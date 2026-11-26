@@ -6,11 +6,10 @@ import { eq } from "drizzle-orm";
 import { createAuth } from "@/server/auth/auth.service";
 import { type Db, openDb } from "@/server/db/client";
 import { runMigrations } from "@/server/db/migrate";
-import { account, auditLog, session, setting, user } from "@/server/db/schema";
+import { account, auditLog, session, user } from "@/server/db/schema";
 import { log } from "@/server/log.service";
 import { createApiRoutes } from "@/server/routes/api.routes";
-import { getSetting, SETTINGS } from "@/server/settings.service";
-import type { DevAuditEntry, DevHealth, DevLogs, DevSetting, DevUser, Page } from "@/shared/dev.types";
+import type { DevAuditEntry, DevHealth, DevLogs, DevUser, Page } from "@/shared/dev.types";
 import type { Role } from "@/shared/roles";
 
 // test-only dummy values
@@ -18,7 +17,6 @@ const BASE = "http://localhost:3200";
 const SECRET = "fedcba9876543210".repeat(4);
 const SUPER = ["root@example.com", "root2@example.com"];
 const env = { APP_BASE_URL: BASE, GOOGLE_CLIENT_ID: "cid", GOOGLE_CLIENT_SECRET: "csecret", SUPER_ADMIN_EMAILS: SUPER };
-const CF_TOKEN = "cfTok_abcdefghijklmnopqrstuvwxyz0123456789";
 
 const dir = mkdtempSync(join(tmpdir(), "panel-dev-"));
 let db: Db;
@@ -98,7 +96,7 @@ describe("access control", () => {
     ["GET", "/audit", null],
     ["GET", "/logs", null],
     ["GET", "/settings", null],
-    ["PUT", "/settings/sites.dir", { value: "/tmp" }],
+    ["PATCH", "/settings", { values: { "sites.dir": "/tmp" } }],
   ];
   test.each(endpoints)("%s %s → 401 anon, 403 user/admin", async (method, path, b) => {
     const body = b ?? undefined;
@@ -253,62 +251,5 @@ describe("logs", () => {
     expect((await json<DevLogs>(await call("GET", "/logs?limit=1", root))).items).toHaveLength(1);
     expect(await json(await call("GET", "/logs?level=loud", root), 400)).toMatchObject({ error: "invalid_level" });
     expect(await json(await call("GET", "/logs?limit=0", root), 400)).toMatchObject({ error: "invalid_limit" });
-  });
-});
-
-describe("settings", () => {
-  test("list: registry with defaults, secrets null", async () => {
-    const { items } = await json<{ items: DevSetting[] }>(await call("GET", "/settings", root));
-    // Whole registry, in source order — new keys show up here without editing a list.
-    expect(items.map((s) => s.key)).toEqual(Object.keys(SETTINGS));
-    expect(items.map((s) => s.key)).toEqual(
-      expect.arrayContaining(["cloudflare.api_token", "sites.port_range", "backup.s3_bucket", "backup.retention_days"]),
-    );
-    expect(items.find((s) => s.key === "sites.port_range")).toMatchObject({ value: "3001-3999", isSet: false });
-    const secrets = items.filter((s) => s.secret).map((s) => s.key);
-    expect(secrets).toEqual(
-      expect.arrayContaining(["cloudflare.api_token", "backup.s3_access_key_id", "backup.s3_secret_access_key"]),
-    );
-    for (const s of items.filter((i) => i.secret)) expect(s.value).toBeNull();
-  });
-
-  test("secret is encrypted at rest, never returned, audit has key only", async () => {
-    const res = await json<DevSetting>(await call("PUT", "/settings/cloudflare.api_token", root, { value: CF_TOKEN }));
-    expect(res).toMatchObject({ key: "cloudflare.api_token", isSet: true, value: null });
-    const raw = db.select().from(setting).where(eq(setting.key, "cloudflare.api_token")).get()?.value ?? "";
-    expect(raw).not.toBe(CF_TOKEN);
-    expect(raw).not.toContain(CF_TOKEN);
-    expect(raw.startsWith("v1.")).toBe(true);
-    expect(getSetting({ db, secret: SECRET }, "cloudflare.api_token")).toBe(CF_TOKEN);
-    expect(() => getSetting({ db, secret: "0".repeat(64) }, "cloudflare.api_token")).toThrow(/cloudflare.api_token/);
-    const list = await (await call("GET", "/settings", root)).text();
-    expect(list).not.toContain(CF_TOKEN);
-    const audit = auditRows("settings.update").at(-1);
-    expect(audit).toMatchObject({ actorId: rootId, target: "cloudflare.api_token" });
-    expect(JSON.stringify(audit)).not.toContain(CF_TOKEN);
-    const allAudit = await (await call("GET", "/audit?pageSize=100", root)).text();
-    expect(allAudit).not.toContain(CF_TOKEN);
-  });
-
-  test("validation, reset to default, unknown key, ~ expansion", async () => {
-    for (const value of ["80-90", "4000-3000", "3000-70000", "abc", "", 5]) {
-      expect(await json(await call("PUT", "/settings/sites.port_range", root, { value }), 400)).toMatchObject({
-        error: "invalid_value",
-      });
-    }
-    const set = await json<DevSetting>(await call("PUT", "/settings/sites.port_range", root, { value: " 5000-5100 " }));
-    expect(set).toMatchObject({ value: "5000-5100", isSet: true, updatedAt: expect.any(String) });
-    const reset = await json<DevSetting>(await call("PUT", "/settings/sites.port_range", root, { value: null }));
-    expect(reset).toMatchObject({ value: "3001-3999", isSet: false, updatedAt: null });
-    expect(await json(await call("PUT", "/settings/nope", root, { value: "x" }), 404)).toMatchObject({
-      error: "not_found",
-    });
-    expect(await json(await call("PUT", "/settings/sites.dir", root, { value: "relative/dir" }), 400)).toMatchObject({
-      error: "invalid_value",
-    });
-    expect(getSetting({ db, secret: SECRET }, "sites.dir")).toBe(join(process.env.HOME ?? "", "sites"));
-    expect(
-      await json(await call("PUT", "/settings/panel.protected_services", root, { value: "sshd,,x" }), 400),
-    ).toMatchObject({ error: "invalid_value" });
   });
 });

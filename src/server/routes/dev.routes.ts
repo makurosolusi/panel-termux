@@ -1,12 +1,20 @@
-import { LOG_LEVELS, type LogLevel } from "../../shared/dev.types";
-import { listAudit, recordAudit } from "../audit.service";
+import { LOG_LEVELS, type LogLevel, type SettingKey } from "../../shared/dev.types";
+import { listAudit } from "../audit.service";
 import type { Auth } from "../auth/auth.service";
-import { roleGuard } from "../auth/role.guard";
+import { assertFresh, roleGuard } from "../auth/role.guard";
 import type { Db } from "../db/client";
 import { getHealth } from "../dev/health.service";
 import { changeRole, deleteUser, listUsers } from "../dev/users.service";
 import { log, readLogs } from "../log.service";
-import { describeSetting, InvalidSettingError, isSettingKey, listSettings, setSetting } from "../settings.service";
+import {
+  changedSettingKeys,
+  InvalidSettingError,
+  isSettingKey,
+  KeyMismatchError,
+  listSettings,
+  MAX_SETTINGS_BATCH,
+  setSettings,
+} from "../settings.service";
 import { ApiError, parsePaging } from "./http.error";
 
 /** What the /dev API needs besides auth. `superAdmins` = env SUPER_ADMIN_EMAILS (lowercase). */
@@ -25,12 +33,34 @@ function logLimit(raw: string | undefined): number {
   return Math.min(n, MAX_LOG_LIMIT);
 }
 
+// Changing where backups go, or starting to ship secrets in them, needs a fresh sign-in (PLAN/04 §3.5).
+const FRESH_KEYS: readonly SettingKey[] = ["backup.s3_endpoint", "backup.s3_bucket", "backup.prefix"];
+
+/** Validates the PATCH /settings body shape; values are validated later by setSettings. */
+function parseSettingsPatch(body: unknown): Partial<Record<SettingKey, string | null>> {
+  const values = field(body, "values");
+  const bad = (message: string, fields: Record<string, string> = {}) =>
+    new ApiError(400, "invalid_body", message, { fields });
+  if (typeof values !== "object" || values === null || Array.isArray(values))
+    throw bad('body must be { "values": { key: string | null } }');
+  const entries = Object.entries(values);
+  if (entries.length === 0 || entries.length > MAX_SETTINGS_BATCH)
+    throw bad(`values must hold 1-${MAX_SETTINGS_BATCH} keys`);
+  const fields: Record<string, string> = {};
+  for (const [k, v] of entries) {
+    if (!isSettingKey(k)) fields[k] = "unknown";
+    else if (v !== null && typeof v !== "string") fields[k] = "invalid";
+  }
+  if (Object.keys(fields).length) throw bad("unknown keys or values that are not a string or null", fields);
+  return values as Partial<Record<SettingKey, string | null>>;
+}
+
 /** super_admin developer API under /dev (users, audit, logs, settings, health). */
 export function createDevRoutes(auth: Auth, { db, secret, superAdmins, dataDir }: DevDeps) {
   const ctx = (actorId: string) => ({ db, superAdmins, actorId });
   return roleGuard(auth, "/dev", "super_admin")
     .onError(({ error, code, status }) => {
-      if (error instanceof ApiError) return status(error.status, { error: error.code, message: error.message });
+      if (error instanceof ApiError) return status(error.status, error.body);
       if (code === "PARSE") return status(400, { error: "invalid_body", message: "request body must be JSON" });
       if (code === "NOT_FOUND") return;
       log.error(`[dev] request failed: ${error instanceof Error ? error.message : String(code)}`);
@@ -64,23 +94,24 @@ export function createDevRoutes(auth: Auth, { db, secret, superAdmins, dataDir }
         }),
       };
     })
-    .get("/settings", () => ({ items: listSettings(db) }))
-    .put("/settings/:key", ({ params, body, user }) => {
-      const { key } = params;
-      if (!isSettingKey(key)) throw new ApiError(404, "not_found", `unknown setting ${key}`);
-      const value = field(body, "value");
-      if (value !== null && typeof value !== "string") {
-        throw new ApiError(400, "invalid_value", "value must be a string or null");
-      }
+    .get("/settings", () => ({ items: listSettings({ db, secret }) }))
+    .patch("/settings", ({ body, user, session }) => {
+      const values = parseSettingsPatch(body);
+      const changed = changedSettingKeys(db, values);
+      if (
+        changed.some((k) => FRESH_KEYS.includes(k)) ||
+        (changed.includes("backup.include_secrets") && values["backup.include_secrets"]?.trim() === "on")
+      )
+        assertFresh(session);
       try {
-        setSetting({ db, secret }, key, value, user.id);
+        setSettings({ db, secret }, values, user.id);
       } catch (e) {
-        if (e instanceof InvalidSettingError) throw new ApiError(400, "invalid_value", e.message);
-        throw new Error(`PUT /dev/settings/${key} failed: ${(e as Error).message}`, { cause: e });
+        if (e instanceof InvalidSettingError) throw new ApiError(400, "invalid_value", e.message, { fields: e.fields });
+        if (e instanceof KeyMismatchError) throw new ApiError(409, "key_mismatch", e.message);
+        throw new Error(`PATCH /dev/settings failed: ${(e as Error).message}`, { cause: e });
       }
-      // Key only: the value (possibly a secret) never enters the audit trail.
-      recordAudit(db, { actorId: user.id, action: "settings.update", target: key, meta: { reset: value === null } });
-      log.info(`[dev] setting ${key} ${value === null ? "reset" : "updated"} by ${user.id}`);
-      return describeSetting(db, key);
+      // Keys only: values (possibly secrets) never reach the log.
+      log.info(`[dev] settings ${changed.join(", ") || "(unchanged)"} saved by ${user.id}`);
+      return { items: listSettings({ db, secret }) };
     });
 }
