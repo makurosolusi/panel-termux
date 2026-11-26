@@ -1,0 +1,7 @@
+#!/data/data/com.termux/files/usr/bin/sh
+# runit (termux-services) run script of the panel. Installed by scripts/install-phone.sh into
+# $PREFIX/var/service/panel/run; stdout+stderr go to the svlogger in log/run.
+# Bun auto-loads .env from the working directory; PANEL_DATA_DIR defaults to ./data.
+exec 2>&1
+cd "${HOME:-/data/data/com.termux/files/home}/panel" || exit 1
+exec ./panel
