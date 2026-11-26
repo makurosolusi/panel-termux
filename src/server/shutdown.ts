@@ -1,15 +1,33 @@
+import { existsSync, rmSync, writeFileSync } from "node:fs";
+import { join } from "node:path";
 import { log } from "./log.service";
 
-/** How long a running site/deploy job or backup may delay exit after SIGTERM (runit never escalates). */
-export const SHUTDOWN_TIMEOUT_MS = 20_000;
+/**
+ * How long a running site/deploy job or backup may delay exit after SIGTERM (runit never escalates).
+ * 120 s covers a typical change on the phone (PLAN/03 §4.12, D32); a longer one is marked interrupted on boot.
+ */
+export const SHUTDOWN_TIMEOUT_MS = 120_000;
 
-/** What graceful shutdown stops, in order: server → scheduler → wait for work → DB → exit. */
+/** File in the data dir written on graceful exit; boot reads + deletes it to tell an unexpected stop (PLAN/02 K20). */
+export const CLEAN_SHUTDOWN_MARKER = "clean-shutdown";
+
+/** Boot side of the marker: true when the previous process exited gracefully; the marker is removed either way. */
+export function consumeCleanShutdownMarker(dataDir: string): boolean {
+  const path = join(dataDir, CLEAN_SHUTDOWN_MARKER);
+  const clean = existsSync(path);
+  rmSync(path, { force: true });
+  return clean;
+}
+
+/** What graceful shutdown stops, in order: server → scheduler → wait for work → DB → marker → exit. */
 export type ShutdownDeps = {
   server: { stop(closeActive?: boolean): unknown };
   stopScheduler: () => void;
   /** Resolve when background work (site jobs, backup run) is finished. */
   idle: (() => Promise<unknown>)[];
   closeDb: () => void;
+  /** Panel data dir for the clean-shutdown marker. Optional only until boot.ts passes it (wkr-boot-03, W3). */
+  dataDir?: string;
   exit?: (code: number) => void;
   timeoutMs?: number;
 };
@@ -20,6 +38,7 @@ export function createShutdown({
   stopScheduler,
   idle,
   closeDb,
+  dataDir,
   exit = (code) => process.exit(code),
   timeoutMs = SHUTDOWN_TIMEOUT_MS,
 }: ShutdownDeps) {
@@ -48,6 +67,15 @@ export function createShutdown({
       closeDb();
     } catch (e) {
       log.error(`[panel] closing the database failed: ${(e as Error).message}`);
+    }
+    // The stop was asked for (signal), so it is not "unexpected" even after the timeout: a cut-off job shows up
+    // on its own as interrupted.
+    if (dataDir) {
+      try {
+        writeFileSync(join(dataDir, CLEAN_SHUTDOWN_MARKER), `${new Date().toISOString()} ${signal}\n`);
+      } catch (e) {
+        log.error(`[panel] writing the clean-shutdown marker failed: ${(e as Error).message}`);
+      }
     }
     log.info("[panel] stopped");
     exit(0);
