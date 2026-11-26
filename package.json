@@ -2,6 +2,7 @@
   "name": "panel-termux",
   "version": "0.2.2",
   "private": true,
+  "license": "MIT",
   "type": "module",
   "scripts": {
     "dev": "bun --hot src/server/index.ts",
@@ -10,7 +11,8 @@
     "typecheck": "tsc --noEmit",
     "lint": "biome check .",
     "test": "bun test",
-    "db:generate": "drizzle-kit generate"
+    "db:generate": "drizzle-kit generate",
+    "bundle:check": "bun scripts/bundle-report.ts"
   },
   "dependencies": {
     "better-auth": "^1.7.28",
