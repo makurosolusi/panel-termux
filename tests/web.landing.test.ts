@@ -76,6 +76,16 @@ describe("screenshots", () => {
     expect(GALLERY).toEqual(["sites", "health", "services"]);
   });
 
+  test("all 8 variants point at their own WebP file in src/web/assets/landing", () => {
+    const files = Object.values(SHOTS).flatMap((s) => [s.light, s.dark]);
+    expect(files).toHaveLength(8);
+    for (const shot of Object.values(SHOTS)) {
+      const suffix = `${shot.key}-${shot.device === "phone" ? "m" : "d"}`;
+      expect(shot.light).toMatch(new RegExp(`${suffix}-light.*\\.webp$`));
+      expect(shot.dark).toMatch(new RegExp(`${suffix}-dark.*\\.webp$`));
+    }
+  });
+
   test("only the hero's light variant gets fetchpriority=high; the rest is lazy", () => {
     expect(imgLoading(true, "light")).toEqual({ loading: "eager", fetchPriority: "high" });
     expect(imgLoading(true, "dark")).toEqual({ loading: "eager", fetchPriority: "auto" });

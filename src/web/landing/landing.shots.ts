@@ -1,9 +1,17 @@
+import healthDDark from "@/web/assets/landing/health-d-dark.webp";
+import healthDLight from "@/web/assets/landing/health-d-light.webp";
+import overviewMDark from "@/web/assets/landing/overview-m-dark.webp";
+import overviewMLight from "@/web/assets/landing/overview-m-light.webp";
+import servicesMDark from "@/web/assets/landing/services-m-dark.webp";
+import servicesMLight from "@/web/assets/landing/services-m-light.webp";
+import sitesDDark from "@/web/assets/landing/sites-d-dark.webp";
+import sitesDLight from "@/web/assets/landing/sites-d-light.webp";
 import type { idLanding } from "@/web/i18n/id.landing";
 
 /** The four landing screenshots (PLAN/05 §5.8): `-m` = phone 390×844, `-d` = desktop 1440×900. */
 export type ShotKey = keyof typeof idLanding.shots.items;
 
-/** One screenshot: intrinsic size plus light/dark image URLs; null until the WebP files exist. */
+/** One screenshot: CSS size (phone files are @2x) plus light/dark image URLs; null shows a placeholder. */
 export type Shot = {
   key: ShotKey;
   device: "phone" | "desktop";
@@ -16,15 +24,12 @@ export type Shot = {
 const PHONE = { device: "phone", width: 390, height: 844 } as const;
 const DESKTOP = { device: "desktop", width: 1440, height: 900 } as const;
 
-/**
- * Screenshot registry. W10 fills `light`/`dark` with imports of
- * src/web/assets/landing/{overview-m,sites-d,health-d,services-m}-{light,dark}.webp; until then pages show a placeholder.
- */
+/** Screenshot registry: hashed WebP URLs from src/web/assets/landing (captured from the demo seed, PLAN/05 §5.8). */
 export const SHOTS: Record<ShotKey, Shot> = {
-  overview: { key: "overview", ...PHONE, light: null, dark: null },
-  sites: { key: "sites", ...DESKTOP, light: null, dark: null },
-  health: { key: "health", ...DESKTOP, light: null, dark: null },
-  services: { key: "services", ...PHONE, light: null, dark: null },
+  overview: { key: "overview", ...PHONE, light: overviewMLight, dark: overviewMDark },
+  sites: { key: "sites", ...DESKTOP, light: sitesDLight, dark: sitesDDark },
+  health: { key: "health", ...DESKTOP, light: healthDLight, dark: healthDDark },
+  services: { key: "services", ...PHONE, light: servicesMLight, dark: servicesMDark },
 };
 
 /** Gallery order below the hero (the overview shot is the hero image). */
