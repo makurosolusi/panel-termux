@@ -132,5 +132,10 @@ export function createTermuxPm2(pm2Home = process.env.PM2_HOME || join(homedir()
       await pm2(["delete", name]);
       return true;
     },
+    async startFromEcosystem(ecosystem: string, name: string) {
+      await pm2(["start", ecosystem, "--only", name]);
+      const p = await find(name);
+      return p ? toApp(p) : null;
+    },
   };
 }

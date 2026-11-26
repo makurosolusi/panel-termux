@@ -119,7 +119,10 @@ export function createFakeSystem({
   return {
     mode: "fake",
     home,
-    net: { isListening: async (port) => listeningPorts.includes(port) },
+    net: {
+      isListening: async (port) => listeningPorts.includes(port),
+      httpStatus: async (port) => (listeningPorts.includes(port) ? 200 : null),
+    },
     runit: {
       list: async () => svcs.map(svcView),
       async control(name, action) {
@@ -161,6 +164,24 @@ export function createFakeSystem({
         apps.splice(i, 1);
         return true;
       },
+      async startFromEcosystem(_ecosystem, name) {
+        await sleep(delayMs);
+        let a = apps.find((x) => x.name === name);
+        if (!a) {
+          a = {
+            name,
+            status: "online",
+            pid: nextPid++,
+            memoryMb: 50,
+            cpu: 0.5,
+            restarts: 0,
+            port: null,
+            since: Date.now(),
+          };
+          apps.push(a);
+        }
+        return appView(a);
+      },
     },
     cloudflared: {
       configPath: cloudflared.configPath,
@@ -178,6 +199,10 @@ export function createFakeSystem({
       async dropRoleAndDatabase(name) {
         const i = databases.findIndex((d) => d.name === name);
         if (i !== -1) databases.splice(i, 1);
+      },
+      async dump(name, file) {
+        if (!databases.some((d) => d.name === name)) throw new SystemError(`pg_dump ${name}: database does not exist`);
+        writeFileSync(file, `PGDMP fake dump of ${name}\n`);
       },
     },
     device: {

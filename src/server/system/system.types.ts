@@ -34,6 +34,8 @@ export interface Pm2Adapter {
   readLog(name: string, stream: LogStream, lines: number): Promise<string[] | null>;
   /** `pm2 delete <name>`; false when pm2 has no such process. */
   remove(name: string): Promise<boolean>;
+  /** `pm2 start <ecosystem> --only <name>`: (re)loads the app from the ecosystem file; null if it is still absent. */
+  startFromEcosystem(ecosystem: string, name: string): Promise<App | null>;
 }
 
 /** cloudflared ingress config and reachability of its hostnames. */
@@ -53,6 +55,8 @@ export interface PostgresAdapter {
   createRoleAndDatabase(name: string, password: string): Promise<void>;
   /** Drops database and role `name` (IF EXISTS, terminating connections). */
   dropRoleAndDatabase(name: string): Promise<void>;
+  /** `pg_dump -Fc` of database `name` into `file` (read-only for the database). */
+  dump(name: string, file: string): Promise<void>;
 }
 
 /** Site role/database identifier: lowercase, starts with a letter (no quoting surprises in psql). */
@@ -62,6 +66,8 @@ export const SQL_IDENT_RE = /^[a-z][a-z0-9_]{0,62}$/;
 export interface NetAdapter {
   /** Whether something accepts TCP connections on 127.0.0.1:`port`. */
   isListening(port: number): Promise<boolean>;
+  /** HTTP status of `GET http://127.0.0.1:<port>/`; null on network error/timeout. */
+  httpStatus(port: number): Promise<number | null>;
 }
 
 /** Device metrics (battery, memory, disk, load, uptime). */

@@ -57,7 +57,13 @@ export type SiteEnvUpdate = { set: Record<string, string>; unset: string[] };
 /** 202 response of the job-starting endpoints. */
 export type JobAccepted = { jobId: string };
 
-export type JobKind = "site.create" | "site.delete" | "hostname.add" | "hostname.remove";
+export type JobKind =
+  | "site.create"
+  | "site.delete"
+  | "hostname.add"
+  | "hostname.remove"
+  | "site.deploy"
+  | "site.rollback";
 export type JobStatus = "running" | "succeeded" | "failed" | "rolled_back";
 export type JobStepStatus = "pending" | "running" | "done" | "failed" | "rolled_back" | "skipped";
 

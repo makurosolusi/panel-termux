@@ -26,7 +26,7 @@ export const SECRET_VALUE = "s3cr3t $value with spaces";
  * Shared setup of the site API tests: temp DB + fake system in a sandbox HOME (fake ports: 3001 listening),
  * fake DNS provider whose "configured" state can be toggled. Call once at the top level of a test file.
  */
-export function siteHarness() {
+export function siteHarness(opts: { healthTimeoutMs?: number } = {}) {
   const dir = mkdtempSync(join(tmpdir(), "panel-site-api-"));
   const home = join(dir, "home");
   const system = createFakeSystem({ home, delayMs: 20, listeningPorts: [3001] });
@@ -88,6 +88,15 @@ export function siteHarness() {
         body: body !== undefined ? JSON.stringify(body) : undefined,
       }),
     );
+  /** Request with a raw (non-JSON) body, e.g. upload chunks. */
+  const raw = (method: string, path: string, body: Uint8Array<ArrayBuffer>, cookie: string = admin) =>
+    api.handle(
+      new Request(`${BASE}/api/panel${path}`, {
+        method,
+        headers: { ...(cookie ? { cookie } : {}), "content-type": "application/octet-stream" },
+        body,
+      }),
+    );
   const json = async <T>(res: Response, status = 200): Promise<T> => {
     const text = await res.text();
     expect({ status: res.status, text }).toMatchObject({ status });
@@ -109,7 +118,7 @@ export function siteHarness() {
     db = openDb(dir);
     runMigrations(db);
     auth = createAuth({ db, env, secret: SECRET });
-    api = createApiRoutes(auth, { db, secret: SECRET, superAdmins: SUPER, dataDir: dir }, system, dns);
+    api = createApiRoutes(auth, { db, secret: SECRET, superAdmins: SUPER, dataDir: dir }, system, dns, opts);
     admin = await cookieFor(addUser("admin@x.io", "admin"));
     userCookie = await cookieFor(addUser("plain@x.io", "user"));
     root = await cookieFor(addUser("root@example.com", "super_admin"));
@@ -127,7 +136,9 @@ export function siteHarness() {
     cfg,
     appsJson,
     read,
+    dir,
     call,
+    raw,
     json,
     waitJob,
     startJob,

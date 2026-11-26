@@ -3,6 +3,8 @@ import type { NetAdapter } from "./system.types";
 /** A local connect either succeeds or is refused within milliseconds; the cap only guards odd stacks. */
 const CONNECT_TIMEOUT_MS = 1_000;
 const LOOPBACK = "127.0.0.1";
+/** A health GET of `/` should be answered well within this on a phone. */
+const HTTP_TIMEOUT_MS = 5_000;
 
 /** Whether 127.0.0.1:`port` accepts a TCP connection (refused/timeout = not listening). */
 export async function isListening(port: number, timeoutMs = CONNECT_TIMEOUT_MS): Promise<boolean> {
@@ -25,5 +27,23 @@ export async function isListening(port: number, timeoutMs = CONNECT_TIMEOUT_MS):
   }
 }
 
+/** HTTP status of GET http://127.0.0.1:`port`/ (redirects not followed); null on error/timeout. */
+export async function httpStatus(port: number, timeoutMs = HTTP_TIMEOUT_MS): Promise<number | null> {
+  try {
+    const res = await fetch(`http://${LOOPBACK}:${port}/`, {
+      redirect: "manual",
+      signal: AbortSignal.timeout(timeoutMs),
+    });
+    await res.body?.cancel();
+    return res.status;
+  } catch {
+    // Refused/reset/timeout all mean "not answering yet"; callers poll.
+    return null;
+  }
+}
+
 /** Real network adapter. */
-export const createTermuxNet = (): NetAdapter => ({ isListening: (port) => isListening(port) });
+export const createTermuxNet = (): NetAdapter => ({
+  isListening: (port) => isListening(port),
+  httpStatus: (port) => httpStatus(port),
+});

@@ -8,6 +8,9 @@ import { type PostgresAdapter, SQL_IDENT_RE, SystemError } from "./system.types"
  */
 const DEFAULT_PGUSER = "postgres";
 
+/** A site database dump on the phone takes seconds; the cap only stops a hung pg_dump. */
+const DUMP_TIMEOUT_MS = 30 * 60_000;
+
 const LIST_SQL =
   "SELECT datname, pg_get_userbyid(datdba), pg_database_size(datname) FROM pg_database " +
   "WHERE NOT datistemplate AND datname <> 'postgres' ORDER BY datname";
@@ -72,6 +75,14 @@ export function createTermuxPostgres(): PostgresAdapter {
     async dropRoleAndDatabase(name) {
       assertIdent(name);
       await script(`drop ${name}`, dropSql(name));
+    },
+    async dump(name, file) {
+      assertIdent(name);
+      const r = await runTermux("pg_dump", ["-Fc", "-w", "-f", file, "-d", name], {
+        env: env(),
+        timeoutMs: DUMP_TIMEOUT_MS,
+      });
+      if (r.code !== 0) throw new SystemError(`pg_dump ${name} exited ${r.code}: ${r.stderr.trim().slice(0, 200)}`);
     },
   };
 }

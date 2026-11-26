@@ -23,7 +23,11 @@ export type AuditAction =
   | "site.adopt"
   | "site.env_update"
   | "hostname.add"
-  | "hostname.remove";
+  | "hostname.remove"
+  | "backup.run"
+  | "backup.download"
+  | "site.deploy"
+  | "site.rollback";
 
 /** One audit event. `meta` must never carry secrets or setting values. */
 export type AuditEvent = {

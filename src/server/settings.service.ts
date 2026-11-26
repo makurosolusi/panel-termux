@@ -28,6 +28,35 @@ const PORT_RANGE_RE = /^(\d+)-(\d+)$/;
 const SERVICE_NAME_RE = /^[A-Za-z0-9._-]+$/;
 const MAX_PATH_LEN = 4096;
 
+const BUCKET_RE = /^[a-z0-9][a-z0-9.-]{1,61}[a-z0-9]$/;
+const REGION_RE = /^[a-z0-9-]{1,32}$/;
+const S3_KEY_RE = /^[A-Za-z0-9+/=_-]{8,256}$/;
+const PREFIX_RE = /^[A-Za-z0-9._-][A-Za-z0-9._/-]*\/$/;
+const MAX_PREFIX_LEN = 256;
+const LAST_HOUR = 23;
+const MAX_RETENTION_DAYS = 365;
+
+const intIn = (v: string, min: number, max: number) => /^\d+$/.test(v) && Number(v) >= min && Number(v) <= max;
+
+/** http(s) origin only: no credentials in the URL, no path/query (the bucket goes in the path). */
+function validateEndpoint(v: string): string | null {
+  const bad =
+    "must be an http(s) URL without credentials, path or query, e.g. https://<account>.r2.cloudflarestorage.com";
+  try {
+    const u = new URL(v);
+    const ok =
+      (u.protocol === "https:" || u.protocol === "http:") &&
+      !u.username &&
+      !u.password &&
+      (u.pathname === "/" || u.pathname === "") &&
+      !u.search &&
+      !u.hash;
+    return ok ? null : bad;
+  } catch {
+    return bad; // URL() throws on unparseable input; that is exactly the invalid case.
+  }
+}
+
 const expandHome = (p: string) => (p === "~" || p.startsWith("~/") ? join(homedir(), p.slice(1)) : p);
 
 /** Typed registry of runtime settings editable in /dev. */
@@ -79,6 +108,65 @@ export const SETTINGS = {
       v.split(",").every((s) => SERVICE_NAME_RE.test(s.trim()))
         ? null
         : "must be a comma-separated list of service names (A-Z, a-z, 0-9, . _ -)",
+  },
+  "backup.s3_endpoint": {
+    label: "Backup S3 endpoint",
+    description: "S3-compatible endpoint, e.g. https://<account>.r2.cloudflarestorage.com (path-style).",
+    secret: false,
+    default: null,
+    validate: validateEndpoint,
+  },
+  "backup.s3_bucket": {
+    label: "Backup bucket",
+    description: "Bucket that receives the backups.",
+    secret: false,
+    default: null,
+    validate: (v) => (BUCKET_RE.test(v) ? null : "must be 3-63 characters of a-z, 0-9, . or -"),
+  },
+  "backup.s3_region": {
+    label: "Backup S3 region",
+    description: "S3 region; Cloudflare R2 uses `auto`.",
+    secret: false,
+    default: "auto",
+    validate: (v) => (REGION_RE.test(v) ? null : "must be 1-32 characters of a-z, 0-9 or -"),
+  },
+  "backup.s3_access_key_id": {
+    label: "Backup S3 access key ID",
+    description: "Access key ID of an API token with write access to the bucket.",
+    secret: true,
+    default: null,
+    validate: (v) => (S3_KEY_RE.test(v) ? null : "must be 8-256 characters of A-Z, a-z, 0-9, + / = _ -"),
+  },
+  "backup.s3_secret_access_key": {
+    label: "Backup S3 secret access key",
+    description: "Secret access key belonging to the access key ID.",
+    secret: true,
+    default: null,
+    validate: (v) => (S3_KEY_RE.test(v) ? null : "must be 8-256 characters of A-Z, a-z, 0-9, + / = _ -"),
+  },
+  "backup.prefix": {
+    label: "Backup key prefix",
+    description: "Object key prefix; retention only ever deletes keys under it. Must end with /.",
+    secret: false,
+    default: "panel-termux/",
+    validate: (v) =>
+      PREFIX_RE.test(v) && v.length <= MAX_PREFIX_LEN && !v.includes("//") && !v.split("/").includes("..")
+        ? null
+        : "must be a relative key prefix of A-Z, a-z, 0-9, . _ - / ending with /",
+  },
+  "backup.hour": {
+    label: "Backup hour",
+    description: "Local hour (0-23) of the daily backup, or `off`.",
+    secret: false,
+    default: "3",
+    validate: (v) => (v === "off" || intIn(v, 0, LAST_HOUR) ? null : "must be an hour 0-23 or off"),
+  },
+  "backup.retention_days": {
+    label: "Backup retention (days)",
+    description: "Backups older than this many days are deleted after each run.",
+    secret: false,
+    default: "14",
+    validate: (v) => (intIn(v, 1, MAX_RETENTION_DAYS) ? null : `must be a whole number 1-${MAX_RETENTION_DAYS}`),
   },
 } satisfies Record<string, SettingDef>;
 

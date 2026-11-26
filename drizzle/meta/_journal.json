@@ -29,6 +29,13 @@
       "when": 1795694874852,
       "tag": "0003_sites",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "6",
+      "when": 1795696095282,
+      "tag": "0004_deploy",
+      "breakpoints": true
     }
   ]
 }

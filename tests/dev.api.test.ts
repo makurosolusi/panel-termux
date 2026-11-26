@@ -9,7 +9,7 @@ import { runMigrations } from "@/server/db/migrate";
 import { account, allowedEmail, auditLog, session, setting, user } from "@/server/db/schema";
 import { log } from "@/server/log.service";
 import { createApiRoutes } from "@/server/routes/api.routes";
-import { getSetting } from "@/server/settings.service";
+import { getSetting, SETTINGS } from "@/server/settings.service";
 import type { DevAuditEntry, DevHealth, DevInvite, DevLogs, DevSetting, DevUser, Page } from "@/shared/dev.types";
 import type { Role } from "@/shared/roles";
 
@@ -288,15 +288,17 @@ describe("logs", () => {
 describe("settings", () => {
   test("list: registry with defaults, secrets null", async () => {
     const { items } = await json<{ items: DevSetting[] }>(await call("GET", "/settings", root));
-    expect(items.map((s) => s.key)).toEqual([
-      "cloudflare.api_token",
-      "cloudflare.account_id",
-      "sites.dir",
-      "sites.port_range",
-      "panel.protected_services",
-    ]);
+    // Whole registry, in source order — new keys show up here without editing a list.
+    expect(items.map((s) => s.key)).toEqual(Object.keys(SETTINGS));
+    expect(items.map((s) => s.key)).toEqual(
+      expect.arrayContaining(["cloudflare.api_token", "sites.port_range", "backup.s3_bucket", "backup.retention_days"]),
+    );
     expect(items.find((s) => s.key === "sites.port_range")).toMatchObject({ value: "3001-3999", isSet: false });
-    expect(items.find((s) => s.key === "cloudflare.api_token")).toMatchObject({ secret: true, value: null });
+    const secrets = items.filter((s) => s.secret).map((s) => s.key);
+    expect(secrets).toEqual(
+      expect.arrayContaining(["cloudflare.api_token", "backup.s3_access_key_id", "backup.s3_secret_access_key"]),
+    );
+    for (const s of items.filter((i) => i.secret)) expect(s.value).toBeNull();
   });
 
   test("secret is encrypted at rest, never returned, audit has key only", async () => {
