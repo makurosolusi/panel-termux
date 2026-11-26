@@ -9,7 +9,10 @@ const SIZES = {
   lg: "h-12 px-6 text-base",
 } as const;
 
-/** Primary landing CTA: "Masuk dengan Google" or "Buka panel", from the root `/api/me` loader result. */
+/**
+ * Primary landing CTA: "Masuk dengan Google" or "Buka panel", from the root `/api/me` loader result.
+ * "Buka panel" is a full document load so Cloudflare Access can challenge the protected home path.
+ */
 export function CtaLink({ size = "lg", inverted = false }: { size?: keyof typeof SIZES; inverted?: boolean }) {
   const cta = landingCta(useRouteLoaderData(ROOT_ROUTE_ID) as MeResult | undefined);
   const palette = inverted
@@ -18,6 +21,7 @@ export function CtaLink({ size = "lg", inverted = false }: { size?: keyof typeof
   return (
     <Link
       to={cta.to}
+      reloadDocument={cta.kind === "open"}
       className={`group inline-flex items-center gap-2.5 rounded-full font-lp-mono font-semibold tracking-tight shadow-[0_1px_0_0_rgb(0_0_0/0.25)] transition-transform hover:-translate-y-0.5 focus-visible:outline-2 focus-visible:outline-offset-4 motion-reduce:transition-none motion-reduce:hover:translate-y-0 ${SIZES[size]} ${palette}`}
     >
       {cta.kind === "signIn" && <GoogleMark />}

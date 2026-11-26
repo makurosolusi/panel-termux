@@ -2,8 +2,8 @@ import type { ApiErrorBody } from "@/shared/dev.types";
 import { id } from "@/web/i18n/id";
 import { LOGIN_PATH } from "@/web/session/session.redirect";
 
-/** How an API call failed: no response, expired session, wrong role, other 4xx, or 5xx. */
-export type ApiErrorKind = "network" | "unauthorized" | "forbidden" | "client" | "server";
+/** How an API call failed: no response, expired session, Cloudflare Access challenge, wrong role, other 4xx, or 5xx. */
+export type ApiErrorKind = "network" | "unauthorized" | "access" | "forbidden" | "client" | "server";
 
 /** Indonesian messages per server error code (`{ error: code }`), owned by each section. */
 export type ErrorCodes = Readonly<Record<string, string>>;
@@ -24,10 +24,30 @@ export class ApiError extends Error {
 const isErrorBody = (v: unknown): v is ApiErrorBody =>
   typeof v === "object" && v !== null && typeof (v as ApiErrorBody).error === "string";
 
+/**
+ * Sent on every `/api` call so Cloudflare Access answers an expired session with 401 instead of redirecting
+ * the fetch to its login page on another domain (which surfaces as a network error).
+ * Source: cloudflare-docs session-management.mdx, section "AJAX".
+ */
+export const AJAX_HEADERS = { accept: "application/json", "x-requested-with": "XMLHttpRequest" } as const;
+
+/**
+ * True when a 401 came from Cloudflare Access rather than the panel. The panel's own 401 is always JSON
+ * `{ error: "unauthorized" }`; Access documents only the status, so any 401 without a `{ error }` JSON body is Access.
+ */
+export const isAccessChallenge = (status: number, body: unknown): boolean => status === 401 && !isErrorBody(body);
+
 /** Maps a non-2xx status and its parsed body (or null) to an ApiError. */
 export function errorFromResponse(status: number, body: unknown): ApiError {
-  const kind: ApiErrorKind =
-    status === 401 ? "unauthorized" : status === 403 ? "forbidden" : status >= 500 ? "server" : "client";
+  const kind: ApiErrorKind = isAccessChallenge(status, body)
+    ? "access"
+    : status === 401
+      ? "unauthorized"
+      : status === 403
+        ? "forbidden"
+        : status >= 500
+          ? "server"
+          : "client";
   const code = isErrorBody(body) ? body.error : null;
   const msg = isErrorBody(body) && typeof body.message === "string" ? body.message : null;
   return new ApiError(kind, status, code, msg);
@@ -38,6 +58,41 @@ export function redirectFor(err: ApiError): string | null {
   if (err.kind === "unauthorized") return LOGIN_PATH;
   if (err.kind === "forbidden") return "/";
   return null;
+}
+
+const ACCESS_RELOAD_KEY = "panel.accessReloadAt";
+/** A second Access 401 within this window after our reload means reloading does not help (loop guard). */
+export const ACCESS_RELOAD_WINDOW_MS = 30_000;
+
+/** Whether to reload for an Access 401, given when we last did (ms epoch, or null if never). */
+export const shouldReloadForAccess = (lastReloadAt: number | null, now: number): boolean =>
+  lastReloadAt === null || !(now - lastReloadAt < ACCESS_RELOAD_WINDOW_MS);
+
+/**
+ * Reloads the current URL so the full page load lets Access show its login. Returns false (caller shows the
+ * error state) when we already reloaded recently or sessionStorage is unavailable, since then a reload could loop.
+ */
+function reloadForAccess(): boolean {
+  try {
+    const raw = sessionStorage.getItem(ACCESS_RELOAD_KEY);
+    const now = Date.now();
+    if (!shouldReloadForAccess(raw === null ? null : Number(raw), now)) return false;
+    sessionStorage.setItem(ACCESS_RELOAD_KEY, String(now));
+  } catch (cause) {
+    console.warn("access reload guard: sessionStorage unavailable, not reloading", cause);
+    return false;
+  }
+  window.location.reload();
+  return true;
+}
+
+/** Turns a failed response into an ApiError and performs its navigation (Access reload, login, home). */
+export function failedResponse(status: number, body: unknown): ApiError {
+  const err = errorFromResponse(status, body);
+  if (err.kind === "access") reloadForAccess();
+  const to = redirectFor(err);
+  if (to) window.location.assign(to);
+  return err;
 }
 
 /** User-facing Indonesian message: known error code first, then server message for 4xx, then per kind. */
@@ -62,7 +117,8 @@ export function apiUrl(base: string, path: string, query: Record<string, QueryVa
 
 /**
  * Calls the API and returns the parsed JSON (undefined for 204). Throws ApiError; an aborted request
- * rethrows the AbortError untouched. 401/403 also navigate away (full reload so the session is re-checked).
+ * rethrows the AbortError untouched. 401/403 also navigate away (full reload so the session is re-checked);
+ * an Access 401 reloads the current URL (see `failedResponse`).
  */
 export async function apiFetch<T>(
   method: "GET" | "POST" | "PATCH" | "PUT" | "DELETE",
@@ -76,7 +132,7 @@ export async function apiFetch<T>(
       method,
       signal,
       credentials: "same-origin",
-      headers: { accept: "application/json", ...(body === undefined ? {} : { "content-type": "application/json" }) },
+      headers: { ...AJAX_HEADERS, ...(body === undefined ? {} : { "content-type": "application/json" }) },
       body: body === undefined ? undefined : JSON.stringify(body),
     });
   } catch (cause) {
@@ -89,8 +145,5 @@ export async function apiFetch<T>(
     if (parsed === null) throw new ApiError("server", res.status, "invalid_json", null);
     return parsed as T;
   }
-  const err = errorFromResponse(res.status, parsed);
-  const to = redirectFor(err);
-  if (to) window.location.assign(to);
-  throw err;
+  throw failedResponse(res.status, parsed);
 }

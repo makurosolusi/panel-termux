@@ -16,7 +16,8 @@ describe("errorFromResponse / redirectFor / devErrorMessage", () => {
     [500, "server", null],
     [503, "server", null],
   ] as const)("HTTP %d → %s, redirect %p", (status, kind, to) => {
-    const err = errorFromResponse(status, null);
+    // the panel's own 401 always carries this body; a bodyless 401 is Cloudflare Access (web.api-client.test.ts)
+    const err = errorFromResponse(status, status === 401 ? { error: "unauthorized" } : null);
     expect(err.kind).toBe(kind);
     expect(err.status).toBe(status);
     expect(redirectFor(err)).toBe(to);

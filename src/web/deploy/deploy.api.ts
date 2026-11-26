@@ -2,7 +2,7 @@ import type { UploadStarted } from "@/shared/deploy.types";
 import type { JobAccepted } from "@/shared/site.types";
 import { id } from "@/web/i18n/id";
 import { panelUrl } from "@/web/panel/panel.api";
-import { ApiError, apiFetch, errorFromResponse } from "@/web/shared/api.client";
+import { AJAX_HEADERS, ApiError, apiFetch, failedResponse } from "@/web/shared/api.client";
 import { SITE_ERROR_CODES, siteUrl } from "@/web/site/site.api";
 import { chunkPlan, retryDelayMs } from "./deploy.upload";
 
@@ -11,7 +11,7 @@ export const DEPLOY_ERROR_CODES: Readonly<Record<string, string>> = { ...SITE_ER
 
 const uploadUrl = (uploadId: string, rest = "") => panelUrl(`/uploads/${encodeURIComponent(uploadId)}${rest}`);
 
-/** PUTs one raw chunk (apiFetch only speaks JSON). Throws ApiError like apiFetch. */
+/** PUTs one raw chunk (apiFetch only speaks JSON). Throws ApiError and navigates on 401/403 like apiFetch. */
 async function putChunk(uploadId: string, index: number, body: Blob, signal: AbortSignal): Promise<void> {
   let res: Response;
   try {
@@ -20,13 +20,13 @@ async function putChunk(uploadId: string, index: number, body: Blob, signal: Abo
       body,
       signal,
       credentials: "same-origin",
-      headers: { "content-type": "application/octet-stream", accept: "application/json" },
+      headers: { ...AJAX_HEADERS, "content-type": "application/octet-stream" },
     });
   } catch (cause) {
     if (signal.aborted) throw cause;
     throw new ApiError("network", null, null, null, { cause });
   }
-  if (!res.ok) throw errorFromResponse(res.status, await res.json().catch(() => null));
+  if (!res.ok) throw failedResponse(res.status, await res.json().catch(() => null)); // non-JSON body → no body
 }
 
 const sleep = (ms: number, signal: AbortSignal) =>

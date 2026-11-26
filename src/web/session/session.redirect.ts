@@ -18,3 +18,10 @@ export function resolveRedirect(result: MeResult, path: string): string | null {
   if (path === LOGIN_PATH) return home;
   return canAccess(result.me.role, path) ? null : home;
 }
+
+/**
+ * Whether the redirect `path` → `to` must be a full document load: leaving the public /login for a protected home
+ * lets Cloudflare Access challenge the document request (it cannot challenge a client-side navigation).
+ * Never true for a redirect back to /login, so it cannot reload-loop.
+ */
+export const needsFullLoad = (path: string, to: string): boolean => path === LOGIN_PATH && to !== LOGIN_PATH;

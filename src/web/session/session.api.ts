@@ -1,4 +1,5 @@
 import type { Role } from "@/shared/roles";
+import { AJAX_HEADERS } from "@/web/shared/api.client";
 
 /** Signed-in account as returned by `GET /api/me`. */
 export type Me = {
@@ -15,7 +16,7 @@ export type MeResult = { status: "ok"; me: Me } | { status: "unauthorized" };
 
 /** Loads the current session. Throws on network errors and non-401 failures so the error boundary shows them. */
 export async function fetchMe(): Promise<MeResult> {
-  const res = await fetch("/api/me", { credentials: "same-origin", headers: { accept: "application/json" } });
+  const res = await fetch("/api/me", { credentials: "same-origin", headers: AJAX_HEADERS });
   if (res.status === 401) return { status: "unauthorized" };
   if (!res.ok) throw new Error(`GET /api/me failed: HTTP ${res.status}`);
   return { status: "ok", me: (await res.json()) as Me };
