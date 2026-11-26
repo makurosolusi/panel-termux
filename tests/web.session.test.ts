@@ -13,7 +13,7 @@ const anon: MeResult = { status: "unauthorized" };
 
 describe("resolveRedirect", () => {
   test.each([
-    ["anon", anon, "/", "/login"],
+    ["anon", anon, "/", null],
     ["anon", anon, "/profile", "/login"],
     ["anon", anon, "/dev", "/login"],
     ["anon", anon, "/login", null],
@@ -28,7 +28,11 @@ describe("resolveRedirect", () => {
     ["user", as("user"), "/login", "/profile"],
     ["admin", as("admin"), "/login", "/panel"],
     ["super_admin", as("super_admin"), "/login", "/dev"],
-    ["super_admin", as("super_admin"), "/", "/dev"],
+    ["user", as("user"), "/", null],
+    ["admin", as("admin"), "/", null],
+    ["super_admin", as("super_admin"), "/", null],
+    ["anon", anon, "/panel/sites", "/login"],
+    ["anon", anon, "/nope", "/login"],
   ] as const)("%s on %s → %p", (_label, result, path, expected) => {
     expect(resolveRedirect(result, path)).toBe(expected);
   });

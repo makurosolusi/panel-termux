@@ -3,6 +3,7 @@ import { idBackup } from "./id.backup";
 import { idCommon } from "./id.common";
 import { idDeploy } from "./id.deploy";
 import { idDev } from "./id.dev";
+import { idLanding } from "./id.landing";
 import { idPanel } from "./id.panel";
 import { idSite } from "./id.site";
 
@@ -35,4 +36,5 @@ export const id = {
   deploy: idDeploy,
   backup: idBackup,
   dev: idDev,
+  landing: idLanding,
 } as const;

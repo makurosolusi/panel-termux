@@ -26,6 +26,31 @@
   --ring: oklch(0.708 0 0);
 }
 
+/* Landing page ("field manual" look): warm paper + ink, one signal-orange accent, LED green for status. */
+:root {
+  --lp-paper: oklch(0.97 0.012 85);
+  --lp-ink: oklch(0.2 0.015 60);
+  --lp-dim: oklch(0.45 0.02 60);
+  --lp-line: oklch(0.2 0.015 60 / 14%);
+  --lp-signal: oklch(0.55 0.18 40); /* ≥4.5:1 against paper and white text */
+  --lp-signal-bright: oklch(0.75 0.17 52); /* for dark surfaces (screen, arch band) */
+  --lp-signal-ink: oklch(0.99 0.01 85);
+  --lp-led: oklch(0.78 0.2 145);
+  --lp-screen: oklch(0.17 0.012 60);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --lp-paper: oklch(0.16 0.01 60);
+    --lp-ink: oklch(0.94 0.015 85);
+    --lp-dim: oklch(0.72 0.02 70);
+    --lp-line: oklch(0.94 0.015 85 / 12%);
+    --lp-signal: oklch(0.72 0.18 50);
+    --lp-signal-ink: oklch(0.16 0.01 60);
+    --lp-screen: oklch(0.11 0.008 60);
+  }
+}
+
 @media (prefers-color-scheme: dark) {
   :root {
     --background: oklch(0.145 0 0);
@@ -72,6 +97,62 @@
   --color-border: var(--border);
   --color-input: var(--input);
   --color-ring: var(--ring);
+  --color-lp-paper: var(--lp-paper);
+  --color-lp-ink: var(--lp-ink);
+  --color-lp-dim: var(--lp-dim);
+  --color-lp-line: var(--lp-line);
+  --color-lp-signal: var(--lp-signal);
+  --color-lp-signal-ink: var(--lp-signal-ink);
+  --color-lp-signal-bright: var(--lp-signal-bright);
+  --color-lp-led: var(--lp-led);
+  --color-lp-screen: var(--lp-screen);
+  /* System font stacks only: the panel must work offline and without third-party font hosts. */
+  --font-lp-serif: "Iowan Old Style", "Palatino Linotype", Palatino, "Book Antiqua", "Noto Serif", Georgia, serif;
+  --font-lp-mono: ui-monospace, "SF Mono", "JetBrains Mono", "Cascadia Mono", Menlo, Consolas, "Roboto Mono", monospace;
+}
+
+/* Landing motion; everything static when the visitor prefers reduced motion. */
+@keyframes lp-rise {
+  from {
+    opacity: 0;
+    transform: translateY(14px);
+  }
+}
+@keyframes lp-blink {
+  50% {
+    opacity: 0;
+  }
+}
+@keyframes lp-pulse {
+  50% {
+    opacity: 0.35;
+  }
+}
+@keyframes lp-flow {
+  to {
+    stroke-dashoffset: -24;
+  }
+}
+@media (prefers-reduced-motion: no-preference) {
+  .lp-rise {
+    animation: lp-rise 0.7s cubic-bezier(0.2, 0.7, 0.2, 1) both;
+    animation-delay: calc(var(--lp-i, 0) * 90ms);
+  }
+  .lp-blink {
+    animation: lp-blink 1.1s steps(1) infinite;
+  }
+  .lp-pulse {
+    animation: lp-pulse 2.4s ease-in-out infinite;
+  }
+  .lp-flow {
+    animation: lp-flow 1.2s linear infinite;
+  }
+}
+/* Faint drafting grid behind the landing page. */
+.lp-grid {
+  background-image:
+    linear-gradient(var(--lp-line) 1px, transparent 1px), linear-gradient(90deg, var(--lp-line) 1px, transparent 1px);
+  background-size: 32px 32px;
 }
 
 @layer base {

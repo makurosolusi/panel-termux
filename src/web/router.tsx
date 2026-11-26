@@ -6,6 +6,7 @@ import { HealthPage } from "@/web/dev/health.page";
 import { LogsPage } from "@/web/dev/logs.page";
 import { SettingsPage } from "@/web/dev/settings.page";
 import { UsersPage } from "@/web/dev/users.page";
+import { LandingPage } from "@/web/landing/landing.page";
 import { AppLayout } from "@/web/layout/app.layout";
 import { LoginPage } from "@/web/pages/login.page";
 import { ProfilePage } from "@/web/pages/profile.page";
@@ -40,7 +41,7 @@ export const router = createBrowserRouter([
     HydrateFallback: SessionFallback,
     ErrorBoundary: SessionError,
     children: [
-      { index: true, element: null }, // SessionGate always redirects "/" to login or home
+      { index: true, Component: LandingPage }, // public, never redirected by SessionGate
       { path: "login", Component: LoginPage },
       {
         Component: AppLayout,
