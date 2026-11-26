@@ -225,16 +225,19 @@ describe("audit", () => {
     db.insert(auditLog).values({ actorId: rootId, action: "invite.create", target: "old@guest.io" }).run();
     db.insert(auditLog).values({ actorId: null, action: "auth.denied", target: "x.io" }).run();
     const old = await json<Page<DevAuditEntry>>(await call("GET", "/audit?action=invite.create", root));
-    expect(old.items).toEqual([
-      {
-        id: expect.any(Number),
-        at: expect.any(String),
-        actor: { id: rootId, name: expect.any(String) },
-        action: "invite.create",
-        target: "old@guest.io",
-        meta: null,
-      },
-    ]);
+    expect(old.items).toHaveLength(1);
+    // Pre-0.3.0 rows carry no actor kind/label columns: kind "unknown", label falls back to the live user's name.
+    expect(old.items[0]).toMatchObject({
+      id: expect.any(Number),
+      at: expect.any(String),
+      actor: { id: rootId, name: expect.any(String) },
+      actorKind: "unknown",
+      actorLabel: old.items[0]?.actor?.name,
+      actorDeleted: false,
+      action: "invite.create",
+      target: "old@guest.io",
+      meta: null,
+    });
     const all = await json<Page<DevAuditEntry>>(await call("GET", "/audit?pageSize=2", root));
     expect(all.items.map((e) => e.action)).toEqual(["auth.denied", "invite.create"]);
   });

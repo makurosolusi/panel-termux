@@ -1,40 +1,44 @@
-// .env helpers. Values are written but never read back out of the file (only keys are listed).
+// .env helpers on top of the shared Bun codec (B23). Values are written, and read back only for PORT and redaction.
+import {
+  decodeEnvValue,
+  type EnvValueProblem,
+  encodeEnvLine,
+  envValueProblem,
+  findEnvLine,
+} from "../../shared/env.codec";
+import { ENV_KEY_RE } from "../../shared/site.types";
 
-/** Allowed env key. */
-export const ENV_KEY_RE = /^[A-Za-z_][A-Za-z0-9_]{0,127}$/;
-const KEY_LINE = /^\s*(?:export\s+)?([A-Za-z_][A-Za-z0-9_]*)\s*=/;
-const PLAIN_VALUE = /^[A-Za-z0-9_./:@%+,=-]*$/;
-const MAX_VALUE_LEN = 16_384;
-/** What envLine cannot encode for Bun's .env loader (verified against Bun 1.4.2, see tests/site.files.test.ts). */
-const UNREPRESENTABLE = /['\r\n]|\\$/;
+export { ENV_KEY_RE };
 
-/** Thrown for an invalid key or value; the message names the key, never the value. */
-export class EnvInputError extends Error {}
+const KEY_LINE = /^\s*(?:export\s+)?([A-Za-z_][A-Za-z0-9_]*)\s*=(.*)$/;
+const MAX_PORT = 65535;
 
-/** Checks a set of env entries (key shape, value type/length, no NUL). */
-export function assertEnvEntries(env: Record<string, unknown>): asserts env is Record<string, string> {
-  for (const [k, v] of Object.entries(env)) {
-    if (!ENV_KEY_RE.test(k)) throw new EnvInputError(`invalid env key ${JSON.stringify(k)}`);
-    if (typeof v !== "string" || v.length > MAX_VALUE_LEN || v.includes("\0")) {
-      throw new EnvInputError(`env ${k}: value must be a string of at most ${MAX_VALUE_LEN} characters`);
-    }
-    if (UNREPRESENTABLE.test(v)) {
-      throw new EnvInputError(`env ${k}: value must be one line without ' and must not end with a backslash`);
-    }
+/** Why an env entry is refused (API `invalid_env.reason`). */
+export type EnvInputReason = "key" | EnvValueProblem;
+
+/** Thrown for an invalid key or value; names the key, never the value. */
+export class EnvInputError extends Error {
+  constructor(
+    readonly key: string,
+    readonly reason: EnvInputReason,
+  ) {
+    super(`env ${key}: ${reason === "key" ? "invalid key" : `value not representable (${reason})`}`);
   }
 }
 
-/**
- * One `KEY=value` line. Non-trivial values are single-quoted: Bun keeps backslashes literal there but still expands `$VAR`, so `$` is written as `\$`. Values must pass assertEnvEntries.
- */
-export function envLine(key: string, value: string): string {
-  if (PLAIN_VALUE.test(value)) return `${key}=${value}`;
-  return `${key}='${value.replaceAll("$", "\\$")}'`;
+/** Checks a set of env entries (key shape, string value that encodeEnvLine can write, no NUL). */
+export function assertEnvEntries(env: Record<string, unknown>): asserts env is Record<string, string> {
+  for (const [k, v] of Object.entries(env)) {
+    if (!ENV_KEY_RE.test(k)) throw new EnvInputError(k, "key");
+    if (typeof v !== "string" || v.includes("\0")) throw new EnvInputError(k, "quote");
+    const problem = envValueProblem(v);
+    if (problem) throw new EnvInputError(k, problem);
+  }
 }
 
 /** Keys defined in a .env text, in file order, without duplicates. */
 export const envKeys = (text: string): string[] => [
-  ...new Set(text.split("\n").flatMap((l) => (l.match(KEY_LINE)?.[1] ? [l.match(KEY_LINE)?.[1] as string] : []))),
+  ...new Set(text.split("\n").flatMap((l) => l.match(KEY_LINE)?.[1] ?? [])),
 ];
 
 /**
@@ -45,6 +49,25 @@ export function updateEnv(text: string, set: Record<string, string>, unset: stri
   const touched = new Set([...Object.keys(set), ...unset]);
   const kept = text.split("\n").filter((l) => !touched.has(l.match(KEY_LINE)?.[1] ?? ""));
   while (kept.length && kept.at(-1) === "") kept.pop();
-  const added = Object.entries(set).map(([k, v]) => envLine(k, v));
+  const added = Object.entries(set).map(([k, v]) => encodeEnvLine(k, v));
   return `${[...kept, ...added].join("\n")}\n`.replace(/^\n/, "");
+}
+
+/** Text of a fresh .env with `vars` in order. */
+export const envText = (vars: [string, string][]): string =>
+  `${vars.map(([k, v]) => encodeEnvLine(k, v)).join("\n")}\n`;
+
+/** PORT of a .env (decoded, integer 1-65535) or null. Reads only that line (D8). */
+export function envPort(text: string): number | null {
+  const raw = findEnvLine(text, "PORT");
+  const p = raw === null ? Number.NaN : Number(decodeEnvValue(raw));
+  return Number.isInteger(p) && p >= 1 && p <= MAX_PORT ? p : null;
+}
+
+/** Decoded values of every key except `skip` (for log redaction; never logged or returned by the API). */
+export function envValues(text: string, skip: readonly string[] = []): string[] {
+  return text.split("\n").flatMap((l) => {
+    const m = KEY_LINE.exec(l.replace(/\r$/, ""));
+    return m?.[1] && !skip.includes(m[1]) ? [decodeEnvValue(m[2] ?? "")] : [];
+  });
 }

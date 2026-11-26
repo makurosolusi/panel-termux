@@ -5,9 +5,10 @@ import { dnsRecord } from "../db/schema";
 import { log } from "../log.service";
 import { getSetting } from "../settings.service";
 import { type CfClient, type CfClientOptions, CloudflareApiError, createCfClient } from "./cloudflare.client";
-import { DnsConflictError, DnsNotConfiguredError, type DnsProvider } from "./dns.types";
+import { DnsConflictError, DnsNotConfiguredError, type SiteDnsProvider } from "./dns.types";
 
 export { createFakeDnsProvider } from "./dns.fake";
+export type { DnsInspect, SiteDnsProvider } from "./dns.types";
 
 /** Comment set on every record the panel creates (visible in the Cloudflare dashboard). */
 export const MANAGED_COMMENT = "managed by panel-termux";
@@ -24,10 +25,11 @@ export type DnsProviderDeps = { db: Db; secret: string } & CfClientOptions;
 type Zone = { id: string; name: string };
 type CfRecord = { id: string; type: string; name: string; content: string };
 
+/** CNAME target of a tunnel. */
 export const tunnelTarget = (tunnelId: string) => `${tunnelId}.cfargotunnel.com`;
 
 /** Cloudflare-backed DnsProvider. Reads the token on every call so a /dev change applies without restart. */
-export function createDnsProvider(deps: DnsProviderDeps): DnsProvider {
+export function createDnsProvider(deps: DnsProviderDeps): Required<SiteDnsProvider> {
   const { db, secret } = deps;
   let zoneCache: { token: string; at: number; zones: Zone[] } | null = null;
 
@@ -61,6 +63,17 @@ export function createDnsProvider(deps: DnsProviderDeps): DnsProvider {
 
   const rowOf = (hostname: string) => db.select().from(dnsRecord).where(eq(dnsRecord.hostname, hostname)).get();
 
+  async function lookup(s: Session, hostname: string) {
+    const zone = await zoneFor(s, hostname);
+    const path = `/zones/${zone.id}/dns_records?name.exact=${encodeURIComponent(hostname)}`;
+    const existing = (await s.cf.request<CfRecord[]>(`list records ${hostname}`, "GET", path)).result;
+    const row = rowOf(hostname);
+    const mine = row && existing.length === 1 && existing[0]?.id === row.recordId ? existing[0] : undefined;
+    return { zone, existing, mine };
+  }
+  const sameTunnel = (existing: CfRecord[], target: string) =>
+    existing.length === 1 && existing[0]?.type === "CNAME" && existing[0].content === target;
+
   return {
     async verify() {
       try {
@@ -80,24 +93,26 @@ export function createDnsProvider(deps: DnsProviderDeps): DnsProvider {
       }
     },
 
-    async ensureTunnelCname(rawHostname, tunnelId) {
+    async inspect(rawHostname, tunnelId) {
+      const hostname = rawHostname.trim().toLowerCase();
+      const { existing, mine } = await lookup(session(), hostname);
+      if (existing.length === 0) return "absent";
+      if (mine?.type === "CNAME") return "owned";
+      return sameTunnel(existing, tunnelTarget(tunnelId)) ? "same_tunnel" : "conflict";
+    },
+
+    async ensureTunnelCname(rawHostname: string, tunnelId: string, actorId: string | null = null) {
       const hostname = rawHostname.trim().toLowerCase();
       const target = tunnelTarget(tunnelId);
       const s = session();
       const { cf } = s;
-      const zone = await zoneFor(s, hostname);
-      const existing = (
-        await cf.request<CfRecord[]>(
-          `list records ${hostname}`,
-          "GET",
-          `/zones/${zone.id}/dns_records?name.exact=${encodeURIComponent(hostname)}`,
-        )
-      ).result;
-      const row = rowOf(hostname);
+      const { zone, existing, mine } = await lookup(s, hostname);
 
       if (existing.length > 0) {
-        const mine = row && existing.length === 1 && existing[0]?.id === row.recordId ? existing[0] : undefined;
         if (mine?.type !== "CNAME") {
+          // A hand-made CNAME to this same tunnel already routes the hostname: use it, never own it.
+          if (sameTunnel(existing, target))
+            return { recordId: existing[0]?.id as string, created: false, owned: false };
           throw new DnsConflictError(`DNS record for ${hostname} already exists and was not created by the panel`);
         }
         if (mine.content !== target) {
@@ -108,7 +123,7 @@ export function createDnsProvider(deps: DnsProviderDeps): DnsProvider {
           });
           log.info(`[dns] repointed ${hostname} to tunnel ${tunnelId}`);
         }
-        return { recordId: mine.id, created: false };
+        return { recordId: mine.id, created: false, owned: true };
       }
 
       const created = await cf.request<CfRecord>(`create record ${hostname}`, "POST", `/zones/${zone.id}/dns_records`, {
@@ -124,12 +139,12 @@ export function createDnsProvider(deps: DnsProviderDeps): DnsProvider {
         .values({ hostname, zoneId: zone.id, recordId })
         .onConflictDoUpdate({ target: dnsRecord.hostname, set: { zoneId: zone.id, recordId } })
         .run();
-      recordAudit(db, { actorId: null, action: "dns.create", target: hostname, meta: { zoneId: zone.id, recordId } });
+      recordAudit(db, { actorId, action: "dns.create", target: hostname, meta: { zoneId: zone.id, recordId } });
       log.info(`[dns] created CNAME ${hostname} -> tunnel ${tunnelId}`);
-      return { recordId, created: true };
+      return { recordId, created: true, owned: true };
     },
 
-    async deleteManaged(rawHostname) {
+    async deleteManaged(rawHostname: string, actorId: string | null = null) {
       const hostname = rawHostname.trim().toLowerCase();
       const row = rowOf(hostname);
       if (!row) return; // not panel-owned: never touch it
@@ -141,7 +156,7 @@ export function createDnsProvider(deps: DnsProviderDeps): DnsProvider {
         log.warn(`[dns] record for ${hostname} already gone in Cloudflare; dropping ownership row`);
       }
       db.delete(dnsRecord).where(eq(dnsRecord.hostname, hostname)).run();
-      recordAudit(db, { actorId: null, action: "dns.delete", target: hostname, meta: { zoneId: row.zoneId } });
+      recordAudit(db, { actorId, action: "dns.delete", target: hostname, meta: { zoneId: row.zoneId } });
       log.info(`[dns] deleted CNAME ${hostname}`);
     },
   };

@@ -1,59 +1,71 @@
+// Site management behind /api/panel/sites, /jobs and /integration (PLAN/03 §3.5).
 import { existsSync } from "node:fs";
 import { join } from "node:path";
-import { eq } from "drizzle-orm";
-import type {
-  DiscoveredIngress,
-  Integration,
-  Site,
-  SiteCheckResult,
-  SiteDetail,
-  SiteRuntime,
-} from "../../shared/site.types";
+import { desc, eq } from "drizzle-orm";
+import type { HealthProbe, Site, SiteCheckResult, SiteDetail } from "../../shared/site.types";
 import { recordAudit } from "../audit.service";
-import type { DnsProvider } from "../cloudflare/dns.types";
-import { site, siteHostname } from "../db/schema";
+import type { SiteDnsProvider } from "../cloudflare/dns.provider";
+import { deploy, site, siteHostname, user } from "../db/schema";
+import { siteBinaries } from "../deploy/binary.identity";
+import { appName } from "../deploy/deploy.steps";
+import { scriptRuntimeOf } from "../deploy/run.script";
 import { log } from "../log.service";
-import { RESOURCE_NAME_RE } from "../panel/panel.service";
 import { ApiError } from "../routes/http.error";
-import { describeSetting } from "../settings.service";
-import type { SystemAdapters } from "../system/system.types";
-import { assertEnvEntries, ENV_KEY_RE, EnvInputError, envKeys, updateEnv } from "./env.file";
-import { readTunnelId } from "./ingress.editor";
-import { createJobRunner } from "./job.runner";
-import { checkSite, HOSTNAME_RE, SITE_NAME_RE, type SiteCtx, sitePaths, suggestPort } from "./site.checks";
-import { readTextOrNull, writeAtomic } from "./site.files";
-import { addHostnameJob, createSiteJob, deleteSiteJob, removeHostnameJob } from "./site.jobs";
+import { type Pm2Proc, Pm2UnavailableError } from "../system/system.types";
+import { discover } from "./adopt.candidates";
+import { ensureAppsJson } from "./apps.file";
+import { envKeys } from "./env.file";
+import { createIntegration } from "./integration.service";
+import { recoverJob } from "./job.recovery";
+import { createJobRunner, type JobRunnerDeps } from "./job.runner";
+import { adoptSite } from "./site.adopt";
+import {
+  checkSite,
+  HOSTNAME_RE,
+  type PanelSelf,
+  parseHealthSettings,
+  SITE_NAME_RE,
+  type SiteCtx,
+  suggestPort,
+} from "./site.checks";
+import { envInput, lockedEnvKeys, restartPending, saveEnv } from "./site.env.service";
+import { readTextOrNull } from "./site.files";
+import { addHostnamesJob, createSiteJob, deleteSiteJob, removeHostnameJob, restartSiteJob } from "./site.jobs";
+import { siteSecretsFor } from "./site.secrets";
+import { probeHealth } from "./site.steps";
 
-/** Deps of the site service. One DnsProvider instance is shared with the /dev cloudflare routes. */
-export type SiteDeps = { db: SiteCtx["db"]; secret: string; system: SystemAdapters; dns: DnsProvider };
+/** Deps of the site service. `panel` defaults to APP_BASE_URL/PORT of the process env. */
+export type SiteDeps = Omit<SiteCtx, "panel"> & { dns: SiteDnsProvider; panel?: PanelSelf } & JobRunnerDeps;
 
-/** Keys the panel writes into a new site's .env itself. */
-const RESERVED_ENV = ["PORT", "DATABASE_URL"];
-const ENV_MODE = 0o600;
-const MAX_PORT = 65535;
+const MAX_HOSTNAMES = 5;
 
 const obj = (v: unknown): Record<string, unknown> =>
   typeof v === "object" && v !== null && !Array.isArray(v) ? (v as Record<string, unknown>) : {};
-const bad = (code: string, message: string) => new ApiError(400, code, message);
-const normHost = (h: unknown) => (typeof h === "string" ? h.trim().toLowerCase() : h);
+const bad = (code: string, message: string, extra?: Record<string, unknown>) => new ApiError(400, code, message, extra);
+const lower = (h: unknown) => (typeof h === "string" ? h.trim().toLowerCase() : h);
+const hostsIn = (b: Record<string, unknown>): unknown[] =>
+  Array.isArray(b.hostnames)
+    ? b.hostnames.map(lower)
+    : [lower(b.hostname), ...(Array.isArray(b.extraHostnames) ? b.extraHostnames.map(lower) : [])];
 
-function envInput(v: unknown, field: string): Record<string, string> {
-  if (v === undefined) return {};
-  if (typeof v !== "object" || v === null || Array.isArray(v)) throw bad("invalid_env", `${field} must be an object`);
+/** Panel host/port from the process env (the boot wiring may pass them explicitly). */
+function panelFromEnv(): PanelSelf {
+  let hostname: string | null = null;
   try {
-    assertEnvEntries(v as Record<string, unknown>);
-  } catch (e) {
-    if (e instanceof EnvInputError) throw bad("invalid_env", e.message);
-    throw e;
+    hostname = process.env.APP_BASE_URL ? new URL(process.env.APP_BASE_URL).hostname : null;
+  } catch {
+    hostname = null; // invalid URL: env.ts refuses to boot with it, so only tests get here
   }
-  return v as Record<string, string>;
+  const port = Number(process.env.PORT);
+  return { hostname, port: Number.isInteger(port) && port > 0 ? port : null };
 }
 
-/** Site management behind /api/panel/sites, /jobs and /integration. */
+/** Site management service; one job runner and one integration cache per instance. */
 export function createSiteService(deps: SiteDeps) {
-  const ctx = deps;
-  const { db, system } = deps;
-  const jobs = createJobRunner(db);
+  const ctx = { ...deps, panel: deps.panel ?? panelFromEnv() };
+  const { db, system } = ctx;
+  const jobs = createJobRunner(db, { monitor: deps.monitor });
+  const integ = createIntegration(ctx);
 
   const siteRow = (name: string) => {
     if (!SITE_NAME_RE.test(name)) throw bad("invalid_name", `invalid site name ${JSON.stringify(name)}`);
@@ -62,58 +74,84 @@ export function createSiteService(deps: SiteDeps) {
     return s;
   };
   const hostsOf = (name: string) => db.select().from(siteHostname).where(eq(siteHostname.siteName, name)).all();
-
-  async function toSites(rows: (typeof site.$inferSelect)[]): Promise<Site[]> {
-    const hosts = db.select().from(siteHostname).all();
-    const apps = await system.pm2.list().catch((e: unknown) => {
-      log.warn(`[sites] pm2 list unavailable: ${(e as Error).message}`);
-      return [];
+  /** pm2 processes, or null when pm2 is not running (statuses then read "unknown"). */
+  const procsOrNull = async (): Promise<Pm2Proc[] | null> =>
+    system.pm2.procs().catch((e: unknown) => {
+      if (!(e instanceof Pm2UnavailableError)) throw e;
+      return null;
     });
-    return rows.map((s) => ({
-      name: s.name,
-      port: s.port,
-      hostnames: hosts.filter((h) => h.siteName === s.name).map((h) => h.hostname),
-      database: s.database,
-      runtime: s.runtime,
-      managed: s.managed,
-      appStatus: apps.find((a) => a.name === s.app)?.status ?? "not_deployed",
-      createdAt: s.createdAt.toISOString(),
-    }));
+  const assertPm2 = async () => {
+    if ((await procsOrNull()) === null) throw new ApiError(409, "pm2_not_running", "pm2 is not running");
+  };
+
+  function toSites(rows: (typeof site.$inferSelect)[], procs: Pm2Proc[] | null): Site[] {
+    const hosts = db.select().from(siteHostname).all();
+    return rows.map((s) => {
+      const p = procs?.find((a) => a.name === appName(s));
+      const d = db
+        .select({ at: deploy.at, kind: deploy.kind, status: deploy.status, actorName: user.name })
+        .from(deploy)
+        .leftJoin(user, eq(user.id, deploy.actorId))
+        .where(eq(deploy.siteName, s.name))
+        .orderBy(desc(deploy.at))
+        .get();
+      return {
+        name: s.name,
+        port: s.port,
+        hostnames: hosts.filter((h) => h.siteName === s.name).map((h) => h.hostname),
+        database: s.database,
+        runtime: s.runtime,
+        managed: s.managed,
+        app: appName(s),
+        appStatus: procs === null ? "unknown" : (p?.status ?? "not_deployed"),
+        restarts: p?.restarts ?? null,
+        lastDeploy: d ? { ...d, at: d.at.toISOString(), actorName: d.actorName ?? null } : null,
+        createdAt: s.createdAt.toISOString(),
+      };
+    });
+  }
+  const troubled = (s: Site) =>
+    s.appStatus === "errored" || ["failed", "interrupted"].includes(s.lastDeploy?.status ?? "");
+
+  async function detail(name: string): Promise<SiteDetail> {
+    const s = siteRow(name);
+    const procs = await procsOrNull();
+    const [base] = toSites([s], procs) as [Site];
+    const proc = procs?.find((p) => p.name === appName(s));
+    const ready = s.managed && !existsSync(join(s.dir, "app")) ? (await integ.get()).ready : true;
+    return {
+      ...base,
+      dir: s.dir,
+      envKeys: envKeys(readTextOrNull(join(s.dir, ".env")) ?? ""),
+      lockedEnvKeys: lockedEnvKeys(s),
+      pm2EnvKeys: s.managed ? [] : await integ.envKeysOf(appName(s)),
+      restartPending: restartPending(s, proc),
+      dns: hostsOf(name).map((h) => ({ hostname: h.hostname, managed: h.dnsManaged })),
+      health: { path: s.healthPath, expect: s.healthExpect, timeoutSec: s.healthTimeoutSec },
+      binary: siteBinaries(db, s),
+      scriptRuntime: proc ? scriptRuntimeOf(proc) : null,
+      deployBlocker: !existsSync(s.dir)
+        ? "no_folder"
+        : procs === null
+          ? "pm2_not_running"
+          : ready
+            ? null
+            : "integration",
+      activeJob: jobs.active(),
+    };
   }
 
   return {
     jobs,
+    detail,
 
-    list: async () => toSites(db.select().from(site).orderBy(site.name).all()),
+    list: async () =>
+      toSites(db.select().from(site).orderBy(site.name).all(), await procsOrNull()).sort(
+        (a, b) => Number(troubled(b)) - Number(troubled(a)),
+      ),
 
-    async detail(name: string): Promise<SiteDetail> {
-      const s = siteRow(name);
-      const [base] = await toSites([s]);
-      return {
-        ...(base as Site),
-        dir: s.dir,
-        envKeys: envKeys(readTextOrNull(join(s.dir, ".env")) ?? ""),
-        dns: hostsOf(name).map((h) => ({ hostname: h.hostname, managed: h.dnsManaged })),
-      };
-    },
-
-    async discovered(): Promise<DiscoveredIngress[]> {
-      const [ingress, apps] = await Promise.all([system.cloudflared.listIngress(), system.pm2.list()]);
-      const known = new Set(
-        db
-          .select({ h: siteHostname.hostname })
-          .from(siteHostname)
-          .all()
-          .map((r) => r.h),
-      );
-      return ingress
-        .filter((r) => !known.has(r.hostname))
-        .map((r) => ({
-          hostname: r.hostname,
-          port: r.port,
-          app: r.port === null ? null : (apps.find((a) => a.port === r.port)?.name ?? null),
-        }));
-    },
+    /** Unclaimed ingress + pm2 apps; Pm2UnavailableError → 503 `pm2_unavailable` in the routes. */
+    discovered: () => discover(ctx),
 
     async suggestPort(): Promise<{ port: number }> {
       const port = await suggestPort(ctx);
@@ -123,104 +161,83 @@ export function createSiteService(deps: SiteDeps) {
 
     async check(body: unknown): Promise<SiteCheckResult> {
       const b = obj(body);
-      const issues = await checkSite(ctx, { name: b.name, hostname: normHost(b.hostname), port: b.port });
-      return { ok: issues.length === 0, issues };
+      const scope = b.scope === "hostname" ? "hostname" : "site";
+      const r = await checkSite(ctx, {
+        ...b,
+        hostnames: hostsIn(b),
+        scope,
+        dns: deps.dns,
+        database: b.database === true,
+      });
+      return { ok: r.issues.length === 0, ...r };
     },
 
     async create(actorId: string, body: unknown): Promise<{ jobId: string }> {
       jobs.assertIdle();
       const b = obj(body);
       if (typeof b.database !== "boolean") throw bad("invalid_database", "database must be a boolean");
-      const env = envInput(b.env, "env");
-      const reserved = Object.keys(env).filter((k) => RESERVED_ENV.includes(k));
-      if (reserved.length) throw bad("invalid_env", `${reserved.join(", ")} are set by the panel`);
-      const hostname = normHost(b.hostname);
-      const issues = await checkSite(ctx, { name: b.name, hostname, port: b.port, database: b.database });
-      if (issues.length) throw bad("invalid_site", issues.map((i) => `${i.field}: ${i.message}`).join("; "));
+      const env = envInput(b.env);
+      const reserved = Object.keys(env).find((k) => k === "PORT" || k === "DATABASE_URL");
+      if (reserved) throw bad("invalid_env", `${reserved} is set by the panel`, { key: reserved, reason: "key" });
+      const hostnames = hostsIn(b);
+      if (hostnames.length > MAX_HOSTNAMES) throw bad("invalid_hostname", `at most ${MAX_HOSTNAMES} domains`);
+      const { issues } = await checkSite(ctx, { name: b.name, hostnames, port: b.port, database: b.database });
+      if (issues.length) throw bad("invalid_site", issues.map((i) => `${i.field}: ${i.code}`).join("; "), { issues });
       const port = b.port === undefined ? (await this.suggestPort()).port : (b.port as number);
       const name = b.name as string;
-      const input = { name, hostname: hostname as string, port, database: b.database, env };
-      const jobId = jobs.start(createSiteJob(ctx, actorId, input));
+      const hs = hostnames as string[];
+      const jobId = jobs.start(createSiteJob(ctx, actorId, { name, hostnames: hs, port, database: b.database, env }));
       recordAudit(db, {
         actorId,
         action: "site.create",
         target: name,
-        meta: { jobId, hostname, port, database: b.database, envKeys: Object.keys(env) },
+        meta: { jobId, hostnames: hs, port, database: b.database, envKeys: Object.keys(env) },
       });
-      log.info(`[sites] create ${name} (${hostname}:${port}) by ${actorId}, job ${jobId}`);
+      log.info(`[sites] create ${name} (${hs.join(", ")}:${port}) by ${actorId}, job ${jobId}`);
       return { jobId };
     },
 
-    async adopt(actorId: string, body: unknown): Promise<Site> {
+    async adopt(actorId: string, body: unknown): Promise<SiteDetail> {
       jobs.assertIdle();
-      const b = obj(body);
-      const { name, port, app } = b;
-      const hostname = normHost(b.hostname);
-      const runtime = (b.runtime ?? "grun") as SiteRuntime;
-      if (typeof name !== "string" || !SITE_NAME_RE.test(name)) throw bad("invalid_name", "invalid site name");
-      if (db.select().from(site).where(eq(site.name, name)).get())
-        throw new ApiError(409, "exists", `site ${name} exists`);
-      if (typeof hostname !== "string" || !HOSTNAME_RE.test(hostname))
-        throw bad("invalid_hostname", "invalid hostname");
-      if (db.select().from(siteHostname).where(eq(siteHostname.hostname, hostname)).get()) {
-        throw new ApiError(409, "exists", `${hostname} already belongs to a site`);
-      }
-      if (typeof port !== "number" || !Number.isInteger(port) || port < 1 || port > MAX_PORT) {
-        throw bad("invalid_port", "port must be an integer 1-65535");
-      }
-      if (db.select().from(site).where(eq(site.port, port)).get())
-        throw new ApiError(409, "exists", `port ${port} belongs to a site`);
-      if (app !== undefined && (typeof app !== "string" || !RESOURCE_NAME_RE.test(app)))
-        throw bad("invalid_app", "invalid pm2 app name");
-      if (runtime !== "native" && runtime !== "grun")
-        throw bad("invalid_runtime", 'runtime must be "native" or "grun"');
-      const dir = join(sitePaths(ctx).sitesDir, name);
-      db.transaction((tx) => {
-        tx.insert(site)
-          .values({
-            name,
-            port,
-            app: (app as string | undefined) ?? null,
-            database: null,
-            runtime,
-            managed: false,
-            dir,
-          })
-          .run();
-        tx.insert(siteHostname).values({ hostname, siteName: name, ingressManaged: false, dnsManaged: false }).run();
-      });
-      recordAudit(db, { actorId, action: "site.adopt", target: name, meta: { hostname, port, app: app ?? null } });
-      log.info(`[sites] adopted ${name} by ${actorId}`);
-      return (await toSites([siteRow(name)]))[0] as Site;
+      return detail(await adoptSite(ctx, actorId, obj(body)));
     },
 
-    async updateEnv(actorId: string, name: string, body: unknown): Promise<{ envKeys: string[] }> {
+    saveEnv: (actorId: string, name: string, body: unknown) => saveEnv(ctx, jobs, actorId, siteRow(name), body),
+
+    async updateSettings(actorId: string, name: string, body: unknown): Promise<SiteDetail> {
       const s = siteRow(name);
-      const b = obj(body);
-      const set = envInput(b.set ?? {}, "set");
-      const unset = b.unset ?? [];
-      if (!Array.isArray(unset) || !unset.every((k) => typeof k === "string" && ENV_KEY_RE.test(k))) {
-        throw bad("invalid_env", "unset must be an array of env keys");
-      }
-      if (!existsSync(s.dir)) throw new ApiError(409, "no_folder", `site folder ${s.dir} does not exist`);
-      const path = join(s.dir, ".env");
-      const next = updateEnv(readTextOrNull(path) ?? "", set, unset);
-      writeAtomic(path, next, { mode: ENV_MODE });
-      // Keys only: values never reach audit or logs.
-      recordAudit(db, { actorId, action: "site.env_update", target: name, meta: { set: Object.keys(set), unset } });
-      const restarted = s.app ? await system.pm2.control(s.app, "restart") : null;
-      log.info(`[sites] env of ${name} updated by ${actorId}${restarted ? ", app restarted" : ""}`);
-      return { envKeys: envKeys(next) };
+      const set = parseHealthSettings(obj(obj(body).health));
+      jobs.assertIdle();
+      if (Object.keys(set).length) db.update(site).set(set).where(eq(site.name, s.name)).run();
+      recordAudit(db, { actorId, action: "site.settings_update", target: name, meta: { health: set } });
+      return detail(name);
     },
 
-    addHostname(actorId: string, name: string, body: unknown): { jobId: string } {
+    /** GET /sites/:name/health: one probe with the site's path/expect and Host = first domain. */
+    health: (name: string): Promise<HealthProbe> => probeHealth(ctx, siteRow(name), hostsOf(name)[0]?.hostname),
+
+    async restart(actorId: string, name: string): Promise<{ jobId: string }> {
       jobs.assertIdle();
       const s = siteRow(name);
-      const hostname = normHost(obj(body).hostname);
-      if (typeof hostname !== "string" || !HOSTNAME_RE.test(hostname))
-        throw bad("invalid_hostname", "invalid hostname");
-      const jobId = jobs.start(addHostnameJob(ctx, actorId, s, hostname));
-      recordAudit(db, { actorId, action: "hostname.add", target: name, meta: { jobId, hostname } });
+      await assertPm2();
+      const jobId = jobs.start(restartSiteJob(ctx, actorId, s));
+      recordAudit(db, { actorId, action: "site.restart", target: name, meta: { jobId } });
+      return { jobId };
+    },
+
+    addHostnames(actorId: string, name: string, body: unknown): { jobId: string } {
+      jobs.assertIdle();
+      const s = siteRow(name);
+      const hostnames = hostsIn(obj(body));
+      if (
+        hostnames.length < 1 ||
+        hostnames.length > MAX_HOSTNAMES ||
+        !hostnames.every((h) => typeof h === "string" && HOSTNAME_RE.test(h))
+      )
+        throw bad("invalid_hostname", `1-${MAX_HOSTNAMES} valid hostnames are required`);
+      const hs = [...new Set(hostnames as string[])];
+      const jobId = jobs.start(addHostnamesJob(ctx, actorId, s, hs));
+      recordAudit(db, { actorId, action: "hostname.add", target: name, meta: { jobId, hostnames: hs } });
       return { jobId };
     },
 
@@ -231,17 +248,18 @@ export function createSiteService(deps: SiteDeps) {
       const h = hosts.find((x) => x.hostname === hostname.toLowerCase());
       if (!h) throw new ApiError(404, "not_found", `${hostname} is not a hostname of ${name}`);
       if (hosts.length === 1) throw bad("last_hostname", "a site needs at least one hostname; delete the site instead");
-      if (!s.managed && !h.ingressManaged) {
+      if (!s.managed && !h.ingressManaged)
         throw new ApiError(409, "hand_written", `${hostname} is a hand-written ingress rule of an adopted site`);
-      }
       const jobId = jobs.start(removeHostnameJob(ctx, actorId, s, h));
       recordAudit(db, { actorId, action: "hostname.remove", target: name, meta: { jobId, hostname: h.hostname } });
       return { jobId };
     },
 
-    remove(actorId: string, name: string, keep: { data: boolean; database: boolean }): { jobId: string } {
+    /** DELETE /sites/:name: a managed site needs `confirm=<name>` (typed confirmation, D24). */
+    remove(actorId: string, name: string, keep: { data: boolean; database: boolean }, confirm?: string) {
       jobs.assertIdle();
       const s = siteRow(name);
+      if (s.managed && confirm !== name) throw bad("confirm_mismatch", `confirm must be the site name ${name}`);
       const jobId = jobs.start(deleteSiteJob(ctx, actorId, s, hostsOf(name), keep));
       recordAudit(db, {
         actorId,
@@ -253,31 +271,19 @@ export function createSiteService(deps: SiteDeps) {
       return { jobId };
     },
 
-    integration(): Integration {
-      const p = sitePaths(ctx);
-      const eco = readTextOrNull(p.ecosystem);
-      const cfg = readTextOrNull(p.cfConfig);
-      const issues: string[] = [];
-      let tunnelId: string | null = null;
-      let cfgError: string | null = null;
-      try {
-        tunnelId = cfg === null ? null : readTunnelId(cfg);
-      } catch (e) {
-        cfgError = `${p.cfConfig}: ${(e as Error).message}`;
-      }
-      const ecosystemIncludesAppsJson = eco !== null && /apps\.json/.test(eco);
-      const appsJsonExists = existsSync(p.appsJson);
-      const cloudflareTokenSet = describeSetting(db, "cloudflare.api_token").isSet;
-      if (eco === null) issues.push(`${p.ecosystem} not found`);
-      else if (!ecosystemIncludesAppsJson)
-        issues.push(`${p.ecosystem} does not spread apps.json into apps (add ...require('./apps.json'))`);
-      if (!appsJsonExists) issues.push(`${p.appsJson} does not exist yet (created with the first site)`);
-      if (cfg === null) issues.push(`${p.cfConfig} not found`);
-      else if (cfgError) issues.push(cfgError);
-      else if (!tunnelId) issues.push(`${p.cfConfig}: no tunnel UUID in tunnel: or the credentials-file name`);
-      if (!cloudflareTokenSet) issues.push("Cloudflare API token not set (/dev settings): DNS records will be skipped");
-      return { ecosystemIncludesAppsJson, appsJsonExists, tunnelId, cloudflareTokenSet, issues };
+    recover: (actorId: string, id: string) => recoverJob(ctx, jobs, actorId, id),
+
+    getIntegration: () => integ.get(),
+    verifyIntegration: () => {
+      jobs.assertIdle();
+      return integ.verify();
     },
+    /** Sync status for /dev/setup (`ecosystemIncludesAppsJson`), from the last check. */
+    integration: () => integ.snapshot(),
+    /** Boot: writes apps.json `[]` when sites.dir exists and it does not (D3). */
+    ensureAppsJson: () => ensureAppsJson(ctx),
+    /** .env values of the site run by pm2 app `app` (log redaction, B22). */
+    secretsFor: (app: string) => siteSecretsFor(db, app),
   };
 }
 

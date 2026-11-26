@@ -1,54 +1,79 @@
-// Reusable job steps that touch shared state: config.yml ingress, cloudflared restart, DNS records.
+// Coded job steps on shared state: config.yml ingress, cloudflared restart, DNS records, HTTPS probe (PLAN/03 §3.4).
+
 import { chmodSync, copyFileSync, renameSync, rmSync, statSync, writeFileSync } from "node:fs";
-import { DnsNotConfiguredError, type DnsProvider } from "../cloudflare/dns.types";
+import type { HealthProbe } from "../../shared/site.types";
+import { DnsZoneNotFoundError, type SiteDnsProvider } from "../cloudflare/dns.provider";
+import { DnsConflictError, DnsNotConfiguredError } from "../cloudflare/dns.types";
+import type { site } from "../db/schema";
+import { appRestartStep, healthStep } from "../deploy/deploy.restart";
+import { newState } from "../deploy/deploy.steps";
+import { passes } from "../deploy/health.check";
 import { log } from "../log.service";
 import type { RunitAdapter } from "../system/system.types";
-import type { StepDef } from "./job.runner";
-import type { SiteCtx } from "./site.checks";
-import { readTextOrNull, restoreText, tempPathFor } from "./site.files";
+import { parseApps, removeApp } from "./apps.file";
+import { IngressEditError } from "./ingress.editor";
+import { type StepDef, StepError } from "./job.runner";
+import { type SiteCtx, sitePaths } from "./site.checks";
+import { readTextOrNull, restoreText, tempPathFor, writeAtomic } from "./site.files";
 
 /** runit service name of the tunnel. */
 export const CLOUDFLARED_SERVICE = "cloudflared";
 /** How long to wait for cloudflared to be `run` again after a restart. */
 const CLOUDFLARED_UP_TIMEOUT_MS = 30_000;
 const POLL_MS = 500;
+const MS_PER_SEC = 1000;
+const HTTP_SERVER_ERROR = 500;
 
 /** Per-job flags shared by ingress/restart steps so rollback can re-apply the restored config. */
 export type TunnelState = { ingressChanged: boolean; restarted: boolean };
+/** Fresh tunnel flags for one job. */
+export const tunnelState = (): TunnelState => ({ ingressChanged: false, restarted: false });
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+const list = (hosts: string[]) => hosts.join(", ");
 
 /**
- * Edits config.yml via `mutate`: the candidate is written to a temp file next to it and validated with
- * cloudflared first, then the old file is copied to config.yml.bak and the candidate renamed over it,
- * so the live config is never invalid. Undo writes back the exact previous bytes.
+ * Edits config.yml via `mutate`: the candidate is written next to it and validated with cloudflared first, then
+ * the old file is copied to config.yml.bak and the candidate renamed over it, so the live config is never invalid.
+ * Undo writes back the exact previous bytes. `removing` picks the outcome code.
  */
-export function ingressStep(ctx: SiteCtx, st: TunnelState, label: string, mutate: (t: string) => string): StepDef {
+export function ingressStep(
+  ctx: SiteCtx,
+  st: TunnelState,
+  hostnames: string[],
+  removing: boolean,
+  mutate: (t: string) => string,
+): StepDef {
   const path = ctx.system.cloudflared.configPath;
   let prev: string | null = null;
   let mode = 0o644;
   return {
     key: "ingress",
-    label,
     async run() {
       prev = readTextOrNull(path);
-      if (prev === null) throw new Error(`${path} not found`);
+      if (prev === null) throw new StepError("ingress_config_missing", { path });
       mode = statSync(path).mode & 0o777;
-      const next = mutate(prev);
-      if (next === prev) return { skipped: "ingress already up to date" };
+      let next: string;
+      try {
+        next = mutate(prev);
+      } catch (e) {
+        if (e instanceof IngressEditError) throw new StepError("ingress_unsupported", {}, e.message);
+        throw e;
+      }
+      if (next === prev) return { code: "ingress_unchanged", skipped: true };
       const tmp = tempPathFor(path);
       writeFileSync(tmp, next, { mode });
       chmodSync(tmp, mode);
       try {
         const v = await ctx.system.cloudflared.validate(tmp);
-        if (!v.ok) throw new Error(`cloudflared rejected the new ingress: ${v.message}`);
+        if (!v.ok) throw new StepError("ingress_rejected", {}, `cloudflared rejected the new ingress: ${v.message}`);
         copyFileSync(path, `${path}.bak`);
         renameSync(tmp, path); // atomic: same directory
       } finally {
         rmSync(tmp, { force: true });
       }
       st.ingressChanged = true;
-      return "config.yml updated (backup: config.yml.bak)";
+      return { code: removing ? "ingress_removed" : "ingress_added", params: { hostnames: list(hostnames) } };
     },
     async undo() {
       restoreText(path, prev, mode);
@@ -56,27 +81,27 @@ export function ingressStep(ctx: SiteCtx, st: TunnelState, label: string, mutate
   };
 }
 
-async function restartAndWait(runit: RunitAdapter): Promise<string> {
+async function restartAndWait(runit: RunitAdapter): Promise<number> {
+  const t0 = Date.now();
   const s = await runit.control(CLOUDFLARED_SERVICE, "restart");
-  if (!s) throw new Error(`runit service ${CLOUDFLARED_SERVICE} not found`);
-  const deadline = Date.now() + CLOUDFLARED_UP_TIMEOUT_MS;
+  if (!s) throw new StepError("tunnel_service_missing");
+  const deadline = t0 + CLOUDFLARED_UP_TIMEOUT_MS;
   for (;;) {
-    const cur = (await runit.list()).find((x) => x.name === CLOUDFLARED_SERVICE);
-    if (cur?.state === "run") return `cloudflared running (pid ${cur.pid ?? "?"})`;
+    const cur = await runit.supervise(CLOUDFLARED_SERVICE);
+    if (cur?.state === "run") return Math.round((Date.now() - t0) / MS_PER_SEC);
     if (Date.now() > deadline)
-      throw new Error(`cloudflared not running ${CLOUDFLARED_UP_TIMEOUT_MS / 1000}s after restart`);
+      throw new StepError("tunnel_not_running", { seconds: CLOUDFLARED_UP_TIMEOUT_MS / MS_PER_SEC });
     await sleep(POLL_MS);
   }
 }
 
-/** Restarts cloudflared (drops every domain for a few seconds) when the ingress changed. */
-export const restartStep = (ctx: SiteCtx, st: TunnelState): StepDef => ({
-  key: "restart",
-  label: "Restart cloudflared",
+/** Restarts cloudflared (drops every domain for a few seconds) only when the ingress text changed (D29). */
+export const tunnelRestartStep = (ctx: SiteCtx, st: TunnelState): StepDef => ({
+  key: "tunnel_restart",
   async run() {
-    if (!st.ingressChanged) return { skipped: "ingress unchanged, no restart needed" };
+    if (!st.ingressChanged) return { code: "tunnel_unchanged", skipped: true };
     st.restarted = true;
-    return restartAndWait(ctx.system.runit);
+    return { code: "tunnel_restarted", params: { seconds: await restartAndWait(ctx.system.runit) } };
   },
 });
 
@@ -87,62 +112,133 @@ export async function reapplyTunnel(ctx: SiteCtx, st: TunnelState): Promise<void
   await restartAndWait(ctx.system.runit);
 }
 
-/** Points `hostname` at the tunnel. Not configured → skipped. `out.managed` tells if the panel owns the record. */
+/** Maps DNS provider errors of `hostname` to step codes. */
+function dnsError(e: unknown, hostname: string): never {
+  if (e instanceof DnsConflictError) throw new StepError("dns_conflict", { hostname }, e.message);
+  if (e instanceof DnsZoneNotFoundError) throw new StepError("dns_zone_missing", { hostname }, e.message);
+  if (e instanceof StepError) throw e;
+  throw new StepError("dns_api_failed", { hostname }, (e as Error).message);
+}
+
+/**
+ * Points every hostname at the tunnel. Token not set → skipped. `owned` gets the hostnames whose record the panel
+ * owns (a hand-made CNAME to the same tunnel is used but not owned). Undo deletes the records this step created.
+ */
 export function dnsEnsureStep(
-  dns: DnsProvider,
-  hostname: string,
+  dns: SiteDnsProvider,
+  hostnames: string[],
   tunnelId: () => string | null,
-  out: { managed: boolean },
+  owned: Set<string>,
+  actorId: string | null,
 ): StepDef {
-  let created = false;
+  const created: string[] = [];
   return {
     key: "dns",
-    label: `DNS record for ${hostname}`,
     async run() {
       const id = tunnelId();
-      if (!id) throw new Error("config.yml: no tunnel UUID in tunnel: or the credentials-file name");
-      try {
-        const r = await dns.ensureTunnelCname(hostname, id);
-        created = r.created;
-        out.managed = true;
-        return r.created ? "CNAME created" : "panel-managed CNAME already present";
-      } catch (e) {
-        if (e instanceof DnsNotConfiguredError) {
-          return { skipped: "Cloudflare token not set: set it in /dev settings, then create the DNS record" };
+      if (!id) throw new StepError("dns_no_tunnel_id");
+      const same: string[] = [];
+      for (const h of hostnames) {
+        try {
+          const r = await dns.ensureTunnelCname(h, id, actorId);
+          if (r.created) created.push(h);
+          if (r.owned === false) same.push(h);
+          else owned.add(h);
+        } catch (e) {
+          if (e instanceof DnsNotConfiguredError) return { code: "dns_no_token", skipped: true };
+          dnsError(e, h);
         }
-        throw e;
       }
+      if (created.length) return { code: "dns_created", params: { hostnames: list(created) } };
+      if (same.length) return { code: "dns_same_tunnel", params: { hostnames: list(same) } };
+      return { code: "dns_owned_present" };
     },
     async undo() {
-      if (created) await dns.deleteManaged(hostname);
+      for (const h of created) await dns.deleteManaged(h, actorId);
     },
   };
 }
 
-/** Deletes the panel-managed records of `hostnames` (others skipped); undo re-creates them. */
-export function dnsDeleteStep(dns: DnsProvider, hostnames: string[], tunnelId: () => string | null): StepDef {
-  const deleted: string[] = [];
+/**
+ * Deletes the panel-owned records of `hostnames`. Runs after the tunnel restart and never fails the job (D29):
+ * an API error leaves `dns_left` with the hostnames still to clean up in the dashboard.
+ */
+export function dnsDeleteStep(dns: SiteDnsProvider, hostnames: string[], actorId: string | null): StepDef {
   return {
     key: "dns",
-    label: "Delete DNS records",
     async run() {
-      if (hostnames.length === 0) return { skipped: "no panel-managed DNS records" };
+      if (hostnames.length === 0) return { code: "dns_none_owned", skipped: true };
+      const left: string[] = [];
+      let detail: string | null = null;
       for (const h of hostnames) {
         try {
-          await dns.deleteManaged(h);
-          deleted.push(h);
+          await dns.deleteManaged(h, actorId);
         } catch (e) {
-          if (e instanceof DnsNotConfiguredError)
-            return { skipped: "Cloudflare token not set; DNS records left as is" };
-          throw e;
+          if (e instanceof DnsNotConfiguredError) return { code: "dns_no_token", skipped: true };
+          left.push(h);
+          detail = `${h}: ${(e as Error).message}`;
+          log.warn(`[sites] DNS delete of ${h} failed (left in Cloudflare): ${(e as Error).message}`);
         }
       }
-      return `deleted ${deleted.join(", ")}`;
-    },
-    async undo() {
-      const id = tunnelId();
-      if (!id) throw new Error("config.yml: no tunnel UUID in tunnel: or the credentials-file name");
-      for (const h of deleted) await dns.ensureTunnelCname(h, id);
+      if (left.length) return { code: "dns_left", params: { hostnames: list(left) }, detail };
+      return { code: "dns_deleted", params: { hostnames: list(hostnames) } };
     },
   };
+}
+
+/** One HTTPS probe of the first new hostname after the restart; never fails (a fresh site has no app yet). */
+export const domainProbeStep = (ctx: SiteCtx, hostnames: string[]): StepDef => ({
+  key: "domain_probe",
+  async run() {
+    const hostname = hostnames[0] as string;
+    const r = await ctx.system.cloudflared.probe(hostname);
+    const ok = r.status !== null && r.status < HTTP_SERVER_ERROR;
+    return { code: ok ? "domain_reachable" : "domain_not_yet", params: { hostname, status: r.status } };
+  },
+});
+
+/** apps.json without the panel entry of `name`; undo writes back the exact previous bytes. */
+export function appsRemoveStep(ctx: SiteCtx, name: string, managed: boolean): StepDef {
+  const { appsJson } = sitePaths(ctx);
+  let prev: string | null = null;
+  return {
+    key: "apps_remove",
+    async run() {
+      if (!managed) return { code: "apps_adopted_skip", skipped: true };
+      prev = readTextOrNull(appsJson);
+      let apps: Record<string, unknown>[];
+      try {
+        apps = parseApps(prev);
+      } catch (e) {
+        throw new StepError("apps_json_invalid", {}, (e as Error).message);
+      }
+      if (!apps.some((a) => a.name === name)) return { code: "apps_absent", skipped: true };
+      writeAtomic(appsJson, removeApp(prev, name), { backup: true });
+      return { code: "apps_removed", params: { name } };
+    },
+    async undo() {
+      if (prev !== null) restoreText(appsJson, prev);
+    },
+  };
+}
+
+type SiteRow = typeof site.$inferSelect;
+
+/** app_restart → health (deploy's D16 check), shared by site.restart, site.env and their cleanups. */
+export function restartSteps(ctx: SiteCtx, s: SiteRow): StepDef[] {
+  const st = newState(s.runtime);
+  return [appRestartStep(ctx, s, st), healthStep(ctx, s, st)];
+}
+
+const HEALTH_PROBE_TIMEOUT_MS = 5000;
+
+/** GET /sites/:name/health: one probe with the site's path/expect and Host = its first domain. */
+export async function probeHealth(ctx: SiteCtx, s: SiteRow, host: string | undefined): Promise<HealthProbe> {
+  const t0 = Date.now();
+  const { net } = ctx.system;
+  const status = (await net.isListening(s.port))
+    ? await net.httpStatus(s.port, s.healthPath, HEALTH_PROBE_TIMEOUT_MS, host)
+    : null;
+  const ms = status === null ? null : Date.now() - t0;
+  return { ok: passes(status, s.healthExpect), status, ms, path: s.healthPath, checkedAt: new Date().toISOString() };
 }

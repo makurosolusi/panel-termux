@@ -2,8 +2,16 @@ import { afterAll, describe, expect, test } from "bun:test";
 import { chmodSync, mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { addApp, appNames, removeApp } from "@/server/sites/apps.file";
-import { assertEnvEntries, EnvInputError, envKeys, envLine, updateEnv } from "@/server/sites/env.file";
+import { appNames, entryBinary, removeApp } from "@/server/sites/apps.file";
+import {
+  assertEnvEntries,
+  EnvInputError,
+  envKeys,
+  envPort,
+  envText,
+  envValues,
+  updateEnv,
+} from "@/server/sites/env.file";
 import {
   IngressEditError,
   ingressHostnames,
@@ -13,6 +21,7 @@ import {
 } from "@/server/sites/ingress.editor";
 import { readTextOrNull, restoreText, writeAtomic } from "@/server/sites/site.files";
 import { createTermuxPostgres } from "@/server/system/postgres.termux";
+import { encodeEnvLine } from "@/shared/env.codec";
 
 const sandbox = mkdtempSync(join(tmpdir(), "panel-site-files-"));
 afterAll(() => rmSync(sandbox, { recursive: true, force: true }));
@@ -90,20 +99,45 @@ describe("ingress editor", () => {
 });
 
 describe(".env helpers", () => {
-  test("quotes non-trivial values, rejects unrepresentable ones", () => {
-    expect(envLine("A", "plain-value_1.2:3@x")).toBe("A=plain-value_1.2:3@x");
-    expect(envLine("B", 'has space "q" $HOME')).toBe("B='has space \"q\" \\$HOME'");
-    for (const v of ["it's", "a\nb", "a\rb", "end\\"]) expect(() => assertEnvEntries({ K: v })).toThrow(EnvInputError);
-    expect(() => assertEnvEntries({ "1BAD": "x" })).toThrow(/invalid env key/);
-    expect(() => assertEnvEntries({ K: 5 })).toThrow(/string/);
+  test("refuses unrepresentable values with a coded reason, naming the key only", () => {
+    const reason = (env: Record<string, unknown>) => {
+      try {
+        assertEnvEntries(env);
+        return null;
+      } catch (e) {
+        expect(e).toBeInstanceOf(EnvInputError);
+        expect((e as Error).message).not.toContain("secretvalue");
+        return [(e as EnvInputError).key, (e as EnvInputError).reason];
+      }
+    };
+    expect(reason({ A: "plain", B: "it's fine", C: 'has "q" $HOME' })).toBeNull();
+    expect(reason({ K: "secretvalue\nb" })).toEqual(["K", "multiline"]);
+    expect(reason({ K: "secretvalue'\"" })).toEqual(["K", "quote"]);
+    expect(reason({ K: "end\\" })).toEqual(["K", "quote"]);
+    expect(reason({ K: "x".repeat(16_385) })).toEqual(["K", "too_long"]);
+    expect(reason({ "1BAD": "x" })).toEqual(["1BAD", "key"]);
+    expect(reason({ K: 5 })).toEqual(["K", "quote"]);
+  });
+
+  test("PORT and values are decoded with the Bun rules; PORT skipped for redaction", () => {
+    const text = envText([
+      ["PORT", "3005"],
+      ["TOKEN", "a b $x"],
+      ["Q", "it's"],
+    ]);
+    expect(text).toBe("PORT=3005\nTOKEN='a b \\$x'\nQ=\"it's\"\n");
+    expect(envPort(text)).toBe(3005);
+    expect(envPort("PORT=' 99999'\n")).toBeNull();
+    expect(envPort('export PORT="4100" # c\n')).toBe(4100);
+    expect(envValues(text, ["PORT"])).toEqual(["a b $x", "it's"]);
   });
 
   test("written values load back exactly through Bun's .env parser", async () => {
     // biome-ignore lint/suspicious/noTemplateCurlyInString: a literal ${HOME} is the case under test
-    const values = ['p@ss "w" $HOME ${HOME} \\ mid', "x\\$HOME", "a\\nb", "#notcomment", "=eq= ", "$"];
+    const values = ['p@ss "w" $HOME ${HOME} \\ mid', "x\\$HOME", "a\\nb", "#notcomment", "=eq= ", "$", "it's $x"];
     const dir = join(sandbox, "envcheck");
     mkdirSync(dir);
-    writeFileSync(join(dir, ".env"), `${values.map((v, i) => envLine(`V${i}`, v)).join("\n")}\n`);
+    writeFileSync(join(dir, ".env"), `${values.map((v, i) => encodeEnvLine(`V${i}`, v)).join("\n")}\n`);
     writeFileSync(
       join(dir, "print.ts"),
       `process.stdout.write(JSON.stringify(${JSON.stringify(values.map((_, i) => `V${i}`))}.map((k) => process.env[k])));`,
@@ -126,16 +160,25 @@ describe(".env helpers", () => {
 });
 
 describe("apps.json + atomic files", () => {
-  const entry = { name: "shop", cwd: "/s/shop", script: "./app", interpreter: "none" as const, env: { PORT: "3010" } };
+  test("remove keeps other entries; invalid shapes throw", () => {
+    const text = JSON.stringify([
+      { name: "keep", script: "x" },
+      { name: "shop", script: "./run" },
+    ]);
+    expect(JSON.parse(removeApp(text, "shop"))).toEqual([{ name: "keep", script: "x" }]);
+    expect(appNames(removeApp(text, "absent"))).toEqual(["keep", "shop"]);
+    expect(appNames(null)).toEqual([]);
+    expect(() => appNames('{"a":1}')).toThrow(/array/);
+  });
 
-  test("add/remove keeps other entries", () => {
-    const hand = JSON.stringify([{ name: "keep", script: "x" }]);
-    const added = addApp(hand, entry);
-    expect(appNames(added)).toEqual(["keep", "shop"]);
-    expect(() => addApp(added, entry)).toThrow(/already/);
-    expect(JSON.parse(removeApp(added, "shop"))).toEqual([{ name: "keep", script: "x" }]);
-    expect(appNames(addApp(null, entry))).toEqual(["shop"]);
-    expect(() => addApp('{"a":1}', entry)).toThrow(/array/);
+  test("entryBinary: ./run needs run + app, grun its first arg, others the script", () => {
+    expect(entryBinary({ name: "a", cwd: "/s/a", script: "./run" }, "/s")).toEqual(["/s/a/run", "/s/a/app"]);
+    expect(entryBinary({ name: "b", cwd: "/s/b", script: "/usr/bin/grun", args: "./app" }, "/s")).toEqual(["/s/b/app"]);
+    expect(entryBinary({ name: "c", cwd: "/s/c", script: "/x/glibc-runner", args: ["bin/srv", "-p"] }, "/s")).toEqual([
+      "/s/c/bin/srv",
+    ]);
+    expect(entryBinary({ name: "d", script: "/abs/app" }, "/s")).toEqual(["/abs/app"]);
+    expect(entryBinary({ name: "e", script: "srv.js" }, "/s")).toEqual(["/s/srv.js"]);
   });
 
   test("writeAtomic sets mode, keeps .bak; restoreText puts back exact bytes or removes", () => {

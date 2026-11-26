@@ -5,7 +5,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createAuth } from "@/server/auth/auth.service";
 import { createFakeDnsProvider } from "@/server/cloudflare/dns.provider";
-import { DnsNotConfiguredError, type DnsProvider } from "@/server/cloudflare/dns.types";
+import { DnsNotConfiguredError, type SiteDnsProvider } from "@/server/cloudflare/dns.types";
 import { type Db, openDb } from "@/server/db/client";
 import { runMigrations } from "@/server/db/migrate";
 import { user } from "@/server/db/schema";
@@ -32,13 +32,20 @@ export function siteHarness(opts: { healthTimeoutMs?: number } = {}) {
   const system = createFakeSystem({ home, delayMs: 20, listeningPorts: [3001] });
   const fakeDns = createFakeDnsProvider();
   let dnsConfigured = true;
-  const dns: DnsProvider = {
+  const configured = () => {
+    if (!dnsConfigured) throw new DnsNotConfiguredError("no token");
+  };
+  const dns: Required<SiteDnsProvider> = {
     verify: () => fakeDns.verify(),
-    ensureTunnelCname: (h, t) => {
-      if (!dnsConfigured) throw new DnsNotConfiguredError("no token");
-      return fakeDns.ensureTunnelCname(h, t);
+    inspect: async (h, t) => {
+      configured();
+      return fakeDns.inspect(h, t);
     },
-    deleteManaged: (h) => fakeDns.deleteManaged(h),
+    ensureTunnelCname: async (h, t, actorId) => {
+      configured();
+      return fakeDns.ensureTunnelCname(h, t, actorId);
+    },
+    deleteManaged: (h, actorId) => fakeDns.deleteManaged(h, actorId),
   };
   const realValidate = system.cloudflared.validate;
   const cfg = join(home, ".cloudflared", "config.yml");

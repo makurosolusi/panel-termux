@@ -1,21 +1,34 @@
-// Step lists of the four site jobs. Each step is undoable (or irreversible and placed last).
+// Coded step lists of the site jobs (PLAN/03 §3.4). Each step is undoable, or irreversible and placed last.
 import { randomBytes } from "node:crypto";
 import { chmodSync, existsSync, mkdirSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { eq } from "drizzle-orm";
-import type { DnsProvider } from "../cloudflare/dns.types";
+import type { SiteDnsProvider } from "../cloudflare/dns.provider";
 import { site, siteHostname } from "../db/schema";
-import { addApp, type Pm2AppEntry, removeApp } from "./apps.file";
-import { envLine } from "./env.file";
-import { insertIngressRule, readTunnelId, removeIngressRule } from "./ingress.editor";
-import type { JobSpec, StepDef } from "./job.runner";
-import { checkSite, dbNameFor, type SiteCtx, sitePaths } from "./site.checks";
-import { readTextOrNull, restoreText, writeAtomic } from "./site.files";
-import { dnsDeleteStep, dnsEnsureStep, ingressStep, reapplyTunnel, restartStep, type TunnelState } from "./site.steps";
+import { appName } from "../deploy/deploy.steps";
+import { log } from "../log.service";
+import { Pm2UnavailableError } from "../system/system.types";
+import { envText } from "./env.file";
+import { insertIngressRule, removeIngressRule } from "./ingress.editor";
+import { type JobSpec, type StepDef, StepError } from "./job.runner";
+import { checkSite, dbNameFor, type SiteCtx, sitePaths, tunnelIdOf } from "./site.checks";
+import { writeAtomic } from "./site.files";
+import {
+  appsRemoveStep,
+  dnsDeleteStep,
+  dnsEnsureStep,
+  domainProbeStep,
+  ingressStep,
+  reapplyTunnel,
+  restartSteps,
+  tunnelRestartStep,
+  tunnelState,
+} from "./site.steps";
 
 /** Deps of the job builders: site context plus the shared DNS provider. */
-export type JobCtx = SiteCtx & { dns: DnsProvider };
-type SiteRow = typeof site.$inferSelect;
+export type JobCtx = SiteCtx & { dns: SiteDnsProvider };
+/** A `site` row. */
+export type SiteRow = typeof site.$inferSelect;
 type HostRow = typeof siteHostname.$inferSelect;
 
 const DIR_MODE = 0o700;
@@ -24,76 +37,47 @@ const PG_HOST = "127.0.0.1";
 const PG_PORT = 5432;
 const PASSWORD_BYTES = 24;
 
-const service = (port: number) => `http://localhost:${port}`;
-const tunnelOf = (ctx: SiteCtx) => () => {
-  const t = readTextOrNull(ctx.system.cloudflared.configPath);
-  return t === null ? null : readTunnelId(t);
-};
+/** Ingress service URL of a local port. */
+export const serviceOf = (port: number) => `http://localhost:${port}`;
+const issueCodes = (issues: { code: string }[]) => issues.map((i) => i.code).join(",");
 
-/** apps.json edit as a step; undo writes back the exact previous bytes (or removes a file it created). */
-function appsStep(ctx: SiteCtx, label: string, mutate: (t: string | null) => string, note = () => ""): StepDef {
-  const { appsJson } = sitePaths(ctx);
-  let prev: string | null = null;
-  return {
-    key: "apps",
-    label,
-    async run() {
-      prev = readTextOrNull(appsJson);
-      writeAtomic(appsJson, mutate(prev), { backup: true });
-      return `apps.json updated${note()}`;
-    },
-    async undo() {
-      restoreText(appsJson, prev);
-    },
-  };
-}
-
-const ecosystemNote = (ctx: SiteCtx) => () =>
-  /apps\.json/.test(readTextOrNull(sitePaths(ctx).ecosystem) ?? "")
-    ? ""
-    : "; WARNING: ecosystem.config.js does not include apps.json, pm2 will not load it";
-
-/** Input of the create job (already request-validated; port resolved). */
+/** Input of the create job (request-validated; port resolved). `env` never reaches the journal. */
 export type CreateInput = {
   name: string;
-  hostname: string;
+  hostnames: string[];
   port: number;
   database: boolean;
   env: Record<string, string>;
 };
 
-/** site.create: validate → folder → database → .env → apps.json → ingress → DNS → restart cloudflared. */
+/** site.create: validate → folder → database → env_write → ingress → dns → tunnel_restart → domain_probe. */
 export function createSiteJob(ctx: JobCtx, actorId: string, input: CreateInput): JobSpec {
-  const { name, hostname, port } = input;
+  const { name, hostnames, port } = input;
   const dir = join(sitePaths(ctx).sitesDir, name);
   const dbName = dbNameFor(name);
   const password = randomBytes(PASSWORD_BYTES).toString("hex");
-  const tunnel: TunnelState = { ingressChanged: false, restarted: false };
-  const dns = { managed: false };
-  const entry: Pm2AppEntry = {
-    name,
-    cwd: dir,
-    script: "./app",
-    interpreter: "none",
-    env: { PORT: String(port) },
-  };
+  const tunnel = tunnelState();
+  const owned = new Set<string>();
   const steps: StepDef[] = [
     {
       key: "validate",
-      label: "Validate",
       async run() {
-        const issues = await checkSite(ctx, { name, hostname, port, database: input.database });
-        if (issues.length) throw new Error(issues.map((i) => i.message).join("; "));
+        const { issues } = await checkSite(ctx, { name, hostnames, port, database: input.database });
+        if (issues.length) throw new StepError("invalid_site", { issues: issueCodes(issues) });
+        return { code: "validated" };
       },
     },
     {
       key: "folder",
-      label: "Create site folder",
       async run() {
-        mkdirSync(join(dir, "data"), { recursive: true, mode: DIR_MODE });
-        chmodSync(dir, DIR_MODE);
-        chmodSync(join(dir, "data"), DIR_MODE);
-        return dir;
+        try {
+          mkdirSync(join(dir, "data"), { recursive: true, mode: DIR_MODE });
+          chmodSync(dir, DIR_MODE);
+          chmodSync(join(dir, "data"), DIR_MODE);
+        } catch (e) {
+          throw new StepError("folder_failed", { path: dir }, (e as Error).message);
+        }
+        return { code: "folder_created", params: { path: dir } };
       },
       async undo() {
         rmSync(dir, { recursive: true, force: true });
@@ -101,47 +85,54 @@ export function createSiteJob(ctx: JobCtx, actorId: string, input: CreateInput):
     },
     {
       key: "database",
-      label: "Create database",
       async run() {
-        if (!input.database) return { skipped: "no database requested" };
+        if (!input.database) return { code: "database_skipped", skipped: true };
         try {
           await ctx.system.postgres.createRoleAndDatabase(dbName, password);
         } catch (e) {
-          // Role may exist without the database (CREATE DATABASE failed); both were checked absent before.
-          await ctx.system.postgres.dropRoleAndDatabase(dbName).catch(() => undefined);
-          throw e;
+          // The role may exist without the database (CREATE DATABASE failed); both were checked absent before.
+          await ctx.system.postgres.dropRoleAndDatabase(dbName).catch((d: unknown) => {
+            log.error(`[sites] cleanup of half-created database ${dbName} failed: ${(d as Error).message}`);
+          });
+          throw new StepError("database_failed", { name: dbName }, (e as Error).message);
         }
-        return `role and database ${dbName}`;
+        return { code: "database_created", params: { name: dbName } };
       },
       async undo() {
         if (input.database) await ctx.system.postgres.dropRoleAndDatabase(dbName);
       },
     },
     {
-      key: "env",
-      label: "Write .env",
+      key: "env_write",
       async run() {
         const vars: [string, string][] = [...Object.entries(input.env), ["PORT", String(port)]];
         if (input.database) {
           vars.push(["DATABASE_URL", `postgresql://${dbName}:${password}@${PG_HOST}:${PG_PORT}/${dbName}`]);
         }
-        writeAtomic(join(dir, ".env"), `${vars.map(([k, v]) => envLine(k, v)).join("\n")}\n`, { mode: ENV_MODE });
-        return `${vars.length} keys`;
+        try {
+          writeAtomic(join(dir, ".env"), envText(vars), { mode: ENV_MODE });
+        } catch (e) {
+          throw new StepError("env_failed", {}, (e as Error).message);
+        }
+        return { code: "env_written", params: { count: vars.length } };
       },
       async undo() {
         rmSync(join(dir, ".env"), { force: true });
       },
     },
-    appsStep(ctx, "Register pm2 app", (t) => addApp(t, entry), ecosystemNote(ctx)),
-    ingressStep(ctx, tunnel, "Add ingress rule", (t) => insertIngressRule(t, hostname, service(port))),
-    dnsEnsureStep(ctx.dns, hostname, tunnelOf(ctx), dns),
-    restartStep(ctx, tunnel),
+    ingressStep(ctx, tunnel, hostnames, false, (t) =>
+      hostnames.reduce((acc, h) => insertIngressRule(acc, h, serviceOf(port)), t),
+    ),
+    dnsEnsureStep(ctx.dns, hostnames, tunnelIdOf(ctx), owned, actorId),
+    tunnelRestartStep(ctx, tunnel),
+    domainProbeStep(ctx, hostnames),
   ];
   return {
     kind: "site.create",
     target: name,
     actorId,
     steps,
+    input: { name, hostnames, port, database: input.database },
     onSuccess() {
       ctx.db.transaction((tx) => {
         tx.insert(site)
@@ -155,135 +146,152 @@ export function createSiteJob(ctx: JobCtx, actorId: string, input: CreateInput):
             dir,
           })
           .run();
-        tx.insert(siteHostname)
-          .values({ hostname, siteName: name, ingressManaged: true, dnsManaged: dns.managed })
-          .run();
+        for (const hostname of hostnames)
+          tx.insert(siteHostname)
+            .values({ hostname, siteName: name, ingressManaged: true, dnsManaged: owned.has(hostname) })
+            .run();
       });
     },
     afterRollback: () => reapplyTunnel(ctx, tunnel),
   };
 }
 
+/** Irreversible step that only acts on managed sites (adopted: `<prefix>_adopted_skip`). */
+const managedOnly = (key: StepDef["key"], s: SiteRow, prefix: string, run: StepDef["run"]): StepDef => ({
+  key,
+  irreversible: true,
+  run: async (c) => (s.managed ? run(c) : { code: `${prefix}_adopted_skip`, skipped: true }),
+});
+
+/** Keep flags of a site delete. */
+export type DeleteKeep = { data: boolean; database: boolean };
+
 /**
- * site.delete. Managed: ingress → restart → DNS → apps.json → pm2 delete → db drop → folder (last three
- * irreversible). Adopted: only the ingress rules / DNS records the panel added, then the DB record.
+ * site.delete: validate → apps_remove (first, D5) → ingress → tunnel_restart → dns (non-fatal) → app_remove! →
+ * database_drop! → folder_remove!. Adopted sites: only panel-added ingress rules / DNS records, then the DB row.
  */
-export function deleteSiteJob(
-  ctx: JobCtx,
-  actorId: string,
-  s: SiteRow,
-  hosts: HostRow[],
-  keep: { data: boolean; database: boolean },
-): JobSpec {
-  const tunnel: TunnelState = { ingressChanged: false, restarted: false };
+export function deleteSiteJob(ctx: JobCtx, actorId: string, s: SiteRow, hosts: HostRow[], keep: DeleteKeep): JobSpec {
+  const tunnel = tunnelState();
   const ingressHosts = hosts.filter((h) => s.managed || h.ingressManaged).map((h) => h.hostname);
-  const skipUnlessManaged = (what: string) => ({ skipped: `adopted site: ${what} left untouched` });
   const steps: StepDef[] = [
     {
       key: "validate",
-      label: "Validate",
       async run() {
         if (!ctx.db.select().from(site).where(eq(site.name, s.name)).get())
-          throw new Error(`site ${s.name} no longer exists`);
+          throw new StepError("invalid_site", { issues: "gone" });
+        return { code: "validated" };
       },
     },
-    ingressStep(ctx, tunnel, "Remove ingress rules", (t) => ingressHosts.reduce(removeIngressRule, t)),
-    restartStep(ctx, tunnel),
+    appsRemoveStep(ctx, s.name, s.managed),
+    ingressStep(ctx, tunnel, ingressHosts, true, (t) => ingressHosts.reduce(removeIngressRule, t)),
+    tunnelRestartStep(ctx, tunnel),
     dnsDeleteStep(
       ctx.dns,
       hosts.filter((h) => h.dnsManaged).map((h) => h.hostname),
-      tunnelOf(ctx),
+      actorId,
     ),
-    s.managed
-      ? appsStep(ctx, "Unregister pm2 app", (t) => removeApp(t, s.name))
-      : { key: "apps", label: "Unregister pm2 app", run: async () => skipUnlessManaged("pm2 entry") },
-    {
-      key: "pm2",
-      label: "Stop and remove pm2 process",
-      irreversible: true,
-      async run() {
-        if (!s.managed) return skipUnlessManaged("pm2 process");
-        return (await ctx.system.pm2.remove(s.name)) ? "pm2 process deleted" : { skipped: "not deployed" };
-      },
-    },
-    {
-      key: "database",
-      label: "Drop database",
-      irreversible: true,
-      async run() {
-        if (!s.managed) return skipUnlessManaged("database");
-        if (!s.database) return { skipped: "site has no database" };
-        if (keep.database) return { skipped: "kept (keepDatabase)" };
+    managedOnly("app_remove", s, "app", async () => {
+      try {
+        const removed = await ctx.system.pm2.remove(appName(s));
+        return removed
+          ? { code: "app_removed", params: { name: appName(s) } }
+          : { code: "app_not_deployed", skipped: true };
+      } catch (e) {
+        if (e instanceof Pm2UnavailableError) throw new StepError("pm2_not_running", { reason: e.reason });
+        throw new StepError("pm2_failed", {}, (e as Error).message);
+      }
+    }),
+    managedOnly("database_drop", s, "database", async () => {
+      if (!s.database) return { code: "database_none", skipped: true };
+      if (keep.database) return { code: "database_kept", skipped: true };
+      try {
         await ctx.system.postgres.dropRoleAndDatabase(s.database);
-        return `dropped ${s.database}`;
-      },
-    },
-    {
-      key: "folder",
-      label: "Remove site folder",
-      irreversible: true,
-      async run() {
-        if (!s.managed) return skipUnlessManaged("folder");
-        if (keep.data) return { skipped: `kept ${s.dir} (keepData)` };
-        if (!existsSync(s.dir)) return { skipped: "folder already gone" };
+      } catch (e) {
+        throw new StepError("database_failed", { name: s.database }, (e as Error).message);
+      }
+      return { code: "database_dropped", params: { name: s.database } };
+    }),
+    managedOnly("folder_remove", s, "folder", async () => {
+      if (keep.data) return { code: "folder_kept", skipped: true };
+      if (!existsSync(s.dir)) return { code: "folder_gone", skipped: true };
+      try {
         rmSync(s.dir, { recursive: true, force: true });
-        return `removed ${s.dir}`;
-      },
-    },
+      } catch (e) {
+        throw new StepError("folder_failed", { path: s.dir }, (e as Error).message);
+      }
+      return { code: "folder_removed", params: { path: s.dir } };
+    }),
   ];
   return {
     kind: "site.delete",
     target: s.name,
     actorId,
     steps,
+    input: { name: s.name, keepData: keep.data, keepDatabase: keep.database },
     onSuccess: () => ctx.db.delete(site).where(eq(site.name, s.name)).run(),
     afterRollback: () => reapplyTunnel(ctx, tunnel),
   };
 }
 
-/** hostname.add: validate → ingress → DNS → restart cloudflared. */
-export function addHostnameJob(ctx: JobCtx, actorId: string, s: SiteRow, hostname: string): JobSpec {
-  const tunnel: TunnelState = { ingressChanged: false, restarted: false };
-  const dns = { managed: false };
+/** hostname.add (1–5 domains, one cloudflared restart): validate → ingress → dns → tunnel_restart → domain_probe. */
+export function addHostnamesJob(ctx: JobCtx, actorId: string, s: SiteRow, hostnames: string[]): JobSpec {
+  const tunnel = tunnelState();
+  const owned = new Set<string>();
   return {
     kind: "hostname.add",
     target: s.name,
     actorId,
+    input: { site: s.name, hostnames },
     steps: [
       {
         key: "validate",
-        label: "Validate",
         async run() {
-          const issues = (await checkSite(ctx, { name: "x", hostname })).filter((i) => i.field === "hostname");
-          if (issues.length) throw new Error(issues.map((i) => i.message).join("; "));
+          const { issues } = await checkSite(ctx, { hostnames, scope: "hostname" });
+          if (issues.length) throw new StepError("invalid_site", { issues: issueCodes(issues) });
+          return { code: "validated" };
         },
       },
-      ingressStep(ctx, tunnel, "Add ingress rule", (t) => insertIngressRule(t, hostname, service(s.port))),
-      dnsEnsureStep(ctx.dns, hostname, tunnelOf(ctx), dns),
-      restartStep(ctx, tunnel),
+      ingressStep(ctx, tunnel, hostnames, false, (t) =>
+        hostnames.reduce((acc, h) => insertIngressRule(acc, h, serviceOf(s.port)), t),
+      ),
+      dnsEnsureStep(ctx.dns, hostnames, tunnelIdOf(ctx), owned, actorId),
+      tunnelRestartStep(ctx, tunnel),
+      domainProbeStep(ctx, hostnames),
     ],
     onSuccess: () =>
-      ctx.db
-        .insert(siteHostname)
-        .values({ hostname, siteName: s.name, ingressManaged: true, dnsManaged: dns.managed })
-        .run(),
+      ctx.db.transaction((tx) => {
+        for (const hostname of hostnames)
+          tx.insert(siteHostname)
+            .values({ hostname, siteName: s.name, ingressManaged: true, dnsManaged: owned.has(hostname) })
+            .run();
+      }),
     afterRollback: () => reapplyTunnel(ctx, tunnel),
   };
 }
 
-/** hostname.remove: ingress → DNS → restart cloudflared. Caller ensures the panel may remove the rule. */
+/** hostname.remove: ingress → tunnel_restart → dns (non-fatal, no second restart). Caller checks the rule is ours. */
 export function removeHostnameJob(ctx: JobCtx, actorId: string, s: SiteRow, h: HostRow): JobSpec {
-  const tunnel: TunnelState = { ingressChanged: false, restarted: false };
+  const tunnel = tunnelState();
   return {
     kind: "hostname.remove",
     target: s.name,
     actorId,
+    input: { site: s.name, hostname: h.hostname },
     steps: [
-      ingressStep(ctx, tunnel, "Remove ingress rule", (t) => removeIngressRule(t, h.hostname)),
-      dnsDeleteStep(ctx.dns, h.dnsManaged ? [h.hostname] : [], tunnelOf(ctx)),
-      restartStep(ctx, tunnel),
+      ingressStep(ctx, tunnel, [h.hostname], true, (t) => removeIngressRule(t, h.hostname)),
+      tunnelRestartStep(ctx, tunnel),
+      dnsDeleteStep(ctx.dns, h.dnsManaged ? [h.hostname] : [], actorId),
     ],
     onSuccess: () => ctx.db.delete(siteHostname).where(eq(siteHostname.hostname, h.hostname)).run(),
     afterRollback: () => reapplyTunnel(ctx, tunnel),
   };
 }
+
+/** site.restart: app_restart → health. */
+export const restartSiteJob = (ctx: SiteCtx, actorId: string, s: SiteRow): JobSpec => ({
+  kind: "site.restart",
+  target: s.name,
+  actorId,
+  input: { site: s.name },
+  steps: restartSteps(ctx, s),
+});
