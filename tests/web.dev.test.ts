@@ -44,7 +44,10 @@ describe("errorFromResponse / redirectFor / devErrorMessage", () => {
     expect(devErrorMessage(new DevApiError("network", null, null, null))).toContain("terhubung");
     expect(devErrorMessage(errorFromResponse(500, { error: "boom", message: "stack" }))).toContain("gangguan");
   });
-  test("non-DevApiError → generic", () => expect(devErrorMessage(new Error("x"))).toBe("Permintaan gagal."));
+  test("non-DevApiError → generic", () =>
+    expect(devErrorMessage(new Error("x"))).toBe(
+      "Permintaan tidak berhasil. Coba lagi; bila terus gagal, muat ulang halaman.",
+    ));
 });
 
 describe("devUrl", () => {
@@ -130,12 +133,15 @@ describe("formatters", () => {
     [-1, "–"],
   ] as const)("formatBytes(%d) = %s", (n, s) => expect(formatBytes(n)).toBe(s));
   test.each([
-    [0, "0d"],
-    [42, "42d"],
-    [3725, "1j 2m"],
-    [3600, "1j"],
-    [90061, "1h 1j"],
-    [86400 * 3 + 59, "3h"],
+    [0, "0 dtk"],
+    [42, "42 dtk"],
+    [437, "7 mnt 17 dtk"],
+    [3725, "1 jam 2 mnt"],
+    [3600, "1 jam"],
+    [90061, "1 hari 1 jam"],
+    [119_340, "1 hari 9 jam"],
+    [86400 * 3 + 59, "3 hari"],
+    [-1, "–"],
   ] as const)("formatUptime(%d) = %s", (n, s) => expect(formatUptime(n)).toBe(s));
   test("usedPercent", () => {
     expect(usedPercent(25, 100)).toBe(75);

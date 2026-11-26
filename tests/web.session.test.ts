@@ -67,6 +67,8 @@ describe("needsFullLoad", () => {
 describe("loginErrorMessage", () => {
   test("no error code → no message", () => expect(loginErrorMessage(null)).toBeNull());
   test.each(["state_mismatch", "access_denied"])("%p → generic message", (code) =>
-    expect(loginErrorMessage(code)).toBe("Gagal masuk. Silakan coba lagi."),
+    expect(loginErrorMessage(code)).toBe(
+      "Masuk dengan Google tidak berhasil. Coba lagi; bila terus gagal, pastikan kamu memakai akun Google yang benar.",
+    ),
   );
 });

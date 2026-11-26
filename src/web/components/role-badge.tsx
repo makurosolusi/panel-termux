@@ -1,13 +1,15 @@
 import type { Role } from "@/shared/roles";
-import { Badge } from "@/web/components/ui/badge";
 import { id } from "@/web/i18n/id";
+import type { StatusTone } from "./status.tone";
+import { StatusBadge } from "./status-badge";
 
-const VARIANT = { user: "secondary", admin: "default", super_admin: "destructive" } as const satisfies Record<
+/** Role colour: super admin = brand accent (privileged, not dangerous), admin = info, user = neutral. */
+export const ROLE_TONE = { user: "neutral", admin: "info", super_admin: "accent" } as const satisfies Record<
   Role,
-  "secondary" | "default" | "destructive"
+  StatusTone
 >;
 
 /** Localized role label. */
-export function RoleBadge({ role }: { role: Role }) {
-  return <Badge variant={VARIANT[role]}>{id.roles[role]}</Badge>;
+export function RoleBadge({ role, className }: { role: Role; className?: string }) {
+  return <StatusBadge tone={ROLE_TONE[role]} label={id.roles[role]} className={className} />;
 }

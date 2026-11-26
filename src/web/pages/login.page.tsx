@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useSearchParams } from "react-router";
 import { signInWithGoogle } from "@/web/auth/auth.client";
 import { Button } from "@/web/components/ui/button";
@@ -12,6 +12,9 @@ export function LoginPage() {
   const [pending, setPending] = useState(false);
   const [startError, setStartError] = useState<string | null>(null);
   const message = startError ?? loginErrorMessage(params.get("error"));
+  useEffect(() => {
+    document.title = id.login.title;
+  }, []);
 
   const start = async () => {
     setPending(true);

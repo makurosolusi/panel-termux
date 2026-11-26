@@ -1,4 +1,6 @@
-import { LogOutIcon } from "lucide-react";
+import { cn } from "cn";
+import { ChevronsUpDownIcon, LogOutIcon, MonitorIcon, MoonIcon, SunIcon, UserIcon } from "lucide-react";
+import { Link } from "react-router";
 import { useSignOut } from "@/web/auth/use-sign-out";
 import { RoleBadge } from "@/web/components/role-badge";
 import {
@@ -6,33 +8,71 @@ import {
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuLabel,
+  DropdownMenuRadioGroup,
+  DropdownMenuRadioItem,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/web/components/ui/dropdown-menu";
 import { UserAvatar } from "@/web/components/user-avatar";
 import { id } from "@/web/i18n/id";
 import type { Me } from "@/web/session/session.api";
+import { parsePreference } from "@/web/theme/theme.preference";
+import { setThemePreference, useTheme } from "@/web/theme/theme.store";
 
-/** Avatar button opening the account menu (identity + sign-out). */
-export function UserMenu({ me }: { me: Me }) {
+const t = id.shell;
+const THEME_OPTIONS = [
+  { value: "system", label: t.theme.system, icon: MonitorIcon },
+  { value: "light", label: t.theme.light, icon: SunIcon },
+  { value: "dark", label: t.theme.dark, icon: MoonIcon },
+] as const;
+
+/** Account block at the bottom of the sidebar: avatar, name, role; menu with theme switch, profile, sign-out. */
+export function UserMenu({ me, compact = false }: { me: Me; compact?: boolean }) {
   const { signOut, pending, error } = useSignOut();
+  const { preference } = useTheme();
   return (
     <DropdownMenu>
       <DropdownMenuTrigger
-        className="rounded-full focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
-        aria-label={id.menu.account}
+        aria-label={t.account}
+        className={cn(
+          "flex w-full items-center gap-2.5 rounded-md p-1.5 text-left transition-colors hover:bg-accent",
+          compact && "justify-center",
+        )}
       >
-        <UserAvatar me={me} className="size-9" />
+        <UserAvatar me={me} className="size-8" />
+        {!compact && (
+          <>
+            <span className="flex min-w-0 flex-1 flex-col">
+              <span className="truncate text-sm font-medium">{me.name}</span>
+              <span className="truncate text-xs text-muted-foreground">{id.roles[me.role]}</span>
+            </span>
+            <ChevronsUpDownIcon className="size-4 shrink-0 text-muted-foreground" aria-hidden />
+          </>
+        )}
       </DropdownMenuTrigger>
-      <DropdownMenuContent align="end" className="w-64">
+      <DropdownMenuContent side="top" align="start" className="w-64">
         <DropdownMenuLabel className="flex flex-col gap-1">
           <span className="truncate">{me.name}</span>
           <span className="truncate text-xs font-normal text-muted-foreground">{me.email}</span>
-          <span>
-            <RoleBadge role={me.role} />
-          </span>
+          <RoleBadge role={me.role} className="mt-1" />
         </DropdownMenuLabel>
         <DropdownMenuSeparator />
+        <DropdownMenuLabel className="text-xs font-normal text-muted-foreground">{t.theme.label}</DropdownMenuLabel>
+        <DropdownMenuRadioGroup value={preference} onValueChange={(v) => setThemePreference(parsePreference(v))}>
+          {THEME_OPTIONS.map(({ value, label, icon: Icon }) => (
+            <DropdownMenuRadioItem key={value} value={value} onSelect={(e) => e.preventDefault()}>
+              <Icon aria-hidden />
+              {label}
+            </DropdownMenuRadioItem>
+          ))}
+        </DropdownMenuRadioGroup>
+        <DropdownMenuSeparator />
+        <DropdownMenuItem asChild>
+          <Link to="/profile">
+            <UserIcon aria-hidden />
+            {t.nav.profile}
+          </Link>
+        </DropdownMenuItem>
         <DropdownMenuItem
           variant="destructive"
           disabled={pending}
@@ -41,7 +81,7 @@ export function UserMenu({ me }: { me: Me }) {
             void signOut();
           }}
         >
-          <LogOutIcon />
+          <LogOutIcon aria-hidden />
           {id.menu.signOut}
         </DropdownMenuItem>
         {error && (
