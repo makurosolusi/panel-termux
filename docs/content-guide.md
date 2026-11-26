@@ -61,14 +61,14 @@ Satu istilah untuk satu konsep. Jangan bergantian.
 
 Semua memakai locale `id-ID`.
 
-| Jenis           | Format                                                | Contoh                               |
-| --------------- | ----------------------------------------------------- | ------------------------------------ |
-| Tanggal dan jam | tanggal pendek + jam dengan titik                     | 26 Nov 2026, 21.26                   |
-| Jam saja        | HH.MM                                                 | 03.00                                |
-| Durasi          | dua satuan terbesar, satuan disingkat konsisten       | 7 mnt 17 dtk · 1 hari 9 jam · 42 dtk |
-| Relatif         | angka + satuan + "lalu"; di bawah 1 menit "baru saja" | 3 mnt lalu · baru saja               |
-| Desimal         | koma                                                  | 1,5 GB                               |
-| Ribuan          | titik                                                 | 12.480                               |
+| Jenis           | Format                                                                                                              | Contoh                                                            |
+| --------------- | ------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------- |
+| Tanggal dan jam | tanggal pendek + jam dengan titik                                                                                   | 26 Nov 2026, 21.26                                                |
+| Jam saja        | HH.MM                                                                                                               | 03.00                                                             |
+| Durasi          | dua satuan terbesar, satuan disingkat konsisten                                                                     | 7 mnt 17 dtk · 1 hari 9 jam · 42 dtk                              |
+| Relatif         | tanpa detik: angka + satuan + "lalu", masa depan "dalam …"; di bawah 1 menit "baru saja"; hari sebelumnya "kemarin" | 3 mnt lalu · 1 jam 5 mnt lalu · dalam 5 mnt · baru saja · kemarin |
+| Desimal         | koma                                                                                                                | 1,5 GB                                                            |
+| Ribuan          | titik                                                                                                               | 12.480                                                            |
 
 Singkatan satuan waktu hanya: **hari**, **jam**, **mnt**, **dtk**. Jangan "h", "j", "m", "d" (ambigu dengan hours/minutes/days).
 
