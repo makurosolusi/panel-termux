@@ -16,6 +16,7 @@ import type { SystemAdapters } from "../system/system.types";
 import { createDeployRoutes } from "./deploy.routes";
 import { createDevRoutes, type DevDeps } from "./dev.routes";
 import { createMeRoutes } from "./me.routes";
+import { rejectForeignOrigin } from "./origin.guard";
 import { createPanelRoutes, panelOnError } from "./panel.routes";
 import { createSiteRoutes } from "./sites.routes";
 
@@ -46,6 +47,8 @@ export function createApiRoutes(
   });
   return (
     new Elysia({ prefix: "/api" })
+      // CSRF: state-changing requests must come from the panel's own pages (see origin.guard.ts).
+      .onRequest(({ request }) => rejectForeignOrigin(request, auth.options.baseURL) ?? undefined)
       // Better Auth owns /api/auth/* (sign-in/social, callback/google, get-session, sign-out, ...).
       .all("/auth/*", ({ request }) => auth.handler(request), { parse: "none" })
       .decorate("siteJobs", sites.jobs)

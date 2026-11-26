@@ -57,7 +57,12 @@ async function login(userId: string): Promise<{ cookie: string; id: string }> {
 }
 
 const call = (method: string, path: string, cookie?: string) =>
-  api.handle(new Request(`${BASE}/api${path}`, { method, headers: cookie ? { cookie } : {} }));
+  api.handle(
+    new Request(`${BASE}/api${path}`, {
+      method,
+      headers: { origin: BASE, "x-requested-with": "XMLHttpRequest", ...(cookie ? { cookie } : {}) },
+    }),
+  );
 
 beforeAll(() => {
   db = openDb(dir);

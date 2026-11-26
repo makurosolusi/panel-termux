@@ -53,7 +53,12 @@ async function cookieFor(userId: string): Promise<string> {
 }
 
 const call = (method: string, path: string, cookie = admin) =>
-  api.handle(new Request(`${BASE}/api/panel${path}`, { method, headers: cookie ? { cookie } : {} }));
+  api.handle(
+    new Request(`${BASE}/api/panel${path}`, {
+      method,
+      headers: { origin: BASE, "x-requested-with": "XMLHttpRequest", ...(cookie ? { cookie } : {}) },
+    }),
+  );
 const json = async <T>(res: Response, status = 200): Promise<T> => {
   expect(res.status).toBe(status);
   return (await res.json()) as T;
