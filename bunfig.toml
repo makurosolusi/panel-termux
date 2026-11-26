@@ -1,0 +1,6 @@
+# drizzle/migrations.js imports .sql files; load them as text so they are embedded in the binary.
+[loader]
+".sql" = "text"
+
+[serve.static]
+plugins = ["bun-plugin-tailwind"]
