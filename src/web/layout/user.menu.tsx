@@ -26,8 +26,19 @@ const THEME_OPTIONS = [
   { value: "dark", label: t.theme.dark, icon: MoonIcon },
 ] as const;
 
-/** Account block at the bottom of the sidebar: avatar, name, role; menu with theme switch, profile, sign-out. */
-export function UserMenu({ me, compact = false }: { me: Me; compact?: boolean }) {
+/**
+ * Account menu (sidebar bottom, or the phone top bar for roles without a bottom bar): avatar, name, role; menu with
+ * theme switch, profile, sign-out. `side` = where the menu opens.
+ */
+export function UserMenu({
+  me,
+  compact = false,
+  side = "top",
+}: {
+  me: Me;
+  compact?: boolean;
+  side?: "top" | "bottom";
+}) {
   const { signOut, pending, error } = useSignOut();
   const { preference } = useTheme();
   return (
@@ -36,7 +47,7 @@ export function UserMenu({ me, compact = false }: { me: Me; compact?: boolean })
         aria-label={t.account}
         className={cn(
           "flex w-full items-center gap-2.5 rounded-md p-1.5 text-left transition-colors hover:bg-accent",
-          compact && "justify-center",
+          compact && "w-auto justify-center",
         )}
       >
         <UserAvatar me={me} className="size-8" />
@@ -50,7 +61,7 @@ export function UserMenu({ me, compact = false }: { me: Me; compact?: boolean })
           </>
         )}
       </DropdownMenuTrigger>
-      <DropdownMenuContent side="top" align="start" className="w-64">
+      <DropdownMenuContent side={side} align={side === "top" ? "start" : "end"} className="w-64">
         <DropdownMenuLabel className="flex flex-col gap-1">
           <span className="truncate">{me.name}</span>
           <span className="truncate text-xs font-normal text-muted-foreground">{me.email}</span>

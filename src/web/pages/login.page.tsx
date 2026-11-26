@@ -1,9 +1,10 @@
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { useSearchParams } from "react-router";
 import { signInWithGoogle } from "@/web/auth/auth.client";
 import { Button } from "@/web/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/web/components/ui/card";
 import { id } from "@/web/i18n/id";
+import { useDocumentTitle } from "@/web/layout/document.title";
 import { loginErrorMessage } from "./login.error";
 
 /** /login: Google sign-in card. */
@@ -12,9 +13,7 @@ export function LoginPage() {
   const [pending, setPending] = useState(false);
   const [startError, setStartError] = useState<string | null>(null);
   const message = startError ?? loginErrorMessage(params.get("error"));
-  useEffect(() => {
-    document.title = id.login.title;
-  }, []);
+  useDocumentTitle(id.login.title, { raw: true });
 
   const start = async () => {
     setPending(true);

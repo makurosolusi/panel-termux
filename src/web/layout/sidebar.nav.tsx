@@ -11,10 +11,13 @@ export function SidebarNav({
   groups,
   collapsed = false,
   onNavigate,
+  tall = false,
 }: {
   groups: readonly NavGroup[];
   collapsed?: boolean;
   onNavigate?: () => void;
+  /** 48 px rows (phone "Lainnya" sheet). */
+  tall?: boolean;
 }) {
   return (
     <div className="flex flex-col gap-5">
@@ -31,7 +34,7 @@ export function SidebarNav({
           <ul className="flex flex-col gap-0.5">
             {g.items.map((item) => (
               <li key={item.to}>
-                <SidebarLink item={item} collapsed={collapsed} onNavigate={onNavigate} />
+                <SidebarLink item={item} collapsed={collapsed} onNavigate={onNavigate} tall={tall} />
               </li>
             ))}
           </ul>
@@ -41,7 +44,17 @@ export function SidebarNav({
   );
 }
 
-function SidebarLink({ item, collapsed, onNavigate }: { item: NavItem; collapsed: boolean; onNavigate?: () => void }) {
+function SidebarLink({
+  item,
+  collapsed,
+  onNavigate,
+  tall,
+}: {
+  item: NavItem;
+  collapsed: boolean;
+  onNavigate?: () => void;
+  tall: boolean;
+}) {
   const { icon: Icon } = item;
   const link = (
     <NavLink
@@ -50,8 +63,9 @@ function SidebarLink({ item, collapsed, onNavigate }: { item: NavItem; collapsed
       onClick={onNavigate}
       className={({ isActive }) =>
         cn(
-          "group relative flex h-8 items-center gap-2.5 rounded-md px-2.5 text-sm text-muted-foreground transition-colors",
+          "group relative flex items-center gap-2.5 rounded-md px-2.5 text-sm text-muted-foreground transition-colors",
           "hover:bg-accent hover:text-foreground focus-visible:outline-2 focus-visible:outline-offset-0",
+          tall ? "h-12 text-base" : "h-8",
           isActive && "bg-accent font-medium text-foreground",
           collapsed && "justify-center px-0",
         )

@@ -65,11 +65,26 @@ export const NAV_GROUPS: readonly NavGroup[] = [
 /** Routes without their own sidebar link, titled under the group of their path. */
 const HIDDEN_PAGES: readonly NavItem[] = [{ to: "/panel/jobs", label: n.jobs, icon: ActivityIcon }];
 
+/** Phone bottom bar slots 1–4 (PLAN/01 §3.7); slot 5 is the "Lainnya" sheet with everything else. */
+export const MOBILE_PRIMARY: readonly string[] = ["/panel", "/panel/sites", "/panel/services", "/panel/apps"];
+
 /** Groups and links the role may open; empty groups are dropped. */
 export const navGroupsFor = (role: Role): NavGroup[] =>
   NAV_GROUPS.map((g) => ({ ...g, items: g.items.filter((item) => canAccess(role, item.to)) })).filter(
     (g) => g.items.length > 0,
   );
+
+/** Phone navigation: bottom bar items (empty → no bar) and the "Lainnya" groups (Administrasi first, no Akun). */
+export function mobileNavFor(role: Role): { primary: NavItem[]; more: NavGroup[] } {
+  const groups = navGroupsFor(role);
+  const primary = groups.flatMap((g) => g.items).filter((i) => MOBILE_PRIMARY.includes(i.to));
+  if (primary.length === 0) return { primary, more: [] };
+  const rest = groups
+    .filter((g) => g.key !== "account")
+    .map((g) => ({ ...g, items: g.items.filter((i) => !MOBILE_PRIMARY.includes(i.to)) }))
+    .filter((g) => g.items.length > 0);
+  return { primary, more: [...rest.filter((g) => g.key === "admin"), ...rest.filter((g) => g.key !== "admin")] };
+}
 
 const matches = (item: NavItem, path: string) => path === item.to || (!item.end && path.startsWith(`${item.to}/`));
 
@@ -86,36 +101,26 @@ export function navMatch(pathname: string): { group: NavGroup; item: NavItem } |
   return best;
 }
 
+/** Whether the current page lives in the "Lainnya" sheet (its nav item, or Profil in the account block). */
+export function activeInMore(pathname: string, more: readonly NavGroup[]): boolean {
+  const current = navMatch(pathname)?.item.to;
+  if (current === "/profile") return true;
+  return more.some((g) => g.items.some((i) => i.to === current));
+}
+
 /** One breadcrumb; `to` absent = current page. */
 export type Crumb = { label: string; to?: string };
 
-/** Group › page › trailing segments ("Server › Situs › blog › Log"); empty for unknown paths. */
-export function breadcrumbsFor(pathname: string): Crumb[] {
+/**
+ * At most 3 crumbs: group › nav item › page title (only when the path is deeper than the item). URL segments in
+ * between never become crumbs, so no crumb links to a route that does not exist. Empty for unknown paths.
+ */
+export function breadcrumbsFor(pathname: string, pageTitle: string | null): Crumb[] {
   const match = navMatch(pathname);
   if (!match) return [];
-  const rest = pathname.slice(match.item.to.length).split("/").filter(Boolean);
-  const crumbs: Crumb[] = [{ label: match.group.label }, { label: match.item.label, to: match.item.to }];
-  let to = match.item.to;
-  for (const seg of rest) {
-    to += `/${seg}`;
-    crumbs.push({ label: id.shell.segments[seg] ?? safeDecode(seg), to });
-  }
-  const last = crumbs.at(-1);
-  if (last) delete last.to;
-  return crumbs;
-}
-
-function safeDecode(seg: string): string {
-  try {
-    return decodeURIComponent(seg);
-  } catch {
-    return seg; // malformed %-escape in the URL: show it raw rather than crash the shell
-  }
-}
-
-/** `<title>` for a path: "Situs · Panel Termux", detail pages "blog · Situs · Panel Termux". */
-export function documentTitleFor(pathname: string, fallback: string): string {
-  const crumbs = breadcrumbsFor(pathname).slice(1); // the group name adds nothing to a tab title
-  const parts = crumbs.length ? crumbs.map((c) => c.label).reverse() : [fallback];
-  return [...parts, id.appName].join(" · ");
+  const path = pathname.replace(/\/+$/, "") || "/";
+  const group = { label: match.group.label };
+  if (path === match.item.to) return [group, { label: match.item.label }];
+  const item = { label: match.item.label, to: match.item.to };
+  return pageTitle ? [group, item, { label: pageTitle }] : [group, item];
 }

@@ -1,11 +1,23 @@
 import { describe, expect, test } from "bun:test";
 import * as sharedFormat from "@/shared/format.id";
 import type { Role } from "@/shared/roles";
+import { backupRoutes } from "@/web/backup/backup.routes";
 import { typedMatches } from "@/web/components/confirm-action";
 import { ROLE_TONE } from "@/web/components/role-badge";
 import { usageTone } from "@/web/components/stat-tile";
 import { LEGACY_TONE, toneForStatus } from "@/web/components/status.tone";
-import { breadcrumbsFor, documentTitleFor, navGroupsFor, navMatch } from "@/web/layout/nav.items";
+import { devRoutes } from "@/web/dev/dev.routes";
+import { documentTitle } from "@/web/layout/document.title";
+import {
+  activeInMore,
+  breadcrumbsFor,
+  MOBILE_PRIMARY,
+  mobileNavFor,
+  navGroupsFor,
+  navMatch,
+} from "@/web/layout/nav.items";
+import { routeMeta } from "@/web/layout/shell.page";
+import { panelRoutes } from "@/web/panel/panel.routes";
 import * as webFormat from "@/web/shared/format";
 import {
   formatBytes,
@@ -18,6 +30,7 @@ import {
   formatPercent,
   formatRelative,
 } from "@/web/shared/format";
+import { siteRoutes } from "@/web/site/site.routes";
 import {
   parsePreference,
   readPreference,
@@ -63,21 +76,90 @@ describe("route meta", () => {
     expect(navMatch("/nope")).toBeNull();
   });
 
-  test("breadcrumbs: group, page, decoded segments; last one is current", () => {
-    expect(breadcrumbsFor("/panel/services/my%20svc/log")).toEqual([
+  test("breadcrumbs: at most 3, intermediate URL segments never become crumbs", () => {
+    expect(breadcrumbsFor("/panel/services/sshd/log", "Log sshd")).toEqual([
       { label: "Server" },
       { label: "Layanan", to: "/panel/services" },
-      { label: "my svc", to: "/panel/services/my%20svc" },
-      { label: "Log" },
+      { label: "Log sshd" },
     ]);
-    expect(breadcrumbsFor("/panel/sites/%E0%A4%A")).toContainEqual({ label: "%E0%A4%A" });
-    expect(breadcrumbsFor("/nope")).toEqual([]);
+    const uuid = "0b7e2a4c-3f1d-4a8e-9c2b-5d6e7f8a9b0c"; // test-only
+    const job = breadcrumbsFor(`/panel/jobs/${uuid}`, "Progres perubahan");
+    expect(job).toEqual([
+      { label: "Server" },
+      { label: "Riwayat perubahan", to: "/panel/jobs" },
+      { label: "Progres perubahan" },
+    ]);
+    expect(JSON.stringify(job)).not.toContain(uuid);
+    expect(breadcrumbsFor("/panel/sites", "Situs")).toEqual([{ label: "Server" }, { label: "Situs" }]);
+    expect(breadcrumbsFor("/panel/sites/blog", null)).toEqual([
+      { label: "Server" },
+      { label: "Situs", to: "/panel/sites" },
+    ]);
+    expect(breadcrumbsFor("/nope", "x")).toEqual([]);
   });
 
-  test("document titles", () => {
-    expect(documentTitleFor("/panel/sites", "x")).toBe("Situs · Panel Termux");
-    expect(documentTitleFor("/panel/sites/new", "x")).toBe("Baru · Situs · Panel Termux");
-    expect(documentTitleFor("/nope", "Halaman tidak ditemukan")).toBe("Halaman tidak ditemukan · Panel Termux");
+  test("every breadcrumb link points at a nav item (an existing route)", () => {
+    const navPaths = new Set(navGroupsFor("super_admin").flatMap((g) => g.items.map((i) => i.to)));
+    navPaths.add("/panel/jobs");
+    for (const path of ["/panel/sites/blog", "/panel/apps/x/log", "/dev/users/1", "/panel/jobs/1"]) {
+      const crumbs = breadcrumbsFor(path, "T");
+      expect(crumbs.length).toBeLessThanOrEqual(3);
+      for (const c of crumbs) if (c.to) expect(navPaths.has(c.to)).toBe(true);
+    }
+  });
+
+  test("document title", () => {
+    expect(documentTitle("Situs")).toBe("Situs · Panel Termux");
+  });
+});
+
+describe("phone navigation", () => {
+  test("user: no bottom bar, nothing in the sheet", () => {
+    expect(mobileNavFor("user")).toEqual({ primary: [], more: [] });
+  });
+
+  test("admin: four primary slots, sheet has the rest of Server only", () => {
+    const { primary, more } = mobileNavFor("admin");
+    expect(primary.map((i) => i.to)).toEqual([...MOBILE_PRIMARY]);
+    expect(more.map((g) => [g.key, g.items.map((i) => i.to)])).toEqual([
+      ["server", ["/panel/domains", "/panel/databases", "/panel/backups"]],
+    ]);
+  });
+
+  test("super_admin: Administrasi first in the sheet, then Domain/Database/Cadangan; Akun never a group", () => {
+    const { primary, more } = mobileNavFor("super_admin");
+    expect(primary).toHaveLength(4);
+    expect(more.map((g) => g.key)).toEqual(["admin", "server"]);
+  });
+
+  test("'Lainnya' marks pages that live in the sheet", () => {
+    const { more } = mobileNavFor("super_admin");
+    expect(activeInMore("/dev/users", more)).toBe(true);
+    expect(activeInMore("/panel/backups", more)).toBe(true);
+    expect(activeInMore("/profile", more)).toBe(true);
+    expect(activeInMore("/panel/sites/blog", more)).toBe(false);
+    expect(activeInMore("/panel", more)).toBe(false);
+  });
+});
+
+describe("route titles", () => {
+  test("deepest handle title wins; task on any match", () => {
+    expect(routeMeta([{ handle: { title: "A" } }, {}, { handle: { title: "B", task: true } }])).toEqual({
+      title: "B",
+      task: true,
+    });
+    expect(routeMeta([{}, { handle: "junk" }])).toEqual({ title: null, task: false });
+  });
+
+  test("every signed-in route entry has handle.title; the wizard is a task route", () => {
+    type R = { path?: string; handle?: unknown; children?: R[] };
+    const leaves = (rs: R[]): R[] => rs.flatMap((r) => (r.children ? leaves(r.children) : [r]));
+    // app.routes itself pulls the browser-only auth client; it only concatenates these four arrays
+    const all = leaves([...panelRoutes, ...siteRoutes, ...backupRoutes, ...devRoutes] as R[]);
+    expect(all.length).toBe(18);
+    for (const r of all) expect(routeMeta([r]).title, r.path).toBeTruthy();
+    expect(routeMeta(all.filter((r) => r.path === "/panel/sites/new")).task).toBe(true);
+    expect(routeMeta(all.filter((r) => r.path === "/panel/sites")).task).toBe(false);
   });
 });
 

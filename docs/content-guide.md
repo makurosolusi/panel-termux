@@ -131,7 +131,7 @@ Jangan menampilkan pesan teknis mentah sebagai satu-satunya isi. Detail server b
 
 ### Teks bantuan dan status data
 
-- Jangan menulis interval teknis yang statis ("Diperbarui otomatis tiap 15 detik"). Tampilkan kapan data terakhir diperbarui: "Diperbarui 12 dtk lalu" (`id.common.updatedAgo`; potongan waktu relatif ada di `id.shell.time`).
+- Jangan menulis interval teknis yang statis ("Diperbarui otomatis tiap 15 detik"). Tampilkan kapan data terakhir diperbarui: "Diperbarui 3 mnt lalu", di bawah 1 menit "Diperbarui baru saja" (`id.common.updatedAgo`; potongan waktu relatif ada di `id.shell.time`).
 - Placeholder memberi contoh, diawali "mis.": "mis. blog.contoh.com".
 
 ## Landing page
