@@ -1,10 +1,13 @@
 import { describe, expect, test } from "bun:test";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
+import { CodeText, codeSegments } from "@/web/components/code-text";
 import { typedMatches } from "@/web/components/confirm-action";
 import { PaginationFooter } from "@/web/components/pagination-footer";
 import { isEmptyData, queryViewState } from "@/web/components/query-view";
 import { buttonVariants } from "@/web/components/ui/button";
+import { Select, SelectTrigger, SelectValue } from "@/web/components/ui/select";
+import { Switch } from "@/web/components/ui/switch";
 import { parsePageParam } from "@/web/components/use-page-param";
 import { ApiError } from "@/web/shared/api.client";
 
@@ -86,5 +89,45 @@ describe("PaginationFooter", () => {
   });
   test("shows position with total", () => {
     expect(renderToStaticMarkup(createElement(PaginationFooter, { p: p(3) }))).toContain("Halaman 2 dari 3 · 40 entri");
+  });
+});
+
+describe("CodeText", () => {
+  test("backtick spans become <code>, the rest stays text", () => {
+    expect(codeSegments("Tulis `awal-akhir`, mis. `3001-3999`.")).toEqual([
+      { text: "Tulis ", code: false },
+      { text: "awal-akhir", code: true },
+      { text: ", mis. ", code: false },
+      { text: "3001-3999", code: true },
+      { text: ".", code: false },
+    ]);
+    const html = renderToStaticMarkup(createElement(CodeText, null, "Untuk R2 biarkan `auto`."));
+    expect(html).toContain("<code");
+    expect(html).toContain(">auto</code>.");
+    expect(html).not.toContain("`");
+  });
+  test("unbalanced backticks and non-strings pass through unchanged", () => {
+    expect(codeSegments("satu ` saja")).toEqual([{ text: "satu ` saja", code: false }]);
+    expect(renderToStaticMarkup(createElement(CodeText, null, "tanpa kode"))).toBe("tanpa kode");
+  });
+});
+
+describe("touch targets under pointer: coarse (D-W9-5)", () => {
+  const triggerClass = (size?: "sm" | "default") =>
+    renderToStaticMarkup(
+      createElement(Select, null, createElement(SelectTrigger, { size }, createElement(SelectValue))),
+    ).match(/class="([^"]+)"/)?.[1] ?? "";
+  test("select heights are plain utilities, so pointer-coarse:h-11 is not outranked by a data-[size] selector", () => {
+    for (const size of ["sm", "default"] as const) {
+      const cls = triggerClass(size);
+      expect(cls).toContain("pointer-coarse:h-11");
+      expect(cls).not.toMatch(/data-\[size=[a-z]+\]:h-/);
+    }
+    expect(triggerClass("sm")).toMatch(/(^| )h-8( |$)/);
+  });
+  test("switch gets a centred 44 px hit-area", () => {
+    const html = renderToStaticMarkup(createElement(Switch));
+    expect(html).toContain("pointer-coarse:after:size-11");
+    expect(html).toMatch(/class="[^"]*(^| )relative /);
   });
 });

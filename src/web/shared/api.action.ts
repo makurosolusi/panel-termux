@@ -1,4 +1,6 @@
+import { createElement } from "react";
 import { toast } from "sonner";
+import { CodeText } from "@/web/components/code-text";
 import { apiErrorMessage, type ErrorCodes } from "./api.client";
 
 /** Error toasts stay long enough to read (PLAN/01 D10); success toasts keep sonner's default. */
@@ -15,7 +17,8 @@ export async function runApiAction(
     toast.success(success);
     return true;
   } catch (err) {
-    toast.error(apiErrorMessage(err, codes), { duration: ERROR_TOAST_MS }); // 401/403 already redirected in apiFetch
+    // 401/403 already redirected in apiFetch; `code` spans in the message render as <code>
+    toast.error(createElement(CodeText, null, apiErrorMessage(err, codes)), { duration: ERROR_TOAST_MS });
     return false;
   }
 }

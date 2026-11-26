@@ -3,7 +3,13 @@ import { cn } from "cn";
 import { ArrowDownIcon, DownloadIcon, PauseIcon, PlayIcon, WrapTextIcon } from "lucide-react";
 import { type ReactNode, type UIEvent, useDeferredValue, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { CopyButton } from "@/web/components/copy-button";
-import { type BufferedLogLine, filterLogLines, LOG_MAX_LINES, logToText } from "@/web/components/log.buffer";
+import {
+  type BufferedLogLine,
+  filterLogLines,
+  LOG_MAX_LINES,
+  logFileName,
+  logToText,
+} from "@/web/components/log.buffer";
 import { LogLines } from "@/web/components/log-lines";
 import { SearchField } from "@/web/components/search-field";
 import { Button } from "@/web/components/ui/button";
@@ -19,6 +25,7 @@ const PHONE_QUERY = "(max-width: 767px)";
 
 /** Which stream(s) a log view shows. */
 export type LogStreamFilter = "all" | "out" | "err";
+export { logFileName };
 
 /** Stored wrap preference, else on below 768 px. Storage can be blocked (private mode): fall back to the default. */
 function initialWrap(): boolean {
@@ -29,16 +36,6 @@ function initialWrap(): boolean {
     // storage unavailable: use the width default below
   }
   return globalThis.matchMedia?.(PHONE_QUERY).matches ?? false;
-}
-
-/** `<label-slug>-YYYYMMDD-HHmm.log` in local time. */
-export function logFileName(label: string, now = new Date()): string {
-  const p = (n: number) => String(n).padStart(2, "0");
-  const slug = label
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, "-")
-    .replace(/^-|-$/g, "");
-  return `${slug || "log"}-${now.getFullYear()}${p(now.getMonth() + 1)}${p(now.getDate())}-${p(now.getHours())}${p(now.getMinutes())}.log`;
 }
 
 /** Server download when `href` is given (audited there), else a Blob of the client buffer. */
@@ -130,29 +127,31 @@ export function LogViewer(props: {
         <div className="min-w-40 flex-1">
           <SearchField value={query} onChange={setQuery} label={t.search} placeholder={t.searchPlaceholder} />
         </div>
-        <Button
-          variant="ghost"
-          size="icon-sm"
-          aria-label={t.wrap}
-          title={t.wrap}
-          aria-pressed={wrap}
-          onClick={toggleWrap}
-        >
-          <WrapTextIcon aria-hidden />
-        </Button>
-        <CopyButton
-          value={() => logToText(visible)}
-          label={deferredQuery ? t.copyFiltered(formatNumber(visible.length)) : t.copy}
-        />
-        <Button
-          variant="ghost"
-          size="icon-sm"
-          aria-label={t.download}
-          title={t.download}
-          onClick={() => download(props.downloadHref, lines, label)}
-        >
-          <DownloadIcon aria-hidden />
-        </Button>
+        <div className="flex items-center gap-2">
+          <Button
+            variant="ghost"
+            size="icon-sm"
+            aria-label={t.wrap}
+            title={t.wrap}
+            aria-pressed={wrap}
+            onClick={toggleWrap}
+          >
+            <WrapTextIcon aria-hidden />
+          </Button>
+          <CopyButton
+            value={() => logToText(visible)}
+            label={deferredQuery ? t.copyFiltered(formatNumber(visible.length)) : t.copy}
+          />
+          <Button
+            variant="ghost"
+            size="icon-sm"
+            aria-label={t.download}
+            title={t.download}
+            onClick={() => download(props.downloadHref, lines, label)}
+          >
+            <DownloadIcon aria-hidden />
+          </Button>
+        </div>
       </div>
       {props.notice}
       {props.error}

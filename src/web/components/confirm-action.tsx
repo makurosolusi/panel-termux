@@ -1,6 +1,7 @@
 import { Loader2Icon } from "lucide-react";
 import { type ReactElement, type ReactNode, useId, useRef, useState } from "react";
 import { toast } from "sonner";
+import { CodeText } from "@/web/components/code-text";
 import {
   AlertDialog,
   AlertDialogCancel,
@@ -60,6 +61,7 @@ export function ConfirmAction(props: ConfirmActionProps) {
   const [error, setError] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
   const inFlight = useRef(false); // state updates are async; a ref stops a double tap from confirming twice
+  const inputRef = useRef<HTMLInputElement>(null);
   const inputId = useId();
   const errorId = useId();
 
@@ -97,6 +99,11 @@ export function ConfirmAction(props: ConfirmActionProps) {
     <AlertDialog open={open} onOpenChange={setOpen}>
       {trigger && <AlertDialogTrigger asChild>{trigger}</AlertDialogTrigger>}
       <AlertDialogContent
+        onOpenAutoFocus={(e) => {
+          if (typedValue === null) return; // confirm tier: radix focuses Batal (safe default)
+          e.preventDefault(); // typed tier: the next step is typing, so focus the input
+          inputRef.current?.focus();
+        }}
         onEscapeKeyDown={(e) => {
           if (inFlight.current) e.preventDefault();
         }}
@@ -104,7 +111,9 @@ export function ConfirmAction(props: ConfirmActionProps) {
         <AlertDialogHeader>
           <AlertDialogTitle>{title}</AlertDialogTitle>
           <AlertDialogDescription asChild>
-            <div className="flex flex-col gap-2">{description}</div>
+            <div className="flex flex-col gap-2">
+              <CodeText>{description}</CodeText>
+            </div>
           </AlertDialogDescription>
         </AlertDialogHeader>
         {error && (
@@ -113,7 +122,7 @@ export function ConfirmAction(props: ConfirmActionProps) {
             role="alert"
             className="rounded-md border border-danger/25 bg-danger-subtle px-3 py-2 text-sm"
           >
-            {error}
+            <CodeText>{error}</CodeText>
           </p>
         )}
         {typedValue !== null && (
@@ -128,6 +137,7 @@ export function ConfirmAction(props: ConfirmActionProps) {
               <TypedLabel value={typedValue} />
             </label>
             <Input
+              ref={inputRef}
               id={inputId}
               value={typed}
               onChange={(e) => setTyped(e.target.value)}

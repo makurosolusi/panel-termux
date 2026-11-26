@@ -1,6 +1,7 @@
 import { cn } from "cn";
 import { TriangleAlertIcon } from "lucide-react";
 import type { ReactNode } from "react";
+import { CodeText } from "@/web/components/code-text";
 import { Button } from "@/web/components/ui/button";
 import { idCommon } from "@/web/i18n/id.common";
 
@@ -47,7 +48,12 @@ export function ErrorState({
         <TriangleAlertIcon className="size-4 shrink-0 text-danger" aria-hidden />
         <p className="min-w-0 flex-1">
           <span className="font-medium text-danger">{title}</span>
-          {description && <span className="text-foreground/80"> {description}</span>}
+          {description && (
+            <span className="text-foreground/80">
+              {" "}
+              <CodeText>{description}</CodeText>
+            </span>
+          )}
         </p>
         {actions}
       </div>
@@ -64,7 +70,11 @@ export function ErrorState({
       <TriangleAlertIcon className="size-5 shrink-0 text-danger" aria-hidden />
       <div className="min-w-0 flex-1">
         <p className="font-medium text-danger">{title}</p>
-        {description && <p className="mt-1 text-foreground/80">{description}</p>}
+        {description && (
+          <p className="mt-1 text-foreground/80">
+            <CodeText>{description}</CodeText>
+          </p>
+        )}
       </div>
       {actions}
     </div>

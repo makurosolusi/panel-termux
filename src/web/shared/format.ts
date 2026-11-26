@@ -15,9 +15,18 @@ export {
 /** Uptime of a process/device; same format as `formatDuration`. */
 export const formatUptime = formatDuration;
 
+/** Whole local calendar days between two instants ("kemarin" = previous calendar day, not 24-48 h ago). */
+const calendarDays = (from: Date, to: Date): number =>
+  Math.round(
+    (new Date(to.getFullYear(), to.getMonth(), to.getDate()).getTime() -
+      new Date(from.getFullYear(), from.getMonth(), from.getDate()).getTime()) /
+      86_400_000,
+  );
+
 /**
- * Relative time (PLAN/01 D16): under a minute (or in the future) "baru saja"; under a day up to two units without
- * seconds ("3 mnt lalu", "2 jam 5 mnt lalu"); "kemarin"; "4 hari lalu"; a week or older → "26 Nov 2026".
+ * Relative time (PLAN/01 D16): within a minute either way "baru saja"; under a day up to two units without
+ * seconds ("3 mnt lalu", "2 jam 5 mnt lalu"; future "dalam 57 mnt"); then by local calendar day "kemarin",
+ * "4 hari lalu"; a week or older (or a future beyond a day) → "26 Nov 2026".
  */
 export function formatRelative(at: string | Date | null, now: Date = new Date()): string {
   if (at === null) return "–";
@@ -25,11 +34,12 @@ export function formatRelative(at: string | Date | null, now: Date = new Date())
   if (Number.isNaN(d.getTime())) return "–";
   const sec = Math.floor((now.getTime() - d.getTime()) / 1000);
   const t = idShell.time;
-  if (sec < 60) return t.justNow;
-  if (sec < 86_400) return t.ago(formatDuration(sec - (sec % 60)));
-  const days = Math.floor(sec / 86_400);
+  if (Math.abs(sec) < 60) return t.justNow;
+  if (sec < 0 && -sec < 86_400) return t.in(formatDuration(-sec - (-sec % 60)));
+  if (sec > 0 && sec < 86_400) return t.ago(formatDuration(sec - (sec % 60)));
+  const days = sec > 0 ? Math.max(1, calendarDays(d, now)) : 0;
   if (days === 1) return t.yesterday;
-  if (days < 7) return t.ago(`${days} hari`);
+  if (days > 1 && days < 7) return t.ago(`${days} hari`);
   return d.toLocaleDateString("id-ID", { dateStyle: "medium" });
 }
 

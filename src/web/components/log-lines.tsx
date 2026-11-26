@@ -75,7 +75,7 @@ const LogRow = memo(function LogRow({ line, query, showLevel, separator }: RowPr
           </time>
         )}
         {showLevel && line.level && <span className="w-10 shrink-0 text-muted-foreground uppercase">{line.level}</span>}
-        <span className="min-w-0 whitespace-pre group-data-[wrap=true]/log:break-all group-data-[wrap=true]/log:whitespace-pre-wrap">
+        <span className="min-w-0 whitespace-pre group-data-[wrap=true]/log:[overflow-wrap:anywhere] group-data-[wrap=true]/log:whitespace-pre-wrap">
           {line.stream === "err" && <span className="sr-only">{t.streams.err}: </span>}
           {splitHighlight(shown, query).map((p, i) =>
             // biome-ignore lint/suspicious/noArrayIndexKey: parts are positional and never reordered

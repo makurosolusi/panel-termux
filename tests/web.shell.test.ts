@@ -9,6 +9,7 @@ import { devRoutes } from "@/web/dev/dev.routes";
 import { documentTitle } from "@/web/layout/document.title";
 import {
   activeInMore,
+  activeNavTo,
   breadcrumbsFor,
   MOBILE_PRIMARY,
   mobileNavFor,
@@ -17,6 +18,7 @@ import {
 } from "@/web/layout/nav.items";
 import { routeMeta } from "@/web/layout/shell.page";
 import { panelRoutes } from "@/web/panel/panel.routes";
+import { HEALTH_URL, recoverChunk, serverReachable } from "@/web/shared/chunk.error";
 import * as webFormat from "@/web/shared/format";
 import {
   formatBytes,
@@ -148,6 +150,17 @@ describe("phone navigation", () => {
     expect(activeInMore("/panel/sites/blog", more)).toBe(false);
     expect(activeInMore("/panel", more)).toBe(false);
   });
+
+  test("hidden pages highlight their parent link (sidebar + bottom bar), visible pages themselves", () => {
+    expect(activeNavTo("/panel/jobs")).toBe("/panel/sites");
+    expect(activeNavTo("/panel/jobs/job-1")).toBe("/panel/sites");
+    expect(activeNavTo("/panel/problems")).toBe("/panel");
+    expect(activeNavTo("/panel/sites/blog")).toBe("/panel/sites");
+    expect(activeNavTo("/panel")).toBe("/panel");
+    expect(activeNavTo("/dev/users/1")).toBe("/dev/users");
+    expect(activeNavTo("/nope")).toBeNull();
+    expect(MOBILE_PRIMARY).toContain(activeNavTo("/panel/jobs") as string);
+  });
 });
 
 describe("route titles", () => {
@@ -237,10 +250,19 @@ describe("formatters (shell)", () => {
     expect(formatRelative(ago(2 * 3600 + 5), now)).toBe("2 jam lalu");
     expect(formatRelative(ago(2 * 3600 + 5 * 60 + 9), now)).toBe("2 jam 5 mnt lalu");
     expect(formatRelative(ago(86_400 + 60), now)).toBe("kemarin");
+    expect(formatRelative(ago(-57 * 60), now)).toBe("dalam 57 mnt"); // a coming backup is never "baru saja"
+    expect(formatRelative(ago(-2 * 86_400), now)).toMatch(/2026/);
     expect(formatRelative(ago(4 * 86_400), now)).toBe("4 hari lalu");
     expect(formatRelative(ago(30 * 86_400), now)).toMatch(/2026/);
     expect(formatRelative("nope", now)).toBe("–");
     expect(formatRelative(null, now)).toBe("–");
+  });
+
+  test("relative days follow the local calendar, not 24 h blocks", () => {
+    const now = new Date(2026, 10, 27, 2, 30); // 27 Nov 02.30 local
+    expect(formatRelative(new Date(2026, 10, 25, 23, 52), now)).toBe("2 hari lalu"); // 26 h ago, 2 calendar days
+    expect(formatRelative(new Date(2026, 10, 26, 1, 0), now)).toBe("kemarin");
+    expect(formatRelative(new Date(2026, 10, 26, 20, 0), now)).toBe("6 jam 30 mnt lalu");
   });
 
   test("bytes, megabytes, numbers, percent", () => {
@@ -295,5 +317,39 @@ describe("typed confirmation", () => {
   test("trims input but is case-sensitive", () => {
     expect(typedMatches(" blog ", "blog")).toBe(true);
     expect(typedMatches("Blog", "blog")).toBe(false);
+  });
+});
+
+describe("chunk recovery (server down ≠ stale bundle)", () => {
+  const reloads: string[] = [];
+  const reload = (key: string) => {
+    reloads.push(key);
+    return true;
+  };
+  test("server down → offline, no reload (stays in the app instead of a browser error page)", async () => {
+    reloads.length = 0;
+    expect(await recoverChunk("k", { reachable: async () => false, reload })).toBe("offline");
+    expect(reloads).toEqual([]);
+  });
+  test("server answers → reload once; already reloaded → stale", async () => {
+    reloads.length = 0;
+    expect(await recoverChunk("k", { reachable: async () => true, reload })).toBe("reloading");
+    expect(reloads).toEqual(["k"]);
+    expect(await recoverChunk("k", { reachable: async () => true, reload: () => false })).toBe("stale");
+  });
+  test("serverReachable: 2xx only; a network error or a proxy 502 counts as down", async () => {
+    const seen: string[] = [];
+    const ok = (async (url: string) => {
+      seen.push(url);
+      return new Response("{}", { status: 200 });
+    }) as unknown as typeof fetch;
+    expect(await serverReachable(ok)).toBe(true);
+    expect(seen).toEqual([HEALTH_URL]);
+    const proxy502 = (async () => new Response("", { status: 502 })) as unknown as typeof fetch;
+    expect(await serverReachable(proxy502)).toBe(false);
+    const offline = (async () => {
+      throw new TypeError("Failed to fetch");
+    }) as unknown as typeof fetch;
+    expect(await serverReachable(offline)).toBe(false);
   });
 });

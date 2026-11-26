@@ -6,7 +6,7 @@ import { idShell } from "@/web/i18n/id.shell";
 import { NavBadge } from "@/web/panel/nav.badge.provider";
 import type { Me } from "@/web/session/session.api";
 import { MobileMore } from "./mobile.more";
-import { activeInMore, type NavGroup, type NavItem } from "./nav.items";
+import { activeInMore, activeNavTo, type NavGroup, type NavItem } from "./nav.items";
 
 const t = idShell.mobileNav;
 const SLOT = "flex min-w-0 flex-1 flex-col items-center justify-center gap-0.5 text-[11px] leading-none";
@@ -16,6 +16,7 @@ export function MobileNav({ primary, more, me }: { primary: readonly NavItem[]; 
   const [open, setOpen] = useState(false);
   const { pathname } = useLocation();
   const inMore = activeInMore(pathname, more);
+  const current = activeNavTo(pathname);
   return (
     <nav
       aria-label={t.label}
@@ -28,9 +29,11 @@ export function MobileNav({ primary, more, me }: { primary: readonly NavItem[]; 
             <NavLink
               to={to}
               end={end}
-              className={({ isActive }) =>
-                cn(SLOT, "text-muted-foreground", isActive && "font-medium text-foreground [&_svg]:text-brand-text")
-              }
+              className={cn(
+                SLOT,
+                "text-muted-foreground",
+                current === to && "font-medium text-foreground [&_svg]:text-brand-text",
+              )}
             >
               <span className="relative">
                 <Icon className="size-5" aria-hidden />

@@ -1,6 +1,7 @@
 import { cn } from "cn";
 import { InboxIcon, type LucideIcon } from "lucide-react";
 import type { ReactNode } from "react";
+import { CodeText } from "@/web/components/code-text";
 
 /** "Nothing here yet" block: icon, title, optional description and primary action. */
 export function EmptyState({
@@ -27,7 +28,11 @@ export function EmptyState({
         <Icon className="size-5" aria-hidden />
       </span>
       <p className="font-medium">{title}</p>
-      {description && <p className="max-w-sm text-muted-foreground">{description}</p>}
+      {description && (
+        <p className="max-w-sm text-muted-foreground">
+          <CodeText>{description}</CodeText>
+        </p>
+      )}
       {action && <div className="mt-2">{action}</div>}
     </div>
   );

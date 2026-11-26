@@ -1,12 +1,13 @@
 import { cn } from "cn";
-import { NavLink } from "react-router";
+import { NavLink, useLocation } from "react-router";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/web/components/ui/tooltip";
 import { NavBadge } from "@/web/panel/nav.badge.provider";
-import type { NavGroup, NavItem } from "./nav.items";
+import { activeNavTo, type NavGroup, type NavItem } from "./nav.items";
 
 /**
  * Grouped navigation links shared by the desktop sidebar and the mobile sheet. NavLink sets aria-current="page"
- * on the active link; `collapsed` = icons only with the label in a tooltip (and still in the accessible name).
+ * on the active link; the highlight follows `activeNavTo`, so a hidden page (/panel/jobs) lights up its parent.
+ * `collapsed` = icons only with the label in a tooltip (and still in the accessible name).
  */
 export function SidebarNav({
   groups,
@@ -20,6 +21,7 @@ export function SidebarNav({
   /** 48 px rows (phone "Lainnya" sheet). */
   tall?: boolean;
 }) {
+  const current = activeNavTo(useLocation().pathname);
   return (
     <div className="flex flex-col gap-5">
       {groups.map((g) => (
@@ -35,7 +37,13 @@ export function SidebarNav({
           <ul className="flex flex-col gap-0.5">
             {g.items.map((item) => (
               <li key={item.to}>
-                <SidebarLink item={item} collapsed={collapsed} onNavigate={onNavigate} tall={tall} />
+                <SidebarLink
+                  item={item}
+                  collapsed={collapsed}
+                  onNavigate={onNavigate}
+                  tall={tall}
+                  highlight={current === item.to}
+                />
               </li>
             ))}
           </ul>
@@ -50,11 +58,13 @@ function SidebarLink({
   collapsed,
   onNavigate,
   tall,
+  highlight,
 }: {
   item: NavItem;
   collapsed: boolean;
   onNavigate?: () => void;
   tall: boolean;
+  highlight: boolean;
 }) {
   const { icon: Icon } = item;
   const link = (
@@ -62,24 +72,18 @@ function SidebarLink({
       to={item.to}
       end={item.end}
       onClick={onNavigate}
-      className={({ isActive }) =>
-        cn(
-          "group relative flex items-center gap-2.5 rounded-md px-2.5 text-sm text-muted-foreground transition-colors",
-          "hover:bg-accent hover:text-foreground focus-visible:outline-2 focus-visible:outline-offset-0",
-          tall ? "h-12 text-base" : "h-8",
-          isActive && "bg-accent font-medium text-foreground",
-          collapsed && "justify-center px-0",
-        )
-      }
-    >
-      {({ isActive }) => (
-        <>
-          {isActive && <span aria-hidden className="absolute inset-y-1.5 left-0 w-0.5 rounded-full bg-brand" />}
-          <Icon className={cn("size-4 shrink-0", isActive && "text-brand-text")} aria-hidden />
-          <span className={cn("truncate", collapsed && "sr-only")}>{item.label}</span>
-          <NavBadge to={item.to} dot={collapsed} className={cn(collapsed && "absolute top-1 right-1")} />
-        </>
+      className={cn(
+        "group relative flex items-center gap-2.5 rounded-md px-2.5 text-sm text-muted-foreground transition-colors",
+        "hover:bg-accent hover:text-foreground focus-visible:outline-2 focus-visible:outline-offset-0",
+        tall ? "h-12 text-base" : "h-8",
+        highlight && "bg-accent font-medium text-foreground",
+        collapsed && "justify-center px-0",
       )}
+    >
+      {highlight && <span aria-hidden className="absolute inset-y-1.5 left-0 w-0.5 rounded-full bg-brand" />}
+      <Icon className={cn("size-4 shrink-0", highlight && "text-brand-text")} aria-hidden />
+      <span className={cn("truncate", collapsed && "sr-only")}>{item.label}</span>
+      <NavBadge to={item.to} dot={collapsed} className={cn(collapsed && "absolute top-1 right-1")} />
     </NavLink>
   );
   if (!collapsed) return link;

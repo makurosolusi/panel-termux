@@ -1,6 +1,7 @@
 import { cn } from "cn";
 import { RefreshCwIcon } from "lucide-react";
 import { createContext, type ReactNode, useContext, useLayoutEffect } from "react";
+import { CodeText } from "@/web/components/code-text";
 import { Button } from "@/web/components/ui/button";
 import { idCommon } from "@/web/i18n/id.common";
 import { idShell } from "@/web/i18n/id.shell";
@@ -15,6 +16,8 @@ export type PageMeta = {
   refreshing?: boolean;
   /** Auto-refresh is on: shows a pulsing dot. */
   live?: boolean;
+  /** The last refresh failed (pass `!!query.error`): warning dot + "gagal memperbarui" instead of the live dot. */
+  stale?: boolean;
 };
 
 /** Link to the parent list; on phones it becomes the "‹" button of the top bar. */
@@ -75,7 +78,11 @@ export function PageHeader({
           </h1>
           {status}
         </div>
-        {description && <p className="max-w-prose text-sm text-muted-foreground">{description}</p>}
+        {description && (
+          <p className="max-w-prose text-sm text-muted-foreground">
+            <CodeText>{description}</CodeText>
+          </p>
+        )}
         {meta && <MetaLine meta={meta} />}
       </div>
       {actions && <div className="flex shrink-0 flex-wrap items-center gap-2">{actions}</div>}
@@ -86,12 +93,19 @@ export function PageHeader({
 function MetaLine({ meta }: { meta: PageMeta }) {
   return (
     <div className="mt-1 flex items-center gap-2 text-xs text-muted-foreground">
-      {meta.live && (
-        <span className="relative flex size-2" title={t.live}>
-          <span className="absolute inline-flex size-full rounded-full bg-success opacity-60 motion-safe:animate-ping" />
-          <span className="relative inline-flex size-2 rounded-full bg-success" />
-          <span className="sr-only">{t.live}</span>
+      {meta.stale ? (
+        <span className="flex items-center gap-1.5 font-medium text-warning">
+          <span aria-hidden className="size-2 rounded-full bg-warning" />
+          {t.stale}
         </span>
+      ) : (
+        meta.live && (
+          <span className="relative flex size-2" title={t.live}>
+            <span className="absolute inline-flex size-full rounded-full bg-success opacity-60 motion-safe:animate-ping" />
+            <span className="relative inline-flex size-2 rounded-full bg-success" />
+            <span className="sr-only">{t.live}</span>
+          </span>
+        )
       )}
       {meta.updatedAt && <RelativeTime at={meta.updatedAt} format={idCommon.updatedAgo} />}
       {meta.onRefresh && (

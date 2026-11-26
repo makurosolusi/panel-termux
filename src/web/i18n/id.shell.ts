@@ -45,9 +45,11 @@ export const idShell = {
   time: {
     justNow: "baru saja",
     ago: (s: string) => `${s} lalu`,
+    in: (s: string) => `dalam ${s}`,
     yesterday: "kemarin",
     refresh: "Muat ulang",
     live: "Pembaruan otomatis aktif",
+    stale: "Gagal memperbarui",
   },
   copy: { copy: "Salin", copied: "Tersalin", failed: "Tidak bisa menyalin. Salin manual dari teks di atas." },
   table: {
@@ -70,6 +72,10 @@ export const idShell = {
     title: "Bagian panel ini gagal dimuat",
     body: "Biasanya karena panel baru diperbarui atau koneksi terputus. Muat ulang halaman untuk memakai versi terbaru.",
     reload: "Muat ulang halaman",
+    offlineTitle: "Server panel tidak terjangkau",
+    offlineBody:
+      "Bagian panel ini belum bisa dimuat karena server panel tidak menjawab. Periksa koneksi internet dan pastikan panel di HP masih berjalan, lalu coba lagi.",
+    retry: "Coba lagi",
   },
   notFound: {
     title: "Halaman tidak ditemukan",

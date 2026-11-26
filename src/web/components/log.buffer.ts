@@ -52,3 +52,13 @@ export function logToText(lines: readonly LogLine[]): string {
     })
     .join("\n");
 }
+
+/** `<label-slug>-YYYYMMDD-HHmm.log` in local time. */
+export function logFileName(label: string, now = new Date()): string {
+  const p = (n: number) => String(n).padStart(2, "0");
+  const slug = label
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-|-$/g, "");
+  return `${slug || "log"}-${now.getFullYear()}${p(now.getMonth() + 1)}${p(now.getDate())}-${p(now.getHours())}${p(now.getMinutes())}.log`;
+}

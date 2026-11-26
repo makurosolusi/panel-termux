@@ -15,14 +15,26 @@ export function PaginationFooter({ p }: { p: DataPagination }) {
     p.total === undefined ? t.page(p.page, p.pageCount) : t.pageWithTotal(p.page, p.pageCount, formatNumber(p.total));
   return (
     <nav aria-label={t.pagination} className="flex items-center justify-between gap-2 text-sm">
-      <Button variant="outline" size="sm" disabled={p.page <= 1} onClick={() => p.onPageChange(p.page - 1)}>
+      <Button
+        variant="outline"
+        size="sm"
+        className="pointer-coarse:min-w-11"
+        disabled={p.page <= 1}
+        onClick={() => p.onPageChange(p.page - 1)}
+      >
         <ChevronLeftIcon aria-hidden />
         <span className="sr-only sm:not-sr-only">{t.prev}</span>
       </Button>
       <span className="text-center text-muted-foreground tabular-nums" aria-live="polite">
         {text}
       </span>
-      <Button variant="outline" size="sm" disabled={p.page >= p.pageCount} onClick={() => p.onPageChange(p.page + 1)}>
+      <Button
+        variant="outline"
+        size="sm"
+        className="pointer-coarse:min-w-11"
+        disabled={p.page >= p.pageCount}
+        onClick={() => p.onPageChange(p.page + 1)}
+      >
         <span className="sr-only sm:not-sr-only">{t.next}</span>
         <ChevronRightIcon aria-hidden />
       </Button>

@@ -25,8 +25,18 @@ const n = idShell.nav;
 /** Content width class of a page: tables/dashboards wide, forms and profile narrow. */
 export type PageWidth = "wide" | "narrow";
 
-/** One sidebar link. `end` = active only on the exact path (index routes). */
-export type NavItem = { to: string; label: string; icon: LucideIcon; end?: boolean; width?: PageWidth };
+/**
+ * One sidebar link. `end` = active only on the exact path (index routes); `parent` (hidden pages only) = the link
+ * highlighted in the sidebar and bottom bar while this page is open.
+ */
+export type NavItem = {
+  to: string;
+  label: string;
+  icon: LucideIcon;
+  end?: boolean;
+  width?: PageWidth;
+  parent?: string;
+};
 
 /** Titled group of sidebar links. */
 export type NavGroup = { key: keyof typeof idShell.groups; label: string; items: readonly NavItem[] };
@@ -66,8 +76,8 @@ export const NAV_GROUPS: readonly NavGroup[] = [
 
 /** Routes without their own sidebar link, titled under the group of their path. */
 const HIDDEN_PAGES: readonly NavItem[] = [
-  { to: "/panel/jobs", label: n.jobs, icon: ActivityIcon },
-  { to: "/panel/problems", label: idHistory.problems.title, icon: HistoryIcon },
+  { to: "/panel/jobs", label: n.jobs, icon: ActivityIcon, parent: "/panel/sites" },
+  { to: "/panel/problems", label: idHistory.problems.title, icon: HistoryIcon, parent: "/panel" },
 ];
 
 /** Phone bottom bar slots 1–4 (PLAN/01 §3.7); slot 5 is the "Lainnya" sheet with everything else. */
@@ -106,9 +116,15 @@ export function navMatch(pathname: string): { group: NavGroup; item: NavItem } |
   return best;
 }
 
+/** The visible nav link to highlight for a path: its own item, or the `parent` of a hidden page; null if none. */
+export function activeNavTo(pathname: string): string | null {
+  const item = navMatch(pathname)?.item;
+  return item ? (item.parent ?? item.to) : null;
+}
+
 /** Whether the current page lives in the "Lainnya" sheet (its nav item, or Profil in the account block). */
 export function activeInMore(pathname: string, more: readonly NavGroup[]): boolean {
-  const current = navMatch(pathname)?.item.to;
+  const current = activeNavTo(pathname);
   if (current === "/profile") return true;
   return more.some((g) => g.items.some((i) => i.to === current));
 }

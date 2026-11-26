@@ -1,12 +1,12 @@
 import { ServerCrashIcon, TriangleAlertIcon, WifiOffIcon } from "lucide-react";
-import { useEffect } from "react";
 import { useRevalidator, useRouteError } from "react-router";
 import { Button } from "@/web/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/web/components/ui/card";
 import { idSession } from "@/web/i18n/id.session";
 import { idShell } from "@/web/i18n/id.shell";
 import { ApiError } from "@/web/shared/api.client";
-import { CHUNK_RELOAD_KEY, isChunkLoadError, reloadOnce } from "@/web/shared/chunk.error";
+import { isChunkLoadError } from "@/web/shared/chunk.error";
+import { useChunkRecovery } from "@/web/shared/use-chunk-recovery";
 
 /** Which root failure this is: a code chunk that did not load, `/api/me` unreachable, or the server failing. */
 export function sessionErrorKind(err: unknown): "chunk" | "network" | "server" {
@@ -16,20 +16,32 @@ export function sessionErrorKind(err: unknown): "chunk" | "network" | "server" {
 
 /**
  * Root error boundary (distinct from 401, which redirects to login). A failed chunk (panel updated while the tab
- * was open) reloads once; if that already happened, or for network/server failures, it shows a card.
+ * was open) reloads once when the server answers; if that already happened, the server is down, or for
+ * network/server failures, it shows a card.
  */
 export function SessionError() {
   const error = useRouteError();
   const revalidator = useRevalidator();
   const kind = sessionErrorKind(error);
-  useEffect(() => {
-    if (kind === "chunk") reloadOnce(CHUNK_RELOAD_KEY);
-  }, [kind]);
-
-  const chunk = kind === "chunk";
-  const Icon = chunk ? TriangleAlertIcon : kind === "network" ? WifiOffIcon : ServerCrashIcon;
-  const title = chunk ? idShell.chunkError.title : kind === "network" ? idSession.errorTitle : idSession.serverTitle;
-  const body = chunk ? idShell.chunkError.body : kind === "network" ? idSession.errorBody : idSession.serverBody;
+  const recovery = useChunkRecovery(kind === "chunk");
+  const offline = kind === "chunk" && recovery.state === "offline";
+  const chunk = kind === "chunk" && !offline;
+  const c = idShell.chunkError;
+  const Icon = chunk ? TriangleAlertIcon : kind === "network" || offline ? WifiOffIcon : ServerCrashIcon;
+  const title = offline
+    ? c.offlineTitle
+    : chunk
+      ? c.title
+      : kind === "network"
+        ? idSession.errorTitle
+        : idSession.serverTitle;
+  const body = offline
+    ? c.offlineBody
+    : chunk
+      ? c.body
+      : kind === "network"
+        ? idSession.errorBody
+        : idSession.serverBody;
   return (
     <main className="mx-auto flex min-h-svh max-w-md flex-col justify-center p-4">
       <Card>
@@ -41,9 +53,9 @@ export function SessionError() {
           <CardDescription>{body}</CardDescription>
         </CardHeader>
         <CardContent>
-          {chunk ? (
-            <Button className="w-full" onClick={() => window.location.reload()}>
-              {idShell.chunkError.reload}
+          {kind === "chunk" ? (
+            <Button className="w-full" disabled={recovery.state === "checking"} onClick={recovery.retry}>
+              {offline ? c.retry : c.reload}
             </Button>
           ) : (
             <Button
