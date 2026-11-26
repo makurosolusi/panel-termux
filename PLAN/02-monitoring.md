@@ -1,94 +1,132 @@
-# PLAN 02 — Monitoring: Ringkasan, Layanan, Aplikasi, Domain, Database, Log, Sampler, Histori, Notifikasi
+# PLAN 02 — Monitoring: Ringkasan, Layanan, Aplikasi, Domain, Database, Log, Sampler, Notifikasi
 
-Penulis: wkr-plan-monitor-01 · Tanggal: 2026-11-26 · Basis: `feature/production-polish` @ 74fe380.
-Sumber: `R&D/02-monitoring.md` (angka terukur di HP POCO), silang dengan R&D-01 (shell, DataTable, LogViewer,
-polling), R&D-03 (kunci job, restart cloudflared), R&D-04 (backup.status melempar → overview 500, notifikasi cadangan),
-R&D-05 (Pengaturan, request log membanjiri ring buffer). Semua klaim kode di bawah dicek ulang ke file di HEAD.
+Penulis: wkr-plan-monitor-01 · Tanggal: 2026-11-26 · Basis: `feature/production-polish` @ 74fe380 · **Revisi 3**
+(setelah debat: `PLAN/debate/02-critique.md`, `02-response.md`, `00-integration-critique.md`; diselaraskan dengan
+`PLAN/DECISIONS.md` yang mengikat).
 
-Konvensi: "Rx-Gn" = gap n di `R&D/0x`. Angka biaya dari R&D-02 §2.0: `pm2 jlist` 0,34–0,61 dtk wall ≈ 0,5 dtk CPU,
-`sv status` 0,02 dtk, `psql` 0,08 dtk, `termux-battery-status` 0,7–1,25 dtk, probe HTTPS ±0,9 dtk, load idle ±20 di 8 inti,
-`/proc/stat` EACCES (tidak ada CPU%).
+Sumber:
+
+- `R&D/02-monitoring.md`: angka terukur di HP POCO.
+- Silang dengan R&D-01 (shell, polling), R&D-03 (kunci job), R&D-04 (`backup.status` melempar → overview 500),
+  R&D-05 (request log).
+- Kontrak lintas PLAN mengikuti tabel `00-integration-critique.md` §2 dan jadwal global §5.
+
+Angka biaya:
+
+- `pm2 jlist`: 0,46–0,73 dtk wall, **0,54–0,66 dtk CPU** (diukur ulang oleh kritik).
+- `sv status`: 0,01–0,02 dtk.
+- `termux-battery-status`: 0,7–1,31 dtk wall.
+- Probe HTTPS ±0,9 dtk; `gstatic generate_204` 0,32 dtk.
+- Load idle ±20 di 8 inti; `/proc/stat` dan `/proc/loadavg` EACCES.
+
+Konvensi: "Rx-Gn" = gap n di `R&D/0x`; "C-n" = temuan kritik; "X-n"/"K-n" = kritik integrasi.
 
 ---
 
 ## 1. Tujuan & ruang lingkup
 
-**Tujuan.** Dalam 3 detik di layar 390 px admin tahu "ada yang rusak atau tidak, dan apa langkahnya"; panel memantau
-sendiri saat tidak ada yang membuka halaman, dan memberi tahu lewat Telegram; biaya CPU di HP terukur dan dibatasi.
+**Tujuan.**
 
-**Masuk ruang lingkup (menutup gap):**
+- Di layar 390 px, dalam 3 detik admin tahu ada yang rusak atau tidak, dan apa langkahnya.
+- Panel memantau sendiri saat tidak ada yang membuka halaman, lalu memberi tahu lewat Telegram tanpa pesan palsu.
+- Biaya CPU di HP terukur dan dibatasi.
 
-| Bagian                                                                                  | Menutup                                                   |
-| --------------------------------------------------------------------------------------- | --------------------------------------------------------- |
-| Ringkasan problem-first dari `problems` server, satu set aturan                         | R2-G1, G2, G3, G18, G21, G22; R4-G4 (bagian overview 500) |
-| `Problem` dengan `code` + `params` + `since` + `href`; teks diterjemahkan               | R2-G3                                                     |
-| Tile perangkat jujur: load relatif terhadap HP ini, tanpa CPU% palsu                    | R2-G6, G7, G27                                            |
-| Baterai: dicabut/tidak dicas = masalah, suhu null bila tak ada                          | R2-G11                                                    |
-| pm2 daemon mati = masalah, bukan daftar kosong                                          | R2-G12                                                    |
-| Halaman Layanan/Aplikasi/Domain/Database dengan `DataTable`                             | R2-G19, G20, G24, G26; R1-G2                              |
-| Layanan inti (pm2, postgres) + restart panel/cloudflared yang benar                     | R2-G8; R4 temuan `cloudflared/restart`                    |
-| Domain: debounce 3 cek, cek lokal port, arti kode HTTP, cek ulang manual                | R2-G13                                                    |
-| Satu sampler latar + cache snapshot + histori 7 hari                                    | R2-G5, G15, G16                                           |
-| Mesin alert + kanal Telegram (kunci setting, API, uji kirim)                            | R2-G14; R4-G15                                            |
-| Log: kontrak API follow/cursor, parse svlogd, redaksi, unduh; pakai `LogViewer` PLAN/01 | R2-G9, G17, G23                                           |
-| Level request log untuk polling                                                         | R2-G10; R5-G12                                            |
-| Interval polling per halaman                                                            | R2-G4 (bersama PLAN/01 `useApiQuery`)                     |
+**Masuk v0.3.0 (menutup gap):**
 
-**Di luar ruang lingkup:**
+| Bagian                                                                                       | Menutup                                  |
+| -------------------------------------------------------------------------------------------- | ---------------------------------------- |
+| Ringkasan problem-first dari `problems` server, satu set aturan (termasuk kode PLAN/03, /04) | R2-G1, G2, G3, G18, G21, G22; R4-G4; X10 |
+| `Problem` dengan `code` + `params` + `since` + `href`, penahanan akar masalah                | R2-G3; C2, C8                            |
+| Tile perangkat jujur: load + baseline "biasanya …", tanpa CPU% palsu, suhu `null`            | R2-G6, G7, G27                           |
+| Baterai rendah saja (charger sengaja dicabut-colok, A9/B3)                                   | R2-G11; C7                               |
+| pm2 tidak berjalan = masalah, dan CLI pm2 tidak pernah meluncurkan daemon liar               | R2-G12; C6                               |
+| Restart-loop runit dan pm2 (tanpa salah hitung restart manual)                               | R2 §2.2; C4, C5                          |
+| Halaman Layanan/Aplikasi/Domain/Database dengan `DataTable` (01)                             | R2-G19, G20, G24, G26                    |
+| Layanan inti + restart panel/cloudflared (putus yang diharapkan)                             | R2-G8; C9, C10                           |
+| Domain: debounce 3 cek, cek lokal port, arti kode HTTP, cek ulang manual                     | R2-G13                                   |
+| Satu sampler latar + cache snapshot                                                          | R2-G5, G15                               |
+| Mesin alert (`problem_event`) + Telegram + notifikasi reboot                                 | R2-G14; R4-G15; C1–C3, C18, C19, C21     |
+| Log: API cursor, redaksi; tampilan pakai `LogViewer` 01                                      | R2-G9, G17, G23                          |
+| Request log polling ke `debug`                                                               | R2-G10; R5-G12                           |
+| Histori 7 hari (`metric_sample`, `check_result`), sparkline, strip heartbeat domain          | R2-G16; A8                               |
+| Riwayat masalah (`/problems/history` + halaman), badge nav `/panel/status`                   | R2-G16; R1-G26; A8                       |
+| Unduh log dari server + audit `log.download`                                                 | R2 §4; A8                                |
 
-- Komponen generik `DataTable`, `LogViewer`, `ConfirmAction` bertingkat, `useApiQuery` (pause/backoff), bottom bar,
-  `RelativeTime` jam global — milik **PLAN/01**. Dokumen ini hanya menyebut props/perilaku yang dibutuhkan (§3.9).
-- UI Pengaturan Telegram — milik **PLAN/05**. Dokumen ini mendefinisikan kunci, validator, dan API-nya (§3.6, §3.7).
-- Aturan masalah Situs/Perubahan (job gagal, situs restart-loop) — kode dicadangkan (§3.1), aturannya ditulis PLAN/03.
-- Isi/perbaikan data cadangan — PLAN/04; dokumen ini hanya membaca `backup.status()` dan `backup_run`.
-- Log rotasi (`@….s`, `.gz`) (R2-G25), webhook generik, ntfy, email, Web Push, heartbeat keluar (R2-G28) — P2, tidak
-  dikerjakan di rilis ini. R2-G28 didokumentasikan di README saja (§2 K15).
-- Grafik interaktif, library chart. Sparkline SVG tangan saja (gelombang 3).
+Semua fitur masuk v0.3.0 (DECISIONS A8). Fitur histori dikerjakan di gelombang akhir (W4, §7).
+
+**Bukan bagian PLAN ini** (tidak pernah direncanakan, bukan pemangkasan):
+
+- Log rotasi `@….s`/`.gz` (R2-G25).
+- Kanal selain Telegram (webhook/ntfy/email/Web Push) dan heartbeat keluar (R2-G28; README saja).
+
+**Di luar PLAN ini:**
+
+- Komponen `DataTable`, `LogViewer`, `ConfirmAction`, `usePoller`/`useApiQuery`, `useLogFollow`, `status.vocab`, `log.time.ts`, dan
+  `format.id.ts` milik **PLAN/01**.
+- UI Pengaturan dan `PATCH /api/dev/settings` milik **PLAN/05**.
+- Data cadangan/keamanan milik **PLAN/04**. PLAN/04 hanya menyediakan input, aturannya ada di sini.
+- Job situs milik **PLAN/03**.
 
 ---
 
 ## 2. Keputusan
 
-| #   | Keputusan (dipilih)                                                                                                                                                                                                                                                                                                                                                                                                                                       | Alternatif ditolak                                              | Alasan                                                                                                                                                           |
-| --- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| K1  | **Satu sumber aturan**: `computeProblems` di server; klien tidak punya aturan. `countProblems` (`web/panel/panel.status.ts:49`) dihapus; hitungan per kartu = `problems.filter(p => p.kind === …)`.                                                                                                                                                                                                                                                       | Aturan ganda klien/server (hari ini)                            | R2-G2: angka "2 perlu dicek" tidak boleh beda dengan daftar.                                                                                                     |
-| K2  | **`Problem` = `{ id, code, kind, target, severity, params, since, href }`**, `message` Inggris dihapus. Teks Indonesia dari `code`+`params` di `src/shared/problem.copy.ts` (dipakai web **dan** pesan Telegram).                                                                                                                                                                                                                                         | Teks Indonesia di server saja; mem-parse string Inggris         | Notifikasi butuh teks yang sama dengan UI; satu tempat. Pengecualian sadar dari content guide ("teks di `src/web/i18n`"): `id.panel` me-re-export dari file ini. |
-| K3  | **App `stopped` bukan masalah** (netral "Dihentikan"). Masalah app hanya `errored` dan crash loop (restart naik ≥ 3 dalam 10 mnt). Domain yang app-nya `stopped` tidak dijadikan masalah (diberi `params.appStopped`).                                                                                                                                                                                                                                    | Lacak "niat" dari audit (stop lewat panel = sengaja)            | pm2 tak menyimpan "want"; stop lewat CLI juga sengaja. Situs yang mati tanpa disengaja tetap tertangkap lewat `errored`/crash loop dan probe domain.             |
-| K4  | **Load: angka "Beban sistem" netral + baseline HP ini.** Setelah ≥ 24 jam sampel: "biasanya 18–22" (p10–p90 load5 7 hari) dan nada warning bila load5 > 1,5× p50, danger > 2× p50 — **hanya tampilan, tidak pernah jadi Problem/notifikasi**. `formatLoadPerCore` tidak dipakai di mode termux.                                                                                                                                                           | Ambang per-core Linux (selalu merah), sembunyikan load          | R2 §6.1 opsi D lalu C.                                                                                                                                           |
-| K5  | **Tidak ada CPU%**: adapter termux selalu mengisi `App.cpu = null`; kolom CPU hanya tampil bila ada nilai non-null (mode demo diubah juga ke null supaya mewakili Android).                                                                                                                                                                                                                                                                               | Tampilkan "CPU 0%"                                              | Data palsu (R2-G7).                                                                                                                                              |
-| K6  | **Baterai untuk HP server**: `plugged = unplugged` → `battery_unplugged` **warning** (alert ditunda 5 mnt agar kabel goyang tidak memicu); `< 20%` dan tidak dicas → `battery_low` **danger** (menggantikan unplugged); suhu ≥ 45 °C warning, ≥ 50 °C danger. Dicolok tapi `NOT_CHARGING` (batas cas 80% / proteksi) **bukan** masalah. Baterai tak terbaca (`null`) bukan masalah, tile "Tidak tersedia".                                                | Hanya < 20% (hari ini)                                          | Dicabut = risiko mati total nomor satu; danger hanya bila waktu tersisa pendek.                                                                                  |
-| K7  | **Satu sampler latar** (rantai `setTimeout`, default 60 dtk, setting `monitor.sample_interval_sec` 30–600) yang: memperbarui snapshot, mem-probe domain, menulis histori, menghitung problems, menjalankan alert. Single-flight: tick yang jatuh saat tick sebelumnya masih jalan dilewati + `log.warn`.                                                                                                                                                  | Tiga loop terpisah; SSE push                                    | R2 §6.3; satu biaya tetap.                                                                                                                                       |
-| K8  | **Cache snapshot per bagian, stale-while-revalidate**: TTL bagian murah (runit, device tanpa baterai, ingress) 5 dtk; pm2 15 dtk; baterai 120 dtk; domain health = hasil probe sampler terakhir (request UI **tidak pernah** menunggu probe). Bila ada nilai lama (≤ 120 dtk), request langsung dijawab dengan itu sementara refresh berjalan di belakang; hanya request pertama setelah boot yang menunggu. Aksi kontrol meng-invalidate bagian terkait. | TTL tunggal 5 dtk; tanpa cache                                  | Satu tab Ringkasan (poll 10 dtk) → `jlist` paling sering tiap ±20 dtk ≈ 2,5% satu inti (< target 3%); N tab = biaya sama.                                        |
-| K9  | **Histori di `panel.db`, 7 hari mentah, tanpa downsampling tulis.** Downsampling hanya saat baca (bucket 15 mnt untuk 24 jam, 2 jam untuk 7 hari). Retensi: `DELETE` per jam; tanpa `VACUUM` (halaman bebas dipakai ulang, ukuran stabil). Ikut cadangan harian apa adanya (bagian dari `VACUUM INTO`, ±3 MB).                                                                                                                                            | Agregat per jam 30 hari; ring di RAM                            | Ukuran mentah 7 hari ±3 MB (§3.4) → kode downsampling tulis tidak sebanding.                                                                                     |
-| K10 | **Debounce di aturan, tunda di alert.** Problem tampil di UI segera (kecuali domain: butuh 3 cek gagal berturut-turut = ±3 mnt, pulih setelah 1 cek sehat). Alert punya `delay` per kode (§3.1).                                                                                                                                                                                                                                                          | Debounce semua di UI                                            | UI harus jujur seketika; notifikasi harus tahan flapping.                                                                                                        |
-| K11 | **Mesin alert = rekonsiliasi status** per kunci `code:target` yang disimpan di tabel `problem_event` (bertahan restart): kirim bila status yang diinginkan (buka/pulih) ≠ yang terakhir dikirim, dengan cooldown 15 mnt per kunci, pengingat tiap 24 jam selama masih terbuka, eskalasi warning→danger menembus cooldown, semua perubahan dalam satu tick digabung jadi **satu pesan**, batas 20 pesan/jam.                                               | Kirim per event; antre pesan                                    | Tahan badai (internet pulih = 1 pesan), restart panel tidak mengirim ulang, kegagalan kirim otomatis dicoba ulang tanpa antrean.                                 |
-| K12 | **Tanpa jam tenang (quiet hours).** Pesan yang hanya berisi warning dikirim dengan `disable_notification: true` (senyap); pesan berisi danger berbunyi. Membisukan chat diserahkan ke Telegram.                                                                                                                                                                                                                                                           | Setting jam tenang                                              | Satu setting dan satu zona waktu lebih sedikit; TZ proses di runit Termux tidak terjamin (§8 R4).                                                                |
-| K13 | **Layanan inti**: default `panel.protected_services` = `sshd,cloudflared,panel,pm2,postgres`. Protected: **Hentikan** butuh ketik nama (body `confirm`), **Mulai ulang** boleh dengan peringatan akibat. `panel` dan `cloudflared` **tidak bisa dihentikan sama sekali** dari panel (`lockout`, 409): menghentikannya memutus akses ke panel itu sendiri dan runit tidak akan menyalakannya lagi.                                                         | Refuse stop untuk semua protected (hari ini); tanpa proteksi    | Default brief + menghindari admin mengunci dirinya sendiri. Nilai setting yang sudah disimpan pengguna tidak diubah (hanya default).                             |
-| K14 | **Restart `panel` dan `cloudflared` = "putus yang diharapkan"**: server membalas `202` dulu, lalu menjalankan `sv restart` 500 ms kemudian (untuk `panel` lewat proses `sv` terlepas/detached). UI menampilkan overlay "Menyambung ulang…", poll tiap 2 dtk (`/api/health` dengan `bootId` baru untuk panel; `/api/panel/ping` untuk cloudflared), batas 90 dtk.                                                                                          | Toast gagal palsu (hari ini)                                    | R2 §6.6 C.                                                                                                                                                       |
-| K15 | **Panel sendiri mati tidak bisa memberi tahu.** README menyarankan monitor luar (Uptime Kuma/healthchecks) ke `https://panel.<domain>/api/health`; heartbeat keluar P2.                                                                                                                                                                                                                                                                                   | Implementasi heartbeat sekarang                                 | Jujur, murah (R2-G28).                                                                                                                                           |
-| K16 | **Request log**: semua `GET`/`HEAD` dengan status < 400 dicatat `debug`; lainnya `info` (5xx tetap juga `error` dari `normalizeError`). Ring buffer `log.service` tidak menyimpan `debug` di produksi (sama dengan stdout).                                                                                                                                                                                                                               | Daftar path polling khusus                                      | Aturan satu baris tanpa daftar yang harus dipelihara; R2-G10/R5-G12.                                                                                             |
-| K17 | **Log**: kontrak `LogChunk` dengan `cursor` (`<ino>:<offset>`) untuk follow (poll 3 dtk), parse prefix `svlogd -tt` (UTC) jadi `at`, redaksi pola rahasia umum di server, unduh = audit `log.download`. Tanpa opsi "semua" stdout+stderr (pm2 tidak memberi timestamp untuk menggabungkan urutan).                                                                                                                                                        | SSE/`fs.watch` (belum terbukti di Android); merge stdout/stderr | R2 §6.4 opsi A.                                                                                                                                                  |
-| K18 | **Internet HP putus**: bila semua domain yang bisa diprobe gagal tanpa jawaban di tick yang sama, sampler mem-probe `CONNECTIVITY_PROBE_URL` (`https://www.gstatic.com/generate_204`, konstanta bernama + override env `PANEL_CONNECTIVITY_URL`). Gagal juga → satu problem `internet_down` menggantikan problem per-domain. Saat pulih, bila lamanya ≥ 5 mnt, kirim "HP sempat tidak terhubung internet selama X".                                       | N domain merah                                                  | R2 §4 tabel kegagalan.                                                                                                                                           |
-| K19 | Notifikasi **tidak pernah** memuat isi log/env; hanya judul masalah + nama resource + tautan `APP_BASE_URL/panel`. Waktu ditulis relatif ("sejak 12 mnt") bukan jam, supaya tidak bergantung TZ proses.                                                                                                                                                                                                                                                   | Jam absolut                                                     | R2 §4 keamanan; R4 TZ.                                                                                                                                           |
-| K20 | **Role**: semua API monitoring tetap `admin`; uji kirim dan deteksi chat Telegram `super_admin` (setara pengaturan). Admin melihat status kanal (aktif/gagal) tapi bukan isinya.                                                                                                                                                                                                                                                                          | Uji kirim untuk admin                                           | Keputusan owner 1: super_admin mengelola pengaturan.                                                                                                             |
+| #   | Keputusan (dipilih)                                                                                                                                                                                                                                                                                                                                                                                                                                 | Alternatif ditolak                                    | Alasan                                                             |
+| --- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------- | ------------------------------------------------------------------ |
+| K1  | **Satu sumber aturan** di `src/server/panel/overview.problems.ts`, termasuk kode cadangan/keamanan PLAN/04 dan `site_job_failed` PLAN/03. Klien tidak punya aturan; `countProblems` dihapus. `/dev/health` (05) menurunkan cek `backup`/`storage` dari `problems` sampler terakhir.                                                                                                                                                                 | Aturan per domain (`backup.problems.ts`)              | Angka Ringkasan = angka notifikasi = angka Kesehatan sistem (X10). |
+| K2  | **`Problem` = `{ id, code, kind, target, severity, params, since, href }`**; `message` dihapus. Teks dari `src/shared/problem.copy.ts` dipakai UI dan Telegram, dengan formatter dari `src/shared/format.id.ts` (01).                                                                                                                                                                                                                               | Teks di server; parse string Inggris                  | Satu teks; pengecualian sadar atas lokasi i18n.                    |
+| K3  | **Penahanan akar masalah.** `computeProblems` → `{ problems, suppressed, unknownKinds }`. Problem yang ditahan tidak tampil di daftar, tidak menutup/membuka event, dan tidak dikirim (tabel §3.1 kolom "Menahan").                                                                                                                                                                                                                                 | N baris untuk satu sebab; "menggantikan" (tutup+buka) | C2, C8: penggantian menghasilkan "PULIH" palsu dan pesan berlipat. |
+| K4  | **Kind yang tidak terbaca = tidak diketahui, bukan sehat.** Bagian snapshot yang gagal, atau baterai `null`, menandai kind-nya `unknown`. Event kind itu dibekukan.                                                                                                                                                                                                                                                                                 | Bagian gagal → `[]` → event tertutup                  | C1: `termux-battery-status` timeout itu sering.                    |
+| K5  | **App `stopped` bukan masalah.** Masalah app hanya `errored` dan crash loop. Restart yang disengaja (`noteIntentionalRestart`: tombol panel, job PLAN/03) tidak dihitung; counter turun me-reset.                                                                                                                                                                                                                                                   | Lacak niat dari audit; hitung semua `restart_time`    | pm2 menambah `restart_time` juga untuk restart manual (C4).        |
+| K6  | **Load + baseline HP ini.** "Beban sistem 20,9 · 20,7 · 20,0", netral sampai ada ≥ 24 jam sampel; lalu "· biasanya 18–22" (p10–p90 load5 7 hari) dan nada warning > 1,5× p50, danger > 2× p50 — **hanya tampilan**, tidak pernah Problem/notifikasi.                                                                                                                                                                                                | Ambang per-core (selalu merah)                        | R2 §6.1 opsi D lalu C; A8.                                         |
+| K7  | **Tanpa CPU%.** Adapter termux selalu `cpu = null`; demo juga.                                                                                                                                                                                                                                                                                                                                                                                      | "CPU 0%"                                              | R2-G7.                                                             |
+| K8  | **Baterai: hanya baterai rendah yang jadi masalah** (A9/B3; charger sengaja dicabut-colok). Satu kode `battery_low`: warning bila tidak mengisi (`status` bukan `charging`/`full`) dan `percent < monitor.battery_warn_percent` (default **25**, bisa `off`); danger bila tidak mengisi dan `percent < 15` (`BATTERY_DANGER_PERCENT`). "Tidak dicolok" bukan masalah (`battery_unplugged` dihapus). `battery_hot`: ≥ 45 °C warning, ≥ 50 °C danger. | Dua kode (unplugged/low); hanya `plugged`             | C2, C7; owner A9, B3.                                              |
+| K9  | **Satu sampler latar** (rantai `setTimeout`, `monitor.sample_interval_sec` default 60) yang memperbarui snapshot, mem-probe domain, menghitung problems, dan menjalankan alert. Single-flight: tick yang tumpang tindih dilewati + `log.warn`. Tick pertama 10 dtk setelah boot.                                                                                                                                                                    | Tiga loop; SSE                                        | R2 §6.3.                                                           |
+| K10 | **Cache snapshot per bagian, stale-while-revalidate, bagian membawa `at`.** TTL: runit/device/ingress 5 dtk; pm2 15 dtk; baterai 120 dtk. Domain = hasil probe sampler terakhir. Nilai ≤ 120 dtk langsung dijawab sementara refresh berjalan di latar. Aksi kontrol **mem-patch** item hasil aksi ke cache lalu menandai bagian basi. UI menampilkan umur data (`dataAt`), bukan waktu respons.                                                     | TTL tunggal; invalidasi tanpa patch                   | C16.                                                               |
+| K11 | **Alert = rekonsiliasi** per kunci `code:target` di `problem_event`. Detail lengkap di §4.6: histeresis tutup 2 tick, buka-kembali baris yang ditutup < 15 mnt, cooldown 15 mnt hanya untuk "buka", "pulih" tanpa cooldown, eskalasi menembus cooldown, pengingat 24 jam, `min_severity` hanya saat memilih kirim, satu digest per tick, plafon 20/jam.                                                                                             | Kirim per event; antrean                              | C1, C3, C21.                                                       |
+| K12 | **Tanpa jam tenang.** Pesan yang hanya berisi warning dikirim `disable_notification: true`.                                                                                                                                                                                                                                                                                                                                                         | Setting jam tenang                                    | TZ proses runit tidak terjamin.                                    |
+| K13 | **Layanan inti**: default `panel.protected_services` = `sshd,cloudflared,panel,pm2,postgres`. Hentikan protected = ketik nama (`confirm` di body). Mulai ulang = peringatan. `panel`/`cloudflared` = **`lockout`** (stop selalu 409), apa pun isi setting.                                                                                                                                                                                          | Refuse semua stop                                     | Brief + hindari mengunci diri sendiri.                             |
+| K14 | **Restart `panel` = keluar rapi.** 202, lalu `shutdown("restart")` (server stop → idle ≤ 120 dtk → tulis marker → tutup DB → `exit(0)`); runsv menjalankan ulang (`exec ./panel`). Hanya bila `$SVDIR/panel/supervise/pid` = `process.pid`, selain itu 409 `not_supervised`. Ditolak bila `jobs.active() \|\| backup.running \|\| backup.restoring`.                                                                                                | `sv` detached + `setsid`                              | C9: lebih sederhana, tanpa risiko proses anak mati.                |
+| K15 | **Restart `cloudflared`**: 202 dengan `oldPid`, `sv restart` 500 ms kemudian. Overlay selesai bila `GET /panel/services` berhasil **dan** `cloudflared` `run` dengan `pid !== oldPid`.                                                                                                                                                                                                                                                              | Poll `/ping`                                          | C10.                                                               |
+| K16 | **Request log**: `GET`/`HEAD` < 400 → `debug`; 401, dan 404 tanpa sesi → `debug`; lainnya `info`. Ring `log.service` tidak menyimpan `debug` di produksi. Mencakup `QUIET_PATHS` PLAN/05.                                                                                                                                                                                                                                                           | Daftar path                                           | R2-G10, C23.                                                       |
+| K17 | **Log**: endpoint mengembalikan `LogChunk` (cursor `<ino>:<offset>`), waktu dari `splitLogTimestamp` (01), redaksi di server (`log.redact.ts`). Unduh dari server (`…/log/download`, ≤ 10 MiB, diredaksi, audit `log.download`). Tanpa "semua" stdout+stderr.                                                                                                                                                                                       | SSE; parser sendiri                                   | X9, C13.                                                           |
+| K18 | **Internet HP putus**: semua probe domain `null` → probe `CONNECTIVITY_PROBE_URL` (`https://www.gstatic.com/generate_204`, override env `PANEL_CONNECTIVITY_URL`). Gagal → `internet_down` menahan problem domain. Pulih ≥ 5 mnt → "HP sempat tidak terhubung internet selama X".                                                                                                                                                                   | N domain merah                                        | R2 §4.                                                             |
+| K19 | **pm2 hanya dipanggil bila layanan runit `pm2` `run`.** Dicek di adapter (`sv status pm2`, 0,01 dtk), sehingga semua pemanggil terlindungi. Tanpa layanan `pm2` di runit → cek `rpc.sock`.                                                                                                                                                                                                                                                          | `rpc.sock` saja                                       | C6: socket basi → CLI meluncurkan daemon liar.                     |
+| K20 | **Notifikasi reboot/mati tak terduga** (`host_rebooted`, `panel_restarted_unexpectedly`) sekali kirim saat boot, dari `os.uptime()` dan marker `data/clean-shutdown`.                                                                                                                                                                                                                                                                               | Tidak ada                                             | C19.                                                               |
+| K21 | Isi notifikasi tanpa log/env; hanya judul + resource + tautan `APP_BASE_URL/panel`; waktu relatif.                                                                                                                                                                                                                                                                                                                                                  | Jam absolut                                           | Keamanan; TZ.                                                      |
+| K22 | **Role**: API monitoring `admin`; uji kirim/cari chat `super_admin`.                                                                                                                                                                                                                                                                                                                                                                                | –                                                     | Keputusan owner 1.                                                 |
+| K23 | **Tanpa `heartbeat.ts`** (B5). `/dev/health` membaca `monitor.status()` (dan `backupScheduler.lastTickAt()` milik 04).                                                                                                                                                                                                                                                                                                                              | `heartbeat.ts` (05 K21)                               | X30: duplikat `sampledAt`.                                         |
+| K24 | **Severity `info`** (B4): `backup_not_configured` dan `access_not_seen` tampil sebagai informasi (tone info) di Ringkasan; tidak dihitung di vonis/hitungan, tidak membuka event alert, tidak pernah ke Telegram.                                                                                                                                                                                                                                   | warning permanen                                      | Hindari alarm permanen di instance baru.                           |
+| K25 | **Histori 7 hari di `panel.db`** (A8, B15): `metric_sample` per tick (7 hari), `check_result` per probe (7 hari, `WITHOUT ROWID`, tanpa indeks `at` tambahan), `problem_event` (30 hari). Downsampling hanya saat baca. Ikut cadangan apa adanya.                                                                                                                                                                                                   | Ring di RAM; agregat tulis                            | Baseline load, sparkline, strip heartbeat, riwayat masalah; ±4 MB. |
 
 ---
 
 ## 3. Model data & kontrak API
 
-### 3.1 Tipe bersama — `src/shared/monitor.types.ts` (baru, ±150 baris)
+### 3.1 Tipe bersama — `src/shared/monitor.types.ts` (ditulis `wkr-contracts-00`, W0)
 
 ```ts
-import type { DevAuditEntry } from "./dev.types";
-
 /** What a problem is about. */
-export type ProblemKind = "service" | "app" | "domain" | "network" | "backup" | "disk" | "battery" | "alerts" | "site";
+export type ProblemKind =
+  | "service"
+  | "app"
+  | "domain"
+  | "network"
+  | "backup"
+  | "security"
+  | "disk"
+  | "battery"
+  | "host"
+  | "alerts"
+  | "site";
 
-export type ProblemSeverity = "warning" | "danger";
+/** `info` (B4) = shown with tone info; never counted in verdicts/counts, never opens an alert event. */
+export type ProblemSeverity = "info" | "warning" | "danger";
 
-/** Stable problem codes: i18n key, alert dedupe key part, test fixture. Never rename; add new ones. */
+/** Stable codes: i18n key, dedupe key part, test fixture. Never rename; only add. */
 export type ProblemCode =
   | "service_down"
+  | "service_crash_loop"
   | "pm2_unavailable"
   | "app_errored"
   | "app_crash_loop"
@@ -99,23 +137,22 @@ export type ProblemCode =
   | "backup_failed"
   | "backup_partial"
   | "backup_stale"
+  | "backup_item_stale"
   | "backup_status_error"
+  | "key_mismatch"
+  | "access_not_seen"
   | "disk_low"
-  | "battery_unplugged"
   | "battery_low"
   | "battery_hot"
   | "alerts_failing"
-  // reserved for PLAN/03 (rules written there, evaluated in the same computeProblems):
   | "site_job_failed"
-  | "site_crash_loop";
+  // one-shot notices (kind "host"): stored closed, sent once, never shown in the Ringkasan list
+  | "host_rebooted"
+  | "panel_restarted_unexpectedly";
 
-/** Primitive params only, so they survive JSON + the problem_event table. */
 export type ProblemParams = Record<string, string | number | boolean | null>;
 
-/**
- * Something an admin should look at. `id` = `${code}:${target}` (dedupe key). `since` = first seen (ISO, from
- * problem_event; null until the sampler persisted it). `href` = SPA path to act on it.
- */
+/** `id` = `${code}:${target}`; `since` = first seen (problem_event.opened_at), null before persisted; `href` = SPA path. */
 export type Problem = {
   id: string;
   code: ProblemCode;
@@ -127,22 +164,20 @@ export type Problem = {
   href: string;
 };
 
-/** Typical load of this phone (load5 over the last 7 days); null until >= 24 h of samples exist. */
-export type LoadBaseline = { p10: number; p50: number; p90: number; spanHours: number };
+/** Overview parts that can fail on their own. */
+export type OverviewSection = "device" | "services" | "apps" | "domains" | "backup" | "security" | "activity";
 
-/** Overview parts that can fail on their own; listed in PanelOverview.unavailable when they did. */
-export type OverviewSection = "device" | "services" | "apps" | "domains" | "backup" | "activity";
-
-/** Outbound alert channel state shown on Ringkasan (admin) and Pengaturan (super_admin). */
 export type AlertChannelState = "not_configured" | "disabled" | "ok" | "failing";
 
 export type AlertErrorCode =
-  | "telegram_token_invalid" // HTTP 401
-  | "telegram_chat_not_found" // HTTP 400 "chat not found"
-  | "telegram_forbidden" // HTTP 403 (bot blocked / not in group)
-  | "telegram_rate_limited" // HTTP 429
+  | "telegram_token_invalid" // 401
+  | "telegram_chat_not_found" // 400 "chat not found"
+  | "telegram_chat_migrated" // 400 + parameters.migrate_to_chat_id (auto-saved, see §3.8)
+  | "telegram_forbidden" // 403 (bot blocked / removed)
+  | "telegram_conflict" // 409 (webhook set or another getUpdates poller)
+  | "telegram_rate_limited" // 429 (+ retry_after)
   | "telegram_bad_request" // other 400
-  | "telegram_unreachable"; // network error, timeout, 5xx
+  | "telegram_unreachable"; // network, timeout, 5xx
 
 /** GET /api/panel/alerts/status */
 export type AlertStatus = {
@@ -151,31 +186,27 @@ export type AlertStatus = {
   lastSentAt: string | null;
   lastError: AlertErrorCode | null;
   lastErrorAt: string | null;
-  /** Open problems that are due but not delivered yet (e.g. while offline). */
+  /** Due but undelivered (e.g. while offline). */
   pending: number;
 };
 
 /** POST /api/dev/alerts/test → 200 */
 export type AlertTestResult = { ok: true; sentAt: string };
 
-/** POST /api/dev/alerts/telegram/chats → chats that recently messaged the bot (getUpdates). */
+/** POST /api/dev/alerts/telegram/chats → 200 */
 export type TelegramChat = { id: string; title: string; type: "private" | "group" | "supergroup" | "channel" };
 export type TelegramChats = { chats: TelegramChat[] };
 
-/** One row of GET /api/panel/problems/history (newest first, paginated with Page<T>). */
-export type ProblemEvent = {
-  id: number;
-  code: ProblemCode;
-  kind: ProblemKind;
-  target: string;
-  severity: ProblemSeverity; // highest seen while open
-  params: ProblemParams; // last seen
-  openedAt: string;
-  closedAt: string | null;
-  notified: boolean;
-};
+/** Thin status for the nav badge: GET /api/panel/status (no system calls; last sampler result; info excluded). */
+export type PanelStatus = { danger: number; warning: number; sampledAt: string | null };
 
-/** GET /api/panel/metrics?range= — bucket averages, oldest first; at most 100 points. */
+/** Typical load of this phone (load5, last 7 days); null until >= 24 h of samples. */
+export type LoadBaseline = { p10: number; p50: number; p90: number; spanHours: number };
+
+/** One domain check for the heartbeat strip; `status` null = no answer. */
+export type DomainCheck = { at: string; status: number | null };
+
+/** GET /api/panel/metrics?range= — bucket averages, oldest first, at most 100 points (bounded, no pagination). */
 export type MetricRange = "24h" | "7d";
 export type MetricPoint = {
   at: string;
@@ -186,56 +217,118 @@ export type MetricPoint = {
 };
 export type MetricSeries = { range: MetricRange; bucketSec: number; points: MetricPoint[] };
 
-/** One domain check kept for the heartbeat strip; `status` null = no answer. */
-export type DomainCheck = { at: string; status: number | null };
-
-export type { DevAuditEntry };
+/** Item of GET /api/panel/problems/history (newest first, `Page<ProblemEvent>`). */
+export type ProblemEvent = {
+  id: number;
+  code: ProblemCode;
+  kind: ProblemKind;
+  target: string;
+  severity: ProblemSeverity;
+  params: ProblemParams;
+  openedAt: string;
+  closedAt: string | null;
+  notified: boolean;
+};
 ```
 
-Tabel aturan (diimplementasikan di `src/server/panel/overview.problems.ts`; `delay` dipakai mesin alert; "–" = tidak
-pernah dikirim ke Telegram):
-
-| code                    | kind    | severity                         | Kondisi (input snapshot + status sampler)                                                                                        | params                                                         | href                                | delay alert     |
-| ----------------------- | ------- | -------------------------------- | -------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------- | ----------------------------------- | --------------- |
-| `service_down`          | service | danger                           | `wantUp && state !== "run"` (bukan `pm2`, lihat baris berikut)                                                                   | `state`, `downSec`                                             | `/panel/services`                   | 2 mnt           |
-| `pm2_unavailable`       | service | danger                           | `pm2.available() === false` (tidak ada `rpc.sock`) **atau** `jlist` gagal 2 tick berturut-turut; menggantikan `service_down:pm2` | `reason: "no_daemon" \| "jlist_failed"`                        | `/panel/services`                   | 2 mnt           |
-| `app_errored`           | app     | danger                           | `status === "errored"`                                                                                                           | `restarts`, `site`                                             | `/panel/apps/<name>/log?stream=err` | 1 mnt           |
-| `app_crash_loop`        | app     | danger                           | `status !== "errored"` dan `restarts` naik ≥ 3 dalam 10 mnt (ring di memori sampler)                                             | `restarts10m`, `site`                                          | `/panel/apps/<name>/log?stream=err` | 0               |
-| `domain_unreachable`    | domain  | danger                           | 3 probe berturut-turut `status === null`; app tujuan bukan `stopped`; tidak sedang `internet_down`                               | `failures`, `local` (status HTTP lokal port atau null), `port` | `/panel/domains`                    | 0               |
-| `domain_http_error`     | domain  | danger                           | 3 probe berturut-turut `status >= 500` (termasuk 502/530); syarat app sama                                                       | `status`, `local`, `port`                                      | `/panel/domains`                    | 0               |
-| `internet_down`         | network | danger                           | Semua domain yang bisa diprobe `null` di tick ini **dan** probe konektivitas gagal                                               | `domains` (jumlah)                                             | `/panel/domains`                    | 0 (khusus, K18) |
-| `backup_not_configured` | backup  | warning                          | `!configured`                                                                                                                    | –                                                              | `/panel/backups`                    | –               |
-| `backup_failed`         | backup  | danger                           | run terakhir `failed`, tidak sedang berjalan                                                                                     | –                                                              | `/panel/backups`                    | 0               |
-| `backup_partial`        | backup  | warning                          | run terakhir `partial`                                                                                                           | –                                                              | `/panel/backups`                    | 0               |
-| `backup_stale`          | backup  | warning                          | tidak ada run selesai dalam `BACKUP_STALE_MS` (36 jam, sudah ada)                                                                | `hours`                                                        | `/panel/backups`                    | 0               |
-| `backup_status_error`   | backup  | danger                           | `backup.status()` melempar (mis. kunci data tak cocok, R4-G4)                                                                    | –                                                              | `/dev/settings`                     | 0               |
-| `disk_low`              | disk    | warning < 10% bebas, danger < 5% | konstanta yang sudah ada                                                                                                         | `freePct`, `freeBytes`                                         | `/panel`                            | 0               |
-| `battery_unplugged`     | battery | warning                          | `plugged === "unplugged"` dan tidak `battery_low`                                                                                | `percent`                                                      | `/panel`                            | 5 mnt           |
-| `battery_low`           | battery | danger                           | `percent < 20` dan `plugged === "unplugged"`                                                                                     | `percent`                                                      | `/panel`                            | 0               |
-| `battery_hot`           | battery | warning ≥ 45 °C, danger ≥ 50 °C  | `temperatureC !== null`                                                                                                          | `temperatureC`                                                 | `/panel`                            | 2 mnt           |
-| `alerts_failing`        | alerts  | warning                          | kanal terkonfigurasi + aktif dan pengiriman terakhir gagal ≥ 3× berturut-turut                                                   | `reason: AlertErrorCode`                                       | `/dev/settings`                     | –               |
-
-Konstanta baru (nama tetap di `overview.problems.ts`): `BATTERY_DANGER_C = 50`, `DOMAIN_FAILS_TO_PROBLEM = 3`,
-`CRASH_LOOP_RESTARTS = 3`, `CRASH_LOOP_WINDOW_MS = 600_000`. Yang lama tetap. Urutan hasil: danger dulu, lalu urutan
-tabel di atas, lalu `target` alfabetis (deterministik untuk test dan aria-live). `memory` sengaja tidak punya aturan
-(Android mengelola memori; 63% terpakai itu normal).
-
-### 3.2 Perubahan `src/shared/panel.types.ts`
+Kontrak internal server (W0, `src/server/monitor/monitor.contract.ts`, C15). Tujuannya agar rules, core, dan api tidak
+saling menebak:
 
 ```ts
-/** Item of GET /services. `downSec` = seconds in down state (parsed from `sv status`); `lockout` = stop always refused. */
+export type SnapshotSection<T> =
+  | { ok: true; value: T; at: number }
+  | { ok: false; error: string; at: number | null; stale: T | null };
+export type MonitorSnapshot = {
+  device: SnapshotSection<DeviceInfo>;
+  services: SnapshotSection<Service[]>;
+  apps: SnapshotSection<Pm2Proc[]>;
+  ingress: SnapshotSection<IngressRule[]>;
+  backup: SnapshotSection<BackupStatus>;
+  security: SnapshotSection<SecurityStatus>;
+};
+/** Sampler memory (lost on restart, documented): domain fail/success streaks, restart rings, crash-loop streaks. */
+export type MonitorState = {
+  domains: Map<string, { failures: number; last: DomainHealth }>;
+  appRestarts: Map<string, { at: number; restarts: number }[]>; // ring, 10 min
+  serviceRuns: Map<string, { pid: number; at: number }[]>; // last 3 ticks
+  intentional: Map<string, number>; // `${kind}:${name}` → until (ms)
+  internetDown: boolean;
+};
+export type ProblemResult = { problems: Problem[]; suppressed: Problem[]; unknownKinds: Set<ProblemKind> };
+export interface Monitor {
+  snapshot(): Promise<MonitorSnapshot>; // SWR, never waits for probes
+  pm2Procs(): Promise<Pm2Proc[]>; // for PLAN/03 lists (≤ 15 s stale)
+  patch<K extends "services" | "apps">(section: K, item: Service | App): void;
+  problems(): ProblemResult; // from the latest snapshot + state
+  noteIntentionalRestart(r: { kind: "app" | "service"; name: string }): void; // PLAN/03 job runner calls this too
+  probeDomain(hostname: string): Promise<Domain>; // manual check
+  status(): { sampledAt: string | null; intervalSec: number; lastTickMs: number | null; running: boolean }; // B5
+  loadBaseline(): LoadBaseline | null; // cached, recomputed at most hourly
+  alertStatus(): AlertStatus;
+  start(): () => void; // returns stop
+  idle(): Promise<void>;
+}
+export declare function monitorFor(deps: MonitorDeps): Monitor; // one instance per Db (pattern backupServiceFor)
+```
+
+Tabel aturan (`overview.problems.ts`). Delay dipakai mesin alert; "–" = tidak pernah dikirim. "Menahan" = problem yang
+masuk `suppressed` selama problem ini ada:
+
+| code                           | kind     | severity                                                   | Kondisi                                                                                                                                         | params                      | href                                | delay   | Menahan                                                                                        |
+| ------------------------------ | -------- | ---------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------- | ----------------------------------- | ------- | ---------------------------------------------------------------------------------------------- |
+| `service_down`                 | service  | danger                                                     | `wantUp && state !== "run"`                                                                                                                     | `state`, `downSec`          | `/panel/services`                   | 2 mnt   | target `cloudflared` → semua `domain_*`                                                        |
+| `service_crash_loop`           | service  | danger                                                     | 3 tick berturut-turut: `state === "run"`, `uptimeSec < interval`, `pid` berubah; restart sengaja dikecualikan                                   | `ticks`                     | `/panel/services/<name>/log`        | 0       | target `cloudflared` → semua `domain_*`                                                        |
+| `pm2_unavailable`              | service  | danger                                                     | adapter melempar `Pm2UnavailableError` (`service_down` \| `no_daemon`), atau `jlist` gagal 2 tick                                               | `reason`                    | `/panel/services`                   | 2 mnt   | `service_down:pm2`, `service_crash_loop:pm2`, semua `app_*`, `domain_*` yang tujuannya app pm2 |
+| `app_errored`                  | app      | danger                                                     | `status === "errored"`                                                                                                                          | `restarts`, `site`          | `/panel/apps/<name>/log?stream=err` | 1 mnt   | `domain_*` yang `app` = target                                                                 |
+| `app_crash_loop`               | app      | danger                                                     | bukan `errored`; `restarts` naik ≥ 3 dalam 10 mnt, tidak termasuk kenaikan ≤ 2 mnt setelah `noteIntentionalRestart`; counter turun → ring reset | `restarts10m`, `site`       | sama                                | 1 tick  | sama                                                                                           |
+| `domain_unreachable`           | domain   | danger                                                     | 3 probe berturut-turut `null`; app tujuan bukan `stopped`                                                                                       | `failures`, `local`, `port` | `/panel/domains`                    | 0       | –                                                                                              |
+| `domain_http_error`            | domain   | danger                                                     | 3 probe berturut-turut ≥ 500                                                                                                                    | `status`, `local`, `port`   | `/panel/domains`                    | 0       | –                                                                                              |
+| `internet_down`                | network  | danger                                                     | semua domain yang bisa diprobe `null` di tick ini dan probe konektivitas gagal                                                                  | `domains`                   | `/panel/domains`                    | 0 (K18) | semua `domain_*`                                                                               |
+| `backup_not_configured`        | backup   | **info** (B4)                                              | `!configured`                                                                                                                                   | –                           | `/panel/backups`                    | –       | –                                                                                              |
+| `backup_failed`                | backup   | danger                                                     | run terakhir `failed`, tidak sedang berjalan                                                                                                    | –                           | `/panel/backups`                    | 0       | –                                                                                              |
+| `backup_partial`               | backup   | warning                                                    | run terakhir `partial`                                                                                                                          | –                           | `/panel/backups`                    | 0       | –                                                                                              |
+| `backup_stale`                 | backup   | warning                                                    | tidak ada run selesai dalam 36 jam                                                                                                              | `hours`                     | `/panel/backups`                    | 0       | `backup_item_stale`                                                                            |
+| `backup_item_stale`            | backup   | warning                                                    | item yang dicoba di run terakhir dengan `lastGood` > 36 jam atau tidak ada (input 04); target `<itemKind>:<name>`                               | `itemKind`, `name`, `hours` | `/panel/backups`                    | 0       | –                                                                                              |
+| `backup_status_error`          | backup   | danger                                                     | `backup.status()` melempar selain `KeyMismatchError`                                                                                            | –                           | `/dev/health`                       | 0       | –                                                                                              |
+| `key_mismatch`                 | security | danger                                                     | `SecurityStatus.keyMismatch` atau `backup.status()` melempar `KeyMismatchError` (04)                                                            | –                           | `/dev/health`                       | 0       | `backup_status_error`, `backup_*`                                                              |
+| `access_not_seen`              | security | **info** (B4)                                              | input 04: `https` dan `accessLastSeenAt` null/> 24 jam padahal `adminSeenSinceBoot`                                                             | –                           | `/dev/health`                       | –       | –                                                                                              |
+| `disk_low`                     | disk     | warning < 10% bebas, danger < 5%                           | konstanta yang ada                                                                                                                              | `freePct`, `freeBytes`      | `/panel`                            | 0       | –                                                                                              |
+| `battery_low`                  | battery  | warning < `monitor.battery_warn_percent` (25), danger < 15 | tidak mengisi (`status` ∉ `charging`, `full`); "tidak dicolok" sendiri bukan masalah (A9)                                                       | `percent`, `plugged`        | `/panel`                            | 2 mnt   | –                                                                                              |
+| `battery_hot`                  | battery  | warning ≥ 45 °C, danger ≥ 50 °C                            | `temperatureC !== null`                                                                                                                         | `temperatureC`              | `/panel`                            | 2 mnt   | –                                                                                              |
+| `alerts_failing`               | alerts   | warning                                                    | kanal aktif dan kirim terakhir gagal ≥ 3× berturut-turut                                                                                        | `reason`                    | `/dev/settings`                     | –       | –                                                                                              |
+| `site_job_failed`              | site     | danger                                                     | job terbaru per target `interrupted`/`failed` dengan `resolvedBy = null` (input 03)                                                             | `jobId`, `kind`, `status`   | `/panel/jobs/<jobId>`               | 0       | –                                                                                              |
+| `host_rebooted`                | host     | warning (notice)                                           | saat boot `os.uptime() < 15 mnt`                                                                                                                | `uptimeMin`                 | `/panel`                            | notice  | –                                                                                              |
+| `panel_restarted_unexpectedly` | host     | warning (notice)                                           | saat boot tidak ada marker `data/clean-shutdown` dan bukan `host_rebooted`                                                                      | –                           | `/panel`                            | notice  | –                                                                                              |
+
+Domain juga tidak dijadikan problem bila app tujuannya `stopped` (K5). Pemetaan bagian → kind untuk `unknownKinds`
+(K4): `device` → `disk`, `battery`; `services` → `service`; `apps` → `app`; `ingress` → `domain`, `network`; `backup` →
+`backup`; `security` → `security`; baterai `null` → `battery`.
+
+Konstanta di `overview.problems.ts`:
+
+- `BATTERY_DANGER_PERCENT = 15` (warning dari setting, default 25), `BATTERY_HOT_C = 45`, `BATTERY_DANGER_C = 50`.
+- `DOMAIN_FAILS_TO_PROBLEM = 3`.
+- `CRASH_LOOP_RESTARTS = 3`, `CRASH_LOOP_WINDOW_MS = 600_000`, `INTENTIONAL_RESTART_GRACE_MS = 120_000`.
+- `SERVICE_LOOP_TICKS = 3`, `REBOOT_UPTIME_MS = 900_000`.
+
+Urutan: danger, warning, info, lalu urutan tabel, lalu `target`. Problem `info` tidak masuk hitungan kartu, vonis
+"Semua sehat", `PanelStatus`, maupun mesin alert. `memory` sengaja tidak punya aturan.
+
+### 3.2 Perubahan `src/shared/panel.types.ts` (W0; field baru aditif agar konsumen lama tetap terkompilasi sampai W3)
+
+```ts
 export type Service = {
   name: string;
   state: ServiceState;
   pid: number | null;
-  uptimeSec: number | null; // unchanged: only for state "run"
-  downSec: number | null; // NEW: only for state "down"
+  uptimeSec: number | null; // "run" only (unchanged)
+  downSec: number | null; // NEW: "down" only, from `down: …: 120971s`
   wantUp: boolean;
   protected: boolean; // stop needs typed confirmation
-  lockout: boolean; // NEW: "panel" and "cloudflared"; stop refused (409 lockout)
+  lockout: boolean; // NEW: panel, cloudflared — stop always refused
 };
 
-/** `cpu` is always null on Android (pidusage cannot read /proc); `module` = pm2 module (pmx_module); `site` from table site.app. */
+/** `cpu` always null on Android; `module` = pm2 module; `site` from table site.app. */
 export type App = {
   name: string;
   status: AppStatus;
@@ -249,28 +342,28 @@ export type App = {
   site: string | null; // NEW
 };
 
-/** `local` = HTTP status of 127.0.0.1:<port> checked when the public probe failed; `failures` = consecutive failed probes. */
+/** `failures` = consecutive failed probes; `local` = HTTP status of 127.0.0.1:<port> when the public probe failed. */
 export type DomainHealth = {
   status: number | null;
   ms: number | null;
   checkedAt: string | null;
-  failures: number; // NEW
-  local: number | null; // NEW
+  failures: number;
+  local: number | null;
 };
 
-/** `site` from site_hostname; `target` says what answers behind it. `recent` = up to 30 newest checks, oldest first. */
+/** `target` = what answers behind it (panel = port equals the panel PORT). */
 export type Domain = {
   hostname: string;
   service: string;
   port: number | null;
   app: string | null;
-  site: string | null; // NEW
-  target: "app" | "panel" | "other" | "none"; // NEW: panel = port equals the panel PORT
+  site: string | null;
+  target: "app" | "panel" | "other" | "none";
   health: DomainHealth;
-  recent: DomainCheck[]; // NEW
+  recent: DomainCheck[]; // up to 30 newest checks, oldest first (one check_result query for all hosts)
 };
 
-/** Item of GET /databases. `site` = site using it; `lastBackupAt` = newest backup_run item ok for this DB. */
+/** `lastBackupAt` from PLAN/04 `lastGoodItem(db, "database", name)`. */
 export type DatabaseInfo = {
   name: string;
   owner: string;
@@ -280,75 +373,70 @@ export type DatabaseInfo = {
 };
 
 export type BatteryPlug = "ac" | "usb" | "wireless" | "unplugged" | "unknown";
+export type BatteryStatus = "charging" | "discharging" | "full" | "not_charging" | "unknown";
 
-/** Battery reading; `temperatureC` null when the field is missing (never a fake 0). */
+/** `charging` = status charging|full; `temperatureC` null when missing (never a fake 0). */
 export type Battery = {
   percent: number;
   charging: boolean;
-  plugged: BatteryPlug; // plugged NEW
-  temperatureC: number | null; // was number (0 when missing)
-  health: string | null; // NEW, raw Termux value e.g. "GOOD"
+  status: BatteryStatus;
+  plugged: BatteryPlug;
+  temperatureC: number | null;
+  health: string | null;
 };
 
-/** GET /overview. Sections that failed are empty/null AND listed in `unavailable`. */
+/** GET /overview. Failed sections are empty/null AND listed in `unavailable`. `dataAt` = oldest section time shown. */
 export type PanelOverview = {
   mode: PanelMode;
-  device: DeviceInfo | null; // was non-null
-  loadBaseline: LoadBaseline | null; // NEW
+  device: DeviceInfo | null;
+  loadBaseline: LoadBaseline | null;
   services: Service[];
   apps: App[];
   domains: Domain[];
-  problems: Problem[]; // new Problem shape
-  unavailable: OverviewSection[]; // NEW
-  recentActivity: DevAuditEntry[]; // newest 5 (was 8)
-  backup: OverviewBackup | null; // null when backup.status() threw
+  problems: Problem[]; // suppressed ones excluded; notices excluded; includes `info`
+  unavailable: OverviewSection[];
+  recentActivity: DevAuditEntry[]; // 5 newest, `excludePrefixes: ["auth.", "session."]` (04)
+  backup: OverviewBackup | null;
   sites: { total: number; deployed: number };
-  alerts: Pick<AlertStatus, "state" | "lastError">; // NEW
-  sampledAt: string | null; // NEW: last finished sampler tick
+  alerts: Pick<AlertStatus, "state" | "lastError">;
+  sampledAt: string | null;
+  dataAt: string;
   generatedAt: string;
 };
 
-/** Thin status for the nav badge: GET /api/panel/status (no system calls; last sampler result). */
-export type PanelStatus = { danger: number; warning: number; sampledAt: string | null };
-
-/** 202 body of POST /services/panel|cloudflared/restart: the response is sent before the restart happens. */
-export type DeferredRestart = { deferred: true; service: "panel" | "cloudflared"; bootId: string };
+/** 202 body of POST /services/panel|cloudflared/restart (sent before the restart happens). */
+export type DeferredRestart = {
+  deferred: true;
+  service: "panel" | "cloudflared";
+  bootId: string;
+  oldPid: number | null;
+};
 
 /** Body of POST /services/:name/stop for a protected service. */
 export type ControlBody = { confirm?: string };
 ```
 
-`Problem`, `ProblemKind`, `ProblemSeverity` dipindah dari `panel.types.ts` ke `monitor.types.ts` (re-export dari
-`panel.types.ts` agar import lama tetap jalan). `LogLines` diganti `LogChunk` (§3.3).
+`Problem*` dipindah ke `monitor.types.ts` (di-re-export). `LogLines` diganti `LogChunk`.
 
-### 3.3 Tipe log — `src/shared/log.types.ts` (baru; dipakai PLAN/01 `LogViewer` dan PLAN/05 `/dev/logs`)
+### 3.3 Tipe log — `src/shared/log.types.ts` (W0 kontrak, X9; dipakai 01, 02, 03, 05)
 
 ```ts
-import type { LogLevel } from "./dev.types";
-
-/** One displayed log line. `at` = ISO time when the source has one (svlogd prefix, panel ring), else null. */
-export type LogLine = { at: string | null; text: string; level?: LogLevel };
-
-/**
- * GET …/log?lines=&after=. `cursor` = opaque position to pass as `after` next time. `reset` = the file was rotated
- * or the cursor is invalid: replace the buffer instead of appending. `truncated` = more new data existed than returned.
- */
+export type LogLine = { at: string | null; text: string; stream?: "out" | "err"; level?: LogLevel };
+/** `cursor` opaque (`base64url("<ino>:<offset>")`); `reset` = rotated/invalid cursor → replace buffer; `truncated` = > 256 KiB new. */
 export type LogChunk = { lines: LogLine[]; cursor: string; reset: boolean; truncated: boolean };
 ```
 
-### 3.4 Database — migration `drizzle/00NN_monitor.sql` + `src/server/db/schema/monitor.schema.ts`
+`at` diisi lewat `splitLogTimestamp` (01, `src/shared/log.time.ts`).
 
-Nomor `00NN` diambil saat merge (berikutnya setelah migration PLAN lain yang masuk lebih dulu; 0006 bila ini yang
-pertama). SQL dibuat `drizzle-kit generate`, lalu diedit tangan menjadi `IF NOT EXISTS` (hash migration dihitung dari
-isi file, jadi edit sebelum commit aman; `tests/db.migrate.test.ts` memverifikasi).
+### 3.4 Database — `drizzle/0008_monitor.sql` (nomor dari jadwal integrasi X7, ditulis `wkr-db-01`)
 
 ```sql
--- Monitoring history (PLAN/02). Non-critical data: may be lost, must stay bounded (7 days, pruned hourly).
--- One row per sampler tick (default 60 s). Columns nullable: a failed section must not block the row.
+-- Monitoring history (PLAN/02, A8). Non-critical: may be lost, must stay bounded (pruned hourly by the sampler).
+-- One row per sampler tick (default 60 s); nullable columns so a failed section never blocks the row.
 CREATE TABLE IF NOT EXISTS `metric_sample` (
-  `at` integer PRIMARY KEY NOT NULL,          -- unix ms; rowid alias, so no extra index
+  `at` integer PRIMARY KEY NOT NULL,   -- unix ms; rowid alias, no extra index
   `battery_pct` integer,
-  `battery_plugged` text,                     -- BatteryPlug
+  `battery_status` text,               -- BatteryStatus
   `battery_temp_c` real,
   `mem_available_mb` integer,
   `mem_total_mb` integer,
@@ -359,201 +447,229 @@ CREATE TABLE IF NOT EXISTS `metric_sample` (
   `problems_warning` integer NOT NULL
 );
 --> statement-breakpoint
--- One row per domain probe (sampler or manual check). `local_status` only filled when the public probe failed.
+-- One row per domain probe (sampler or manual check); local_status only when the public probe failed.
+-- WITHOUT ROWID: the composite PK is the table (no second B-tree); prune uses the PK per host (C20).
 CREATE TABLE IF NOT EXISTS `check_result` (
   `hostname` text NOT NULL,
   `at` integer NOT NULL,
   `status` integer,
   `ms` integer,
   `local_status` integer,
-  PRIMARY KEY (`hostname`, `at`)              -- serves "last 30 per host" and the prune by at per host
-);
+  PRIMARY KEY (`hostname`, `at`)
+) WITHOUT ROWID;
 --> statement-breakpoint
-CREATE INDEX IF NOT EXISTS `check_result_at_idx` ON `check_result` (`at`);  -- retention DELETE + 35-min window read
---> statement-breakpoint
--- Problem lifecycle = alert state. Open rows (closed_at NULL) survive panel restarts, so alerts are not re-sent.
+-- Problem lifecycle = alert state (PLAN/02). Open rows (closed_at NULL) survive restarts so alerts are not re-sent.
+-- Non-critical; bounded by retention (closed rows > 30 days pruned hourly by the sampler).
 CREATE TABLE IF NOT EXISTS `problem_event` (
   `id` integer PRIMARY KEY AUTOINCREMENT NOT NULL,
-  `key` text NOT NULL,                        -- code:target
+  `key` text NOT NULL,                 -- code:target
   `code` text NOT NULL,
   `kind` text NOT NULL,
   `target` text NOT NULL,
-  `severity` text NOT NULL,                   -- highest seen while open
-  `params` text NOT NULL,                     -- JSON, last seen
+  `severity` text NOT NULL,            -- highest seen while open
+  `params` text NOT NULL,              -- JSON, last seen
   `opened_at` integer NOT NULL,
+  `last_seen_at` integer NOT NULL,     -- updated on change or at most every 10 min (bounds writes, detects gaps)
   `closed_at` integer,
-  `notified_state` text,                      -- NULL | 'open' | 'closed': what Telegram last heard
+  `notified_state` text,               -- NULL | 'open' | 'closed': what Telegram last heard
   `notified_severity` text,
   `last_sent_at` integer
 );
 --> statement-breakpoint
--- At most one open event per key; the engine relies on it (INSERT fails loudly instead of duplicating).
+-- At most one open event per key; the engine relies on it.
 CREATE UNIQUE INDEX IF NOT EXISTS `problem_event_open_key_idx` ON `problem_event` (`key`) WHERE `closed_at` IS NULL;
 --> statement-breakpoint
-CREATE INDEX IF NOT EXISTS `problem_event_opened_idx` ON `problem_event` (`opened_at`);
+-- Reopen lookup (key closed < 15 min ago) and retention.
+CREATE INDEX IF NOT EXISTS `problem_event_key_closed_idx` ON `problem_event` (`key`, `closed_at`);
 ```
 
-Tidak ada tabel berisi data yang diubah → tidak perlu backfill. Rollback: tabel baru saja; versi lama mengabaikannya.
+- Tidak ada tabel berisi data yang diubah, jadi tidak perlu backfill. Rollback: versi lama mengabaikan tabel ini.
+- `WITHOUT ROWID` tidak bisa dinyatakan di drizzle schema: `wkr-db-01` menambahkannya di SQL hasil generate (komentar
+  di file schema menyebutnya).
+- Retensi (1×/jam, satu transaksi): `metric_sample` dan `check_result` > 7 hari; `problem_event` tertutup > 30 hari.
+  Tanpa `VACUUM` (halaman bebas dipakai ulang, ukuran stabil).
 
-**Retensi** (dijalankan sampler, paling sering 1× per jam, satu transaksi): `metric_sample` dan `check_result`
-`at < now − 7 hari`; `problem_event` tertutup `closed_at < now − 30 hari` (riwayat "kapan app mati?" lebih berguna
-dan baris sangat sedikit). Baris terbuka tidak pernah dihapus.
+| Tabel           | Baris 7 hari             | Ukuran                        |
+| --------------- | ------------------------ | ----------------------------- |
+| `metric_sample` | 10.080                   | ≈ 0,8 MB                      |
+| `check_result`  | 10.080 × D (D=3: 30.240) | ≈ 1,6 MB (D=3); ≈ 5 MB (D=10) |
+| `problem_event` | puluhan/hari (30 hari)   | < 0,1 MB                      |
 
-**Estimasi ukuran** (SQLite, halaman 4 KiB, overhead record+cell ±20 B):
-
-| Tabel           | Baris/hari       | Byte/baris (data + indeks)                | 7 hari                                   |
-| --------------- | ---------------- | ----------------------------------------- | ---------------------------------------- |
-| `metric_sample` | 1.440            | ±80                                       | 10.080 baris ≈ 0,8 MB                    |
-| `check_result`  | 1.440 × D domain | ±45 tabel + ±45 PK index + ±15 `at` index | D=3: 30.240 baris ≈ 3,1 MB; D=10 ≈ 10 MB |
-| `problem_event` | puluhan          | ±200                                      | < 0,1 MB (30 hari)                       |
-
-Total HP sekarang (2 domain yang diprobe + catch-all) ≈ 3 MB. Tulis: 1 transaksi/menit menyentuh ±4–6 halaman → ±25 KB
-WAL/menit ≈ 35 MB/hari tulis flash — dapat diabaikan terhadap ketahanan flash modern (ratusan TBW), tetapi dinyatakan
-jujur di README. Interval 120 dtk memotong setengahnya bila owner ingin.
-
-Repository: `src/server/monitor/monitor.history.ts` (≤ 250 baris): `insertTick(tx, sample, checks)`,
-`recentChecks(sinceMs)` (satu query untuk semua host, dikelompokkan di JS — tanpa N+1), `lastChecksPerHost(n)` (untuk
-seed counter gagal saat boot), `metricSeries(range)` (`GROUP BY at / bucketMs`, ≤ 100 baris), `loadBaseline()`
-(load5 7 hari, ≤ 10.080 angka, persentil di JS, dihitung ulang paling sering 1×/jam), `openEvents()`,
-`upsertEvents(...)`, `historyPage(page, pageSize)`, `prune(now)`.
+- Tulis flash: 1 transaksi per tick, ±4–6 halaman → dengan checkpoint WAL (tiap halaman ditulis dua kali) ≈
+  **70–100 MB/hari** (koreksi C20). Kecil terhadap ketahanan flash; dinyatakan di README. Interval 120 dtk memotong
+  setengahnya.
+- Repository `src/server/monitor/monitor.history.ts` (≤ 250 baris): `insertTick(tx, sample, checks)`,
+  `recentChecks(sinceMs)` (satu query untuk semua host, tanpa N+1), `metricSeries(range)` (`GROUP BY at / bucketMs`,
+  ≤ 100 baris), `loadBaseline()` (load5 7 hari, persentil di JS, di-cache 1 jam), `historyPage(page, pageSize)`,
+  `openEvents()`, `reopenable(key, sinceMs)`, `insert`, `update`, `close`, `markSent`, `prune(now)`.
 
 ### 3.5 Server: modul dan batas tanggung jawab
 
-| File (baru/ubah)                                | Tanggung jawab                                                                                                                                                     | Batas baris |
-| ----------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ----------- |
-| `src/server/monitor/monitor.snapshot.ts` (baru) | Cache per bagian + stale-while-revalidate + single-flight; `get()`, `invalidate(section)`                                                                          | 200         |
-| `src/server/monitor/monitor.sampler.ts` (baru)  | Loop tick: snapshot → probe domain (+ lokal + konektivitas) → problems → histori → alert → retensi; `start()`→`stop`, `idle()`                                     | 250         |
-| `src/server/monitor/monitor.service.ts` (baru)  | `monitorFor(deps)` satu instance per `Db` (pola `backupServiceFor`); state sampler (counter gagal domain, ring restart app, baseline cache, `sampledAt`, `bootId`) | 200         |
-| `src/server/monitor/monitor.history.ts` (baru)  | Repository §3.4                                                                                                                                                    | 250         |
-| `src/server/panel/overview.problems.ts` (ubah)  | Aturan §3.1, fungsi murni `computeProblems(input, state)`                                                                                                          | 250         |
-| `src/server/alerts/alert.engine.ts` (baru)      | Rekonsiliasi §4.6, fungsi murni + adapter repo                                                                                                                     | 250         |
-| `src/server/alerts/telegram.client.ts` (baru)   | `sendMessage`, `getUpdates`, pemetaan error, redaksi token                                                                                                         | 150         |
-| `src/server/alerts/alert.messages.ts` (baru)    | Susun pesan HTML dari `problem.copy.ts`, escape, batas panjang                                                                                                     | 150         |
-| `src/shared/problem.copy.ts` (baru)             | Judul + detail Indonesia per `code` (§5.7)                                                                                                                         | 200         |
-| `src/server/system/log.parse.ts` (baru)         | Parse prefix svlogd, redaksi, baca dari cursor                                                                                                                     | 150         |
-| `src/server/panel/panel.service.ts` (ubah)      | Baca dari snapshot; kontrol dengan proteksi baru + deferred restart                                                                                                | 300         |
-| `src/server/routes/panel.routes.ts` (ubah)      | Endpoint §3.7                                                                                                                                                      | 150         |
-| `src/server/routes/alerts.routes.ts` (baru)     | `/api/dev/alerts/*`                                                                                                                                                | 100         |
+| File                                                    | Tanggung jawab                                                                       | Batas     |
+| ------------------------------------------------------- | ------------------------------------------------------------------------------------ | --------- |
+| `src/server/monitor/monitor.contract.ts` (W0)           | Tipe internal §3.1                                                                   | 100       |
+| `src/server/panel/overview.problems.ts`                 | `computeProblems(snapshot, state, settings, now): ProblemResult`, fungsi murni       | 300       |
+| `src/shared/problem.copy.ts`                            | `title(p)`, `detail(p)`, `recovered(p, dur)` Indonesia                               | 200       |
+| `src/server/alerts/alert.engine.ts`                     | Rekonsiliasi §4.6, fungsi murni + adapter repo                                       | 250       |
+| `src/server/alerts/telegram.client.ts`                  | `sendMessage`, `getUpdates`, pemetaan error, `redactToken`                           | 150       |
+| `src/server/alerts/alert.messages.ts`                   | Digest HTML, escape, batas panjang                                                   | 150       |
+| `src/server/monitor/monitor.snapshot.ts`                | Cache per bagian, SWR, single-flight, `patch`                                        | 200       |
+| `src/server/monitor/monitor.sampler.ts`                 | Tick §4.1                                                                            | 250       |
+| `src/server/monitor/monitor.service.ts`                 | `monitorFor`, state, `status()`, `noteIntentionalRestart`, notice boot               | 200       |
+| `src/server/monitor/monitor.history.ts`                 | Repository §3.4                                                                      | 250       |
+| `src/web/panel/panel.status-key.ts` (B12)               | Pemetaan state mentah → `StatusKey` 01 (layanan, app, domain verdict + alasan)       | 150       |
+| `src/server/system/log.redact.ts`                       | Redaksi + baca dari cursor                                                           | 150       |
+| `src/server/panel/panel.service.ts`                     | Baca dari monitor; kontrol dengan proteksi, kunci job, `noteIntentionalRestart`, 202 | 300       |
+| `src/server/routes/panel.routes.ts`, `alerts.routes.ts` | Endpoint §3.7                                                                        | 150 / 100 |
 
-Adapter (`system.types.ts`): `Pm2Adapter.available(): boolean` (cek `rpc.sock`, tanpa proses); `Pm2Adapter.logPaths(name)`
-dihapus dari kebutuhan — path log diambil dari `Pm2Proc` di snapshot (internal, tidak dikirim ke klien), jadi follow log
-tidak memanggil `jlist`. `RunitAdapter.restartDetached(name)` (spawn `sv restart <name>` detached, stdio diabaikan).
-`parseSvStatus` mengisi `downSec` dari `down: …: 120971s`. `parseBattery` membaca `plugged`
-(`PLUGGED_AC|PLUGGED_USB|PLUGGED_WIRELESS|UNPLUGGED` → `ac|usb|wireless|unplugged`, lain → `unknown`), `health`,
-`temperature` hilang → `null`. Cache baterai `BATTERY_CACHE_MS` 30 → 120 dtk (dicabut terdeteksi ≤ 2 mnt + 1 tick).
-`parsePm2Jlist` mengisi `module = pm2_env.pmx_module === true`; adapter termux memaksa `cpu: null`.
-`system.fake.ts`: load `[20.87, 20.73, 20.01]`, `cpu: null`, baterai `unplugged` 88% (memicu problem di demo), satu
-domain gagal, satu app `errored` — agar UI diuji pada bentuk data nyata (R2-G27).
+**Adapter** (`wkr-adapters-01`, X21; menggabungkan kebutuhan 02 dan PLAN/03 §3.7):
 
-### 3.6 Kunci pengaturan (registri `SETTINGS` di `settings.service.ts`; label/teks UI mengikuti keputusan PLAN/05 — bila PLAN/05 memindah label ke `src/web/i18n`, teks Indonesia di bawah dipakai di sana)
+- `Pm2Proc` += `cwd`, `execPath`, `args`, `startedAtMs` (03), `module`.
+- `createTermuxPm2({ pm2Home, isSupervisorUp })`: bila `isSupervisorUp()` = false, lempar
+  `Pm2UnavailableError("service_down")` tanpa memanggil CLI. Bila null (layanan `pm2` tidak ada di runit), tanpa
+  `rpc.sock` → `Pm2UnavailableError("no_daemon")`. Komentar `pm2.termux.ts:98` diperbaiki.
+- Termux selalu `cpu: null`.
+- `NetAdapter.httpStatus(port, path = "/", timeoutMs = 5000)` (03).
+- `parseSvStatus` mengisi `downSec`.
+- `parseBattery`:
+  - `status` (`CHARGING|DISCHARGING|FULL|NOT_CHARGING` → enum, lain `unknown`);
+  - `plugged` (`PLUGGED_AC|USB|WIRELESS|UNPLUGGED`);
+  - `health`;
+  - suhu hilang → `null`.
+- Cache baterai 120 dtk.
+- Fake mewakili Android:
+  - load `[20.87, 20.73, 20.01]`, `cpu: null`, baterai `discharging/unplugged` 81%;
+  - satu app `errored`, satu domain gagal;
+  - data 03 (cwd di sandbox, app glibc `grun`, app tanpa binary, modul);
+  - `supervise/pid` palsu untuk test restart.
 
-| Key                           | secret | default                                                  | Validator (setelah trim)                                                                                     | Label (id)                  | Deskripsi (id)                                                                                                                 |
-| ----------------------------- | ------ | -------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------ | --------------------------- | ------------------------------------------------------------------------------------------------------------------------------ |
-| `alerts.telegram_bot_token`   | ya     | null                                                     | `/^\d{5,16}:[A-Za-z0-9_-]{30,64}$/` → "harus berbentuk `123456:ABC…` dari @BotFather"                        | Token bot Telegram          | Token dari @BotFather. Disimpan terenkripsi dan tidak pernah ditampilkan lagi.                                                 |
-| `alerts.telegram_chat_id`     | tidak  | null                                                     | `/^(-?\d{1,20}\|@[A-Za-z][A-Za-z0-9_]{4,31})$/` → "harus ID angka (mis. `-1001234567890`) atau `@namakanal`" | ID chat Telegram            | Chat, grup, atau kanal tujuan notifikasi. Pakai "Cari chat" setelah mengirim pesan ke bot.                                     |
-| `alerts.enabled`              | tidak  | `on`                                                     | `on\|off`                                                                                                    | Notifikasi Telegram         | Matikan sementara tanpa menghapus token.                                                                                       |
-| `alerts.min_severity`         | tidak  | `warning`                                                | `warning\|danger`                                                                                            | Kirim mulai dari            | `warning` = semua masalah (peringatan dikirim senyap); `danger` = hanya yang gawat.                                            |
-| `monitor.sample_interval_sec` | tidak  | `60`                                                     | bilangan bulat 30–600                                                                                        | Interval pemantauan (detik) | Seberapa sering panel memeriksa HP saat tidak ada yang membuka halaman. Lebih kecil = lebih cepat tahu, lebih boros baterai.   |
-| `panel.protected_services`    | tidak  | **`sshd,cloudflared,panel,pm2,postgres`** (ubah default) | sama seperti sekarang                                                                                        | Layanan inti                | Layanan yang hanya bisa dihentikan dengan mengetik namanya. `panel` dan `cloudflared` tidak pernah bisa dihentikan dari panel. |
+### 3.6 Kunci pengaturan (`wkr-settings-01`, W1; label di `src/web/i18n/id.settings.ts` milik 05)
 
-Kanal dianggap **terkonfigurasi** bila token **dan** chat id terisi. `alerts.enabled=off` → state `disabled`.
-Perubahan setting dibaca ulang tiap tick (tanpa restart). Mengubah token/chat → reset counter gagal + `lastError`.
+Disimpan lewat `PATCH /api/dev/settings` (05 K3).
+
+| Key                            | secret | default                                   | Validator                                       | Label (id)                      | Deskripsi (id)                                                                                                                                                |
+| ------------------------------ | ------ | ----------------------------------------- | ----------------------------------------------- | ------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `alerts.telegram_bot_token`    | ya     | null                                      | `/^\d{5,16}:[A-Za-z0-9_-]{30,64}$/`             | Token bot Telegram              | Token dari @BotFather. Disimpan terenkripsi dan tidak pernah ditampilkan lagi.                                                                                |
+| `alerts.telegram_chat_id`      | tidak  | null                                      | `/^(-?\d{1,20}\|@[A-Za-z][A-Za-z0-9_]{4,31})$/` | ID chat Telegram                | Chat, grup, atau kanal tujuan. Pakai "Cari chat" setelah mengirim pesan baru ke bot.                                                                          |
+| `alerts.enabled`               | tidak  | `on`                                      | `on\|off`                                       | Notifikasi Telegram             | Matikan sementara tanpa menghapus token.                                                                                                                      |
+| `alerts.min_severity`          | tidak  | `warning`                                 | `warning\|danger`                               | Kirim mulai dari                | `warning` = semua masalah (peringatan dikirim senyap); `danger` = hanya yang gawat.                                                                           |
+| `monitor.sample_interval_sec`  | tidak  | `60`                                      | bulat 30–600                                    | Interval pemantauan (detik)     | Seberapa sering panel memeriksa HP. Lebih kecil = lebih cepat tahu, lebih boros baterai.                                                                      |
+| `monitor.battery_warn_percent` | tidak  | `25`                                      | `off` atau bulat 16–100                         | Peringatan baterai di bawah (%) | Beri peringatan bila HP tidak sedang mengisi dan baterai di bawah angka ini. Di bawah 15% selalu gawat. Mencabut charger sendiri bukan masalah.               |
+| `panel.protected_services`     | tidak  | **`sshd,cloudflared,panel,pm2,postgres`** | seperti sekarang                                | Layanan inti                    | Layanan yang hanya bisa dihentikan dengan mengetik namanya. `panel` dan `cloudflared` tidak pernah bisa dihentikan dari panel, walau dilepas dari daftar ini. |
+
+Ketentuan:
+
+- Kanal **terkonfigurasi** bila token dan chat terisi. `alerts.enabled=off` → state `disabled`.
+- Setting dibaca ulang setiap tick.
+- Mengubah token/chat atau uji kirim yang sukses me-reset state `failing`.
+- Mengubah `monitor.battery_warn_percent` tidak menutup event secara paksa. Event tertutup lewat histeresis biasa.
 
 ### 3.7 Endpoint
 
-Semua di bawah `/api`. Error = `{ error, message }` (pola sekarang). Semua mutasi wajib lolos cek origin hotfix
-(Origin sama + `X-Requested-With`). Peran: `A` = admin, `S` = super_admin.
+Semua di bawah `/api`. Error = `{ error, message }` + status. Semua mutasi lewat guard CSRF (hotfix, `apiFetch`).
+`A` = admin, `S` = super_admin.
 
-| Method + path                            | Peran | Request                               | 2xx                                                                                                                                                                                     | Error                                                                                                                                                                                                                              |
-| ---------------------------------------- | ----- | ------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `GET /health` (publik, ubah)             | –     | –                                     | `{ ok, version, bootId }` (`bootId` UUID acak per proses)                                                                                                                               | –                                                                                                                                                                                                                                  |
-| `GET /panel/overview`                    | A     | –                                     | `PanelOverview` (tidak pernah 500 karena satu bagian; bagian gagal → `unavailable`)                                                                                                     | 401/403                                                                                                                                                                                                                            |
-| `GET /panel/status`                      | A     | –                                     | `PanelStatus` (tanpa perintah sistem)                                                                                                                                                   | 401/403                                                                                                                                                                                                                            |
-| `GET /panel/services`                    | A     | –                                     | `Service[]` dari snapshot                                                                                                                                                               | 502 `system_error` (runit tak bisa dibaca)                                                                                                                                                                                         |
-| `POST /panel/services/:name/:action`     | A     | `ControlBody` (opsional)              | 200 `Service`; **202 `DeferredRestart`** untuk restart `panel`/`cloudflared`                                                                                                            | 400 `invalid_name`/`invalid_action`; 404 `not_found`; 409 `busy`, `lockout` (stop panel/cloudflared), `confirm_required` (stop protected tanpa `confirm === name`), `job_running` (kunci job PLAN/03 dipegang); 502 `system_error` |
-| `GET /panel/services/:name/log`          | A     | `?lines=1..2000 (200)&after=<cursor>` | `LogChunk`                                                                                                                                                                              | 400 `invalid_lines`/`invalid_cursor`; 404                                                                                                                                                                                          |
-| `GET /panel/services/:name/log/download` | A     | –                                     | `text/plain; charset=utf-8`, `Content-Disposition: attachment; filename="<name>-<yyyymmdd-hhmm>.log"`, ≤ 10 MiB terakhir, sudah diredaksi; audit `log.download` target `service:<name>` | 404                                                                                                                                                                                                                                |
-| `GET /panel/apps`                        | A     | –                                     | `App[]`                                                                                                                                                                                 | 502                                                                                                                                                                                                                                |
-| `POST /panel/apps/:name/:action`         | A     | –                                     | 200 `App`                                                                                                                                                                               | 400; 404; 409 `busy`, `job_running`; 503 `pm2_unavailable`; 502                                                                                                                                                                    |
-| `GET /panel/apps/:name/log`              | A     | `?stream=out\|err&lines&after`        | `LogChunk`                                                                                                                                                                              | 400 `invalid_stream`…; 404                                                                                                                                                                                                         |
-| `GET /panel/apps/:name/log/download`     | A     | `?stream=`                            | seperti layanan; audit target `app:<name>:<stream>`                                                                                                                                     | 404                                                                                                                                                                                                                                |
-| `GET /panel/domains`                     | A     | –                                     | `Domain[]` (+ `recent` dari 1 query `check_result` 35 mnt)                                                                                                                              | 502                                                                                                                                                                                                                                |
-| `POST /panel/domains/:hostname/check`    | A     | –                                     | 200 `Domain` (probe sekarang + cek lokal bila gagal; ditulis ke `check_result`)                                                                                                         | 400 `invalid_hostname` (`/^[a-z0-9.-]{1,253}$/`, tanpa `*`); 404; 429 `too_soon` + `retryAfterSec` (10 dtk per host)                                                                                                               |
-| `GET /panel/databases`                   | A     | –                                     | `DatabaseInfo[]` (tidak di-cache, tidak di-poll)                                                                                                                                        | 503 `postgres_down` (layanan `postgres` tidak `run`), 502                                                                                                                                                                          |
-| `GET /panel/metrics`                     | A     | `?range=24h\|7d` (default 24h)        | `MetricSeries` (≤ 100 titik: daftar terbatas, tanpa paginasi)                                                                                                                           | 400 `invalid_range`                                                                                                                                                                                                                |
-| `GET /panel/problems/history`            | A     | `?page&pageSize` (20, maks 100)       | `Page<ProblemEvent>`                                                                                                                                                                    | 400                                                                                                                                                                                                                                |
-| `GET /panel/alerts/status`               | A     | –                                     | `AlertStatus`                                                                                                                                                                           | –                                                                                                                                                                                                                                  |
-| `POST /dev/alerts/test`                  | S     | –                                     | `AlertTestResult`                                                                                                                                                                       | 409 `alerts_not_configured`; 429 `too_soon` (1 per 5 dtk); 502 `<AlertErrorCode>` dengan `message` tanpa token                                                                                                                     |
-| `POST /dev/alerts/telegram/chats`        | S     | –                                     | `TelegramChats` (dari `getUpdates`, unik per id, maks 20)                                                                                                                               | 409 `alerts_token_missing`; 409 `telegram_webhook_set` (getUpdates tidak jalan bila webhook aktif); 502 `<AlertErrorCode>`                                                                                                         |
+| Method + path                            | Peran | Request                               | 2xx                                                                                                                                                                               | Error                                                                                                                     |
+| ---------------------------------------- | ----- | ------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------- |
+| `GET /health` (publik)                   | –     | –                                     | `{ ok, version, bootId }`                                                                                                                                                         | –                                                                                                                         |
+| `GET /panel/overview`                    | A     | –                                     | `PanelOverview` (tidak pernah 500 karena satu bagian)                                                                                                                             | 401/403                                                                                                                   |
+| `GET /panel/services`                    | A     | –                                     | `Service[]`                                                                                                                                                                       | 502 `system_error`                                                                                                        |
+| `POST /panel/services/:name/:action`     | A     | `ControlBody?`                        | 200 `Service`; 202 `DeferredRestart` (restart `panel`/`cloudflared`)                                                                                                              | 400 `invalid_name`/`invalid_action`; 404; 409 `busy`, `lockout`, `confirm_required`, `job_running`, `not_supervised`; 502 |
+| `GET /panel/services/:name/log`          | A     | `?lines=1..2000 (500)&after=<cursor>` | `LogChunk`                                                                                                                                                                        | 400 `invalid_lines`/`invalid_cursor`; 404                                                                                 |
+| `GET /panel/apps`                        | A     | –                                     | `App[]`                                                                                                                                                                           | 503 `pm2_unavailable` (+`reason`); 502                                                                                    |
+| `POST /panel/apps/:name/:action`         | A     | –                                     | 200 `App`                                                                                                                                                                         | 400; 404; 409 `busy`, `job_running`; 503 `pm2_unavailable`; 502                                                           |
+| `GET /panel/apps/:name/log`              | A     | `?stream=out\|err&lines&after`        | `LogChunk`                                                                                                                                                                        | 400 `invalid_stream`…; 404                                                                                                |
+| `GET /panel/domains`                     | A     | –                                     | `Domain[]`                                                                                                                                                                        | 502                                                                                                                       |
+| `POST /panel/domains/:hostname/check`    | A     | –                                     | 200 `Domain`                                                                                                                                                                      | 400 `invalid_hostname`; 404; 429 `too_soon` + `extra.retryAfterSec` (10 dtk/host)                                         |
+| `GET /panel/databases`                   | A     | –                                     | `DatabaseInfo[]`                                                                                                                                                                  | 503 `postgres_down`; 502                                                                                                  |
+| `GET /panel/alerts/status`               | A     | –                                     | `AlertStatus`                                                                                                                                                                     | –                                                                                                                         |
+| `GET /panel/status`                      | A     | –                                     | `PanelStatus` (tanpa perintah sistem; badge nav, poll 60 dtk)                                                                                                                     | –                                                                                                                         |
+| `GET /panel/metrics`                     | A     | `?range=24h\|7d` (24h)                | `MetricSeries` (≤ 100 titik; daftar terbatas, tanpa paginasi)                                                                                                                     | 400 `invalid_range`                                                                                                       |
+| `GET /panel/problems/history`            | A     | `?page&pageSize` (20, maks 100)       | `Page<ProblemEvent>` (tanpa notice dan `info`)                                                                                                                                    | 400                                                                                                                       |
+| `GET /panel/services/:name/log/download` | A     | –                                     | `text/plain; charset=utf-8`, `Content-Disposition: attachment; filename="<name>-<yyyymmdd-hhmm>.log"`, ≤ 10 MiB terakhir, diredaksi; audit `log.download` target `service:<name>` | 404                                                                                                                       |
+| `GET /panel/apps/:name/log/download`     | A     | `?stream=`                            | sama; audit target `app:<name>:<stream>`                                                                                                                                          | 404                                                                                                                       |
+| `POST /dev/alerts/test`                  | S     | –                                     | `AlertTestResult`                                                                                                                                                                 | 409 `alerts_not_configured`; 429 `too_soon` (1/5 dtk); 502 `<AlertErrorCode>`                                             |
+| `POST /dev/alerts/telegram/chats`        | S     | –                                     | `TelegramChats` (maks 20, unik)                                                                                                                                                   | 409 `alerts_token_missing`; 502 `<AlertErrorCode>` (termasuk `telegram_conflict`)                                         |
 
-Catatan:
+Ketentuan kontrol:
 
-- Endpoint lama `GET …/log` mengembalikan `LogChunk`, bukan `LogLines` (kontrak internal; klien satu repo).
-- `GET /panel/ping` tetap (dipakai overlay restart cloudflared).
-- Cursor = `base64url("<ino>:<offset>")`. Server: bila `ino` beda atau `size < offset` → baca tail biasa, `reset: true`.
-  Bila data baru > 256 KiB → kirim 256 KiB terakhir, `truncated: true`. `lines` tetap membatasi jumlah baris.
-- Kunci job PLAN/03: kontrol app/layanan memanggil `jobs.isLocked(resource)` (nama fungsi final dari PLAN/03) sebelum
-  `withLock`; bila terkunci → 409 `job_running`. Restart `panel` ditolak 409 `job_running` bila ada job/deploy/backup
-  yang sedang berjalan (shutdown hanya menunggu 20 dtk).
+- Urutan cek: nama/aksi → `lockout` → `confirm_required` → `jobs.isLocked({ kind, name })` (03) → `withLock` → aksi →
+  `noteIntentionalRestart` (restart/start) → audit (`meta.confirmTyped`) → `monitor.patch`.
+- Restart `panel` juga ditolak 409 `job_running` bila `jobs.active() || backup.running || backup.restoring`.
 
-### 3.8 Telegram (klien, format pesan, batas)
+GET sensitif yang diaudit (C23): unduh item cadangan (04 `backup.download`) dan unduh log (`log.download`, aksi masuk
+union `AuditAction` W0, X22). Melihat log tidak diaudit (admin dipercaya penuh, keputusan owner 1).
 
-Diverifikasi sebagian ke `core.telegram.org/bots/api` (2026-11-26): format token `123456:ABC-DEF…`, URL
-`https://api.telegram.org/bot<token>/METHOD`, `getUpdates` tidak bekerja bila webhook terpasang, `error_code` bisa
-berubah (jadi kode dipetakan dari HTTP status + `description`). **Belum terverifikasi dari halaman** (asumsi dari
-pengetahuan, dicek ulang implementer sebelum menulis kode — Rule 20): batas teks 4.096 karakter, `parse_mode: "HTML"`
-dengan escape `&`, `<`, `>`, `parameters.retry_after` pada 429, `disable_notification`, `link_preview_options.is_disabled`.
+### 3.8 Telegram
 
-- `sendMessage` body: `{ chat_id, text, parse_mode: "HTML", disable_notification, link_preview_options: { is_disabled: true } }`,
-  timeout `TELEGRAM_TIMEOUT_MS = 10_000`.
-- Pemetaan error: 401 → `telegram_token_invalid`; 400 + `description` mengandung "chat not found" → `telegram_chat_not_found`;
-  403 → `telegram_forbidden`; 429 → `telegram_rate_limited` (tunggu `retry_after` detik, default 60); 400 lain →
-  `telegram_bad_request`; jaringan/timeout/5xx → `telegram_unreachable`.
-- **Token tidak boleh muncul di log/error.** URL berisi token; pesan error `fetch` bisa memuat URL → semua pesan error
-  dari klien ini lewat `redactToken()` (`token` → `bot***`) sebelum `log.*`/response. Test wajib.
-- Backoff kirim alert setelah gagal: 1, 2, 4, 8, 16, 30 mnt (maks), reset setelah sukses. 401/403/400-chat → berhenti
-  mencoba sampai setting berubah (state `failing`, problem `alerts_failing`).
-- Batas laju: ≤ 1 pesan per tick (≤ 1/menit dengan default) — jauh di bawah batas Telegram per chat; ditambah plafon
-  `ALERT_MAX_PER_HOUR = 20`. Lewat plafon: kirim satu pesan "Terlalu banyak notifikasi. Buka Ringkasan untuk melihat
-  semuanya." lalu diam sampai jam berikutnya; perubahan yang tertahan tetap direkonsiliasi di digest berikutnya.
+Terverifikasi oleh kritik ke `core.telegram.org/bots/api` + FAQ (2026-11-26):
 
-Format pesan (HTML, teks Indonesia, tanpa emoji, maks 3.500 karakter; lebih dari 15 baris → "… dan N lainnya"):
+- `text` 1–4.096 karakter setelah parsing entitas;
+- HTML wajib meng-escape `< > &` (entitas bernama hanya `&lt; &gt; &amp; &quot;`);
+- `ResponseParameters` berisi `retry_after` dan `migrate_to_chat_id`;
+- `link_preview_options` dan `disable_notification` ada;
+- `getUpdates` tidak jalan saat ada webhook, dan update disimpan maksimal 24 jam;
+- `error_code` "subject to change";
+- batas: ±1 pesan/dtk per chat, 20/menit per grup.
+
+Rincian implementasi:
+
+- `sendMessage`: `{ chat_id, text, parse_mode: "HTML", disable_notification, link_preview_options: { is_disabled: true } }`,
+  timeout 10 dtk.
+- Pemetaan error (dari HTTP status + `description`/`parameters`):
+
+  | Respons                    | Kode                                                       |
+  | -------------------------- | ---------------------------------------------------------- |
+  | 401                        | `telegram_token_invalid`                                   |
+  | 400 "chat not found"       | `telegram_chat_not_found`                                  |
+  | 400 + `migrate_to_chat_id` | `telegram_chat_migrated`                                   |
+  | 403                        | `telegram_forbidden`                                       |
+  | 409                        | `telegram_conflict`                                        |
+  | 429                        | `telegram_rate_limited` (tunggu `retry_after`, default 60) |
+  | 400 lain                   | `telegram_bad_request`                                     |
+  | jaringan / timeout / 5xx   | `telegram_unreachable`                                     |
+
+- **Chat dimigrasi**: ID baru disimpan ke `alerts.telegram_chat_id` (audit `settings.update`, aktor Sistem,
+  `meta.reason: "chat_migrated"`), lalu langsung dicoba ulang sekali.
+- **Backoff**: 1, 2, 4, 8, 16, 30 mnt. 401/403/chat-not-found dicoba ulang tiap 1 jam, dan di-reset oleh perubahan setting
+  atau uji kirim sukses.
+- **Token tidak pernah muncul** di log/error: semua pesan dari klien ini lewat `redactToken()`. Test wajib.
+- **Cari chat**: `getUpdates` tanpa `offset` (update tidak dikonfirmasi). Chat diambil dari `message.chat`,
+  `channel_post.chat`, dan `my_chat_member.chat`.
+- **Laju**: ≤ 1 pesan per tick + plafon `ALERT_MAX_PER_HOUR = 20`. Lewat plafon → satu pesan "Terlalu banyak notifikasi.
+  Buka Ringkasan untuk melihat semuanya.", lalu diam sampai jam berikutnya.
+
+Format (HTML, tanpa emoji, ≤ 3.500 karakter, > 15 baris → "… dan N lainnya"):
 
 ```
 <b>Panel Termux</b> · panel.malikkurosaki.com
-GAWAT · Layanan postgres mati · sejak 3 mnt
-PERINGATAN · HP tidak sedang dicas · baterai 88%
+GAWAT · Layanan postgres terus dimulai ulang · sejak 3 mnt
+PERINGATAN · Baterai tinggal 22% dan tidak mengisi
 PULIH · solusi.malikkurosaki.com bisa dijangkau lagi · putus 12 mnt
+PULIH · Aplikasi blog bermasalah · pulih saat panel tidak berjalan (terakhir terlihat 3 jam lalu)
+INFO · HP baru saja menyala ulang · aktif 4 mnt
 
 Buka Ringkasan: https://panel.malikkurosaki.com/panel
 ```
 
-Nama instance = host dari `APP_BASE_URL`. Pengingat 24 jam diawali "MASIH · ". Uji kirim: "Notifikasi uji dari Panel
-Termux. Kalau pesan ini sampai, notifikasi sudah siap." Tautan menuju panel yang dilindungi Cloudflare Access/login —
-benar, dan dijelaskan di README.
+- Pengingat 24 jam diawali "MASIH · ".
+- Uji kirim: "Notifikasi uji dari Panel Termux. Kalau pesan ini sampai, notifikasi sudah siap."
 
-### 3.9 Kebutuhan ke PLAN/01 (komponen bersama; nama props yang saya pakai)
+### 3.9 Kontrak yang dipakai dari PLAN/01 (signature 01 berlaku harfiah; daftar lama "kebutuhan" digantikan, X20)
 
-- `DataTable<T>` (tambahan): `rowActions?: (row: T) => ReactNode` (slot kanan: 1 tombol utama + menu ⋯; di HP tampil di
-  bawah kartu), `rowHref?: (row: T) => string` (baris = tautan, aksi tidak ikut tertaut), `rowTone?: (row: T) =>
-  StatusTone | undefined` (garis kiri berwarna untuk baris bermasalah), `columns[].hidden?: boolean`. `error` menerima
-  `ApiError` atau node. Urutan baris ditentukan pemanggil (saya urutkan: bermasalah dulu).
-- `LogViewer`: `lines: LogLine[]`, `label: string`, `loading`, `error?: ReactNode`, `following: boolean`,
-  `onFollowChange(v)`, `newCount` (untuk "Baris baru (n)"), `toolbarStart?: ReactNode` (segmented stdout/stderr),
-  `downloadHref?: string`, `maxLines` (default 2.000, teks "Menampilkan 2.000 baris terakhir"), `emptyText`,
-  `notice?: ReactNode` ("Log ditampilkan apa adanya; pola rahasia umum disamarkan."). Cari, bungkus baris, salin,
-  layar penuh (sheet) di HP, `role="log"` + fokus keyboard = milik komponen. Kolom waktu `HH.mm.ss` lokal dari `at`.
-- Hook follow (`useLogFollow(url, { intervalMs: 3000, enabled })`) saya tulis di `src/web/panel/use-log-follow.ts`;
-  bila PLAN/01 ingin memilikinya untuk `/dev/logs`, pindahkan ke `src/web/shared/` di gelombang 3.
-- `ConfirmAction` tier `"none" | "confirm" | "typed"` dengan `typedValue` dan `confirmLabel` kata kerja + objek.
-- `useApiQuery(url, { refreshMs, pauseHidden: true })`: lewati tick saat tersembunyi + reload saat terlihat; tick
-  interval **tidak** meng-abort request yang masih jalan (tick dilewati); backoff error 10→20→40→60 dtk; mengembalikan
-  `updatedAt` (waktu respons sukses terakhir).
-- Pure formatter (`formatBytes`, `formatDuration`, `formatNumber`) dipindah ke `src/shared/format.id.ts` dan di-re-export
-  dari `src/web/shared/format.ts`, supaya `problem.copy.ts` dan pesan Telegram server memakainya. Bila PLAN/01 menolak,
-  `problem.copy.ts` mengimpor langsung dari `src/web/shared/format.ts` (modul murni; tercatat sebagai utang).
-- Bottom bar/sheet: badge masalah di item "Ringkasan" memakai `GET /api/panel/status` (poll 60 dtk, jeda saat
-  tersembunyi) — P2, hanya bila PLAN/01 menyediakan slot `badge` di `NavItem`.
+- `DataTable` prop `actions` (slot aksi baris), `rowHref`; kolom disaring dengan filter array (tanpa `hidden`).
+- `ConfirmAction` `tier: "confirm" | "typed"`. Aksi tanpa konfirmasi = tanpa dialog. `onConfirm` resolve pada 202
+  (restart panel/cloudflared), lalu overlay 02 mengambil alih (X18).
+- `LogViewer` props versi 01 (`live`, `streams`, `empty`, `size`, …). `newCount` dihitung komponen.
+- `usePoller` adalah primitif polling tunggal (B13); `useApiQuery(url, refreshMs?, { enabled })` di atasnya: jeda saat
+  tersembunyi sudah bawaan, backoff error.
+- `useLogFollow(url, { enabled })` di `src/web/shared/`.
+- `status.vocab` (tabel kanonik 01, dibekukan setelah W1, B12): kunci yang diminta 02: `auth_required`, `unstable`,
+  `tunnel_down` (X8). Pemetaan state mentah → kunci ada di **`src/web/panel/panel.status-key.ts`** (milik 02):
+  `serviceKey(s)` (down + `wantUp` → `down`; `!wantUp` → `stopped`), `appKey(a)`, `domainVerdict(health, app)` →
+  `{ key: StatusKey, reason: string }`. Tanpa label/tone sendiri; `panel.status.ts` lama dihapus.
+- `format.id.ts` (`formatBytes`, `formatDuration`, `formatNumber`) untuk `problem.copy.ts`.
+- Copy kesegaran "Diperbarui baru saja" / "Diperbarui 3 mnt lalu" (01 D16: tanpa detik).
 
 ---
 
@@ -561,322 +677,356 @@ benar, dan dijelaskan di README.
 
 ### 4.1 Boot dan sampler
 
-1. `start()` (`src/server/index.ts`): setelah migrations, `const monitor = monitorFor({ db, secret, dataDir, system, appBaseUrl, panelPort })`.
-   Server HTTP mulai; `monitor.sampler.start()` menjadwalkan tick pertama **10 dtk** setelah boot (server tenang dulu).
-2. Seed state dari DB: counter gagal per domain dari 3 `check_result` terakhir tiap host; problem terbuka dari
-   `problem_event` (jadi `since` dan status notifikasi bertahan restart). Ring restart app kosong (crash loop baru bisa
-   terdeteksi 10 mnt setelah boot — dicatat).
-3. Tick: (a) `snapshot.refreshAll()` paralel: `pm2.list` ‖ `runit.list` ‖ `device.read` ‖ `cloudflared.listIngress` ‖
-   `backup.status` (dibungkus try). (b) probe semua domain yang bisa diprobe paralel (timeout 8 dtk sudah ada); yang
-   gagal → `net.httpStatus(port)` lokal (bila port ada). (c) bila semua gagal tanpa jawaban → probe konektivitas.
-   (d) `computeProblems`. (e) satu transaksi: `metric_sample` + `check_result` + upsert `problem_event`. (f) alert
-   engine (kirim di luar transaksi). (g) retensi bila ≥ 1 jam sejak terakhir. (h) `log.debug("[monitor] tick 1234ms")`,
-   `log.warn` bila > 20 dtk. Tick berikutnya dijadwalkan `interval − durasi` (min 5 dtk).
-4. Kegagalan per langkah: bagian snapshot gagal → bagian itu `unavailable`, tick lanjut. Tulis DB gagal (mis. disk
-   penuh) → `log.error` dengan operasi + sebab, tick lanjut ke alert (supaya `disk_low` tetap bisa terkirim). Alert
-   gagal → backoff §3.8. Exception tak terduga di tick → `log.error`, tick berikutnya tetap dijadwalkan.
-5. Shutdown: `stopScheduler` memanggil `backup.stop()` dan `sampler.stop()` (batal timer); `idle` menunggu tick yang
-   sedang berjalan selesai (≤ batas shutdown yang ada).
-6. `pm2 jlist` hang 20 dtk: bagian pm2 single-flight, tick yang menumpuk dilewati; UI tetap mendapat nilai lama
-   (stale-while-revalidate, `sampledAt` menunjukkan umur).
+1. `boot.ts` (`wkr-boot-03`) setelah migrations:
+   - baca lalu hapus marker `data/clean-shutdown`;
+   - buat `monitor = monitorFor({ db, secret, dataDir, system, jobs, backup, security, appBaseUrl, panelPort,
+     bootNotice: { cleanShutdown, uptimeSec: os.uptime() } })`;
+   - `monitor.start()` (tick pertama 10 dtk kemudian).
+2. Notice boot: `host_rebooted` bila uptime < 15 mnt, selain itu `panel_restarted_unexpectedly` bila marker tidak ada.
+   Disimpan sebagai baris `problem_event` yang langsung tertutup dengan `notified_state = NULL` (§4.6 langkah 6).
+3. Seed: event terbuka dari DB (untuk `since` dan status notifikasi); counter gagal domain dari 3 `check_result`
+   terakhir per host. Ring restart dan streak layanan mulai kosong: crash loop app baru terdeteksi ≥ 10 mnt setelah boot.
+4. Tick:
+   - (a) `snapshot.refreshAll()` paralel: `runit.list` dulu (status `pm2` dipakai `isSupervisorUp`), lalu `pm2.list` ‖
+     `device.read` ‖ `listIngress` ‖ `backup.status` ‖ `security.status` (masing-masing dibungkus).
+   - (b) probe domain paralel (timeout 8 dtk); yang gagal → `net.httpStatus(port)` lokal.
+   - (c) semua `null` → probe konektivitas.
+   - (d) `computeProblems` → `ProblemResult`.
+   - (e) satu transaksi: `metric_sample` + `check_result` (histori, A8) + perubahan `problem_event` (§4.6); kirim
+     Telegram di luar transaksi.
+   - (f) retensi ≥ 1×/jam; `loadBaseline` dihitung ulang ≥ 1×/jam.
+   - (g) `log.debug("[monitor] tick 1234ms")`, dan `warn` bila > 20 dtk.
+   - (h) jadwalkan tick berikut `interval − durasi` (min 5 dtk).
+5. Kegagalan:
+   - bagian gagal → `unavailable` + `unknownKinds` (K4);
+   - tulis DB gagal → `log.error` (operasi + sebab), kirim tetap dicoba;
+   - exception tick → `log.error`, tick berikut tetap dijadwalkan;
+   - `jlist` hang 20 dtk → single-flight, UI dapat nilai lama dengan `dataAt` yang jujur.
+6. Shutdown: `stopScheduler` menghentikan sampler. `idle` menunggu tick berjalan. `shutdown.ts` (03 W1) menulis marker
+   `data/clean-shutdown` sebelum `exit` (3 baris, dititipkan di spec `wkr-sites-runner-01`).
 
 ### 4.2 Membuka Ringkasan
 
-1. `GET /panel/overview`: `snapshot.get()` → bila cache ada (≤ 120 dtk) jawab segera, refresh bagian kedaluwarsa di
-   belakang. Problems dihitung dari snapshot + state sampler (counter domain, ring restart, `since` dari event terbuka).
-2. Sebelum tick pertama (≤ 10 dtk setelah boot): domain `checkedAt: null` → "Belum dicek", `sampledAt: null` → meta
-   "Pemantauan latar dimulai…". Tidak ada problem domain.
-3. Poll 10 dtk saat tab terlihat; berhenti saat tersembunyi; saat kembali terlihat langsung muat ulang.
-4. Jaringan klien putus: data terakhir tetap tampil, `ErrorState` ringkas di atas ("Tidak bisa terhubung ke server.
-   Data di bawah dari 2 mnt lalu."), backoff sampai 60 dtk.
-5. Bagian `unavailable`: tile/kartu bagian itu diganti teks "Tidak bisa dibaca saat ini" + tautan Coba lagi; bagian
-   lain normal. `backup_status_error` muncul sebagai problem (R4-G4) — overview tidak lagi 500.
+1. `GET /panel/overview` → `monitor.snapshot()` (SWR) + `monitor.problems()`. Respons segera bila cache ≤ 120 dtk.
+2. Sebelum tick pertama: domain "Belum dicek", `sampledAt: null` → teks "Pemantauan latar dimulai…".
+3. Poll 10 dtk saat terlihat (`useApiQuery`), jeda saat tersembunyi.
+4. Jaringan klien putus: data terakhir tetap tampil + `StaleNotice` (01), backoff.
+5. Bagian `unavailable` → teks "Tidak bisa dibaca saat ini" di tile/kartunya. Problem dari kind itu tetap tampil dari
+   event terbuka (dibekukan, ditandai "data terakhir 3 mnt lalu").
 
 ### 4.3 Kontrol layanan/aplikasi
 
-1. Tombol utama kontekstual: layanan/app tidak berjalan → **Mulai** (tanpa konfirmasi); berjalan → **Mulai ulang**
-   (konfirmasi akibat). Menu ⋯: Hentikan, Lihat log.
-2. Hentikan layanan biasa / app → konfirmasi akibat. Layanan protected → ketik nama; body `{ confirm: name }`.
-   `lockout` → item menu nonaktif dengan alasan (§5.3), server tetap menolak 409 bila dipanggil langsung.
-3. Server: validasi nama/aksi → `lockout` → `confirm_required` → kunci job (`job_running`) → `withLock` (`busy`) →
-   `sv`/`pm2` → audit `service.<action>`/`app.<action>` (+ `meta.confirmTyped: true` untuk stop protected) →
-   `snapshot.invalidate(section)` → kembalikan item.
-4. Klien: toast `doneBy` (bentuk lampau) + reload. Error → toast pola error dari `errorCodes`.
-5. Dua admin bersamaan → yang kedua 409 `busy` ("Masih ada aksi lain yang berjalan…"). Aksi selama job situs → 409
-   `job_running` ("Perubahan situs sedang berjalan…").
-6. Jaringan putus saat request kontrol: toast "Tidak bisa memastikan hasilnya karena koneksi terputus. Muat ulang untuk
-   melihat kondisi terbaru." dan query otomatis dimuat ulang saat online.
-7. `pm2` tidak berjalan → aksi app 503 `pm2_unavailable` ("pm2 tidak berjalan. Mulai layanan pm2 dulu.").
+1. Tombol utama: tidak berjalan → **Mulai** (tanpa dialog); berjalan → **Mulai ulang** (`confirm`). Menu ⋯: Hentikan,
+   Lihat log.
+2. Hentikan: biasa/app → `confirm`; protected → `typed`; `lockout` → item nonaktif dengan alasan terbaca.
+3. Server mengikuti urutan cek §3.7. `monitor.patch` membuat respons poll berikutnya langsung menampilkan status baru.
+4. Klien: toast `doneBy` lalu reload. Error → `errorCodes`.
+5. Konkurensi: aksi kedua → 409 `busy`. Saat job situs berjalan → 409 `job_running`.
+6. Jaringan putus saat kontrol: toast "Tidak bisa memastikan hasilnya karena koneksi terputus. Muat ulang untuk melihat
+   kondisi terbaru." lalu reload saat online.
+7. pm2 tidak berjalan → 503 `pm2_unavailable` ("pm2 tidak berjalan. Mulai layanan pm2 dulu.").
 
-### 4.4 Restart panel / cloudflared (putus yang diharapkan)
+### 4.4 Restart panel / cloudflared
 
-1. Admin memilih Mulai ulang `panel` → dialog konfirmasi: "Halaman ini terputus ±10–30 dtk lalu tersambung lagi.
-   Perubahan dan cadangan yang sedang berjalan membuat permintaan ini ditolak."
-2. Server: cek kunci job/deploy/backup (`job_running` bila ada) → audit `service.restart` (sebelum restart, supaya
-   tercatat) → balas **202** `{ deferred: true, service: "panel", bootId }` → `setTimeout(500)` →
-   `runit.restartDetached("panel")`.
-3. Klien: overlay modal (fokus terkunci, `role="alertdialog"`, `aria-live`) "Panel dimulai ulang… Menyambung ulang."
-   Poll `GET /api/health` tiap 2 dtk (fetch gagal, 502/530 HTML dari Cloudflare, dan halaman login Access = "belum
-   kembali"). Kembali = JSON `ok` dengan `bootId` ≠ lama → tutup overlay, toast "panel dimulai ulang.", muat ulang
-   semua query. Bila versi berubah → reload halaman penuh (bundle SPA baru).
-4. 90 dtk tanpa kembali → overlay berubah jadi error: "Panel belum tersambung lagi. Cek lewat SSH: `sv status panel`
-   dan `tail $PREFIX/var/log/sv/panel/current`." + tombol Coba lagi (lanjut poll) dan Tutup.
-5. Cloudflared: sama, tetapi poll `GET /api/panel/ping`; teks "Semua domain terputus beberapa detik selama tunnel
-   cloudflared dimulai ulang." Tanpa Cloudflare (akses lokal `127.0.0.1`) ping langsung sukses — overlay tertutup cepat.
-6. Restart terjadi saat sesi Access kedaluwarsa → health mengembalikan HTML login → overlay tidak tertutup; teks error
-   di langkah 4 menambah "Bila kamu memakai Cloudflare Access, muat ulang halaman untuk login lagi."
+1. Mulai ulang `panel` → `confirm`: "Halaman ini terputus ±10–30 dtk lalu tersambung lagi."
+2. Server:
+   - cek `not_supervised` (`supervise/pid` ≠ `process.pid` → 409, mode dev);
+   - cek `job_running` (job/backup/restore);
+   - audit `service.restart`;
+   - balas 202 `{ deferred, service: "panel", bootId, oldPid }`;
+   - `setTimeout(300)` → `shutdown("restart")` (marker ditulis, jadi tidak ada notice palsu setelah naik lagi).
+3. Klien: `onConfirm` resolve. Overlay modal `role="alertdialog"` (fokus terkunci): "Panel dimulai ulang… Menyambung
+   ulang." Poll `GET /api/health` tiap 2 dtk. Fetch gagal, HTML 502/530, atau halaman login Access dihitung "belum".
+   Kembali = JSON dengan `bootId` baru → tutup overlay, toast "panel dimulai ulang.", reload query. Versi berubah →
+   reload halaman penuh.
+4. 130 dtk (≥ shutdown 120 dtk) tanpa kembali → overlay berubah jadi error: "Panel belum tersambung lagi. Cek lewat SSH:
+   `sv status panel` dan `tail $PREFIX/var/log/sv/panel/current`. Bila kamu memakai Cloudflare Access, muat ulang
+   halaman untuk login lagi." Tombol: Coba lagi dan Tutup.
+5. `cloudflared`: 202 `{ service: "cloudflared", oldPid }`, `sv restart` 500 ms kemudian. Overlay ("Semua domain
+   terputus beberapa detik…") mem-poll `GET /api/panel/services` tiap 2 dtk, dan selesai bila request berhasil **dan**
+   `cloudflared.state === "run" && pid !== oldPid`. Batas 90 dtk. Tanpa Cloudflare (akses `127.0.0.1`), overlay selesai
+   begitu pid baru terlihat.
 
-### 4.5 Log (follow)
+### 4.5 Log
 
-1. Buka `/panel/services/:name/log` → `GET …/log?lines=500` → `LogChunk`, simpan `cursor`.
-2. Follow aktif (default aktif di desktop, mati di HP untuk hemat) → poll 3 dtk `…/log?after=<cursor>`; baris baru
-   ditambahkan; buffer DOM dipotong ke 2.000 baris.
-3. Pengguna gulir ke atas → follow mati otomatis (milik `LogViewer`), baris baru dihitung → tombol "Baris baru (n)".
-4. `reset: true` (rotasi svlogd ±3,6 jam untuk `pm2`; pm2-logrotate tengah malam) → buffer diganti, sisipkan penanda
-   "— file log diputar —". File hilang → `lines: []` + teks kosong.
-5. Tab tersembunyi → poll berhenti. Kembali → satu request `after` (maks 256 KiB, `truncated` → penanda "Sebagian
-   baris dilewati").
-6. Unduh → tautan biasa ke `…/log/download` (cookie sesi ikut; GET jadi tak terkena cek origin mutasi); audit dicatat.
+1. Buka log → `GET …/log?lines=500` → `LogChunk`.
+2. Follow (`useLogFollow`, 01) poll 3 dtk `?after=<cursor>`. Perilaku gulir/pin, "Baris baru (n)", dan batas DOM 2.000
+   baris milik `LogViewer` 01.
+3. `reset: true` → ganti buffer + penanda "— file log diputar —". `truncated` → penanda "Sebagian baris dilewati".
+4. Tersembunyi → berhenti; terlihat → satu request `after`.
+5. Unduh → tautan biasa ke `…/log/download` (cookie sesi ikut; GET tidak terkena guard mutasi); file ≤ 10 MiB
+   terakhir, diredaksi; audit `log.download`.
 
-### 4.6 Alert (per tick, setelah problems dihitung)
+### 4.6 Mesin alert (per tick)
 
-1. Masukan: `problems` dengan kode yang punya delay (bukan "–") dan `severity ≥ alerts.min_severity`.
-2. Untuk tiap problem: tidak ada event terbuka untuk `key` → insert (`opened_at = now`); ada → update severity (maks)
-   dan params.
-3. Event terbuka yang `key`-nya tidak ada lagi → `closed_at = now`.
-4. Tentukan item kirim untuk event terbuka, dan event tertutup ≤ 24 jam dengan `notified_state = 'open'`:
-   - terbuka dan `now − opened_at < delay` → lewati;
-   - terbuka dan (`notified_state ≠ 'open'` **atau** severity naik di atas `notified_severity` **atau**
-     `now − last_sent_at ≥ 24 jam`) → item "buka"/"masih";
-   - tertutup dan `notified_state = 'open'` → item "pulih" (dengan lama berlangsung);
-   - tertutup dan `notified_state` null → senyap, **kecuali** `internet_down` yang berlangsung ≥ 5 mnt → item "pulih"
-     ("HP sempat tidak terhubung internet selama 14 mnt");
-   - `last_sent_at` < 15 mnt lalu → tunda (kecuali eskalasi ke danger).
-5. Kanal tidak terkonfigurasi/dimatikan → tidak kirim, tidak menandai (item tetap "jatuh tempo" → `pending`).
-   Mengaktifkan kanal nanti hanya mengirim yang **masih terbuka** (yang sudah pulih dan tak pernah diberitahukan tetap
-   senyap).
-6. Ada item → satu pesan (§3.8). Sukses → tandai `notified_state`, `notified_severity`, `last_sent_at`. Gagal → tanpa
-   tanda; backoff; `AlertStatus.lastError`.
-7. Internet putus: semua kirim gagal (`telegram_unreachable`) → backoff; saat pulih, rekonsiliasi hanya mengirim
-   selisih **saat itu** (masalah yang buka-tutup selama offline tidak dikirim, kecuali `internet_down` di atas).
-8. Panel restart: event terbuka ada di DB → tidak dikirim ulang. Masalah yang pulih selama panel mati → ditutup pada
-   tick pertama, "pulih" terkirim bila sebelumnya diberitahukan.
+Input: `ProblemResult`, settings, dan waktu. Konstanta: `CLOSE_AFTER_ABSENT_TICKS = 2`, `REOPEN_WINDOW_MS = 15 mnt`,
+`COOLDOWN_MS = 15 mnt`, `REMIND_MS = 24 jam`, `LAST_SEEN_STEP_MS = 10 mnt`.
 
-### 4.7 Menyiapkan Telegram (UI di PLAN/05; API di sini)
+1. **Hadir.** Untuk tiap problem di `problems` (bukan `suppressed`, bukan notice, bukan severity `info`):
+   - ada event terbuka → UPDATE hanya bila severity naik, params berubah, atau `now − last_seen_at ≥ 10 mnt`;
+   - tidak ada, tetapi ada baris `key` sama dengan `closed_at > now − 15 mnt` → **buka kembali** baris itu
+     (`closed_at = NULL`, `opened_at`/`last_sent_at`/`notified_state` tetap);
+   - selain itu → INSERT. Counter absen `key` = 0.
+2. **Absen.** Untuk tiap event terbuka yang tidak hadir:
+   - kind ∈ `unknownKinds` atau `key` ada di `suppressed` → tidak disentuh, counter absen = 0;
+   - selain itu counter absen +1; bila ≥ 2 → `closed_at = now`.
+3. **Pilih item kirim.** Kandidatnya: event terbuka, dan event tertutup ≤ 24 jam dengan `notified_state = 'open'`.
+   - terbuka, `now − opened_at < delay(code)` → lewati;
+   - terbuka dan severity ≥ `alerts.min_severity` dan (`notified_state ≠ 'open'`, **atau** severity naik di atas
+     `notified_severity`, **atau** `now − last_sent_at ≥ 24 jam`) → item buka/masih, **kecuali** `last_sent_at` < 15 mnt
+     lalu dan bukan eskalasi ke danger (tunda);
+   - tertutup dan `notified_state = 'open'` → item pulih, **tanpa cooldown**. Teks durasinya:
+     `closed_at − last_seen_at > 15 mnt` → "pulih saat panel tidak berjalan (terakhir terlihat X lalu)"; selain itu
+     "berlangsung X";
+   - tertutup dan `notified_state` NULL → senyap, kecuali `internet_down` yang berlangsung ≥ 5 mnt → item pulih.
+4. Kanal tidak terkonfigurasi/dimatikan → tidak kirim, tidak menandai (`pending` dihitung). Kanal yang diaktifkan nanti
+   hanya mengirim yang masih terbuka.
+5. Ada item → satu digest.
+   - Sukses → tandai `notified_state`, `notified_severity`, `last_sent_at`.
+   - Gagal → tanpa tanda; backoff §3.8; ≥ 3 gagal berturut-turut → `alerts_failing`.
+6. **Notice** (`host_*`): baris tertutup dengan `notified_state` NULL dan umur < 24 jam → baris "INFO" di digest. Sukses
+   → `notified_state = 'closed'`. Notice tidak tampil di daftar Ringkasan.
+7. Internet putus → kirim gagal dan backoff. Saat pulih, rekonsiliasi hanya mengirim selisih saat itu.
+8. Restart panel → event terbuka dibaca dari DB, jadi tidak dikirim ulang. Masalah yang pulih saat panel mati ditutup
+   setelah 2 tick dengan teks "pulih saat panel tidak berjalan".
 
-1. Super admin membuat bot di @BotFather, menempel token di Pengaturan → `PUT /api/dev/settings/alerts.telegram_bot_token`.
-2. Mengirim pesan apa saja ke bot (atau menambahkan bot ke grup) → klik "Cari chat" → `POST /api/dev/alerts/telegram/chats`
-   → pilih chat → disimpan ke `alerts.telegram_chat_id`.
-3. Klik "Kirim notifikasi uji" → `POST /api/dev/alerts/test` → toast "Notifikasi uji terkirim." atau pesan dari kode error
-   (§5.7). Uji kirim tidak memakai cooldown alert dan tidak mengubah `problem_event`.
-4. Token salah → `telegram_token_invalid`; bot belum di-chat → daftar chat kosong ("Belum ada chat. Kirim pesan ke bot
-   kamu di Telegram, lalu cari lagi."); webhook aktif → `telegram_webhook_set`.
+### 4.7 Menyiapkan Telegram (UI 05, API 02)
+
+1. Super admin membuat bot di @BotFather, menempel token di grup "Notifikasi", lalu Simpan → `PATCH /api/dev/settings`.
+2. Mengirim **pesan baru** ke bot (atau menambahkan bot ke grup), lalu "Cari chat" → `POST /api/dev/alerts/telegram/chats`
+   → memilih chat → `PATCH` `alerts.telegram_chat_id`.
+3. "Kirim notifikasi uji" → `POST /api/dev/alerts/test`. Hasilnya toast sukses, atau teks dari `errorCodes` (§5.7).
+   Uji kirim tidak menyentuh `problem_event`.
+4. Edge cases:
+   - daftar chat kosong → "Belum ada chat. Kirim pesan baru ke bot kamu (Telegram hanya menyimpan pesan 24 jam), lalu
+     cari lagi.";
+   - `telegram_conflict` → "Bot ini sedang dipakai aplikasi lain (webhook aktif). Matikan webhook-nya atau pakai bot
+     lain.".
 
 ### 4.8 Database
 
-1. Buka `/panel/databases` → `GET` sekali (tanpa polling), tombol muat ulang di `PageHeader`.
-2. Layanan `postgres` tidak `run` → 503 `postgres_down` → `ErrorState` "Layanan postgres tidak berjalan. Situs yang
-   memakai database tidak bisa diakses." + tautan ke Layanan.
-3. Kosong → `EmptyState` "Belum ada database. Database dibuat otomatis saat kamu membuat situs dengan PostgreSQL."
+1. `GET` sekali, dengan tombol muat ulang.
+2. `postgres` tidak `run` → 503 `postgres_down` → `ErrorState` "Layanan postgres tidak berjalan. Situs yang memakai
+   database tidak bisa diakses." + tautan ke Layanan.
+3. Kosong → "Belum ada database. Database dibuat otomatis saat kamu membuat situs dengan PostgreSQL."
 
 ---
 
 ## 5. Spesifikasi UI per halaman
 
-Umum: setiap halaman memakai `PageHeader` (judul h1, `meta={{ updatedAt, onRefresh, refreshing, live }}`), status pakai
-`StatusBadge` (titik + teks), kosong `EmptyState`, error `ErrorState`, loading skeleton dari `components/skeletons.tsx`.
-`QueryView` lama dan `StatCard` lama tidak dipakai lagi di halaman panel. Target sentuh ≥ 44 px di < md untuk tombol aksi
-dan baris (keputusan default brief). Kedua tema: hanya token (`text-warning`, `bg-danger-subtle`, …), tidak ada kelas
-warna Tailwind mentah (banner demo yang `amber-*` diganti tone `warning`).
+Umum:
+
+- Komponen: `PageHeader` (h1, meta `updatedAt = dataAt`, `onRefresh`, `live`), `StatusBadge` dengan kunci `status.vocab`
+  (01), `EmptyState`, `ErrorState`, skeleton dari `components/skeletons.tsx`.
+- `QueryView` dan `StatCard` lama tidak dipakai lagi.
+- Target sentuh ≥ 44 px di < md.
+- Hanya token warna; banner demo memakai tone `warning`.
+- File i18n baru di-import langsung; `id.ts` tidak disentuh (X17).
 
 ### 5.1 Ringkasan (`/panel`)
 
-Urutan (desktop maks-lebar konten; HP satu kolom):
+1. **`PageHeader`** "Ringkasan", meta "Diperbarui baru saja". Mode demo → badge `warning` "Mode demo" + `fakeMode`.
+2. **Strip masalah.**
+   - Tanpa warning/danger → `StatusBadge` `success` "Semua sehat" + "dicek 1 mnt lalu" (`sampledAt`).
+   - Problem `info` (B4: cadangan belum diatur, Access belum terdeteksi) tampil sebagai baris tone `info` di bawah strip,
+     dengan tautan aksi; tidak mengubah "Semua sehat" dan tidak masuk hitungan.
+   - Ada → `<ul>`. Tiap baris: badge severity, judul, detail satu kalimat, "sejak 12 mnt", tautan "Lihat" (+ "Lihat log"
+     untuk app/service). Problem dari kind `unknown` diberi catatan "data terakhir X lalu".
+   - HP: maks 5 baris + "Tampilkan N lainnya".
+   - `aria-live="polite"` `sr-only` hanya diperbarui bila himpunan `id` berubah.
+3. **Tile** `grid-cols-2 lg:grid-cols-4` (`StatTile`, ≤ 170 px untuk 2×2 di 390 px):
+   - Baterai: "81%", hint "Tidak mengisi" / "Sedang dicas" / "Dicolok, tidak mengisi" / "Penuh" — semuanya netral
+     (A9: mencabut charger bukan masalah); nada warning/danger hanya dari `battery_low`. `null` → "Tidak tersedia
+     (pasang Termux:API)". Sparkline 24 jam baterai % (`MetricSeries`, gelombang W4) di bawah nilai.
+   - Suhu: "39,5 °C" atau "Tidak tersedia"; nada 45/50.
+   - Memori: "4,1 GB tersedia", progress terpakai, `thresholds={{ warn: 90, danger: 97 }}`.
+   - Penyimpanan: "170,3 GB bebas", progress, `{ warn: 90, danger: 95 }` (= aturan 10%/5%).
+   - Memori juga mendapat sparkline 24 jam (memori tersedia).
+   - Di bawah tile: "Beban sistem 20,9 · 20,7 · 20,0" + `loadBaseline` → "· biasanya 18–22" dengan nada K6, atau (tanpa
+     baseline) "· nilai biasanya muncul setelah 1 hari pemantauan". Tombol info `Popover` ("Di Android angka ini mencakup
+     proses sistem dan semua aplikasi HP, jadi biasanya tinggi. Yang penting adalah perubahan dari nilai biasanya."),
+     lalu "Waktu aktif HP 3 hari 4 jam".
+4. **Hitungan**: Situs, Layanan, Aplikasi, Domain. Tiap kartu adalah tautan berisi jumlah + badge ("Semua berjalan" /
+   "1 mati" / "1 perlu dicek") dari `problems` per kind. Bagian `unavailable` → "Tidak bisa dibaca".
+5. **Cadangan**: satu baris `KeyValue`, atau badge problem.
+6. **Notifikasi**:
+   - `ok` → "Notifikasi Telegram aktif";
+   - `not_configured` → "Notifikasi belum diatur. Tanpa notifikasi, masalah baru terlihat saat kamu membuka panel." +
+     "Atur di Pengaturan" (super_admin) / "Minta Super Admin mengaturnya" (admin);
+   - `failing` → ditangani `alerts_failing`.
+7. **Aktivitas terbaru**: 5 entri; "Lihat semua" hanya untuk super_admin.
+8. **Riwayat masalah** (W4): 5 event tertutup terbaru ("postgres mati · 12 mnt · kemarin 21.40") + "Lihat riwayat" →
+   `/panel/problems` (`DataTable` + paginasi dari `GET /panel/problems/history`; kosong: "Belum ada masalah dalam 30 hari
+   terakhir.").
 
-1. `PageHeader` "Ringkasan", meta "Diperbarui 12 dtk lalu" (`generatedAt`). Mode demo → `StatusBadge tone="warning"`
-   "Mode demo" di `actions` + kalimat `fakeMode` di `description`.
-2. **Strip masalah** (`Section` tanpa judul bila kosong):
-   - Kosong → satu baris `StatusBadge tone="success"` "Semua sehat" + "dicek 40 dtk lalu" (`sampledAt`).
-   - Ada → daftar `<ul>`; tiap baris: `StatusBadge` ("Gawat"/"Peringatan"), judul (`problem.copy` title), detail satu
-     kalimat, "sejak 12 mnt" (`RelativeTime` dari `since`), tautan "Lihat" ke `href` (+ "Lihat log" untuk app/service).
-     Danger dulu. Maks 5 baris di HP, sisanya "Tampilkan N lainnya" (disclosure).
-   - Region `sr-only` `aria-live="polite"` hanya diperbarui bila himpunan `id` berubah: "1 masalah baru: Layanan
-     postgres mati." / "Masalah selesai: …". Tidak diumumkan tiap poll.
-3. **Tile perangkat** `grid grid-cols-2 lg:grid-cols-4 gap-2` dengan `StatTile` (tinggi ±76 px, 2×2 ≤ 170 px di 390 px):
-   - Baterai: value "88%", hint "Tidak dicas" (nada warning bila `unplugged`; danger bila `battery_low`), "Sedang dicas",
-     "Dicolok, tidak mengisi" (netral, `NOT_CHARGING`), "Penuh". `null` → value "–", hint "Tidak tersedia
-     (pasang Termux:API)".
-   - Suhu: "38,0 °C"; `null` → "Tidak tersedia". Nada dari ambang yang sama dengan server (45/50).
-   - Memori: value "4,1 GB tersedia", progress = terpakai %, `thresholds={{ warn: 90, danger: 97 }}`, hint "dari 11,0 GB".
-   - Penyimpanan: value "170,3 GB bebas", progress terpakai %, `thresholds={{ warn: 90, danger: 95 }}` (= aturan
-     server 10%/5% bebas), hint "dari 232,0 GB".
-   - Di bawah grid, satu baris teks kecil: "Beban sistem 20,9 · 20,7 · 20,0" + (baseline) "· biasanya 18–22" dengan
-     nada dari K4, atau (tanpa baseline) "· nilai biasanya muncul setelah 1 hari pemantauan". Tombol ikon info
-     (`aria-label="Tentang beban sistem"`, ≥ 44 px di HP) membuka `Popover`: "Di Android angka ini mencakup proses sistem
-     dan semua aplikasi HP, jadi biasanya tinggi. Yang penting adalah perubahan dari nilai biasanya." Lalu "Waktu aktif
-     HP 3 hari 4 jam".
-4. **Hitungan resource** `grid grid-cols-2 lg:grid-cols-4`: Situs, Layanan, Aplikasi, Domain — tiap kartu tautan
-   (`Link`, fokus terlihat) berisi jumlah + `StatusBadge`: "Semua berjalan" (success) / "1 mati" (danger) / "1 perlu
-   dicek" (warning), dihitung dari `problems` per `kind`. Bagian `unavailable` → "Tidak bisa dibaca".
-5. **Cadangan** (satu baris `KeyValue`): "Cadangan terakhir: berhasil · 6 jam lalu · berikutnya 03.00", atau badge
-   danger/warning bila ada problem backup; `null` → "Status cadangan tidak bisa dibaca".
-6. **Notifikasi** (satu baris): `ok` → "Notifikasi Telegram aktif"; `not_configured` → "Notifikasi belum diatur. Tanpa
-   notifikasi, masalah baru terlihat saat kamu membuka panel." + tautan "Atur di Pengaturan" (super_admin) atau
-   "Minta Super Admin mengaturnya" (admin); `failing` → ditangani problem `alerts_failing`.
-7. **Aktivitas terbaru**: 5 entri audit (aktor, aksi, target, `RelativeTime`), tautan "Lihat semua" ke `/dev/audit`
-   **hanya untuk super_admin** (halaman audit super_admin). Kosong → "Belum ada aktivitas."
-8. **Riwayat masalah** (gelombang 3): 5 event tertutup terbaru + "Lihat riwayat" → `/panel/problems` (DataTable +
-   `pagination`).
-
-States: loading pertama = skeleton strip + 4 tile + 4 kartu; error total (401/network tanpa data) = `ErrorState` dengan
-Coba lagi; partial = per bagian (§4.2 langkah 5).
+States: skeleton pertama; `ErrorState` bila gagal tanpa data; partial per bagian.
 
 ### 5.2 Layanan (`/panel/services`)
 
-`PageHeader` "Layanan", deskripsi "Layanan runit yang menjalankan panel, tunnel, database, dan aplikasi." Poll 10 dtk.
-`DataTable` kolom: **Nama** (`primary`, font mono, badge "Inti" bila protected), **Status** (§5.6 kosakata), **Sejak**
-("aktif 3 jam" / "mati 33 jam" dari `uptimeSec`/`downSec`), **PID** (`hideOnMobile`). `rowTone` danger untuk
-`service_down`. `rowActions`: tombol utama (Mulai / Mulai ulang) + menu ⋯ (Hentikan, Lihat log). Urutan: bermasalah,
-lalu alfabetis. Kosong: "Belum ada layanan runit. Panel membaca layanan dari `$PREFIX/var/service`." Error 502: "Daftar
-layanan tidak bisa dibaca. Coba lagi; bila terus gagal, cek runit lewat SSH."
+Poll 10 dtk. `DataTable`, kolom:
 
-Tier konfirmasi:
+- **Nama** (mono, badge "Inti");
+- **Status** (kunci vocab);
+- **Sejak** ("aktif 3 jam" / "mati 33 jam" / "berulang kali dimulai ulang" bila `service_crash_loop`);
+- **PID** (disembunyikan di HP).
+
+`actions`: tombol utama + ⋯. Urutan: bermasalah dulu. Kosong: "Belum ada layanan runit. Panel membaca layanan dari
+`$PREFIX/var/service`." Error 502: "Daftar layanan tidak bisa dibaca. Coba lagi; bila terus gagal, cek runit lewat SSH."
 
 | Aksi        | Biasa   | Protected (`sshd`, `pm2`, `postgres`) | `panel`, `cloudflared` |
 | ----------- | ------- | ------------------------------------- | ---------------------- |
-| Mulai       | none    | none                                  | none                   |
+| Mulai       | –       | –                                     | –                      |
 | Mulai ulang | confirm | confirm + akibat                      | confirm + overlay §4.4 |
-| Hentikan    | confirm | typed (ketik nama)                    | nonaktif, alasan       |
+| Hentikan    | confirm | typed                                 | nonaktif + alasan      |
 
-Teks akibat per layanan (`id.panel.serviceImpact`): `pm2` "Semua aplikasi ikut berhenti; situs tidak bisa diakses
-sampai pm2 dan aplikasinya berjalan lagi." · `postgres` "Situs yang memakai database tidak bisa diakses sampai
-postgres berjalan lagi." · `sshd` "Sesi SSH yang terbuka terputus dan kamu tidak bisa masuk lewat SSH sampai sshd
-dijalankan lagi." · `cloudflared` (sudah ada `tunnelWarning`) · `panel` "Halaman ini terputus ±10–30 dtk lalu tersambung
-lagi." Alasan lockout: "Menghentikan {name} memutus akses ke panel ini, dan panel tidak bisa menyalakannya lagi. Hentikan
-lewat SSH bila memang perlu."
+Teks akibat (`id.panel.serviceImpact`):
+
+| Layanan       | Teks                                                                                                                                        |
+| ------------- | ------------------------------------------------------------------------------------------------------------------------------------------- |
+| `pm2`         | "Semua aplikasi ikut berhenti; situs tidak bisa diakses sampai pm2 dan aplikasinya berjalan lagi."                                          |
+| `postgres`    | "Situs yang memakai database tidak bisa diakses sampai postgres berjalan lagi."                                                             |
+| `sshd`        | "Kamu tidak bisa masuk lewat SSH sampai sshd dijalankan lagi (sesi yang sudah terbuka biasanya tetap jalan)." (C24; diverifikasi di HP uji) |
+| `cloudflared` | `tunnelWarning`                                                                                                                             |
+| `panel`       | "Halaman ini terputus ±10–30 dtk lalu tersambung lagi."                                                                                     |
+
+Alasan lockout: "Menghentikan {name} memutus akses ke panel ini, dan panel tidak bisa menyalakannya lagi. Hentikan lewat
+SSH bila memang perlu."
 
 ### 5.3 Aplikasi (`/panel/apps`)
 
-`PageHeader` "Aplikasi", deskripsi "Aplikasi yang dijalankan pm2." Poll 10 dtk. `DataTable` kolom: **Nama** (`primary`),
-**Status**, **Situs** (tautan ke `/panel/sites/<site>` atau "–"), **Memori** ("62 MB", `align="right"`), **Waktu aktif**,
-**Dimulai ulang** ("4×", nada warning bila `app_crash_loop`), **Port** (`hideOnMobile`), **CPU** (`hidden` bila semua
-`cpu === null`). `rowActions` seperti Layanan; Hentikan app milik situs: confirm dengan "Situs {site} tidak bisa diakses
-sampai aplikasinya dimulai lagi." Modul pm2 (`module: true`) tidak masuk tabel utama; di bawahnya `<details>` "Modul pm2
-(1)" berisi daftar ringkas tanpa aksi. `pm2_unavailable` → `ErrorState` "pm2 tidak berjalan. Semua aplikasi ikut tidak
-berjalan." + tombol tautan "Buka Layanan". Kosong (pm2 jalan, 0 app): "Belum ada aplikasi. Aplikasi muncul setelah kamu
-membuat situs atau menambahkannya ke `ecosystem.config.js`."
+Poll 10 dtk. Kolom:
+
+- **Nama**;
+- **Status**;
+- **Situs** (tautan);
+- **Memori**;
+- **Waktu aktif**;
+- **Dimulai ulang** (nada warning bila crash loop);
+- **Port** (disembunyikan di HP);
+- **CPU**: kolom ini tidak ikut dalam array bila semua `cpu === null`.
+
+Hentikan app milik situs: confirm, dengan teks "Situs {site} tidak bisa diakses sampai aplikasinya dimulai lagi."
+Modul pm2 tampil di `<details>` "Modul pm2 (n)" tanpa aksi. `pm2_unavailable` → `ErrorState` per `reason`
+("pm2 tidak berjalan. Semua aplikasi ikut tidak berjalan." + "Buka Layanan"). Kosong: "Belum ada aplikasi. Aplikasi
+muncul setelah kamu membuat situs atau menambahkannya ke `ecosystem.config.js`."
 
 ### 5.4 Domain (`/panel/domains`)
 
-`PageHeader` "Domain", deskripsi "Domain dari tunnel cloudflared dan hasil cek terakhirnya." Poll 30 dtk. `DataTable`
-kolom: **Domain** (`primary`, tautan `target="_blank" rel="noopener"` dengan `aria-label` "Buka {host} di tab baru"),
-**Tujuan** ("Situs blog · aplikasi blog-app" / "Panel Termux" / "Layanan lain (localhost:8080)" / "Tanpa tujuan"),
-**Status** (badge + penjelasan satu kalimat, lihat tabel), **Respons** ("85 ms"), **24 cek terakhir** (strip 30 batang
-2×12 px: hijau sehat, merah gagal, abu belum dicek; `role="img"` `aria-label` "28 dari 30 cek terakhir sehat";
-`hideOnMobile` → di HP diganti teks "28/30 sehat"), **Dicek** (`RelativeTime`). `rowActions`: "Cek ulang" (spinner,
-nonaktif 10 dtk setelah ditekan; 429 → toast "Tunggu sebentar sebelum mengecek lagi.").
+Poll 30 dtk. Kolom:
 
-Penjelasan status (fungsi murni `domainVerdict(health)` di `panel.status.ts`, menggantikan `healthTone`):
+- **Domain** (tautan tab baru, `aria-label`);
+- **Tujuan** ("Situs blog · aplikasi blog-app" / "Panel Termux" / "Layanan lain (localhost:8080)" / "Tanpa tujuan");
+- **Status** (badge dari `domainVerdict` + alasan satu kalimat);
+- **Respons**;
+- **30 cek terakhir** (strip heartbeat dari `Domain.recent`, W4): batang 2×12 px hijau/merah/abu,
+  `role="img"` `aria-label` "28 dari 30 cek terakhir sehat"; di HP diganti teks "28/30 sehat";
+- **Dicek** (`RelativeTime`).
 
-| Kondisi                 | Label / nada                  | Penjelasan                                                                                                                             |
-| ----------------------- | ----------------------------- | -------------------------------------------------------------------------------------------------------------------------------------- |
-| `checkedAt null`        | Belum dicek / neutral         | "Cek pertama berjalan dalam 1 mnt."                                                                                                    |
-| 2xx–3xx                 | Sehat / success               | –                                                                                                                                      |
-| 401, 403                | Butuh login / info            | "Domain menjawab, tapi meminta login (mungkin Cloudflare Access)."                                                                     |
-| 4xx lain                | Menjawab {status} / info      | "Aplikasi berjalan, tetapi halaman utama menjawab {status}."                                                                           |
-| 5xx, `failures < 3`     | Tidak stabil / warning        | "Gagal {n}× berturut-turut. Ditandai bermasalah setelah 3×."                                                                           |
-| 502/504, `failures ≥ 3` | Tidak sehat / danger          | `local` ada → "Aplikasi di HP menjawab {local}, jadi masalahnya di tunnel." · `local` null → "Aplikasi di port {port} tidak menjawab." |
-| 530, `failures ≥ 3`     | Tunnel terputus / danger      | "Cloudflare tidak terhubung ke tunnel cloudflared di HP."                                                                              |
-| `null`, `failures ≥ 3`  | Tidak bisa dijangkau / danger | sama dengan baris 502 untuk `local`                                                                                                    |
-| app `stopped`           | Aplikasi dihentikan / neutral | "Aplikasi {app} sengaja dihentikan."                                                                                                   |
-| wildcard                | Tidak dicek / neutral         | "Domain wildcard tidak dicek otomatis."                                                                                                |
+`actions`: "Cek ulang" (nonaktif 10 dtk; 429 → "Tunggu sebentar sebelum mengecek lagi.").
+
+| Kondisi                                | Kunci vocab     | Alasan                                                                                                                              |
+| -------------------------------------- | --------------- | ----------------------------------------------------------------------------------------------------------------------------------- |
+| `checkedAt null`                       | `unchecked`     | "Cek pertama berjalan dalam 1 mnt."                                                                                                 |
+| 2xx–3xx                                | `healthy`       | –                                                                                                                                   |
+| 401, 403                               | `auth_required` | "Domain menjawab, tapi meminta login (mungkin Cloudflare Access)."                                                                  |
+| 4xx lain                               | `healthy`       | "Aplikasi berjalan, tetapi halaman utama menjawab {status}."                                                                        |
+| gagal, `failures < 3`                  | `unstable`      | "Gagal {n}× berturut-turut. Ditandai bermasalah setelah 3×."                                                                        |
+| 502/504/`null`, `failures ≥ 3`         | `unhealthy`     | `local` ada → "Aplikasi di HP menjawab {local}, jadi masalahnya di tunnel." · tidak ada → "Aplikasi di port {port} tidak menjawab." |
+| 530, `failures ≥ 3`                    | `tunnel_down`   | "Cloudflare tidak terhubung ke tunnel cloudflared di HP."                                                                           |
+| ditahan (cloudflared/app/pm2/internet) | sesuai kondisi  | "Penyebabnya: {judul problem penahan}."                                                                                             |
+| app `stopped`                          | `stopped`       | "Aplikasi {app} sengaja dihentikan."                                                                                                |
+| wildcard                               | `unchecked`     | "Domain wildcard tidak dicek otomatis."                                                                                             |
 
 Kosong: "Belum ada domain. Tambahkan domain dari halaman situs, atau tulis aturan di `~/.cloudflared/config.yml`."
 
 ### 5.5 Database (`/panel/databases`)
 
-`PageHeader` "Database" + tombol muat ulang (tanpa `live`). `DataTable` kolom: **Nama** (`primary`, mono), **Situs**
-(tautan / "–"), **Pemilik**, **Ukuran** (`align="right"`), **Cadangan terakhir** (`RelativeTime` / "Belum pernah",
-nada warning bila > 36 jam). Error/kosong §4.8.
+Kolom: **Nama**, **Situs**, **Pemilik**, **Ukuran**, **Cadangan terakhir** (warning bila > 36 jam). Error dan kosong
+mengikuti §4.8.
 
-### 5.6 Kosakata status (`id.panel`)
+### 5.6 Kosakata status
 
-| Kondisi                   | Label            | Nada         |
-| ------------------------- | ---------------- | ------------ |
-| service `run`             | Berjalan         | success      |
-| service `down`, `!wantUp` | Dihentikan       | neutral      |
-| service `down`, `wantUp`  | Mati tak terduga | danger       |
-| service `finish`          | Sedang berhenti  | warning      |
-| service `unknown`         | Tidak diketahui  | neutral      |
-| app `online`              | Berjalan         | success      |
-| app `stopped`             | Dihentikan       | neutral      |
-| app `errored`             | Bermasalah       | danger       |
-| app `launching`           | Memulai…         | info (pulse) |
-| app `unknown`             | Tidak diketahui  | neutral      |
+Memakai `status.vocab` 01. Tidak ada tabel sendiri (X8). Kunci tambahan yang diminta ada di §3.9. String lama
+`refreshing`, `confirmBody`, `done`, `serviceStates`, dan `appStatuses` dihapus dari `id.panel.ts`.
 
-String "lama" `refreshing`, `confirmBody`, `done` dihapus dari `id.panel.ts` bersama pemakainya (R2-G21). `load` diganti
-"Beban sistem (1/5/15 mnt)".
+### 5.7 Copy masalah (`problem.copy.ts`)
 
-### 5.7 Copy masalah (`src/shared/problem.copy.ts`) — `title(p)` dan `detail(p)`
+| code                           | title                                            | detail                                                                                |
+| ------------------------------ | ------------------------------------------------ | ------------------------------------------------------------------------------------- |
+| `service_down`                 | Layanan {target} mati                            | Seharusnya berjalan. Mati sejak {durasi}.                                             |
+| `service_crash_loop`           | Layanan {target} terus dimulai ulang             | runit menyalakannya lagi tapi langsung berhenti. Lihat log {target}.                  |
+| `pm2_unavailable`              | pm2 tidak berjalan                               | Semua aplikasi ikut tidak berjalan. Mulai layanan pm2.                                |
+| `app_errored`                  | Aplikasi {target} bermasalah                     | pm2 berhenti mencoba setelah {restarts}× gagal. Lihat log stderr.                     |
+| `app_crash_loop`               | Aplikasi {target} terus dimulai ulang            | {restarts10m}× dalam 10 mnt terakhir. Lihat log stderr.                               |
+| `domain_unreachable`           | {target} tidak bisa dijangkau                    | (alasan §5.4)                                                                         |
+| `domain_http_error`            | {target} menjawab HTTP {status}                  | (alasan §5.4)                                                                         |
+| `internet_down`                | HP tidak terhubung ke internet                   | Semua domain tidak bisa dijangkau dari HP. Notifikasi terkirim setelah koneksi pulih. |
+| `backup_not_configured`        | Cadangan belum diatur (info)                     | Tanpa cadangan, data situs hilang bila HP rusak. Atur penyimpanan R2/S3.              |
+| `backup_failed`                | Cadangan terakhir gagal                          | Lihat detailnya di halaman Cadangan.                                                  |
+| `backup_partial`               | Cadangan terakhir hanya sebagian berhasil        | Lihat item yang gagal di halaman Cadangan.                                            |
+| `backup_stale`                 | Tidak ada cadangan dalam {hours} jam terakhir    | Cadangan harian mungkin tidak berjalan.                                               |
+| `backup_item_stale`            | Cadangan {name} sudah {hours} jam tidak berhasil | Item ini gagal di cadangan terakhir. Lihat halaman Cadangan.                          |
+| `backup_status_error`          | Status cadangan tidak bisa dibaca                | Buka Kesehatan sistem untuk melihat penyebabnya.                                      |
+| `key_mismatch`                 | Kunci data tidak cocok                           | Pengaturan rahasia tidak bisa dibuka. Buka Kesehatan sistem → Kunci data.             |
+| `access_not_seen`              | Cloudflare Access tidak terlihat                 | Panel dibuka tanpa melewati Cloudflare Access. Periksa aturan Access.                 |
+| `disk_low`                     | Penyimpanan hampir penuh                         | Tinggal {freePct}% ({freeBytes}) bebas.                                               |
+| `battery_low`                  | Baterai tinggal {percent}% dan tidak mengisi     | Server ikut mati bila baterai habis. Colokkan charger.                                |
+| `battery_hot`                  | Baterai panas ({temperatureC} °C)                | Pindahkan HP ke tempat sejuk atau lepas casingnya.                                    |
+| `alerts_failing`               | Notifikasi Telegram gagal terkirim               | per `reason` (tabel di bawah)                                                         |
+| `site_job_failed`              | Perubahan situs {target} belum selesai           | Buka perubahan ini untuk membersihkan atau mengulang.                                 |
+| `host_rebooted`                | HP baru saja menyala ulang                       | Aktif {uptimeMin} mnt. Periksa apakah semua layanan sudah berjalan.                   |
+| `panel_restarted_unexpectedly` | Panel sempat berhenti tak terduga                | Panel tidak dimatikan dengan rapi (mungkin dihentikan Android).                       |
 
-| code                    | title                                         | detail                                                                                                                                                                                                                                                                        |
-| ----------------------- | --------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `service_down`          | Layanan {target} mati                         | Seharusnya berjalan. Mati sejak {downSec→durasi}.                                                                                                                                                                                                                             |
-| `pm2_unavailable`       | pm2 tidak berjalan                            | Semua aplikasi ikut tidak berjalan. Mulai layanan pm2.                                                                                                                                                                                                                        |
-| `app_errored`           | Aplikasi {target} bermasalah                  | pm2 berhenti mencoba setelah {restarts}× gagal. Lihat log stderr.                                                                                                                                                                                                             |
-| `app_crash_loop`        | Aplikasi {target} terus dimulai ulang         | {restarts10m}× dalam 10 mnt terakhir. Lihat log stderr.                                                                                                                                                                                                                       |
-| `domain_unreachable`    | {target} tidak bisa dijangkau                 | (lihat tabel §5.4 untuk `local`)                                                                                                                                                                                                                                              |
-| `domain_http_error`     | {target} menjawab HTTP {status}               | (lihat tabel §5.4)                                                                                                                                                                                                                                                            |
-| `internet_down`         | HP tidak terhubung ke internet                | Semua domain tidak bisa dijangkau dari HP. Notifikasi terkirim setelah koneksi pulih.                                                                                                                                                                                         |
-| `backup_not_configured` | Cadangan belum diatur                         | Tanpa cadangan, data situs hilang bila HP rusak. Atur penyimpanan R2/S3.                                                                                                                                                                                                      |
-| `backup_failed`         | Cadangan terakhir gagal                       | Lihat detailnya di halaman Cadangan.                                                                                                                                                                                                                                          |
-| `backup_partial`        | Cadangan terakhir hanya sebagian berhasil     | Lihat item yang gagal di halaman Cadangan.                                                                                                                                                                                                                                    |
-| `backup_stale`          | Tidak ada cadangan dalam {hours} jam terakhir | Cadangan harian mungkin tidak berjalan.                                                                                                                                                                                                                                       |
-| `backup_status_error`   | Status cadangan tidak bisa dibaca             | Pengaturan cadangan tidak bisa dibuka, mungkin kunci data berubah. Isi ulang di Pengaturan.                                                                                                                                                                                   |
-| `disk_low`              | Penyimpanan hampir penuh                      | Tinggal {freePct}% ({freeBytes→ukuran}) bebas.                                                                                                                                                                                                                                |
-| `battery_unplugged`     | HP tidak sedang dicas                         | Baterai {percent}%. Server ikut mati bila baterai habis. Colokkan charger.                                                                                                                                                                                                    |
-| `battery_low`           | Baterai tinggal {percent}% dan tidak dicas    | Colokkan charger sekarang agar server tidak mati.                                                                                                                                                                                                                             |
-| `battery_hot`           | Baterai panas ({temperatureC} °C)             | Pindahkan HP ke tempat sejuk atau lepas casingnya.                                                                                                                                                                                                                            |
-| `alerts_failing`        | Notifikasi Telegram gagal terkirim            | per `reason`: token → "Token bot ditolak Telegram. Periksa token di Pengaturan." · chat → "Chat tujuan tidak ditemukan. Kirim pesan ke bot, lalu pilih chat lagi." · forbidden → "Bot diblokir atau dikeluarkan dari grup." · lain → "Telegram tidak bisa dijangkau dari HP." |
+Teks `alerts_failing` per `reason`:
 
-Recovery Telegram generik: "PULIH · {title} · berlangsung {durasi}". `errorCodes` baru di `id.panel`: `lockout`,
-`confirm_required` ("Ketik nama layanan untuk menghentikannya."), `job_running` ("Perubahan situs sedang berjalan.
-Tunggu sampai selesai, lalu coba lagi."), `pm2_unavailable`, `postgres_down`, `too_soon`, `invalid_cursor` ("Posisi log
-tidak valid. Muat ulang log.") dan semua `AlertErrorCode` + `alerts_not_configured`, `alerts_token_missing`,
-`telegram_webhook_set` (untuk PLAN/05).
+| reason                    | Teks                                                                     |
+| ------------------------- | ------------------------------------------------------------------------ |
+| `telegram_token_invalid`  | "Token bot ditolak Telegram. Periksa token di Pengaturan."               |
+| `telegram_chat_not_found` | "Chat tujuan tidak ditemukan. Kirim pesan ke bot, lalu pilih chat lagi." |
+| `telegram_forbidden`      | "Bot diblokir atau dikeluarkan dari grup."                               |
+| `telegram_conflict`       | "Bot sedang dipakai aplikasi lain (webhook)."                            |
+| lainnya                   | "Telegram tidak bisa dijangkau dari HP."                                 |
 
-### 5.8 Log (`/panel/services/:name/log`, `/panel/apps/:name/log`)
+Teks pulih generik: "PULIH · {title} · berlangsung {durasi}".
 
-`PageHeader` judul "Log {name}", breadcrumb Layanan/Aplikasi › {name} (menggantikan tombol "Kembali" manual).
-`LogViewer` (PLAN/01) mengisi sisa tinggi viewport; `toolbarStart` = segmented stdout/stderr (hanya app); `notice` =
-"Log ditampilkan apa adanya; pola rahasia umum (kata sandi di URL database, `*_TOKEN=`, `*_SECRET=`, `Bearer …`)
-disamarkan." Selektor jumlah baris dihapus (tetap 500 awal, follow menambah). Kosong: teks `log.empty` yang ada.
-Stderr: baris berlatar `danger-subtle` (stream `err` seluruhnya).
+`errorCodes` baru: `lockout`, `confirm_required`, `job_running` ("Perubahan situs, cadangan, atau pemulihan sedang
+berjalan. Tunggu sampai selesai, lalu coba lagi."), `not_supervised` ("Panel tidak berjalan di bawah runit, jadi tidak
+bisa memulai ulang dirinya sendiri."), `pm2_unavailable`, `postgres_down`, `too_soon`, `invalid_cursor`, semua
+`AlertErrorCode`, `alerts_not_configured`, dan `alerts_token_missing` (dipakai 05).
 
-Redaksi server (`log.parse.ts`), diterapkan pada tail, follow, dan unduh:
-`(postgres(?:ql)?|mysql|mariadb|redis|rediss|mongodb(?:\+srv)?|amqps?)://[^:/\s@]+:[^@\s]+@` → `$1://***:***@` ·
-`\b([A-Z0-9_]*(?:TOKEN|SECRET|PASSWORD|PASSWD|API_KEY|PRIVATE_KEY|ACCESS_KEY)[A-Z0-9_]*)\s*[=:]\s*\S+` → `$1=***` ·
-`\bBearer\s+[A-Za-z0-9._~+/=-]{8,}` → `Bearer ***` · `\b\d{6,16}:[A-Za-z0-9_-]{30,}\b` → `***` (token bot).
-Parse svlogd: `^(\d{4}-\d{2}-\d{2})_(\d{2}:\d{2}:\d{2})\.(\d+) ` → `at = "<tanggal>T<jam>.<ms>Z"`, `text` = sisa baris.
+### 5.8 Log
 
-### 5.9 Interval polling
+`PageHeader` "Log {name}" + breadcrumb. `LogViewer` (01): `streams` stdout/stderr untuk app. Catatan: "Log ditampilkan
+apa adanya; pola rahasia umum disamarkan."
 
-| Halaman / pemakai               | Interval saat terlihat  | Catatan                           |
-| ------------------------------- | ----------------------- | --------------------------------- |
-| Ringkasan                       | 10 dtk                  | cache server → `jlist` ≤ 1/15 dtk |
-| Layanan, Aplikasi               | 10 dtk                  | sama                              |
-| Domain                          | 30 dtk                  | probe 60 dtk oleh sampler         |
-| Database                        | tidak                   | tombol muat ulang                 |
-| Log follow                      | 3 dtk                   | baca file saja, tanpa `jlist`     |
-| Riwayat masalah, metrik         | tidak                   |                                   |
-| Badge nav (`/panel/status`, P2) | 60 dtk                  | tanpa perintah sistem             |
-| Overlay restart                 | 2 dtk, maks 90 dtk      |                                   |
-| Tersembunyi                     | berhenti semua          | `useApiQuery` PLAN/01             |
-| Error                           | backoff 10→20→40→60 dtk |                                   |
+Redaksi server (`log.redact.ts`), diuji di scratchpad:
 
-**Biaya diharapkan (diukur ulang di kriteria penerimaan):** idle (tanpa tab) ≈ 0,5 dtk CPU `jlist` + ±0,05 dtk lain per
-menit ≈ **0,9% satu inti**; satu tab Ringkasan ≈ +1,7% (jlist tiap ±20 dtk) ≈ **2,6%**; N tab ≈ sama. Request log
-polling tidak lagi tertulis ke flash.
+| Pola                                                                                                                                         | Ganti             |
+| -------------------------------------------------------------------------------------------------------------------------------------------- | ----------------- |
+| `(postgres(?:ql)?\|mysql\|mariadb\|rediss?\|mongodb(?:\+srv)?\|amqps?)://[^:/\s@]+:[^@\s]+@`                                                 | `$1://***:***@`   |
+| `/(["']?)([a-z0-9_]*(?:token\|secret\|password\|passwd\|api_?key\|private_?key\|access_?key)[a-z0-9_]*)\1(\s*[=:]\s*)(["']?)[^"'\s,}]+\4/gi` | `$1$2$1$3$4***$4` |
+| `\bBearer\s+[A-Za-z0-9._~+/=-]{8,}`                                                                                                          | `Bearer ***`      |
+| `\b\d{6,16}:[A-Za-z0-9_-]{30,}\b`                                                                                                            | `***`             |
+
+Hasil uji yang dicatat: `{"password":"x1"}` → `***`; `"apiKey": "abc-123"` → `***`; `token=abc` → `***`;
+`tokenizer ready` tetap.
+
+### 5.9 Interval polling dan biaya
+
+| Pemakai                      | Interval saat terlihat  | Catatan                             |
+| ---------------------------- | ----------------------- | ----------------------------------- |
+| Ringkasan, Layanan, Aplikasi | 10 dtk                  | `jlist` ≤ 1 per 15 dtk berkat cache |
+| Domain                       | 30 dtk                  | probe 60 dtk oleh sampler           |
+| Database                     | –                       | tombol muat ulang                   |
+| Log follow                   | 3 dtk                   | baca file saja                      |
+| Overlay restart              | 2 dtk                   | panel 130 dtk, cloudflared 90 dtk   |
+| Tersembunyi / error          | berhenti / backoff (01) |                                     |
+
+**Biaya diharapkan** (dengan jlist 0,54–0,66 dtk):
+
+- idle ≈ **1,1%** satu inti (jlist/menit + sv + probe TLS + SQLite);
+- satu tab Ringkasan ≈ **3%**; N tab ≈ sama;
+- biaya JVM Termux:API untuk baterai (1× per 2 mnt) **tidak terukur dari panel**.
 
 ---
 
@@ -884,112 +1034,110 @@ polling tidak lagi tertulis ke flash.
 
 **Unit (bun test)**
 
-- [ ] `tests/panel.problems.test.ts`: tiap baris tabel §3.1 punya kasus positif dan negatif; app `stopped` → tidak ada
-      problem; domain app `stopped` → tidak ada problem; domain 1–2 gagal → tidak ada problem, 3 gagal → ada; 4xx → tidak
-      ada; semua null + konektivitas gagal → hanya `internet_down`; `battery_low` menggantikan `battery_unplugged`;
-      `NOT_CHARGING` dicolok → tidak ada; `pm2_unavailable` menggantikan `service_down:pm2`; urutan deterministik.
-- [ ] `tests/panel.parsers.test.ts`: `downSec` dari `down: …: 120971s`; `plugged`/`health`; suhu hilang → `null`;
-      `pmx_module` → `module`; adapter termux `cpu === null`.
-- [ ] `tests/log.parse.test.ts`: prefix svlogd → ISO UTC; baris tanpa prefix → `at: null`; tiap pola redaksi (dan
-      kalimat biasa tidak tersentuh); cursor: append, `reset` saat ino beda / size < offset, `truncated` > 256 KiB.
-- [ ] `tests/monitor.snapshot.test.ts`: dua `get()` bersamaan = satu panggilan adapter; nilai lama dijawab saat refresh
-      berjalan; `invalidate` memaksa refresh; bagian gagal → `unavailable` tanpa melempar.
-- [ ] `tests/monitor.sampler.test.ts` (jam palsu): tick menulis 1 `metric_sample` + N `check_result`; tick tumpang
-      tindih dilewati; retensi menghapus > 7 hari; seed counter dari DB setelah "restart"; `loadBaseline` null < 24 jam.
-- [ ] `tests/alert.engine.test.ts`: delay per kode; satu digest untuk banyak perubahan; cooldown 15 mnt; eskalasi
-      menembus cooldown; pengingat 24 jam; pulih hanya bila pernah diberitahukan; `internet_down` ≥ 5 mnt kirim pulih;
-      restart (state dari DB) tidak kirim ulang; plafon 20/jam; gagal kirim tidak menandai.
-- [ ] `tests/telegram.client.test.ts` (fetch palsu): pemetaan 401/400/403/429/5xx/timeout; **token tidak muncul** di
-      pesan error dan di `log` ring; escape HTML; potong > 3.500 karakter.
-- [ ] `tests/web.panel.test.ts`: `domainVerdict` semua baris tabel §5.4; kosakata §5.6; `problem.copy` setiap `code`
-      punya title+detail (test iterasi atas daftar kode); tier konfirmasi per layanan.
-- [ ] `tests/db.migrate.test.ts` tetap hijau; migration bisa dijalankan dua kali (IF NOT EXISTS).
+- [ ] `panel.problems.test.ts`, kasus per baris tabel §3.1:
+  - kolom "Menahan": cloudflared mati + 3 domain 530 → 1 problem; app errored + domainnya 502 → 1 problem;
+    `pm2_unavailable` menahan semua `app_*`;
+  - app `stopped` → tidak ada problem;
+  - `battery_low`: warning < 25% tidak mengisi (`not_charging` dan `discharging` sama-sama "tidak mengisi"), danger
+    < 15% walau `plugged: usb`; dicabut di 80% → tidak ada problem (A9); setting `off`; problem `info` tidak masuk
+    hitungan/`PanelStatus`/alert;
+    ambang `off`;
+  - `service_crash_loop` butuh 3 tick dengan pid berubah;
+  - `app_crash_loop` mengabaikan restart sengaja; counter turun → reset;
+  - kode 04 dan 03 dari input fixture;
+  - urutan deterministik.
+- [ ] `alert.engine.test.ts`:
+  - pm2 gagal 1 tick → tidak ada pulih/event baru;
+  - baterai `null` → event tetap terbuka;
+  - penahanan tidak menutup;
+  - histeresis 2 tick;
+  - buka-kembali < 15 mnt memakai baris yang sama;
+  - flapping 4 mnt selama 1 jam → ≤ 4 pesan;
+  - pulih tanpa cooldown; eskalasi menembus cooldown; pengingat 24 jam;
+  - `min_severity=danger` + 51→47 °C → tanpa pesan;
+  - teks "pulih saat panel tidak berjalan";
+  - notice sekali kirim dan tetap terkirim setelah gagal pertama;
+  - plafon 20/jam; gagal kirim tidak menandai;
+  - restart (state dari DB) tidak kirim ulang.
+- [ ] `telegram.client.test.ts` (fetch palsu): pemetaan 401/400/400-migrate/403/409/429/5xx/timeout; chat dimigrasi →
+      setting + audit Sistem; **token tidak muncul** di error/ring; escape HTML; potong > 3.500.
+- [ ] `panel.parsers.test.ts`: `downSec`, `status`/`plugged`/`health`, suhu `null`, `module`, `cpu === null`, field 03;
+      `Pm2UnavailableError("service_down")` tanpa memanggil CLI (spy `runTermux`).
+- [ ] `log.redact.test.ts`: semua pola + kasus JSON; cursor append/reset/truncated.
+- [ ] `monitor.snapshot.test.ts`: single-flight, SWR, `patch` langsung terlihat, `at` per bagian.
+- [ ] `monitor.sampler.test.ts` (jam palsu): tumpang tindih dilewati; notice boot dari marker/uptime; retensi
+      `problem_event` 30 hari.
+- [ ] `web.panel.test.ts`: `panel.status-key.ts` (`serviceKey`, `appKey`, `domainVerdict` per baris §5.4); setiap `ProblemCode` punya title+detail (iterasi union);
+      tier per layanan.
+- [ ] `db.migrate.test.ts` (`wkr-db-01`): `0008` idempotent, DB v0.2.x berisi data → 0008.
 
-**Integrasi API (`tests/panel.api.test.ts`, mode fake, DB test)**
+**Integrasi API (mode fake, DB test)**
 
-- [ ] `GET /panel/overview` saat `backup.status` melempar → 200, `backup: null`, `unavailable` berisi `backup`,
-      problem `backup_status_error`.
-- [ ] Stop `postgres` tanpa body → 409 `confirm_required`; dengan `{confirm:"postgres"}` → 200 + audit
-      `meta.confirmTyped`; stop `panel`/`cloudflared` → 409 `lockout`; restart `panel` → 202 `DeferredRestart`,
-      `restartDetached` dipanggil setelah respons (spy).
-- [ ] Aksi saat kunci job PLAN/03 dipegang → 409 `job_running`.
-- [ ] Mutasi tanpa header origin/`X-Requested-With` → ditolak (hotfix).
-- [ ] `POST /dev/alerts/test` sebagai admin → 403; sebagai super_admin tanpa setting → 409; dengan fetch palsu → 200.
-- [ ] `GET …/log/download` → `Content-Disposition`, isi diredaksi, audit `log.download`.
-- [ ] `GET /panel/problems/history?pageSize=101` → 400 atau dibatasi 100 (pola `Page` yang ada).
-- [ ] `request.log`: `GET /api/panel/overview 200` → level debug, tidak masuk ring di produksi; `POST … 409` → info.
+- [ ] `backup.status` melempar `Error` → `backup_status_error`. Melempar `KeyMismatchError` → `key_mismatch`.
+      Keduanya 200.
+- [ ] Stop `postgres` tanpa body → 409 `confirm_required`; dengan `confirm` → 200 + audit.
+- [ ] Stop `panel` → 409 `lockout`.
+- [ ] Restart `panel` saat tidak di bawah runit → 409 `not_supervised`. Dengan `supervise/pid` palsu → 202 lalu
+      `shutdown` dipanggil (spy).
+- [ ] Restart cloudflared → 202 dengan `oldPid`.
+- [ ] Kunci job/backup → 409 `job_running`.
+- [ ] Mutasi tanpa header CSRF → ditolak.
+- [ ] `POST /dev/alerts/test`: admin → 403; tanpa setting → 409; dengan fetch palsu → 200.
+- [ ] Request log: `GET /api/panel/overview 200` → debug, tidak masuk ring produksi; 401 tanpa sesi → debug;
+      `POST … 409` → info.
 
-**UI-QA di browser** (perlu izin owner untuk membuka browser, Rule 1; mode demo lokal + 390 px dan 1280 px, tema terang
-dan gelap)
+**UI-QA di browser** (izin owner, Rule 1; mode demo, 390 px dan 1280 px, terang dan gelap)
 
-- [ ] Ringkasan 390 px: strip masalah + 4 tile terlihat tanpa scroll (≤ 1 layar 844 px tinggi); tile 2×2 ≤ 200 px.
-- [ ] Mode demo memperlihatkan: battery unplugged, 1 app errored, 1 domain gagal, load ±20 dengan teks netral.
-- [ ] Tidak ada "CPU 0%" di mana pun; tidak ada "0 °C".
-- [ ] Layanan: Mulai tanpa dialog; Hentikan `postgres` meminta ketik nama; Hentikan `panel` nonaktif dengan alasan
-      terbaca (bukan hanya `title`).
-- [ ] Restart panel (mode demo: adapter fake mensimulasikan bootId baru setelah 5 dtk) → overlay → tersambung lagi →
-      toast. Matikan jaringan DevTools → overlay error setelah 90 dtk.
-- [ ] Log: follow berhenti saat gulir ke atas; "Baris baru (n)" muncul; layar penuh di HP; salin/unduh bekerja.
-- [ ] Tab disembunyikan 1 mnt → tidak ada request `/api/panel/*` di Network panel.
-- [ ] Pembaca layar (VoiceOver/TalkBack singkat): aria-live hanya bicara saat masalah berubah; strip heartbeat punya
-      label; semua tombol ikon punya `aria-label`; fokus overlay terkunci dan kembali ke tombol semula.
+- [ ] Ringkasan 390 px: strip + 4 tile terlihat tanpa scroll; 2×2 ≤ 200 px.
+- [ ] Demo memperlihatkan baterai 22% tidak mengisi, app errored, domain gagal yang ditahan dengan alasan, load ±20 netral.
+- [ ] Tidak ada "CPU 0%", tidak ada "0 °C".
+- [ ] Mulai tanpa dialog; stop `postgres` typed; stop `panel` nonaktif dengan alasan terbaca.
+- [ ] Overlay restart panel (fake `bootId` baru setelah 5 dtk) dan cloudflared (pid baru). Jaringan dimatikan → overlay
+      error.
+- [ ] Log follow + unduh dari server (audit tercatat).
+- [ ] Sparkline, baseline load (fixture histori 2 hari), strip heartbeat, riwayat masalah, badge nav.
+- [ ] Tab tersembunyi 1 mnt → tidak ada request `/api/panel/*`.
+- [ ] aria-live hanya berbunyi saat masalah berubah; fokus overlay terkunci.
 
 **Di HP (POCO, izin owner, setelah deploy)**
 
-- [ ] `top`/`ps -o time` proses panel: idle 10 mnt ≤ 1,2% satu inti rata-rata; satu tab Ringkasan ≤ 3%.
+- [ ] CPU = selisih `utime+stime+cutime+cstime` dari `/proc/<pid panel>/stat` selama 10 mnt: idle ≤ 1,5%, satu tab
+      ≤ 3,5%. Bila lewat, default interval naik ke 120 dtk.
+- [ ] Nilai `panel.protected_services` yang tersimpan dicek. Bila tersimpan eksplisit tanpa `pm2,postgres`, catatan
+      rilis menyebutkannya (K42).
+- [ ] Cabut charger di 80% → tidak ada notifikasi (A9). Turun ke < 25% tanpa mengisi → "PERINGATAN · Baterai tinggal …"
+      (senyap); colok → "PULIH".
 - [ ] `ls -l panel.db` setelah 24 jam: pertambahan ≤ 1 MB.
-- [ ] Cabut charger → pesan Telegram "PERINGATAN · HP tidak sedang dicas" (senyap) dalam ≤ 8 mnt; colok → "PULIH".
-- [ ] `sv stop` sebuah app uji → tidak ada problem/notifikasi; `pm2 stop` → tidak ada; app crash → notifikasi ≤ 2 mnt.
+- [ ] `pm2 restart` manual 3× → tidak ada notifikasi; app crash → ≤ 2 mnt.
+- [ ] `sv restart panel` dari UI → overlay kembali, tanpa notice "berhenti tak terduga".
+- [ ] Reboot HP (bila owner mengizinkan) → "INFO · HP baru saja menyala ulang".
 
 ---
 
-## 7. Rencana kerja
+## 7. Rencana kerja (mengikuti jadwal global integrasi §5)
 
-Gelombang berurutan; dalam satu gelombang tidak ada file yang dipegang dua worker. "Baris" = perkiraan kode+test.
+| Gelombang | Worker                              | File PLAN/02 (eksklusif di gelombang itu)                                                                                                                                                                                                                                                                           | Ukuran       |
+| --------- | ----------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------ |
+| W0        | `wkr-contracts-00` (bersama)        | `src/shared/monitor.types.ts`, `src/shared/log.types.ts`, `src/shared/panel.types.ts` (aditif), `src/server/monitor/monitor.contract.ts`, union `ApiError` (409 `not_supervised`, 429, 503)                                                                                                                         | ±250         |
+| W1        | `wkr-adapters-01` (bersama, X21)    | `src/server/system/*` sesuai §3.5 (+ kebutuhan 03/04), `tests/panel.parsers.test.ts`                                                                                                                                                                                                                                | ±450 (02+03) |
+| W1        | `wkr-db-01` (bersama, X7, B15)      | `drizzle/0008_monitor.sql` (`metric_sample`, `check_result` `WITHOUT ROWID`, `problem_event`), `src/server/db/schema/monitor.schema.ts`                                                                                                                                                                             | ±120         |
+| W1        | `wkr-settings-01` (bersama, X3, B8) | 7 kunci §3.6 di `SETTING_KEYS`/`settings.service.ts`                                                                                                                                                                                                                                                                | ±50          |
+| W1        | `wkr-mon-rules-01`                  | `src/server/panel/overview.problems.ts`, `src/shared/problem.copy.ts`, `src/server/alerts/{alert.engine,telegram.client,alert.messages}.ts`, `tests/{panel.problems,alert.engine,telegram.client}.test.ts`                                                                                                          | ±1.200       |
+| W1        | `wkr-sites-runner-01` (03)          | titipan: marker `data/clean-shutdown` di `shutdown.ts` (3 baris + test)                                                                                                                                                                                                                                             | ±15          |
+| W2        | `wkr-mon-core-02`                   | `src/server/monitor/{monitor.snapshot,monitor.sampler,monitor.service,monitor.history}.ts` (termasuk tulis + retensi histori, `loadBaseline`), `src/server/system/log.redact.ts`, `tests/{monitor.snapshot,monitor.sampler,monitor.history,log.redact}.test.ts`                                                     | ±950         |
+| W3        | `wkr-mon-api-03`                    | `src/server/panel/panel.service.ts`, `domain.health.ts` (hapus), `src/server/routes/{panel,alerts}.routes.ts` (termasuk `/status`, `/metrics`, `/problems/history`, `…/log/download`), `src/server/http/request.log.ts`, `src/server/log.service.ts`, `tests/{panel.api,alerts.api}.test.ts`                        | ±700         |
+| W3        | `wkr-boot-03` (bersama, X6)         | `boot.ts`: marker + `monitorFor` + start/stop + `bootId`; `api.routes.ts` mount `alerts`                                                                                                                                                                                                                            | ±40          |
+| W3        | `wkr-mon-web-03`                    | `src/web/panel/*` (overview + tiles + problems list, services, apps, domains, databases, log, `restart.overlay.tsx`, control, `panel.status-key.ts`), `src/web/i18n/{id.panel,id.overview}.ts`, `tests/web.panel.test.ts`                                                                                           | ±900         |
+| W4        | `wkr-mon-history-04`                | `src/web/panel/{sparkline,heartbeat.strip,problems.page}.tsx` (baru), integrasi ke overview/domains (file `src/web/panel/*` yang disebut, setelah W3 selesai), route `/panel/problems` lewat `src/web/panel/panel.pages.ts` (01), badge nav (slot `NavItem.badge` 01, poll `/panel/status` 60 dtk), test UI histori | ±550         |
 
-**Gelombang 0 — kontrak (1 worker, kecil)**
+Dokumentasi oleh worker docs tunggal di akhir:
 
-| Worker             | File                                                                                                | Ukuran |
-| ------------------ | --------------------------------------------------------------------------------------------------- | ------ |
-| `wkr-mon-types-00` | `src/shared/panel.types.ts`, `src/shared/monitor.types.ts` (baru), `src/shared/log.types.ts` (baru) | ±250   |
+- README "Pemantauan & notifikasi": cara kerja sampler; biaya CPU jujur (≈1,1% idle); setup Telegram; panel tidak bisa
+  melaporkan dirinya mati (saran monitor luar), tetapi melaporkan reboot/mati tak terduga saat hidup lagi; redaksi log
+  tidak sempurna; ambang baterai (hanya baterai rendah, A9); histori 7 hari ±3 MB dan tulis flash ±70–100 MB/hari.
+- CHANGELOG `[0.3.0]`.
 
-**Gelombang 1 — server inti (paralel; bergantung G0)**
-
-| Worker                | File                                                                                                                                                                                                                                        | Ukuran |
-| --------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------ |
-| `wkr-mon-adapters-01` | `src/server/system/{device.termux,pm2.termux,runit.termux,system.types,system.fake,file.tail}.ts`, `src/server/system/log.parse.ts` (baru), `tests/panel.parsers.test.ts`, `tests/log.parse.test.ts` (baru)                                 | ±500   |
-| `wkr-mon-store-01`    | `src/server/db/schema/monitor.schema.ts` (baru), `src/server/db/schema/index.ts` (1 baris), `drizzle/00NN_monitor.sql`, `drizzle/meta/*`, `drizzle/migrations.js`, `src/server/monitor/monitor.history.ts`, `tests/monitor.history.test.ts` | ±450   |
-| `wkr-mon-rules-01`    | `src/server/panel/overview.problems.ts`, `src/shared/problem.copy.ts` (baru), `tests/panel.problems.test.ts`                                                                                                                                | ±550   |
-| `wkr-mon-alerts-01`   | `src/server/alerts/{alert.engine,telegram.client,alert.messages}.ts` (baru), `tests/alert.engine.test.ts`, `tests/telegram.client.test.ts` (baru)                                                                                           | ±700   |
-
-Migration: orkestrator menetapkan nomor `00NN` sebelum gelombang ini agar tidak bentrok dengan migration PLAN/03/04/05.
-
-**Gelombang 2 — wiring server + halaman (paralel; server bergantung G1; web bergantung G0 + PLAN/01 gelombang komponen)**
-
-| Worker                    | File                                                                                                                                                                                                                                                                                                                                                                                                                        | Ukuran |
-| ------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------ |
-| `wkr-mon-sampler-02`      | `src/server/monitor/{monitor.snapshot,monitor.sampler,monitor.service}.ts` (baru), `src/server/index.ts` (start/stop sampler, `bootId` di `/health`), `src/server/shutdown.ts` (bila perlu idle tambahan), `tests/monitor.snapshot.test.ts`, `tests/monitor.sampler.test.ts`, `tests/server.health.test.ts`                                                                                                                 | ±650   |
-| `wkr-mon-api-02`          | `src/server/panel/panel.service.ts`, `src/server/panel/domain.health.ts` (dihapus/diserap snapshot), `src/server/routes/panel.routes.ts`, `src/server/routes/alerts.routes.ts` (baru), `src/server/routes/api.routes.ts` (1 baris mount), `src/server/http/request.log.ts`, `src/server/log.service.ts` (1 baris), `src/server/settings.service.ts` (6 kunci), `tests/panel.api.test.ts`, `tests/alerts.api.test.ts` (baru) | ±700   |
-| `wkr-mon-web-overview-02` | `src/web/panel/overview.page.tsx`, `src/web/panel/overview.problems.tsx` (baru), `src/web/panel/device.tiles.tsx` (baru; hapus `device.cards.tsx`), `src/web/panel/overview.counts.tsx` (baru), `src/web/i18n/id.overview.ts` (baru), `src/web/i18n/id.ts` (1 baris)                                                                                                                                                        | ±550   |
-| `wkr-mon-web-lists-02`    | `src/web/panel/{services,apps,domains,databases}.page.tsx`, `control.buttons.tsx`, `unit.card.tsx` (hapus), `use-panel-control.ts`, `panel.status.ts`, `panel.api.ts`, `restart.overlay.tsx` (baru), `status.badge.tsx` (hapus adapter lama bila PLAN/01 setuju), `src/web/i18n/id.panel.ts`, `tests/web.panel.test.ts`                                                                                                     | ±800   |
-
-Konflik yang harus diatur orkestrator: `settings.service.ts` (PLAN/05 juga mengubahnya — saya hanya menambah 6 entri
-registri dan mengganti satu default; urutkan setelah/sebelum perubahan struktur PLAN/05), `log.service.ts` dan
-`request.log.ts` (R5-G12 juga menyentuh — saya ambil kepemilikan di gelombang ini), `index.ts` (PLAN/04 mungkin
-menambah scheduler).
-
-**Gelombang 3 — log, histori, polish (bergantung `LogViewer` PLAN/01 dan G2)**
-
-| Worker               | File                                                                                                                                                                           | Ukuran |
-| -------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------ |
-| `wkr-mon-logs-03`    | `src/web/panel/log.page.tsx`, `src/web/panel/use-log-follow.ts` (baru), `src/server/routes/panel.routes.ts` (download, bila belum di G2), test terkait                         | ±350   |
-| `wkr-mon-history-03` | `src/web/panel/problems.page.tsx` (baru), `src/web/panel/sparkline.tsx` (baru), `src/web/panel/heartbeat.strip.tsx` (baru), `src/web/router.tsx` (1 route; koordinasi PLAN/01) | ±400   |
-
-Dokumentasi (sekali di akhir, satu worker): README bagian "Pemantauan & notifikasi" (cara kerja sampler, biaya CPU/flash
-jujur, setup Telegram, batas "panel tidak bisa melaporkan dirinya mati" + saran monitor luar, redaksi log tidak
-sempurna), CHANGELOG `Added/Changed`.
-
-Total ±6.000 baris termasuk test.
+Total PLAN/02 ±4.200 baris (tanpa bagian bersama milik worker lain). Semua di v0.3.0 (A8); histori UI di W4.
 
 ---
 
@@ -997,48 +1145,98 @@ Total ±6.000 baris termasuk test.
 
 **Risiko**
 
-- **R1 Biaya sampler permanen** ±0,9% satu inti hanya untuk `jlist`. Bila pengukuran di HP > 1,2%, naikkan default
-  interval ke 120 dtk (knob sudah ada) sebelum mengubah desain.
-- **R2 Telegram API belum terverifikasi penuh** (§3.8): batas panjang, `retry_after`, `link_preview_options`. Implementer
-  wajib membaca bagian `sendMessage`/`ResponseParameters` di docs resmi dulu; fallback aman: kirim tanpa
-  `link_preview_options` bila 400.
-- **R3 Redaksi log tidak sempurna**; UI dan README berkata begitu, tidak menjanjikan "aman".
-- **R4 Zona waktu proses runit** bisa UTC di Termux bila `TZ` tidak diset; karena itu pesan memakai durasi relatif dan UI
-  memformat waktu di browser. Fitur yang butuh jam lokal server (jam tenang) sengaja tidak dibuat.
-- **R5 `restartDetached` panel**: bila `sv` detached ikut mati bersama proses panel di Android (kebijakan process group),
-  panel tidak restart. Mitigasi: spawn dengan `detached: true` + `setsid` bila tersedia; test manual di HP wajib sebelum
-  rilis. Fallback: tulis `t` lalu `u` ke `$SVDIR/panel/supervise/control` langsung (runsv yang me-restart, bukan anak panel).
-- **R6 Tunnel**: overlay restart menganggap respons HTML 530 / halaman Access sebagai "belum kembali" — sesi Access
-  habis bisa membuat overlay tidak pernah tertutup; ditangani teks error §4.4 langkah 6.
-- **R7 Crash loop setelah restart panel** tidak terdeteksi 10 mnt pertama (ring di memori).
-- **R8 Migration bentrok nomor** dengan PLAN lain — orkestrator menetapkan urutan.
-- **R9 Kontrak internal berubah** (`Problem.message` hilang, `LogLines` → `LogChunk`, `device` nullable): semua konsumen
-  ada di repo; test web/api diperbarui di gelombang yang sama.
+- R1 Biaya ≈ 1,1% idle sudah di tepi batas. Knob interval sudah ada; jangan mengubah desain sebelum diukur.
+- R2 Redaksi log tidak sempurna. README dan UI berkata begitu.
+- R3 TZ proses runit. Karena itu pesan memakai durasi relatif.
+- R4 Overlay dan sesi Access yang kedaluwarsa ditangani teks error §4.4.4.
+- R5 Crash loop app tidak terdeteksi 10 mnt pertama setelah boot (ring di memori). Counter domain di-seed dari
+  `check_result`.
+- R6 `--grace-period` cloudflared belum diverifikasi. Desain §4.4.5 benar dengan atau tanpanya.
+- R7 Kontrak internal berubah (`Problem.message`, `LogLines` → `LogChunk`, `device` nullable). W0 membuatnya aditif;
+  konsumen diperbarui di W3.
+- R8 Tulis flash histori ±70–100 MB/hari (C20). Knob interval memotongnya; dinyatakan di README.
 
 **Asumsi**
 
-- Hotfix CSRF (Origin sama + `X-Requested-With`) masuk; `apiFetch` sudah mengirim header itu.
-- PLAN/03 menyediakan fungsi cek kunci job yang sinkron dan murah (dipanggil di setiap aksi kontrol).
-- PLAN/01 menyediakan `DataTable`/`LogViewer`/`ConfirmAction`/`useApiQuery` dengan props §3.9 sebelum gelombang 2 web.
-- PLAN/05 menampilkan grup "Notifikasi" di Pengaturan dengan tombol "Cari chat" dan "Kirim notifikasi uji" memakai API §3.7.
-- Termux:API terpasang di HP produksi (terbukti saat riset); tanpa itu baterai `null` dan aturan baterai diam.
+- Hotfix CSRF masuk (merge `main`, X15).
+- PLAN/03: `jobs.isLocked({ kind, name })`, `jobs.active()`, input `site_job_failed`, dan job runner memanggil
+  `monitor.noteIntentionalRestart`.
+- PLAN/04: `BackupStatus.lastGood`, `SecurityStatus` (`keyMismatch`, `https`, `accessLastSeenAt`,
+  `adminSeenSinceBoot`), `KeyMismatchError`, `lastGoodItem`, `backup.running/restoring`. 04 tidak membuat
+  `backup.problems.ts`/`backup.events.ts`/`notify()`.
+- PLAN/05: grup "Notifikasi" + "Cari chat" + "Kirim notifikasi uji" lewat API §3.7. `/dev/health` memakai
+  `monitor.status()` dan `problems` (filter kind). Catatan lockout di Pengaturan (C24).
+- runsv menulis `supervise/pid` (standar runit). Diverifikasi di HP sebelum rilis.
 
-**Pertanyaan terbuka (untuk owner; default dipakai bila tidak dijawab)**
+**Pertanyaan terbuka untuk owner** (default dipakai bila tidak dijawab)
 
-1. Peringatan (warning, mis. HP dicabut dari charger) ikut dikirim ke Telegram secara senyap? **Default: ya**
-   (`alerts.min_severity = warning`).
-2. Interval pemantauan 60 dtk (≈0,9% satu inti terus-menerus) atau 120 dtk (≈0,45%, deteksi lebih lambat)?
-   **Default: 60 dtk**, bisa diubah di Pengaturan.
-3. Masalah situs dari PLAN/03 (`site_job_failed`, `site_crash_loop`) ikut dikirim ke Telegram? **Default: ya**, delay 0.
+1. ~~Q1 charger~~ — **dijawab owner (A9)**: sengaja dicabut-colok; hanya baterai rendah (25% warning / 15% danger).
+2. Notice reboot / mati tak terduga berbunyi (danger) atau senyap (warning)? **Default: senyap.**
+3. Warning ikut ke Telegram? **Default: ya** (senyap).
+4. Interval 60 dtk atau 120 dtk? **Default: 60**, dinaikkan bila pengukuran > 1,5%.
 
-**Ketergantungan lintas PLAN yang harus dihormati**
+**Di luar v0.3.0** (tidak direncanakan): webhook generik/ntfy/email, log rotasi, heartbeat keluar.
 
-- PLAN/01: props §3.9; pindahkan formatter murni ke `src/shared/format.id.ts`; jangan menambah aturan masalah di klien;
-  `StatusBadge`/`toneForStatus` tetap satu tabel (saya menambah label, bukan tone baru).
-- PLAN/03: fungsi kunci job untuk kontrol; aturan dua kode `site_*` ditulis di `overview.problems.ts` (koordinasi lewat
-  gelombang setelah G1), bukan file terpisah; restart cloudflared dari job situs tetap memakai jalur job, bukan 202.
-- PLAN/04: `backup.status()` boleh melempar — saya yang menangkap; tolong jangan ubah bentuk `BackupStatus.lastRun`
-  tanpa memberi tahu; isi `backup_run.items` (`kind: "database"`, `name`, `ok`) dipakai untuk "Cadangan terakhir" per DB.
-  Notifikasi kegagalan cadangan (R4-G15) memakai mesin alert ini lewat kode `backup_*` — jangan buat kanal kedua.
-- PLAN/05: kunci dan validator §3.6 apa adanya; teks label Indonesia §3.6; UI uji kirim/cari chat; `/dev/logs` memakai
-  `LogLine` dari `src/shared/log.types.ts`; `request.log.ts`/`log.service.ts` dipegang PLAN/02 di gelombang 2.
+---
+
+## Riwayat revisi
+
+**Revisi 3 (2026-11-26, penyelarasan dengan `PLAN/DECISIONS.md`)**
+
+- A8: semua fitur yang ditunda di Revisi 2 kembali ke v0.3.0. Yang kembali: `metric_sample` + `check_result` (7 hari,
+  `WITHOUT ROWID`), `loadBaseline` "biasanya …", sparkline baterai/memori, strip heartbeat domain (`Domain.recent`),
+  riwayat masalah (`/panel/problems/history` + halaman), `/panel/status` + badge nav, unduh log server + audit
+  `log.download`. Endpoint, tipe, dan UI dipulihkan; worker baru `wkr-mon-history-04` di W4; total ±4.200 baris.
+- A9/B3: `battery_unplugged` dihapus. Kode `battery_power` diganti `battery_low` (warning < `monitor.battery_warn_percent`
+  default **25**, danger < **15**, hanya saat tidak mengisi). `monitor.battery_unplugged_grace_min` dan
+  `notChargingSince` dihapus. Suhu ≥ 45 °C tetap warning. Q1 ditutup.
+- B4: severity baru `info`. `backup_not_configured` dan `access_not_seen` menjadi info: tidak masuk vonis/hitungan,
+  tidak ke Telegram.
+- B5: `monitor.status()` (+ `backupScheduler.lastTickAt()` 04) untuk `/dev/health`, tanpa `heartbeat.ts`.
+- B12: pemetaan status di `src/web/panel/panel.status-key.ts` (`serviceKey`, `appKey`, `domainVerdict`);
+  `panel.status.ts` lama dihapus.
+- B13: `log.types.ts` W0, `splitLogTimestamp` 01, `usePoller` primitif, `useLogFollow` 01.
+- B14: adapter oleh `wkr-adapters-01` dengan `Pm2UnavailableError`.
+- B15: `0008_monitor` memuat tabel histori. Estimasi ukuran/tulis flash dikoreksi.
+
+**Revisi 2 (2026-11-26, setelah debat; detail di `PLAN/debate/02-response.md`)**
+
+- §4.6 mesin alert ditulis ulang:
+  - kind tidak terbaca membekukan event (C1);
+  - penahanan menggantikan "menggantikan" (C2, C8);
+  - histeresis 2 tick + buka-kembali baris < 15 mnt, pulih tanpa cooldown (C3);
+  - `last_seen_at` + teks "pulih saat panel tidak berjalan" (C18);
+  - `min_severity` hanya saat memilih kirim (C21);
+  - notice boot (C19).
+- Tabel aturan:
+  - `battery_unplugged`/`battery_low` → `battery_power` dengan dua ambang setting (C7, owner Q1);
+  - `service_crash_loop` baru (C5);
+  - `app_crash_loop` mengabaikan restart sengaja (C4);
+  - `pm2_unavailable` dari layanan runit dan dicek di adapter (C6);
+  - kode 04 (`backup_item_stale`, `key_mismatch`, `access_not_seen`, kind `security`) dan `site_job_failed` 03 masuk;
+    `site_crash_loop` dihapus (C14, X10);
+  - `host_rebooted`, `panel_restarted_unexpectedly` (C19).
+- Restart panel = 202 + `shutdown()` + cek `supervise/pid`; `restartDetached` dan risiko R5 lama dihapus (C9).
+  Cloudflared memakai `oldPid` (C10). Overlay panel 130 dtk; penolakan memuat backup/restore (C14, X23).
+- Biaya diperbarui ke 1,1% / 3%; pengukuran memakai `cutime/cstime`; batas 1,5% / 3,5% (C11).
+- Kontrak:
+  - `alerts.*` + `/api/dev/alerts/*` dengan `{error, message}` dipertahankan (X3, X14);
+  - `PATCH /api/dev/settings` dan label di `id.settings.ts` diterima;
+  - tanpa `beat()`, diganti `monitor.status()` (C12, X30);
+  - `log.types.ts` di W0, parser `log.time.ts` 01, `log.parse.ts` → `log.redact.ts` (C13, X9);
+  - signature 01 untuk `DataTable`/`ConfirmAction`/`useApiQuery`/`LogViewer`, dan tabel kosakata sendiri dihapus
+    (X8, X20);
+  - adapter 03 §3.7 masuk (C14, X21);
+  - `monitor.contract.ts` di W0 (C15).
+- Snapshot: `at` per bagian, `dataAt`, patch setelah aksi; copy tanpa detik (C16, X19).
+- Telegram: `telegram_conflict`, `telegram_chat_migrated` (simpan otomatis + audit), cari chat dari
+  `my_chat_member`/`channel_post` tanpa `offset`, coba ulang 1 jam, fakta API terverifikasi (C17).
+- Regex redaksi JSON (diuji) (C22). Request log 401/404 tanpa sesi → debug; daftar GET sensitif yang diaudit (C23).
+  Teks sshd dan catatan lockout untuk 05 (C24).
+- **Ruang lingkup dipangkas** untuk v0.3.0 (C20, integrasi §4):
+  - tabel `metric_sample`/`check_result`, `/metrics`, baseline load, sparkline, strip heartbeat, riwayat masalah,
+    unduh log server, dan `/panel/status` ditunda;
+  - migration jadi `0008_monitor` (hanya `problem_event`);
+  - rencana kerja mengikuti jadwal global W0–W3 (±3.200 baris, sebelumnya ±6.000).
+
+**Revisi 1 (2026-11-26):** versi awal.

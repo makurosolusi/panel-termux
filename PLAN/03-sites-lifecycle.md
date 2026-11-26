@@ -1,119 +1,137 @@
 # PLAN 03 — Siklus hidup Situs (integrasi pm2, adopsi, wizard, perubahan, deploy, rollback, variabel lingkungan, domain, hapus)
 
-> Worker: wkr-plan-sites-01 · 2026-11-26 · branch `feature/production-polish` @ 74fe380.
-> Sumber: `R&D/03-sites-lifecycle.md` (selanjutnya "R3-Gn"), silang dengan R&D-01/02/04/05, `PLAN/02` dan `PLAN/05`
-> yang sudah ada, `docs/content-guide.md`, `docs/research/ui-benchmark.md`, dan kode di HEAD (dikutip `file:baris`).
-> Bukti baru di PLAN ini: (1) snippet ecosystem diuji dengan `node` v26 terhadap 7 kondisi `apps.json`; (2) lab pm2
-> lokal (pm2 5.4.3, macOS, `PM2_HOME` terisolasi, sudah dibongkar) untuk dua perilaku pm2 yang ditanyakan R3 §7.5.
-> Hasil lab lokal **bukan** pengganti uji di HP (POCO memakai pm2 7.1.2 di Termux); lihat §8.1 untuk eksperimen POCO.
-> Tidak ada kode yang diubah. Istilah UI mengikuti glosarium (Situs, Domain, Aplikasi, Perubahan, Deploy, Rollback /
-> Kembalikan versi sebelumnya, Variabel lingkungan, Unggah).
+> Worker: wkr-plan-sites-01 · 2026-11-26 · branch `feature/production-polish`.
+> Sumber: `R&D/03-sites-lifecycle.md` (selanjutnya "R3-Gn"), silang dengan R&D-01/02/04/05, PLAN/01/02/04/05,
+> `PLAN/DECISIONS.md` (mengikat), `PLAN/debate/03-critique.md` + `03-response.md`, lab pm2 POCO
+> `PLAN/debate/03-pm2-lab-results.md` (pm2 7.1.2), `docs/content-guide.md`, `docs/research/ui-benchmark.md`, kode di
+> HEAD (dikutip `file:baris`), repo `server-termux` (dibaca). Tidak ada kode yang diubah. Istilah UI mengikuti
+> glosarium (Situs, Domain, Aplikasi, Perubahan, Deploy, Rollback / Kembalikan versi sebelumnya, Variabel lingkungan,
+> Unggah).
+
+## Riwayat revisi
+
+| Rev | Tanggal    | Ringkasan                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              |
+| --- | ---------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 0   | 2026-11-26 | Versi awal (lab pm2 lokal 5.4.3).                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      |
+| 1   | 2026-11-26 | Setelah debat dan lab POCO. **Unggah**: `pwrite` ke satu `upload.bin`, sha dihitung di `complete` dan disimpan sebelum job (C1). **Swap**: urutan yang menjaga `app` selalu ada (hardlink) + tabel cleanup berbasis keadaan file (C2). **Entri pm2**: `script: "./run"` tetap, `run` diturunkan dari ELF, deploy = `pm2 restart` (C6, E3). **Snippet**: filter `existsSync(path.resolve(cwd, script))` wajib (E1/E1e, C3), cek `snippet_current`. **pm2 mati**: `Pm2UnavailableError`, cek `pm2_runtime`/`pm2_auto_exit`/`pm2_guard`, app penjaga `pm2-guard`, spec `server-termux` + `install-phone.sh` (C4, E4). **Cek kesehatan**: pid valid + stabil, `expect lt500/2xx3xx`, header `Host`, pm2 dibaca jarang (C9, E3). **Env**: aturan `$` Bun, `.env.panel-prev`, kunci yang ditimpa `env` pm2 ditandai (C7, C8, E6b). **DNS hapus** non-fatal setelah restart, domain bisa ditambah beberapa sekaligus (C10, A-blip). Stderr lewat endpoint log PLAN/02 (C20). `POST /jobs/:id/recover` tunggal. Lencana "Aktif" dari `(ino, mtimeMs)`. Kunci global sederhana (C21). Status `rolled_back`/`interrupted` = warning (A10, B12). Kepemilikan file selaras jadwal integrasi (C13). |
 
 ---
 
 ## 1. Tujuan & ruang lingkup
 
 **Tujuan.** Pemilik HP bisa (a) menghubungkan pm2 dengan aman tanpa risiko mematikan aplikasi produksi saat reboot,
-(b) mengadopsi `makuro-solusi` dengan data yang benar dari pm2, (c) men-deploy binary 89 MB lewat VPN/4G yang putus-putus
-tanpa mengulang dari nol, (d) tahu kenapa deploy gagal dan apa langkah berikutnya, (e) memulihkan perubahan yang
-terputus oleh restart panel, semuanya dalam bahasa Indonesia.
+(b) mengadopsi `makuro-solusi` dengan data yang benar dari pm2, (c) men-deploy binary 89 MB lewat VPN/4G yang
+putus-putus tanpa mengulang dari nol, (d) tahu kenapa deploy gagal dan apa langkah berikutnya, (e) memulihkan perubahan
+yang terputus oleh restart panel, (f) memasang Panel Termux di HP **baru** tanpa pm2 masuk loop restart. Semua dalam
+bahasa Indonesia.
 
 ### Masuk (menutup gap R&D-03)
 
-| Bagian                                                                                                           | Gap R&D-03                         |
-| ---------------------------------------------------------------------------------------------------------------- | ---------------------------------- |
-| Integrasi pm2 aman: panel membuat `apps.json` = `[]`, snippet aman, verifikasi `node`                            | **G1** (P0), G14                   |
-| Adopsi dari aplikasi pm2 nyata (cwd, script, runtime ELF, port), host panel dikecualikan                         | **G2**, **G3** (P0), G11, G23, G31 |
-| Journal + "Bersihkan"/"Ulangi" untuk perubahan terputus; timeout shutdown; `save()` aman                         | **G4** (P0), G21                   |
-| Unggah yang bisa dilanjutkan (server menyimpan meta, klien memakai `received`), retry ≥ 90 dtk, sha per potongan | **G5** (P0), G22, G24              |
-| Kode langkah + parameter (tanpa string Inggris ke UI), error berkode                                             | **G6** (P0)                        |
-| Ekor stderr aplikasi + aksi lanjutan saat deploy gagal                                                           | **G7** (P0)                        |
-| Cek kesehatan: path, status yang diharapkan, timeout per situs, syarat stabil                                    | G8                                 |
-| Simpan variabel lingkungan = file saja, atau perubahan `site.env` (tulis → mulai ulang → cek)                    | G9, G25 (tempel `.env`)            |
-| Kunci perubahan dihormati kontrol `/panel/apps` & `/panel/services` (kontrak untuk PLAN/02)                      | G10                                |
-| Entri `apps.json` baru dibuat saat deploy pertama, bukan saat buat situs                                         | G12                                |
-| Cek DNS di wizard; CNAME manual ke tunnel yang sama diterima                                                     | G13                                |
-| `hasPrevious`/versi aktif dari file nyata, dialog rollback "dari → ke" + yang tidak ikut kembali                 | G15, G16                           |
-| Hapus situs dengan ketik nama + info cadangan database                                                           | G17                                |
-| Header detail dengan status + aksi utama, Mulai ulang, Cek kesehatan, Log                                        | G18                                |
-| Aktor, durasi, filter per situs di riwayat perubahan; 409 `busy` membawa `jobId`                                 | G19                                |
-| Makna `rolled_back` vs `failed` vs `interrupted` di UI                                                           | G20                                |
-| Probe HTTPS domain baru setelah restart cloudflared (non-fatal)                                                  | G27 (sebagian; tanpa `/ready`)     |
-| Cache `pm2 jlist` (memakai snapshot PLAN/02)                                                                     | G28                                |
+| Bagian                                                                                                                       | Gap R&D-03                                 |
+| ---------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------ |
+| Integrasi pm2 aman: `apps.json` = `[]` dibuat panel, snippet aman dengan filter binary, verifikasi `node`, cek pm2 hidup     | **G1** (P0), G14                           |
+| Adopsi dari aplikasi pm2 nyata (cwd, script, runtime ELF, port), host panel dikecualikan                                     | **G2**, **G3** (P0), G11, G23, G31         |
+| Journal + "Bersihkan"/"Ulangi" (`/recover`) untuk perubahan terputus; swap yang tahan crash; timeout shutdown; `save()` aman | **G4** (P0), G21                           |
+| Unggah yang bisa dilanjutkan (meta dipersist, klien memakai `received`), retry ≥ 120 dtk, sha per potongan                   | **G5** (P0), G22, G24                      |
+| Kode langkah + parameter (tanpa string Inggris ke UI), error berkode                                                         | **G6** (P0)                                |
+| Ekor stderr aplikasi + aksi lanjutan saat deploy gagal                                                                       | **G7** (P0)                                |
+| Cek kesehatan: path, status yang diharapkan, timeout per situs, syarat pid + stabil                                          | G8                                         |
+| Simpan variabel lingkungan = file saja, atau perubahan `site.env` (tulis → mulai ulang → cek); tempel `.env`                 | G9, G25                                    |
+| Kunci perubahan dihormati kontrol `/panel/apps` & `/panel/services`                                                          | G10                                        |
+| Entri `apps.json` baru dibuat saat deploy pertama                                                                            | G12                                        |
+| Cek DNS di wizard; CNAME manual ke tunnel yang sama diterima                                                                 | G13                                        |
+| Versi aktif/sebelumnya dari file nyata, dialog rollback "dari → ke" + yang tidak ikut kembali                                | G15, G16                                   |
+| Hapus situs dengan ketik nama + info cadangan + default aman                                                                 | G17                                        |
+| Header detail dengan status + aksi utama, Mulai ulang, Cek kesehatan, Log                                                    | G18                                        |
+| Aktor, durasi, filter per situs di riwayat perubahan; 409 `busy` membawa job                                                 | G19                                        |
+| Makna `rolled_back` vs `failed` vs `interrupted` di UI                                                                       | G20                                        |
+| Probe HTTPS domain baru setelah restart cloudflared (non-fatal); blip digabung dan dijelaskan                                | G27 (tanpa `/ready`)                       |
+| Cache `pm2 jlist` (snapshot PLAN/02)                                                                                         | G28                                        |
+| Template ecosystem + penjaga untuk HP baru (`server-termux`, `install-phone.sh`)                                             | R3 §4.3 baris "pm2-runtime … tanpa binary" |
 
-### Keluar
+### Keluar (tidak pernah menjadi fitur PLAN ini sejak rev 0; bukan pemangkasan A8)
 
-- Nilai env multi-line (G26) — tetap ditolak dengan pesan jelas. P2.
-- Deploy dari URL (G29) — P2 (keputusan default brief). Build dari Git — di luar scope.
-- Tambah database ke situs yang sudah ada (G30) — P2.
-- Deploy dari CI dengan token (G32) — P3/keputusan pemilik.
-- Simpan N versi binary (`releases/`) — tetap 1 versi sebelumnya (`app.prev`), sesuai default brief.
-- Mengubah `ecosystem.config.js` oleh panel, mengubah situs adopsi menjadi "dikelola", restart pm2-runtime oleh panel.
-- Tunnel remote-managed (R3 §6.9-B), `/ready` metrics cloudflared (butuh ubah run script POCO).
+- Nilai env multi-line (G26): tetap ditolak dengan pesan jelas.
+- Deploy dari URL (G29) dan dari CI (G32); build dari Git.
+- Tambah database ke situs yang sudah ada (G30).
+- N versi binary (`releases/`): tetap 1 versi sebelumnya (`app.prev`, default brief).
+- Panel mengedit `ecosystem.config.js`, mengubah situs adopsi jadi "dikelola", me-restart pm2-runtime.
+- Tunnel remote-managed, `/ready` metrics cloudflared, dua replika cloudflared (zero-downtime).
 - Antrian perubahan (tetap tolak 409 `busy`).
+
+Bila arbitrase menilai salah satu di atas termasuk A8, butir itu perlu PLAN tersendiri.
 
 ---
 
 ## 2. Keputusan
 
-| #   | Keputusan                                                                                                                                                                                                                                                                                               | Alternatif                                                                         | Alasan                                                                                                                                                                                          |
-| --- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| D1  | **Panel tidak pernah mengedit `ecosystem.config.js`.** Panel membuat `apps.json` berisi `[]` (bila belum ada, tidak pernah menimpa), menampilkan snippet aman, dan memverifikasi dengan `node`. (default brief)                                                                                         | Panel menyisipkan baris sendiri (R3 6.1-B); panel mengambil alih ecosystem (6.1-C) | Parser teks JS rapuh (helper `site()`, komentar); satu kesalahan = semua aplikasi mati saat reboot. Snippet aman + verifikasi menutup risiko yang sama dengan diff kecil                        |
-| D2  | Snippet memakai `try/catch` + `Array.isArray` + filter entri ber-`name`, bukan `existsSync`                                                                                                                                                                                                             | `existsSync ? require : []` (R3 6.1-A)                                             | `existsSync` tetap melempar bila JSON rusak/kosong; diuji (§3.6): 7 kondisi, aplikasi tulisan tangan selalu termuat                                                                             |
-| D3  | **Pembuatan `apps.json`**: saat panel start (mode termux, bila `sites.dir` ada) dan di `POST /integration/verify`. Tidak di `GET`                                                                                                                                                                       | Saat situs pertama dibuat (sekarang)                                               | Snippet tidak bergantung pada urutan; `GET` bebas efek samping                                                                                                                                  |
-| D4  | **Integrasi wajib "siap" sebelum Buat situs dan sebelum deploy pertama situs dikelola**. Adopsi dan deploy situs adopsi tidak butuh integrasi                                                                                                                                                           | Hanya peringatan (sekarang)                                                        | Situs yang "berhasil" tetapi tak akan jalan setelah reboot adalah kegagalan senyap                                                                                                              |
-| D5  | **Entri `apps.json` hanya ada bila `app` ada.** Entri ditulis di deploy pertama (setelah swap), dihapus sebelum binary dihapus                                                                                                                                                                          | Tulis saat buat situs (sekarang)                                                   | Lab lokal E1: pm2-runtime yang menemukan satu entri dengan script hilang menghentikan **semua** aplikasi lalu keluar, juga dengan `--no-auto-exit` (§8.1). Harus dikonfirmasi di POCO           |
-| D6  | **Adopsi berbasis aplikasi pm2** (dropdown dari pm2, bukan teks bebas). `dir` = `pm_cwd` (harus di dalam `sites.dir`), runtime dari ELF `<cwd>/app`, port dari ingress, cocokkan via port pm2/args/`.env PORT`                                                                                          | Form bebas + validasi (R3 6.2-B)                                                   | Pemilik tidak perlu tahu nama yang benar; data POCO membuktikan form bebas menghasilkan situs yang tak bisa di-deploy                                                                           |
-| D7  | Baca `PORT` dari `<cwd>/.env` dengan parser satu-kunci (hanya baris `PORT=<1-5 digit>`), hasil hanya integer, tidak pernah dilog                                                                                                                                                                        | Tidak membaca `.env`; atau parse penuh                                             | `makuro-solusi` hanya punya port di `.env`. Parser satu-kunci tidak bisa membocorkan nilai lain                                                                                                 |
-| D8  | Host panel sendiri (`APP_BASE_URL`) dan rule ingress yang menuju `PORT` panel ditandai `self` → tampil "Panel Termux (domain ini)" tanpa tombol Adopsi; server menolak 409 `self_hostname`                                                                                                              | Disembunyikan                                                                      | Pemilik melihat semua rule (tak ada yang "hilang"), tetapi tidak bisa memutus akses panel. Port panel juga dikeluarkan dari `suggestPort` (G31)                                                 |
-| D9  | **Langkah dan hasil berkode**: `JobStep.key` (union tetap) + `code` hasil + `params` + `detail` teknis (Inggris boleh, bisa disalin). Klien menerjemahkan; server tidak mengirim label                                                                                                                  | Server menulis bahasa Indonesia                                                    | Satu sumber kebenaran teks di i18n (pola `errorCodes`); `satisfies Record<...>` memaksa terjemahan lengkap saat compile                                                                         |
-| D10 | **Perubahan terputus = status `interrupted`** + journal (`job.input` + status langkah yang sudah persisten). Pemulihan **manual**: "Bersihkan" (create/hostname.add/deploy/rollback/env/restart) atau "Ulangi" (delete/hostname.remove). Tanpa undo otomatis saat boot                                  | Undo otomatis saat boot (R3 6.3-B); tetap "failed"                                 | Undo saat boot bisa bertabrakan dengan pm2/cloudflared yang baru start dan me-restart cloudflared tanpa ada orang. Pemeriksaan idempoten berbasis file nyata lebih kuat daripada closure memori |
-| D11 | `SHUTDOWN_TIMEOUT_MS` 20 → **120 dtk** (§4.12)                                                                                                                                                                                                                                                          | 90 dtk (R3); 360 dtk (batas health maks)                                           | 120 dtk menutup perubahan tipikal (create ≤ 45 dtk, deploy ≤ 90 dtk dengan health default 60). Sisanya masuk jalur D10. Panel tidak bisa dibuka selama menunggu, hanya bila ada perubahan       |
-| D12 | **Unggah: sha-256 per potongan** (header `X-Chunk-Sha256`), sha akhir dihitung server saat assemble. `UploadStartRequest.sha256` dihapus                                                                                                                                                                | SHA-256 inkremental di klien (R3 6.5 opsi 1)                                       | Memori browser tidak lagi sebesar file (G24 ikut tertutup); integritas per potongan memungkinkan resume yang aman (cocokkan sha potongan)                                                       |
-| D13 | **Meta unggahan dipersist** di `<data>/uploads/<id>/meta.json`; panel restart tidak lagi menghapus unggahan (TTL 1 jam sejak potongan terakhir tetap)                                                                                                                                                   | Hanya memori (sekarang)                                                            | Resume harus bertahan restart panel (upgrade) dan reload karena Access 401                                                                                                                      |
-| D14 | Runtime binary dibaca dari **potongan 0** saat diterima; ELF tidak valid → 400 `invalid_binary`, situs adopsi dengan runtime ≠ script pm2 → 409 `runtime_mismatch`, **sebelum** sisa 81 MB dikirim                                                                                                      | Tolak setelah swap (sekarang, G11)                                                 | Header ELF + program header ada di 8 MB pertama (`deploy.service.ts:143` sudah mengandalkannya)                                                                                                 |
-| D15 | Retry potongan: jeda 1, 2, 4, 8, 15, 30, 30 dtk (total 90 dtk) untuk galat jaringan, 408, 429, 5xx, 52x; `offline` menjeda tanpa menghitung; setelah habis → "Unggahan terhenti" + "Lanjutkan unggahan"                                                                                                 | 1/2/4 dtk (sekarang, ±7 dtk)                                                       | Restart cloudflared bisa 30 dtk (`site.steps.ts:13`) + reconnect edge                                                                                                                           |
-| D16 | Cek kesehatan per situs: `healthPath` (default `/`), `healthExpectStatus` (null = apa pun < 500; angka = harus sama persis), `healthTimeoutSec` (default 60, 10–300). Sukses = 2 jawaban lolos berturut-turut (jarak 1 dtk) **dan** `restarts` pm2 tidak naik + status `online` selama 5 dtk sesudahnya | Satu jawaban < 500, 30 dtk (sekarang)                                              | Menangkap crash 2 dtk setelah start (migrasi gagal) dan start lambat. Batas 300 dtk mengikuti Railway                                                                                           |
-| D17 | Ekor stderr aplikasi (50 baris) diambil saat `app_restart`/`health` gagal, **diredaksi** (nilai `.env` situs ≥ 6 karakter + userinfo URL), disimpan **di memori saja** (maks 20 job, 1 jam)                                                                                                             | Disimpan di `job.steps`                                                            | Log aplikasi bisa memuat rahasia (R3 4.1); redaksi nilai `.env` murah karena server tahu nilainya                                                                                               |
-| D18 | Simpan variabel lingkungan: **"Simpan"** = tulis file saja (di bawah kunci, tercatat audit) → banner "Perlu mulai ulang"; **"Simpan dan mulai ulang"** = perubahan `site.env` (tulis → mulai ulang → cek kesehatan; gagal → `.env` lama dipulihkan + mulai ulang lagi)                                  | Simpan = restart langsung (sekarang)                                               | Nilai salah tidak lagi membuat aplikasi mati tanpa jejak; banyak kunci bisa diubah lalu restart sekali                                                                                          |
-| D19 | `restartPending` dihitung, bukan disimpan: `mtime(.env) > pm2 pm_uptime`                                                                                                                                                                                                                                | Kolom flag                                                                         | Tanpa state tambahan; benar juga bila `.env` diedit lewat ssh                                                                                                                                   |
-| D20 | Kunci terkunci (`PORT`, dan `DATABASE_URL` bila situs punya database) hanya untuk situs **dikelola**, ditegakkan di server juga. Situs adopsi bebas. Regex kunci satu sumber di `src/shared/site.types.ts`                                                                                              | Aturan klien ≠ server (sekarang, G23)                                              | Pemilik harus bisa mengganti `DATABASE_URL` makuro-solusi                                                                                                                                       |
-| D21 | Versi: tetap `app` + `app.prev` (default brief). `binary.live/previous` dari `stat` + sha (cache per `ino/size/mtimeMs`), badge "Aktif" = baris deploy yang sha-nya sama dengan file `app`                                                                                                              | `releases/<sha>` N=3 (R3 6.7-A)                                                    | Menutup kebohongan UI tanpa biaya disk; jujur juga bila binary diganti lewat ssh                                                                                                                |
-| D22 | Konfirmasi: hapus situs = **typed** (ketik nama, server juga mensyaratkan `?confirm=<nama>`); rollback, mulai ulang, hapus domain = **confirm**; Cek kesehatan, Bersihkan inspeksi = tanpa konfirmasi                                                                                                   | Satu tingkat (sekarang)                                                            | Tier PLAN/01 (R1 G8). Parameter server menahan panggilan API tak sengaja                                                                                                                        |
-| D23 | Detail situs = **satu halaman dengan bagian + navigasi jangkar** (chip lengket di HP), bukan tab                                                                                                                                                                                                        | Tab (radix tersedia lewat `radix-ui`)                                              | Konten tidak tersembunyi (Ctrl-F, deep link `#deploy`), lebih sedikit state, cocok dengan "scroll di HP"                                                                                        |
-| D24 | Buat situs **tidak** menyertakan unggah di dalam wizard; halaman hasil memberi CTA besar "Unggah binary pertama" (R3 6.4-B)                                                                                                                                                                             | Wizard 4 langkah dengan unggah (6.4-A)                                             | Dua job berbeda dalam satu alur membuat kegagalan sulit dijelaskan                                                                                                                              |
-| D25 | Cleanup deploy/rollback yang terputus = **kembali ke keadaan sebelum perubahan** (bila swap sudah terjadi), lalu mulai ulang + cek kesehatan                                                                                                                                                            | Pilihan "pertahankan versi baru"                                                   | Status kesehatan versi baru tidak diketahui; deploy ulang murah karena unggahan bisa dilanjutkan. Opsi "pertahankan" = pertanyaan terbuka Q3                                                    |
-| D26 | Kunci perubahan untuk kontrol lain: `jobs.isLocked(resource)` (nama final untuk PLAN/02). Saat perubahan berjalan: layanan `cloudflared` dan `pm2` terkunci; layanan `postgres` terkunci selama create/delete ber-database; aplikasi pm2 milik situs target terkunci                                    | Satu kunci untuk semuanya                                                          | Mencegah restart cloudflared/aplikasi di tengah health check (R3 4.3) tanpa mengunci hal yang tak terkait                                                                                       |
-
-Default brief yang dipakai di sini: D1 (apps.json), 1 binary sebelumnya (D21), deploy dari URL = P2, git di luar scope,
-admin dipercaya penuh (aksi admin ≈ pemilik HP; tidak ada sandbox — catatan risiko di README: admin bisa menjalankan
-binary apa pun sebagai user Termux). `pm2` dan `postgres` sebagai layanan terlindungi = milik PLAN/02, dipakai di sini
-untuk teks akibat.
+| #   | Keputusan                                                                                                                                                                                                                                                                                                                           | Alternatif                                                         | Alasan                                                                                                                                                                                           |
+| --- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| D1  | **Panel tidak pernah mengedit `ecosystem.config.js`.** Panel membuat `apps.json` = `[]` (bila belum ada, tidak pernah menimpa), menampilkan snippet, dan memverifikasi dengan `node`.                                                                                                                                               | Panel menyisipkan baris sendiri; panel mengambil alih              | Parser teks JS rapuh. Satu kesalahan berarti semua app mati saat reboot                                                                                                                          |
+| D2  | Snippet: `try/catch` + `Array.isArray` + filter `name` + **filter `existsSync(path.resolve(a.cwd ‖ __dirname, a.script ‖ ""))` (wajib)**                                                                                                                                                                                            | Tanpa filter binary (rev 0)                                        | Lab E1 (pm2 7.1.2): satu entri native dengan script hilang → runtime menghentikan semua app, ±54 restart/mnt. E1e: filter lulus di runtime nyata. `path.resolve` benar untuk script absolut (C3) |
+| D3  | `apps.json` dibuat saat panel start (termux, bila `sites.dir` ada) dan di `POST /integration/verify`; tidak di `GET`                                                                                                                                                                                                                | Saat situs pertama                                                 | `GET` bebas efek samping, snippet tidak bergantung urutan                                                                                                                                        |
+| D4  | Integrasi wajib `ready` sebelum Buat situs dan sebelum deploy pertama situs dikelola. Adopsi dan deploy situs adopsi tidak butuh integrasi, tetapi butuh `pm2_runtime` ok                                                                                                                                                           | Peringatan saja                                                    | Situs yang "berhasil" tetapi tidak jalan setelah reboot = kegagalan senyap                                                                                                                       |
+| D5  | **Entri `apps.json` hanya ada bila `app` dan `run` ada.** Entri ditulis di deploy pertama setelah swap; dihapus sebelum binary dihapus                                                                                                                                                                                              | Tulis saat buat situs                                              | E1 POCO. Filter D2 = pengaman kedua                                                                                                                                                              |
+| D6  | **Entri panel tetap**: `{ name, cwd, script: "./run", interpreter: "none", exp_backoff_restart_delay: 1000 }` tanpa `env`. `run` = skrip sh 3 baris yang ditulis panel (`exec ./app` atau `exec $PREFIX/bin/grun ./app`), diturunkan dari ELF `app` di setiap deploy/rollback/cleanup                                               | `script: ./app`/`grun` + delete+start saat runtime berubah (rev 0) | E3: `start --only` memakai script lama dan bisa `online` dengan `pid=undefined`. Entri tetap → selalu `pm2 restart`, tanpa jeda 0-app. Tanpa `env` → `.env` satu-satunya sumber (E6b)            |
+| D7  | **Adopsi berbasis aplikasi pm2** (dropdown). `dir` = `realpath(pm_cwd)` di dalam `sites.dir`; runtime dari ELF `<cwd>/app`; `scriptRuntime` dari `pm_exec_path` (`grun`/`glibc-runner` → grun); port dari ingress, dicocokkan via env pm2 → args → `.env PORT`                                                                      | Form bebas + validasi                                              | Data POCO membuktikan form bebas menghasilkan situs yang tak bisa di-deploy. Kritik mencocokkan alur ini dengan POCO: sesuai                                                                     |
+| D8  | `PORT` dari `<cwd>/.env` dibaca lewat `decodeEnvValue` hanya untuk baris `PORT`; hasil hanya integer; tidak dilog                                                                                                                                                                                                                   | Tidak membaca `.env`                                               | `makuro-solusi` hanya punya port di `.env`                                                                                                                                                       |
+| D9  | Host panel (`APP_BASE_URL`) dan rule ingress ke `PORT` panel ditandai `self` ("Panel Termux (domain ini)") tanpa tombol Adopsi; server 409 `self_hostname`. `PORT` panel tidak pernah ditawarkan `suggestPort`. Nama `pm2-guard` dicadangkan                                                                                        | Disembunyikan                                                      | Pemilik melihat semua rule tetapi tidak bisa memutus akses panel                                                                                                                                 |
+| D10 | Langkah dan hasil berkode: `JobStep.key` (union) + `code` + `params` + `detail` teknis. Klien menerjemahkan                                                                                                                                                                                                                         | Server menulis Indonesia                                           | Satu sumber teks; `satisfies Record<…>` memaksa terjemahan lengkap                                                                                                                               |
+| D11 | **Perubahan terputus = `interrupted`** + journal (`job.input` + status langkah). Pemulihan manual lewat satu endpoint `POST /jobs/:id/recover`: server memilih **cleanup** (create, hostname.add, deploy, rollback, env, restart) atau **retry** (delete, hostname.remove). Tanpa undo otomatis saat boot                           | Undo otomatis saat boot; dua endpoint (rev 0)                      | Pemeriksaan idempoten berbasis file nyata lebih kuat daripada closure memori; satu endpoint = satu tombol (C20.3)                                                                                |
+| D12 | **sha akhir disimpan permanen sebelum langkah `swap`**: dihitung di `POST complete` (streaming `upload.bin`), ditulis ke `job.input` dan baris `deploy` sebelum `jobs.start`                                                                                                                                                        | Dihitung di `assemble` (rev 0)                                     | Baris `deploy` disisipkan sebelum langkah pertama dan `sha256` NOT NULL (`deploy.service.ts:97-109`, `deploy.schema.ts:17`) (C1)                                                                 |
+| D13 | **Unggahan**: potongan di-`pwrite` ke `<data>/uploads/<id>/upload.bin` pada offset; `meta.json` (sha per potongan, state) dipersist **setelah** potongan di-`fsync`; panel restart tidak menghapus unggahan; TTL 1 jam sejak potongan terakhir. Langkah `stage` = `rename(upload.bin → app.new)` (fallback salin bila `EXDEV`)      | File per potongan + assemble (rev 0)                               | Satu salinan 89 MB per deploy hilang; preflight ruang 1× bukan 2× (C11, C20)                                                                                                                     |
+| D14 | Runtime dibaca dari potongan 0 saat diterima: non-ELF → 400 `invalid_binary`; situs adopsi dengan runtime ≠ `scriptRuntime` → 409 `runtime_mismatch`, sebelum sisa file terkirim. Rollback situs adopsi memeriksa hal yang sama pada `app.prev`                                                                                     | Tolak setelah swap                                                 | Header ELF ada di 8 MB pertama (`deploy.service.ts:143`). C12                                                                                                                                    |
+| D15 | Retry potongan: 1, 2, 4, 8, 16, 30, 30, 30 dtk (±121 dtk) untuk galat jaringan, 408, 429, 5xx, 52x; lalu "Unggahan terhenti" + **Lanjutkan unggahan**. Tanpa cabang `navigator.onLine`                                                                                                                                              | 1/2/4 dtk; cabang offline                                          | Lebih lama dari blip cloudflared ≤ 30 dtk + reconnect (keputusan pemilik); `onLine` tidak andal di Android (C22)                                                                                 |
+| D16 | Cek kesehatan per situs: `path` (default `/`), `expect: "lt500" \| "2xx3xx"` (default `lt500`), `timeoutSec` 10–300 (default 60), probe dengan `Host: <domain utama>`. Sehat = 2 probe lolos berturut (jarak 1 dtk) **dan** pid pm2 angka > 0 yang sama sejak baseline **dan** `restarts` tidak naik, diperiksa lagi 5 dtk kemudian | Satu jawaban < 500, 30 dtk; status `online`                        | E3: `online` bisa tanpa pid dan port mati. Baseline diambil segera setelah restart (C9)                                                                                                          |
+| D17 | Stderr saat gagal: halaman progres memanggil endpoint log app PLAN/02 (`LogChunk`, 50 baris `err`), diredaksi redaktor PLAN/02 ditambah nilai `.env` situs (`siteSecretsFor(app)`). Tidak disimpan di job                                                                                                                           | Map memori + endpoint sendiri (rev 0)                              | Satu kebijakan redaksi; tetap tersedia setelah panel restart (C20.2)                                                                                                                             |
+| D18 | Simpan env: **Simpan** = tulis file saja (di bawah kunci, audit kunci) → banner `restartPending`; **Simpan dan mulai ulang** = job `site.env` (`env_write` dengan salinan `.env.panel-prev` → `app_restart` → `health`; gagal → `.env` lama dipulihkan + restart)                                                                   | Restart langsung (sekarang)                                        | Nilai salah tidak lagi membuat situs mati tanpa jejak; juga bisa dipulihkan setelah crash (C8)                                                                                                   |
+| D19 | `restartPending` dihitung: `mtime(.env) > pm2 pm_uptime`                                                                                                                                                                                                                                                                            | Kolom flag                                                         | E6: Bun membaca `.env` hanya saat start                                                                                                                                                          |
+| D20 | Kunci terkunci: situs dikelola `PORT` (+ `DATABASE_URL` bila ber-database), ditegakkan server. Situs adopsi: bebas, tetapi kunci yang ada di `env` entri pm2 (probe, nama saja) ditandai "Diatur oleh pm2; nilai di `.env` diabaikan". Regex kunci + codec di `src/shared`                                                          | Aturan klien ≠ server                                              | E6b: `env` pm2 mengalahkan `.env`                                                                                                                                                                |
+| D21 | Codec `.env` mengikuti Bun 1.4.2: `$NAME` diekspansi di semua kutip, `\$` literal; tulis nilai ber-`'` dalam kutip ganda bila tanpa `"`/`\`; tolak hanya bila keduanya. Tempel `.env` menandai `$` tanpa `\`                                                                                                                        | Tolak semua `'`                                                    | Uji Bun kritik (C7)                                                                                                                                                                              |
+| D22 | Versi: `app` + `app.prev`. "Aktif" = `stat(app)` cocok dengan `(ino, mtimeMs, size)` baris deploy terakhir yang sukses; `previous` dikenali lewat `stat(app.prev)`. Binary yang diganti lewat ssh = "Versi tanpa catatan"                                                                                                           | sha cache (rev 0); `releases/` N=3                                 | Tanpa hashing 89 MB per request; jujur bila diganti di luar panel (C20.4)                                                                                                                        |
+| D23 | **Swap tahan crash**: deploy `app.prev → .app.prev.drop` → `link(app, app.prev)` (fallback `copyFile`) → `rename(app.new, app)`; rollback `link(app, .app.swap)` → `rename(app.prev, app)` → `rename(.app.swap, app.prev)`. `app` selalu ada di setiap titik                                                                        | 3 rename (sekarang)                                                | Crash di antara rename sekarang membuat `app` hilang (C2)                                                                                                                                        |
+| D24 | Konfirmasi: hapus situs dikelola = `typed` (+ server `?confirm=<nama>`); rollback, mulai ulang, hapus domain, hapus situs adopsi = `confirm`; Cek kesehatan, Periksa lagi, Pulihkan = `Button` biasa                                                                                                                                | Satu tingkat                                                       | Tier PLAN/01 (`confirm \| typed`)                                                                                                                                                                |
+| D25 | Detail situs = satu halaman dengan bagian + navigasi jangkar                                                                                                                                                                                                                                                                        | Tab                                                                | Konten tidak tersembunyi, deep link `#deploy`                                                                                                                                                    |
+| D26 | Buat situs tanpa unggah di wizard; halaman hasil memberi CTA **Unggah binary pertama**                                                                                                                                                                                                                                              | Wizard 4 langkah                                                   | Dua job dalam satu alur sulit dijelaskan saat gagal                                                                                                                                              |
+| D27 | Cleanup deploy/rollback terputus = kembali ke keadaan sebelum perubahan (tabel keadaan §4.11)                                                                                                                                                                                                                                       | Pilihan "pertahankan versi baru"                                   | Kesehatan versi baru tidak diketahui; unggahan bisa diulang cepat                                                                                                                                |
+| D28 | Kunci: selama ada job, `cloudflared`, `pm2`, `postgres`, dan app pm2 target terkunci (`jobs.isLocked`). `database_drop` menolak `busy` saat cadangan/pemulihan berjalan                                                                                                                                                             | Kunci per sumber daya (rev 0)                                      | Satu job global; granularitas per sumber daya tidak sebanding biayanya (C21, X23)                                                                                                                |
+| D29 | **Blip cloudflared diperkecil dan dijelaskan**: restart hanya bila teks ingress berubah; beberapa domain per job (`hostnames[]` 1–5, `extraHostnames` di wizard maks 4); hapus DNS dilakukan setelah restart dan non-fatal (tanpa restart kedua); UI menyebut domain lain yang ikut terputus                                        | Satu domain per job; DNS hapus fatal                               | Keputusan pemilik; C10                                                                                                                                                                           |
+| D30 | Panel tidak pernah menyalakan daemon pm2: adapter melempar `Pm2UnavailableError` bila layanan runit `pm2` tidak `run`; langkah → `pm2_not_running`                                                                                                                                                                                  | Cek `rpc.sock` saja                                                | `startFromEcosystem` tanpa cek bisa menyalakan daemon di luar runit (C4, B14)                                                                                                                    |
+| D31 | **HP baru**: template ecosystem (snippet + app penjaga `pm2-guard` = `sleep infinity`) + `apps.json` `[]` + run script `--no-auto-exit` dipasang installer bila belum ada (spec §7.2)                                                                                                                                               | "Minimal satu aplikasi" tanpa pemilik                              | E4: ecosystem 0 app saat start keluar seketika, juga dengan `--no-auto-exit`; flag menahan kasus "app terakhir dihapus"                                                                          |
+| D32 | `SHUTDOWN_TIMEOUT_MS` 20 → **120 dtk** (§4.12)                                                                                                                                                                                                                                                                                      | 90/360 dtk                                                         | Menutup perubahan tipikal; sisanya lewat D11                                                                                                                                                     |
 
 ---
 
 ## 3. Model data & kontrak API
 
-### 3.1 Tipe bersama — `src/shared/site.types.ts` (diganti)
+Tipe shared ditulis `wkr-contracts-00` (W0) persis seperti di bawah. `ApiError` memakai status kanonik W0
+(`400|401|403|404|409|410|421|429|502|503|507`) + `extra`.
+
+### 3.1 `src/shared/site.types.ts` (diganti)
 
 ```ts
 // Contract of the site management API under /api/panel (role ≥ admin). Errors: { error, message, ...extra }.
 import type { AppStatus } from "./panel.types";
 
-/** How pm2 runs the binary: directly (Android linker / static) or through grun (glibc). */
+/** How the site's binary runs: directly (Android linker / static) or through grun (glibc). */
 export type SiteRuntime = "native" | "grun";
-/** What a hand-written pm2 entry runs, read from pm2_env.pm_exec_path: grun wrapper, the binary itself, or anything else. */
+/** What a hand-written pm2 entry runs (pm_exec_path basename): grun/glibc-runner, the binary, or anything else. */
 export type ScriptRuntime = SiteRuntime | "other";
 export type SiteAppStatus = AppStatus | "not_deployed";
 
 /** Allowed env key (one source for client and server). */
 export const ENV_KEY_RE = /^[A-Za-z_][A-Za-z0-9_]{0,127}$/;
-/** Health check bounds. */
 export const HEALTH_TIMEOUT_MIN_SEC = 10;
 export const HEALTH_TIMEOUT_MAX_SEC = 300;
 export const HEALTH_TIMEOUT_DEFAULT_SEC = 60;
+/** pm2 app name reserved for the keep-alive guard of fresh phones (never a site, hidden from Aplikasi). */
+export const PM2_GUARD_APP = "pm2-guard";
 
-export type SiteHealthConfig = { path: string; expectStatus: number | null; timeoutSec: number };
+export type HealthExpect = "lt500" | "2xx3xx";
+export type SiteHealthConfig = { path: string; expect: HealthExpect; timeoutSec: number };
+
+type DeployKindRef = "deploy" | "rollback";
+type DeployStatusRef = "running" | "succeeded" | "failed" | "rolled_back" | "interrupted";
 
 /** Item of GET /sites. */
 export type Site = {
@@ -123,81 +141,74 @@ export type Site = {
   database: string | null;
   runtime: SiteRuntime;
   managed: boolean;
-  app: string; // pm2 process name (site.app ?? site.name)
+  /** pm2 process name (site.app ?? site.name). */
+  app: string;
+  /** "unknown" when pm2 is unavailable (never "not_deployed" in that case). */
   appStatus: SiteAppStatus;
   restarts: number | null;
   lastDeploy: { at: string; kind: DeployKindRef; status: DeployStatusRef; actorName: string | null } | null;
   createdAt: string;
 };
-type DeployKindRef = "deploy" | "rollback";
-type DeployStatusRef = "running" | "succeeded" | "failed" | "rolled_back" | "interrupted";
 
-/** One binary file of a site. `sha256` null only when hashing failed (I/O error). */
+/** A binary file of a site, matched against deploy rows by (ino, mtimeMs, size). */
 export type BinaryInfo = {
   sizeBytes: number;
   modifiedAt: string;
-  sha256: string | null;
-  /** Deploy row that put this exact binary in place (newest succeeded with same sha), if any. */
+  /** Deploy row that put exactly this file in place; null = "Versi tanpa catatan". */
   deployId: string | null;
+  sha256: string | null;
   fileName: string | null;
+  runtime: SiteRuntime | null;
 };
+
+export type ActiveJob = { id: string; kind: JobKind; target: string; startedAt: string };
 
 /** GET /sites/:name. Env values are never returned. */
 export type SiteDetail = Site & {
   dir: string;
   envKeys: string[];
-  /** Keys the panel owns for this site (managed: PORT, DATABASE_URL when database); [] for adopted sites. */
+  /** Managed: PORT (+ DATABASE_URL when database). Adopted: []. */
   lockedEnvKeys: string[];
-  /** .env changed after the app (re)started: changes are not live yet. */
+  /** Adopted: keys set in the pm2 entry's env (they override .env; names only). Managed: []. */
+  pm2EnvKeys: string[];
   restartPending: boolean;
   dns: { hostname: string; managed: boolean }[];
   health: SiteHealthConfig;
   binary: { live: BinaryInfo | null; previous: BinaryInfo | null };
-  /** Adopted sites: what the hand-written pm2 entry runs (null when pm2 does not know the app). */
   scriptRuntime: ScriptRuntime | null;
-  /** Why "Deploy" is disabled, or null when allowed. */
-  deployBlocker: "integration" | "no_folder" | null;
-  /** Running change touching this site, for the "Perubahan sedang berjalan" banner. */
+  deployBlocker: "integration" | "no_folder" | "pm2_not_running" | null;
   activeJob: ActiveJob | null;
 };
-
-export type ActiveJob = { id: string; kind: JobKind; target: string; startedAt: string };
 
 /** GET /sites/discovered. */
 export type Discovered = { ingress: DiscoveredIngress[]; apps: AdoptCandidateApp[] };
 
-/** Ingress rule that belongs to no site. `self` = the panel's own hostname/port (never adoptable). */
 export type DiscoveredIngress = {
   hostname: string;
   port: number | null;
   self: boolean;
-  /** pm2 app whose known port equals `port` (first candidate without blockers), else null. */
   match: string | null;
   blockers: ("self" | "no_port" | "wildcard")[];
 };
 
-/** pm2 app not used by any site, as adoption candidate. Paths are shown to admins only. */
 export type AdoptCandidateApp = {
   name: string;
   status: AppStatus;
   cwd: string | null;
   port: number | null;
   portSource: "pm2_env" | "pm2_args" | "dotenv" | null;
-  /** From the ELF header of <cwd>/app; null when there is no readable binary. */
   runtime: SiteRuntime | null;
   scriptRuntime: ScriptRuntime;
   blockers: ("outside_sites_dir" | "no_binary" | "invalid_binary" | "pm2_module" | "name_invalid")[];
-  /** Non-blocking notes shown in the dialog. */
-  warnings: ("runtime_script_mismatch" | "port_unknown" | "port_mismatch")[];
+  warnings: ("runtime_script_mismatch" | "script_other" | "port_unknown" | "port_mismatch")[];
 };
 
-/** Body of POST /sites/adopt (→ 201 SiteDetail). Everything else is derived on the server. */
 export type SiteAdoptRequest = { hostname: string; app: string; name?: string };
 
-/** Body of POST /sites/check. `scope: "hostname"` checks only the hostname (domain dialog). */
 export type SiteCheckRequest = {
   name?: string;
   hostname: string;
+  extraHostnames?: string[];
   port?: number;
   database?: boolean;
   scope?: "site" | "hostname";
@@ -206,45 +217,47 @@ export type SiteCheckRequest = {
 export type SiteIssueCode =
   | "name_invalid"
   | "name_taken"
+  | "name_reserved"
   | "name_folder_exists"
   | "name_database_exists"
   | "name_leftover"
   | "hostname_invalid"
   | "hostname_in_use"
   | "hostname_self"
+  | "hostname_duplicate"
   | "hostname_zone_missing"
   | "hostname_dns_conflict"
   | "port_invalid"
   | "port_out_of_range"
   | "port_in_use"
   | "port_panel";
-/** Non-blocking hints, e.g. "existing CNAME already points at this tunnel". */
 export type SiteNoteCode = "dns_same_tunnel" | "dns_owned" | "dns_token_missing" | "dns_check_failed";
 
 export type SiteIssue = {
   field: "name" | "hostname" | "port";
+  hostname?: string;
   code: SiteIssueCode;
-  params: Record<string, string | number>;
+  params: JobParams;
 };
-export type SiteNote = { field: "hostname"; code: SiteNoteCode; params: Record<string, string | number> };
+export type SiteNote = { field: "hostname"; hostname: string; code: SiteNoteCode; params: JobParams };
 export type SiteCheckResult = { ok: boolean; issues: SiteIssue[]; notes: SiteNote[] };
 
 export type SiteCreateRequest = {
   name: string;
   hostname: string;
+  /** Extra domains added in the same job (one cloudflared restart). Max 4. */
+  extraHostnames?: string[];
   port?: number;
   database: boolean;
   env?: Record<string, string>;
 };
 
-/** PUT /sites/:name/env. `restart` true → 202 { jobId } (job site.env); false → 200 SiteEnvSaved. */
 export type SiteEnvUpdate = { set: Record<string, string>; unset: string[]; restart: boolean };
 export type SiteEnvSaved = { envKeys: string[]; restartPending: boolean };
-
-/** PATCH /sites/:name/settings (→ 200 SiteDetail). Omitted fields stay. */
 export type SiteSettingsUpdate = { health?: Partial<SiteHealthConfig> };
+/** POST /sites/:name/hostnames body: 1–5 domains, one job, one cloudflared restart. */
+export type HostnamesAddRequest = { hostnames: string[] };
 
-/** GET /sites/:name/health: one probe now (no stability wait, no job). */
 export type HealthProbe = { ok: boolean; status: number | null; ms: number | null; path: string; checkedAt: string };
 
 export type JobAccepted = { jobId: string };
@@ -276,17 +289,17 @@ export type JobStepKey =
   | "app_remove"
   | "database_drop"
   | "folder_remove"
-  | "assemble"
+  | "stage"
   | "detect"
   | "chmod"
   | "swap"
+  | "run_script"
   | "apps_entry"
   | "app_restart"
   | "health";
 
-/** Result/skip/failure codes (i18n: id.job.outcomes). Grouped by step; see PLAN 03 §3.4. */
-export type JobOutcomeCode = /* union listed in §3.4 */ string;
-
+/** Full literal union in the implementation; values listed in PLAN 03 §3.4. */
+export type JobOutcomeCode = string;
 export type JobParams = Record<string, string | number | boolean | null>;
 
 export type JobStep = {
@@ -300,14 +313,12 @@ export type JobStep = {
   log: string[];
   startedAt: string | null;
   finishedAt: string | null;
-  /** Only on rows written before migration 00NN: the old English label/message. */
+  /** Rows written before migration 0007 only. */
   legacyLabel?: string;
 };
 
 export type JobError = { code: JobOutcomeCode; params: JobParams; detail: string | null };
-
-/** What the UI may offer after the job; computed by the server (one source). */
-export type JobNextAction = "cleanup" | "retry" | "rollback" | "app_log" | "open_site" | "first_deploy" | "redeploy";
+export type JobNextAction = "recover" | "rollback" | "app_log" | "open_site" | "first_deploy" | "redeploy";
 
 export type Job = {
   id: string;
@@ -321,24 +332,26 @@ export type Job = {
   finishedAt: string | null;
   durationMs: number | null;
   next: JobNextAction[];
-  /** Job id of the cleanup/retry that resolved this interrupted/failed job. */
+  /** What POST /jobs/:id/recover will do; null = not recoverable (or already resolved). */
+  recoverMode: "cleanup" | "retry" | null;
   resolvedBy: string | null;
-  /** job.cleanup only: the job it cleans up. */
+  /** job.cleanup only. */
   cleans: string | null;
-  /** True while the stderr tail of the app is still held in memory (GET /jobs/:id/app-log). */
-  hasAppLog: boolean;
+  /** pm2 app whose stderr the failure box shows (null = none). */
+  appLogApp: string | null;
 };
 
-export type AppLogTail = { lines: string[]; capturedAt: string; redacted: number };
-
-/** GET /integration and POST /integration/verify. */
 export type IntegrationCheckKey =
   | "sites_dir"
   | "apps_json"
   | "ecosystem_file"
   | "ecosystem_loads"
   | "ecosystem_spreads_apps_json"
+  | "snippet_current"
   | "apps_entries_runnable"
+  | "pm2_runtime"
+  | "pm2_auto_exit"
+  | "pm2_guard"
   | "tunnel"
   | "cloudflare_token";
 export type IntegrationCheck = {
@@ -348,22 +361,18 @@ export type IntegrationCheck = {
   detail: string | null;
 };
 export type Integration = {
-  /** sites_dir, apps_json, ecosystem_loads, ecosystem_spreads_apps_json, apps_entries_runnable and tunnel are ok. */
+  /** sites_dir, apps_json, ecosystem_loads, ecosystem_spreads_apps_json, snippet_current, pm2_runtime, tunnel ok. */
   ready: boolean;
   checks: IntegrationCheck[];
-  /** Exact snippet with this phone's paths (§3.6). */
   snippet: string;
   ecosystemPath: string;
   appsJsonPath: string;
-  /** Names pm2 would load from ecosystem.config.js (no env, no paths). */
   appNames: string[];
   checkedAt: string;
 };
 ```
 
-`JobOutcomeCode` ditulis sebagai union literal lengkap (daftar §3.4), bukan `string`; blok di atas hanya menyingkat.
-
-### 3.2 Tipe bersama — `src/shared/deploy.types.ts` (diganti)
+### 3.2 `src/shared/deploy.types.ts` (diganti)
 
 ```ts
 export const DEPLOY_CHUNK_SIZE = 8 * 1024 * 1024;
@@ -374,7 +383,7 @@ export const CHUNK_SHA_HEADER = "X-Chunk-Sha256";
 /** POST /sites/:name/uploads (→ 201 UploadState). Replaces that site's previous unfinished upload. */
 export type UploadStartRequest = { sizeBytes: number; fileName: string };
 
-/** GET /uploads/:id, GET /sites/:name/uploads/active (null when none), and 201 of POST uploads. */
+/** 201 of POST uploads, GET /uploads/:id, GET /sites/:name/uploads/active (200 null when none). */
 export type UploadState = {
   uploadId: string;
   site: string;
@@ -383,18 +392,15 @@ export type UploadState = {
   chunkSize: number;
   chunks: number;
   received: { index: number; sha256: string }[];
-  /** From chunk 0, once received. */
   runtime: "native" | "grun" | null;
   expiresAt: string;
 };
 
-/** PUT /uploads/:id/chunks/:index response. */
 export type ChunkReceived = { received: number[]; runtime: "native" | "grun" | null };
 
 export type DeployStatus = "running" | "succeeded" | "failed" | "rolled_back" | "interrupted";
 export type DeployKind = "deploy" | "rollback";
 
-/** Item of GET /sites/:name/deploys?page&pageSize (Page<Deploy>, newest first). */
 export type Deploy = {
   id: string;
   at: string;
@@ -407,195 +413,218 @@ export type Deploy = {
   status: DeployStatus;
   jobId: string;
   kind: DeployKind;
-  /** This row's binary is the live `app` right now. At most one row per site. */
+  /** This row's file is the live `app` now (stat match). At most one per site. */
   active: boolean;
 };
 ```
 
-### 3.3 Basis data — migration `drizzle/00NN_sites_lifecycle.sql`
+`src/shared/env.codec.ts` (baru, `wkr-contracts-00`): `decodeEnvValue(raw: string): string` (aturan Bun D21),
+`encodeEnvLine(key, value): string` (pindahan `envLine`, `env.file.ts:27-33`, dengan aturan kutip ganda D21),
+`envValueProblem(value): "multiline" | "quote" | "too_long" | null`, `findEnvLine(text, key): string | null`.
 
-Nomor `00NN` ditetapkan orkestrator (PLAN/02, /04, /05 juga menambah migration). Dibuat dengan `bun run db:generate`
-dari perubahan schema, lalu diberi komentar. SQLite tidak punya `ADD COLUMN IF NOT EXISTS`; idempotensi dijamin journal
-drizzle (`__drizzle_migrations`), diuji di `tests/db.migrate.test.ts` (migrasi DB kosong + DB berisi baris v0.2.x).
+**Protokol unggahan (server):**
+
+1. `POST uploads`: validasi; buang unggahan lama situs itu; preflight `freeBytes(dataDir fs) ≥ Σ unggahan aktif +
+   sizeBytes + 200 MB` → 507 `no_space`; buat dir, `upload.bin` kosong (0600, `ftruncate(size)` tidak dipakai agar tidak
+   mengalokasikan blok), `meta.json` `{v:1, site, fileName, sizeBytes, chunks, chunkSha:{}, state:"receiving",
+   createdAt, touchedAt}`.
+2. `PUT chunk i`: cek ukuran + header sha + sha body → `pwrite(fd, body, i × chunkSize)` → `fsync` → meta baru
+   (tmp + rename). Potongan 0: `detectRuntime` dari buffer (bukan file) → `invalid_binary` / `runtime_mismatch`
+   (unggahan dihapus).
+3. `POST complete`: semua index ada → `state:"assembling"` → streaming baca `upload.bin`: sha per potongan
+   dibandingkan dengan meta (beda → 400 `chunk_corrupt {index}`, index itu dihapus dari meta, state kembali
+   `receiving`) + sha total → `assertIdle` → integrasi (deploy pertama dikelola) → ruang ≥ sizeBytes + 100 MB di fs
+   situs bila beda fs → `jobs.start` (sha di `job.input` + baris `deploy`).
+4. Boot: pindai `uploads/*`; buang dir tanpa meta, meta rusak, kedaluwarsa, `state:"assembling"`, dan file `.tmp`.
+5. `site.delete` (langkah `validate`) membuang unggahan aktif situs itu.
+
+### 3.3 Basis data — `drizzle/0007_sites_lifecycle.sql` (`wkr-db-01`)
 
 ```sql
--- Health check per site (D16). Existing rows get the old behaviour's path and a longer, safer timeout.
+-- Health check per site (D16). Existing rows keep the pre-0007 rule ("any status < 500" at /) with a longer timeout.
 ALTER TABLE `site` ADD `health_path` text DEFAULT '/' NOT NULL;
 --> statement-breakpoint
--- null = any status < 500 (the pre-00NN rule); a number = that exact status.
-ALTER TABLE `site` ADD `health_expect_status` integer;
+ALTER TABLE `site` ADD `health_expect` text DEFAULT 'lt500' NOT NULL;
 --> statement-breakpoint
 ALTER TABLE `site` ADD `health_timeout_sec` integer DEFAULT 60 NOT NULL;
 --> statement-breakpoint
--- Journal for recovering interrupted jobs (D10): non-secret request input (names, hostname, port, sha256, flags).
+-- Journal for recovering interrupted jobs (D11): non-secret request input (names, hostnames, port, sha256, flags).
 ALTER TABLE `job` ADD `input` text;
 --> statement-breakpoint
 -- Id of the cleanup/retry job that resolved this one; null = still needs attention when interrupted/failed.
 ALTER TABLE `job` ADD `resolved_by` text;
 --> statement-breakpoint
--- Per-site change history (GET /jobs?target=) and "latest job of a site" lookups.
-CREATE INDEX `job_target_started_idx` ON `job` (`target`,`started_at`);
+-- Per-site change history (GET /jobs?target=) and "latest job of a site".
+CREATE INDEX IF NOT EXISTS `job_target_started_idx` ON `job` (`target`,`started_at`);
 --> statement-breakpoint
--- Original file name of the uploaded binary, shown in the deploy history (sanitized, ≤ 255 chars).
+-- Original upload file name for the deploy history (sanitized, ≤ 255 chars).
 ALTER TABLE `deploy` ADD `file_name` text;
 --> statement-breakpoint
 ALTER TABLE `deploy` ADD `finished_at` integer;
+--> statement-breakpoint
+-- Identity of the file this deploy put in place (D22): "Aktif" = stat(app) matches; null on rows before 0007.
+ALTER TABLE `deploy` ADD `bin_ino` integer;
+--> statement-breakpoint
+ALTER TABLE `deploy` ADD `bin_mtime_ms` integer;
 ```
 
-- `job.steps` tetap kolom JSON; bentuk `JobStep` baru tidak butuh migrasi. Baris lama (`{key,label,status,message}`)
-  dibaca `toJob()` lewat `legacyStep()`: `key` lama dipetakan (`restart` → `tunnel_restart` untuk jenis `site.*`/
-  `hostname.*`, → `app_restart` untuk `site.deploy`/`site.rollback`; `env` → `env_write`; `apps` → `apps_entry`/
-  `apps_remove`; `pm2` → `app_remove`; database pada `site.delete` → `database_drop`; folder pada `site.delete` →
-  `folder_remove`), `code` = null, `detail` = `message` lama, `legacyLabel` = `label` lama.
-- Status `interrupted` untuk baris yang sedang `running` saat boot (bukan `failed` lagi). Baris lama `failed` dengan
-  `error = 'interrupted by panel restart'` tidak dikonversi (tidak ada journal untuk dibersihkan); UI menampilkannya
-  sebagai gagal biasa.
-- `job.input` per jenis (tanpa rahasia; password database tidak pernah masuk):
-  `site.create {name, hostname, port, database}` · `site.delete {name, keepData, keepDatabase}` ·
-  `hostname.add|remove {site, hostname}` · `site.deploy {site, uploadId, sha256, sizeBytes, fileName, runtime}` ·
-  `site.rollback {site, toSha256, fromSha256}` · `site.env {site, set: string[] /* keys */, unset: string[]}` ·
-  `site.restart {site}` · `job.cleanup {jobId}`.
-- Tidak ada setting baru. `sites.dir` dan `sites.port_range` tetap (struktur registri milik PLAN/05).
+- SQLite tidak punya `ADD COLUMN IF NOT EXISTS`; satu kali eksekusi dijamin journal drizzle, dan `CREATE INDEX` memakai
+  `IF NOT EXISTS` (B15). Kolom baru `NOT NULL` punya default, jadi aman untuk tabel berisi data.
+- Baris `job.steps` lama dibaca `legacyStep()` (`job.legacy.ts`): `restart` → `tunnel_restart` (site._/hostname._) atau
+  `app_restart` (deploy/rollback); `env` → `env_write`; `apps` → `apps_entry`/`apps_remove`; `assemble` → `stage`;
+  `pm2` → `app_remove`; `database`/`folder` pada `site.delete` → `database_drop`/`folder_remove`; `code` null,
+  `detail` = message lama, `legacyLabel` = label lama.
+- Boot: `running` → `interrupted` (job dan deploy). Baris lama `failed` "interrupted by panel restart" tidak dikonversi.
+- `job.input` per jenis (tanpa rahasia):
+  `site.create {name, hostnames[], port, database}` · `site.delete {name, keepData, keepDatabase}` ·
+  `hostname.add {site, hostnames[]}` · `hostname.remove {site, hostname}` ·
+  `site.deploy {site, sha256, fromSha256, sizeBytes, fileName, runtime, firstDeploy}` ·
+  `site.rollback {site, toSha256, fromSha256}` · `site.env {site, set: string[], unset: string[]}` (kunci saja) ·
+  `site.restart {site}` · `job.cleanup {jobId}`. `fromSha256` = sha baris deploy aktif atau null bila tidak dikenal;
+  `firstDeploy` = `app` tidak ada sebelum job.
+- Tidak ada setting baru.
 
-### 3.4 Kode langkah, kode hasil, kode error
+### 3.4 Langkah, kode hasil, kode error
 
-Langkah per jenis perubahan (urutan = urutan eksekusi; `!` = irreversible):
+| Jenis             | Langkah (`!` = irreversible)                                                                                        |
+| ----------------- | ------------------------------------------------------------------------------------------------------------------- |
+| `site.create`     | validate → folder → database → env_write → ingress → dns → tunnel_restart → domain_probe                            |
+| `site.delete`     | validate → apps_remove → ingress → tunnel_restart → dns (non-fatal) → app_remove! → database_drop! → folder_remove! |
+| `hostname.add`    | validate → ingress → dns → tunnel_restart → domain_probe                                                            |
+| `hostname.remove` | ingress → tunnel_restart → dns (non-fatal)                                                                          |
+| `site.deploy`     | stage → detect → chmod → swap → run_script → apps_entry → app_restart → health                                      |
+| `site.rollback`   | swap → run_script → app_restart → health                                                                            |
+| `site.restart`    | app_restart → health                                                                                                |
+| `site.env`        | env_write → app_restart → health                                                                                    |
+| `job.cleanup`     | inspect → langkah perbaikan dari daftar yang sama (§4.11)                                                           |
 
-| Jenis             | Langkah                                                                                                 |
-| ----------------- | ------------------------------------------------------------------------------------------------------- |
-| `site.create`     | validate → folder → database → env_write → ingress → dns → tunnel_restart → domain_probe                |
-| `site.delete`     | validate → ingress → tunnel_restart → dns → apps_remove → app_remove! → database_drop! → folder_remove! |
-| `hostname.add`    | validate → ingress → dns → tunnel_restart → domain_probe                                                |
-| `hostname.remove` | ingress → dns → tunnel_restart                                                                          |
-| `site.deploy`     | assemble → detect → chmod → swap → apps_entry → app_restart → health                                    |
-| `site.rollback`   | swap → apps_entry → app_restart → health                                                                |
-| `site.restart`    | app_restart → health                                                                                    |
-| `site.env`        | env_write → app_restart → health                                                                        |
-| `job.cleanup`     | inspect → (langkah perbaikan yang dibutuhkan, dari daftar yang sama) — §4.11                            |
+`apps_remove` pada `site.delete` dipindah ke awal (setelah validate) agar entri hilang sebelum apa pun yang bisa
+membuat binary hilang (D5; E4: runtime yang restart memuat lagi app dari ecosystem). `run_script` dan `apps_entry`
+dilewati untuk situs adopsi. `apps_entry` = `apps_registered` (deploy pertama) / `apps_unchanged` / `apps_migrated`
+(entri lama `script ≠ ./run` → ditulis ulang + delete+start sekali, D6).
 
-`domain_probe` tidak pernah gagal (hasil `not_yet` = selesai dengan nada peringatan). `apps_entry` pada situs dikelola
-yang belum punya entri = **mendaftarkan** entri (D5), pada situs yang sudah punya entri = menyetel runtime.
+Kode hasil (`JobOutcomeCode`, teks di `id.job.outcomes`, contoh §5.9):
 
-Kode hasil (`JobOutcomeCode`, union di shared; teks di `id.job.outcomes`, contoh teks di §5.9):
+| Langkah        | Sukses / dilewati                                                                                                                                                  | Gagal                                                                                                   |
+| -------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------- |
+| validate       | `validated`                                                                                                                                                        | `invalid_site {issues}`, `busy_backup`                                                                  |
+| inspect        | `inspect_found {count}`, `inspect_nothing`                                                                                                                         | `unexpected`                                                                                            |
+| folder         | `folder_created {path}`                                                                                                                                            | `folder_failed`                                                                                         |
+| database       | `database_created {name}`, `database_skipped`                                                                                                                      | `database_failed`                                                                                       |
+| env_write      | `env_written {count}`, `env_updated {set, unset}`, `env_restored`                                                                                                  | `env_failed`                                                                                            |
+| ingress        | `ingress_added {hostnames}`, `ingress_removed {hostnames}`, `ingress_unchanged`                                                                                    | `ingress_rejected`, `ingress_config_missing {path}`, `ingress_unsupported`                              |
+| dns            | `dns_created {hostnames}`, `dns_owned_present`, `dns_same_tunnel {hostnames}`, `dns_deleted {hostnames}`, `dns_left {hostnames}`, `dns_no_token`, `dns_none_owned` | `dns_conflict {hostname}`, `dns_zone_missing {hostname}`, `dns_api_failed`, `dns_no_tunnel_id`          |
+| tunnel_restart | `tunnel_restarted {seconds}`, `tunnel_unchanged`                                                                                                                   | `tunnel_not_running {seconds}`, `tunnel_service_missing`                                                |
+| domain_probe   | `domain_reachable {hostname, status}`, `domain_not_yet {hostname, status}`                                                                                         | –                                                                                                       |
+| apps_remove    | `apps_removed {name}`, `apps_absent`, `apps_adopted_skip`                                                                                                          | `apps_json_invalid`                                                                                     |
+| app_remove     | `app_removed {name}`, `app_not_deployed`, `app_adopted_skip`                                                                                                       | `pm2_failed`, `pm2_not_running`                                                                         |
+| database_drop  | `database_dropped {name}`, `database_kept`, `database_none`, `database_adopted_skip`                                                                               | `database_failed`, `busy_backup`                                                                        |
+| folder_remove  | `folder_removed {path}`, `folder_kept`, `folder_gone`, `folder_adopted_skip`, `folder_not_empty {path, entries}`                                                   | `folder_failed`                                                                                         |
+| stage          | `staged {sizeBytes}`                                                                                                                                               | `upload_missing`, `size_mismatch {got, expected}`, `sha_mismatch`, `folder_missing {path}`, `disk_full` |
+| detect         | `runtime_native`, `runtime_grun`                                                                                                                                   | `invalid_binary`, `runtime_mismatch {expected, got}`                                                    |
+| chmod          | `chmod_done`                                                                                                                                                       | `chmod_failed`                                                                                          |
+| swap           | `swap_first`, `swap_kept_previous {linked}`, `swap_back`                                                                                                           | `swap_failed`                                                                                           |
+| run_script     | `run_written {runtime}`, `run_unchanged`                                                                                                                           | `run_failed`                                                                                            |
+| apps_entry     | `apps_registered`, `apps_unchanged`, `apps_migrated`, `apps_adopted_skip`                                                                                          | `apps_json_invalid`, `integration_not_ready`                                                            |
+| app_restart    | `app_restarted {name}`, `app_started {name}`                                                                                                                       | `app_missing {name}`, `app_not_loaded {name}`, `pm2_failed`, `pm2_not_running`                          |
+| health         | `healthy {status, ms, path, seconds}`                                                                                                                              | `health_timeout {seconds, last, path}`, `app_errored {name}`, `app_unstable {restarts}`, `app_no_pid`   |
+| (semua)        | –                                                                                                                                                                  | `unexpected`, `interrupted`                                                                             |
 
-| Langkah        | Sukses / dilewati                                                                                                             | Gagal                                                                                          |
-| -------------- | ----------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------- |
-| validate       | `validated`                                                                                                                   | `invalid_site {issues}` (params `issues` = kode dipisah koma)                                  |
-| inspect        | `inspect_found {count}`, `inspect_nothing`                                                                                    | `unexpected`                                                                                   |
-| folder         | `folder_created {path}`                                                                                                       | `folder_failed`                                                                                |
-| database       | `database_created {name}`, `database_skipped`                                                                                 | `database_failed`                                                                              |
-| env_write      | `env_written {count}`, `env_updated {set, unset}`                                                                             | `env_failed`                                                                                   |
-| ingress        | `ingress_added {hostname}`, `ingress_removed {hostnames}`, `ingress_unchanged`                                                | `ingress_rejected`, `ingress_config_missing {path}`, `ingress_unsupported`                     |
-| dns            | `dns_created {hostname}`, `dns_owned_present`, `dns_same_tunnel`, `dns_deleted {hostnames}`, `dns_no_token`, `dns_none_owned` | `dns_conflict {hostname}`, `dns_zone_missing {hostname}`, `dns_api_failed`, `dns_no_tunnel_id` |
-| tunnel_restart | `tunnel_restarted {seconds}`, `tunnel_unchanged`                                                                              | `tunnel_not_running {seconds}`, `tunnel_service_missing`                                       |
-| domain_probe   | `domain_reachable {hostname, status}`, `domain_not_yet {hostname, status}`                                                    | –                                                                                              |
-| apps_remove    | `apps_removed {name}`, `apps_absent`, `apps_adopted_skip`                                                                     | `apps_json_invalid`                                                                            |
-| app_remove     | `app_removed {name}`, `app_not_deployed`, `app_adopted_skip`                                                                  | `pm2_failed`                                                                                   |
-| database_drop  | `database_dropped {name}`, `database_kept`, `database_none`, `database_adopted_skip`                                          | `database_failed`                                                                              |
-| folder_remove  | `folder_removed {path}`, `folder_kept`, `folder_gone`, `folder_adopted_skip`, `folder_not_empty {path, entries}`              | `folder_failed`                                                                                |
-| assemble       | `assembled {sizeBytes}`                                                                                                       | `size_mismatch {got, expected}`, `chunk_missing {index}`, `folder_missing {path}`, `disk_full` |
-| detect         | `runtime_native`, `runtime_grun`                                                                                              | `invalid_binary`, `runtime_mismatch {expected, got}`                                           |
-| chmod          | `chmod_done`                                                                                                                  | `chmod_failed`                                                                                 |
-| swap           | `swap_first`, `swap_kept_previous`, `swap_back`                                                                               | `swap_failed`                                                                                  |
-| apps_entry     | `apps_registered {runtime}`, `apps_runtime_set {runtime}`, `apps_unchanged`, `apps_adopted_skip`                              | `apps_json_invalid`, `integration_not_ready`                                                   |
-| app_restart    | `app_restarted {name}`, `app_started {name}`                                                                                  | `app_missing {name}`, `app_not_loaded {name}`, `pm2_failed`                                    |
-| health         | `healthy {status, ms, path, seconds}`                                                                                         | `health_timeout {seconds, last, path}`, `app_errored {name}`, `app_unstable {restarts}`        |
-| (semua)        | –                                                                                                                             | `unexpected` (detail = pesan error mentah yang sudah aman), `interrupted`                      |
+`params.last`: `"refused"`, `"no_answer"`, atau kode HTTP. `params.linked`: `true` = hardlink, `false` = salinan.
 
-`params.last` untuk `health_timeout`: `"refused"`, `"no_answer"`, atau kode HTTP sebagai string.
+Kode error API (`{ error, message, ...extra }`; UI memakai `error`):
 
-Kode error API baru/diubah (semua `{ error, message, ...extra }`; `message` Inggris untuk log, UI memakai `error`):
+| Kode                       | HTTP | Extra                                                                         | Endpoint                                             |
+| -------------------------- | ---- | ----------------------------------------------------------------------------- | ---------------------------------------------------- |
+| `busy`                     | 409  | `job: ActiveJob`                                                              | semua yang memulai perubahan, PUT env, adopt, verify |
+| `busy_backup`              | 409  | –                                                                             | DELETE situs ber-database saat cadangan/pemulihan    |
+| `integration_required`     | 409  | `failing: IntegrationCheckKey[]`                                              | POST /sites, complete (deploy pertama dikelola)      |
+| `pm2_not_running`          | 409  | –                                                                             | restart, rollback, complete, adopt                   |
+| `self_hostname`            | 409  | –                                                                             | adopt                                                |
+| `app_not_found`            | 404  | –                                                                             | adopt                                                |
+| `app_in_use`               | 409  | `site`                                                                        | adopt                                                |
+| `adopt_blocked`            | 409  | `blockers: string[]`                                                          | adopt                                                |
+| `hand_written`             | 409  | –                                                                             | DELETE hostnames                                     |
+| `last_hostname`            | 400  | –                                                                             | DELETE hostnames                                     |
+| `confirm_mismatch`         | 400  | –                                                                             | DELETE /sites/:name                                  |
+| `env_locked`               | 400  | `keys`                                                                        | PUT env                                              |
+| `invalid_env`              | 400  | `key`, `reason: "key" \| "multiline" \| "quote" \| "too_long"`                | PUT env, POST /sites                                 |
+| `invalid_settings`         | 400  | `field`                                                                       | PATCH settings                                       |
+| `no_folder`                | 409  | –                                                                             | PUT env, uploads                                     |
+| `upload_expired`           | 404  | –                                                                             | `/uploads/:id*`                                      |
+| `chunk_sha_mismatch`       | 400  | `index`                                                                       | PUT chunk                                            |
+| `missing_chunk_sha`        | 400  | –                                                                             | PUT chunk                                            |
+| `chunk_corrupt`            | 400  | `index`                                                                       | complete                                             |
+| `invalid_binary`           | 400  | `reason: "not_elf" \| "not_64le" \| "not_aarch64" \| "interp" \| "truncated"` | PUT chunk 0, rollback                                |
+| `runtime_mismatch`         | 409  | `expected`, `got`                                                             | PUT chunk 0, complete, rollback (adopsi)             |
+| `no_space`                 | 507  | `needBytes`, `freeBytes`                                                      | POST uploads, complete                               |
+| `incomplete`               | 400  | `missing`                                                                     | complete                                             |
+| `no_previous`/`no_current` | 409  | –                                                                             | rollback                                             |
+| `not_recoverable`          | 409  | `status`                                                                      | recover                                              |
+| `already_resolved`         | 409  | `resolvedBy`                                                                  | recover                                              |
 
-| Kode                       | HTTP | Extra                                                                                         | Endpoint                                          |
-| -------------------------- | ---- | --------------------------------------------------------------------------------------------- | ------------------------------------------------- |
-| `busy`                     | 409  | `job: ActiveJob`                                                                              | semua yang memulai perubahan, PUT env, adopt      |
-| `integration_required`     | 409  | `failing: IntegrationCheckKey[]`                                                              | POST /sites, complete (deploy pertama dikelola)   |
-| `self_hostname`            | 409  | –                                                                                             | POST /sites/adopt                                 |
-| `app_not_found`            | 404  | –                                                                                             | POST /sites/adopt                                 |
-| `app_in_use`               | 409  | `site`                                                                                        | POST /sites/adopt                                 |
-| `adopt_blocked`            | 409  | `blockers: string[]`                                                                          | POST /sites/adopt                                 |
-| `hand_written`             | 409  | –                                                                                             | DELETE hostnames (sudah ada; kini dipetakan i18n) |
-| `last_hostname`            | 400  | –                                                                                             | DELETE hostnames                                  |
-| `confirm_mismatch`         | 400  | –                                                                                             | DELETE /sites/:name                               |
-| `env_locked`               | 400  | `keys: string[]`                                                                              | PUT env                                           |
-| `invalid_env`              | 400  | `key: string \| null`, `reason: "key" \| "multiline" \| "quote" \| "backslash" \| "too_long"` | PUT env, POST /sites                              |
-| `invalid_settings`         | 400  | `field`                                                                                       | PATCH settings                                    |
-| `no_folder`                | 409  | –                                                                                             | PUT env, uploads                                  |
-| `upload_expired`           | 404  | –                                                                                             | semua `/uploads/:id*`                             |
-| `chunk_sha_mismatch`       | 400  | `index`                                                                                       | PUT chunk                                         |
-| `missing_chunk_sha`        | 400  | –                                                                                             | PUT chunk                                         |
-| `invalid_binary`           | 400  | `reason: "not_elf" \| "not_64le" \| "not_aarch64" \| "interp" \| "truncated"`                 | PUT chunk 0, rollback                             |
-| `runtime_mismatch`         | 409  | `expected: ScriptRuntime`, `got: SiteRuntime`                                                 | PUT chunk 0, complete                             |
-| `no_space`                 | 507  | `needBytes`, `freeBytes`                                                                      | POST uploads, complete                            |
-| `incomplete`               | 400  | `missing: number[]`                                                                           | complete                                          |
-| `no_previous`/`no_current` | 409  | –                                                                                             | rollback                                          |
-| `not_recoverable`          | 409  | `status`                                                                                      | POST /jobs/:id/cleanup, /retry                    |
-| `already_resolved`         | 409  | `resolvedBy`                                                                                  | POST /jobs/:id/cleanup, /retry                    |
-| `log_expired`              | 404  | –                                                                                             | GET /jobs/:id/app-log                             |
+### 3.5 Endpoint (`/api/panel`, peran `admin`, mutasi lewat guard Origin + `X-Requested-With`)
 
-`ApiError` (`src/server/routes/http.error.ts`) diperluas: `status: 400 | 401 | 404 | 409 | 507` dan argumen keempat
-opsional `extra: Record<string, unknown>` yang ikut ke body di `panelOnError` (`panel.routes.ts:29-30`).
+| Metode | Path                                                | Request                  | Response                               | Error                                                                                                                                |
+| ------ | --------------------------------------------------- | ------------------------ | -------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------ |
+| GET    | `/sites`                                            | –                        | `Site[]` (bermasalah dulu, lalu nama)  | –                                                                                                                                    |
+| GET    | `/sites/discovered`                                 | –                        | `Discovered`                           | 502 `system_error`, 503 `pm2_unavailable`                                                                                            |
+| GET    | `/sites/suggest-port`                               | –                        | `{ port }`                             | 409 `no_free_port`                                                                                                                   |
+| POST   | `/sites/check`                                      | `SiteCheckRequest`       | `SiteCheckResult`                      | –                                                                                                                                    |
+| POST   | `/sites`                                            | `SiteCreateRequest`      | 202 `JobAccepted`                      | 400 `invalid_site`/`invalid_env`, 409 `busy`/`integration_required`                                                                  |
+| POST   | `/sites/adopt`                                      | `SiteAdoptRequest`       | 201 `SiteDetail`                       | 400, 404 `app_not_found`, 409 `exists`/`self_hostname`/`app_in_use`/`adopt_blocked`/`busy`/`pm2_not_running`                         |
+| GET    | `/sites/:name`                                      | –                        | `SiteDetail`                           | 404                                                                                                                                  |
+| PATCH  | `/sites/:name/settings`                             | `SiteSettingsUpdate`     | `SiteDetail`                           | 400 `invalid_settings`, 409 `busy`                                                                                                   |
+| GET    | `/sites/:name/health`                               | –                        | `HealthProbe`                          | 404                                                                                                                                  |
+| POST   | `/sites/:name/restart`                              | –                        | 202 (`site.restart`)                   | 409 `busy`/`pm2_not_running`                                                                                                         |
+| PUT    | `/sites/:name/env`                                  | `SiteEnvUpdate`          | 200 `SiteEnvSaved` / 202 `JobAccepted` | 400 `invalid_env`/`env_locked`, 409 `no_folder`/`busy`                                                                               |
+| POST   | `/sites/:name/hostnames`                            | `HostnamesAddRequest`    | 202                                    | 400 `invalid_hostname`, 409 `busy`                                                                                                   |
+| DELETE | `/sites/:name/hostnames/:hostname`                  | –                        | 202                                    | 400 `last_hostname`, 404, 409 `hand_written`/`busy`                                                                                  |
+| DELETE | `/sites/:name?keepData&keepDatabase&confirm=<nama>` | –                        | 202                                    | 400 `confirm_mismatch`, 409 `busy`/`busy_backup`                                                                                     |
+| GET    | `/jobs?page&pageSize&target&kind&status`            | –                        | `Page<Job>`                            | 400 `invalid_pagination`                                                                                                             |
+| GET    | `/jobs/active`                                      | –                        | `{ job: ActiveJob \| null }`           | –                                                                                                                                    |
+| GET    | `/jobs/:id`                                         | –                        | `Job`                                  | 404                                                                                                                                  |
+| POST   | `/jobs/:id/recover`                                 | –                        | 202 (`job.cleanup` atau jenis asli)    | 409 `not_recoverable`/`already_resolved`/`busy`                                                                                      |
+| GET    | `/integration`                                      | –                        | `Integration` (cache ≤ 30 dtk)         | –                                                                                                                                    |
+| POST   | `/integration/verify`                               | –                        | `Integration`                          | 409 `busy`                                                                                                                           |
+| POST   | `/sites/:name/uploads`                              | `UploadStartRequest`     | 201 `UploadState`                      | 400 `invalid_size`/`too_large`/`invalid_file_name`, 409 `no_folder`/`integration_required`, 507                                      |
+| GET    | `/sites/:name/uploads/active`                       | –                        | 200 `UploadState \| null`              | 404 (situs tidak ada)                                                                                                                |
+| GET    | `/uploads/:id`                                      | –                        | `UploadState`                          | 404 `upload_expired`                                                                                                                 |
+| PUT    | `/uploads/:id/chunks/:index`                        | biner + `X-Chunk-Sha256` | `ChunkReceived`                        | 400 `invalid_index`/`invalid_chunk_size`/`chunk_sha_mismatch`/`missing_chunk_sha`/`invalid_binary`, 404, 409 `runtime_mismatch`, 507 |
+| POST   | `/uploads/:id/complete`                             | –                        | 202                                    | 400 `incomplete`/`chunk_corrupt`, 404, 409 `busy`/`runtime_mismatch`/`integration_required`/`pm2_not_running`, 507                   |
+| DELETE | `/uploads/:id`                                      | –                        | 204                                    | 404                                                                                                                                  |
+| POST   | `/sites/:name/rollback`                             | –                        | 202                                    | 400 `invalid_binary`, 409 `no_previous`/`no_current`/`runtime_mismatch`/`busy`/`pm2_not_running`                                     |
+| GET    | `/sites/:name/deploys?page&pageSize`                | –                        | `Page<Deploy>`                         | 404                                                                                                                                  |
 
-### 3.5 Endpoint (semua di `/api/panel`, peran `admin`; mutasi melewati cek Origin + `X-Requested-With` dari hotfix CSRF)
+Stderr untuk kotak "Kenapa gagal": `GET /api/panel/apps/:app/log?stream=err&lines=50` (PLAN/02, `LogChunk`).
 
-| Metode | Path                                                | Request                              | Response                                                    | Error                                                                                                                                                            |
-| ------ | --------------------------------------------------- | ------------------------------------ | ----------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| GET    | `/sites`                                            | –                                    | `Site[]` (urut: bermasalah dulu, lalu nama)                 | –                                                                                                                                                                |
-| GET    | `/sites/discovered`                                 | –                                    | `Discovered`                                                | 502 `system_error`                                                                                                                                               |
-| GET    | `/sites/suggest-port`                               | –                                    | `{ port }`                                                  | 409 `no_free_port`                                                                                                                                               |
-| POST   | `/sites/check`                                      | `SiteCheckRequest`                   | `SiteCheckResult`                                           | –                                                                                                                                                                |
-| POST   | `/sites`                                            | `SiteCreateRequest`                  | 202 `JobAccepted`                                           | 400 `invalid_site{issues}`/`invalid_env`, 409 `busy`/`integration_required`                                                                                      |
-| POST   | `/sites/adopt`                                      | `SiteAdoptRequest`                   | 201 `SiteDetail`                                            | 400 `invalid_name`/`invalid_hostname`, 404 `app_not_found`, 409 `exists`/`self_hostname`/`app_in_use`/`adopt_blocked`/`busy`                                     |
-| GET    | `/sites/:name`                                      | –                                    | `SiteDetail`                                                | 404 `not_found`                                                                                                                                                  |
-| PATCH  | `/sites/:name/settings`                             | `SiteSettingsUpdate`                 | `SiteDetail`                                                | 400 `invalid_settings`, 409 `busy`                                                                                                                               |
-| GET    | `/sites/:name/health`                               | –                                    | `HealthProbe`                                               | 404                                                                                                                                                              |
-| POST   | `/sites/:name/restart`                              | –                                    | 202 `JobAccepted` (`site.restart`)                          | 409 `busy`                                                                                                                                                       |
-| PUT    | `/sites/:name/env`                                  | `SiteEnvUpdate`                      | 200 `SiteEnvSaved` atau 202 `JobAccepted`                   | 400 `invalid_env`/`env_locked`, 409 `no_folder`/`busy`                                                                                                           |
-| POST   | `/sites/:name/hostnames`                            | `{ hostname }`                       | 202 `JobAccepted`                                           | 400 `invalid_hostname`, 409 `busy`                                                                                                                               |
-| DELETE | `/sites/:name/hostnames/:hostname`                  | –                                    | 202 `JobAccepted`                                           | 400 `last_hostname`, 404, 409 `hand_written`/`busy`                                                                                                              |
-| DELETE | `/sites/:name?keepData&keepDatabase&confirm=<nama>` | –                                    | 202 `JobAccepted`                                           | 400 `confirm_mismatch`, 409 `busy`                                                                                                                               |
-| GET    | `/jobs?page&pageSize&target&kind&status`            | –                                    | `Page<Job>` (terbaru dulu)                                  | 400 `invalid_pagination`                                                                                                                                         |
-| GET    | `/jobs/active`                                      | –                                    | `{ job: ActiveJob \| null }`                                | –                                                                                                                                                                |
-| GET    | `/jobs/:id`                                         | –                                    | `Job`                                                       | 404                                                                                                                                                              |
-| GET    | `/jobs/:id/app-log`                                 | –                                    | `AppLogTail`                                                | 404 `log_expired`                                                                                                                                                |
-| POST   | `/jobs/:id/cleanup`                                 | –                                    | 202 `JobAccepted` (`job.cleanup`)                           | 409 `not_recoverable`/`already_resolved`/`busy`                                                                                                                  |
-| POST   | `/jobs/:id/retry`                                   | –                                    | 202 `JobAccepted` (jenis sama)                              | 409 `not_recoverable`/`already_resolved`/`busy`                                                                                                                  |
-| GET    | `/integration`                                      | –                                    | `Integration` (cache ≤ 30 dtk; dihitung bila belum ada)     | –                                                                                                                                                                |
-| POST   | `/integration/verify`                               | –                                    | `Integration` (buat `apps.json` bila belum ada, lalu probe) | 409 `busy`                                                                                                                                                       |
-| POST   | `/sites/:name/uploads`                              | `UploadStartRequest`                 | 201 `UploadState`                                           | 400 `invalid_size`/`too_large`/`invalid_file_name`, 409 `no_folder`/`integration_required`, 507 `no_space`                                                       |
-| GET    | `/sites/:name/uploads/active`                       | –                                    | `UploadState \| null`                                       | 404                                                                                                                                                              |
-| GET    | `/uploads/:id`                                      | –                                    | `UploadState`                                               | 404 `upload_expired`                                                                                                                                             |
-| PUT    | `/uploads/:id/chunks/:index`                        | body mentah, header `X-Chunk-Sha256` | `ChunkReceived`                                             | 400 `invalid_index`/`invalid_chunk_size`/`chunk_sha_mismatch`/`missing_chunk_sha`/`invalid_binary`, 404 `upload_expired`, 409 `runtime_mismatch`, 507 `no_space` |
-| POST   | `/uploads/:id/complete`                             | –                                    | 202 `JobAccepted`                                           | 400 `incomplete`, 404 `upload_expired`, 409 `busy`/`runtime_mismatch`/`integration_required`, 507 `no_space`                                                     |
-| DELETE | `/uploads/:id`                                      | –                                    | 204                                                         | 404 `upload_expired`                                                                                                                                             |
-| POST   | `/sites/:name/rollback`                             | –                                    | 202 `JobAccepted`                                           | 400 `invalid_binary`, 409 `no_previous`/`no_current`/`busy`                                                                                                      |
-| GET    | `/sites/:name/deploys?page&pageSize`                | –                                    | `Page<Deploy>`                                              | 404                                                                                                                                                              |
+Aturan:
 
-Aturan tambahan:
+- `/recover`: `retry` untuk `site.delete` (hanya bila langkah `validate` job asli `done`) dan `hostname.remove`,
+  `interrupted`/`failed` dan belum `resolvedBy`. `cleanup` untuk jenis lain yang `interrupted`, dan jenis mana pun yang
+  `failed` dengan undo tidak bersih. Pada `job.cleanup` yang terputus → cleanup baru atas job **asli**.
+- Laju: limiter mutasi 60/mnt/sesi (`rate.limit.ts:6`); PUT chunk dikecualikan (`CHUNK_ROUTE`, `api.handler.ts:15-16,98`)
+  dan regex itu tidak boleh berubah walau guard CSRF dipindah (B17). Retry `complete` tiap 5 dtk = 12/mnt.
+- Body JSON maks 1 MiB (`api.handler.ts:8`).
 
-- `/retry` hanya untuk `site.delete` dan `hostname.remove` yang `interrupted`/`failed` dan belum `resolvedBy`
-  (langkahnya idempoten: `removeIngressRule` mengembalikan teks sama bila host tidak ada → `ingress_unchanged`,
-  `ingress.editor.ts:104`; `dropSql` memakai `IF EXISTS`, `postgres.termux.ts:47-49`). Input diambil dari `job.input`.
-- `/cleanup` untuk `site.create`, `hostname.add`, `site.deploy`, `site.rollback`, `site.env`, `site.restart` yang
-  `interrupted`, dan untuk jenis mana pun yang `failed` dengan undo tidak bersih. Juga untuk `job.cleanup` yang
-  terputus → membuat cleanup baru atas job **asli**.
-- `POST /integration/verify` memakai kunci perubahan (`assertIdle`) karena bisa menulis `apps.json`.
-- Laju: mutasi lewat rate limiter yang ada (60/menit/sesi, `rate.limit.ts:6`). PUT chunk sudah dikecualikan
-  (`CHUNK_ROUTE`, `api.handler.ts:15-16,98`) dan regex itu tidak boleh berubah. Retry `complete` tiap 5 dtk = 12/menit,
-  di bawah batas. Body JSON maks 1 MiB (`api.handler.ts:8`) cukup untuk `.env` tempelan (validasi nilai maks 16.384
-  karakter per kunci tetap).
+### 3.6 Snippet ecosystem (wajib, lulus lab POCO E1e/E5)
 
-### 3.6 Snippet ecosystem aman (diuji)
-
-Teks persis yang dikembalikan `Integration.snippet` (path relatif ke file ecosystem, jadi sama di semua HP):
+`Integration.snippet`, teks persis:
 
 ```js
 // Panel Termux: situs buatan panel tercatat di apps.json (dikelola panel, jangan diedit tangan).
-// Blok ini aman bila apps.json belum ada, kosong, atau rusak: aplikasi lain di bawah tetap dijalankan pm2.
+// Aman bila apps.json belum ada, kosong, atau rusak; entri yang binary-nya belum ada dilewati,
+// karena satu script yang hilang membuat pm2-runtime menghentikan semua aplikasi.
 const panelApps = (() => {
   try {
+    const fs = require("fs");
+    const path = require("path");
     const list = require("./apps.json");
-    return Array.isArray(list) ? list.filter((a) => a && typeof a.name === "string") : [];
+    return Array.isArray(list)
+      ? list.filter(
+          (a) => a && typeof a.name === "string" && fs.existsSync(path.resolve(a.cwd || __dirname, a.script || "")),
+        )
+      : [];
   } catch (e) {
     console.error(`[ecosystem] apps.json dilewati: ${e.message}`);
     return [];
@@ -603,792 +632,691 @@ const panelApps = (() => {
 })();
 ```
 
-lalu di daftar `apps`: `...panelApps,` sebagai elemen terakhir.
+lalu `...panelApps,` sebagai elemen terakhir `apps`.
 
-Hasil uji (`node` v26.7.0, 2026-11-26; skrip di scratchpad, bukan di repo): ecosystem berisi satu app tulisan tangan
+Bukti:
 
-- snippet, dimuat dengan `require()`:
+| Kondisi `apps.json`                         | node v26 lokal (rev 0) | pm2-runtime 7.1.2 POCO        | Snippet lama `...require('./apps.json')` |
+| ------------------------------------------- | ---------------------- | ----------------------------- | ---------------------------------------- |
+| tidak ada / kosong / rusak / direktori      | app tangan saja        | 1 start, `hand` online (E5)   | melempar → runtime gagal                 |
+| objek `{"name":"x"}`                        | app tangan saja        | 1 start, `hand` online (E5)   | melempar                                 |
+| `[null, blog2]`                             | –                      | `hand`, `blog2` online (E5)   | –                                        |
+| entri native dengan script hilang + `blog2` | –                      | 1 start, ghost dilewati (E1e) | runtime keluar, ±54 start/mnt (E1)       |
+| entri `./run` dengan `run` ada              | dimuat                 | (pola sama E1e)               | dimuat                                   |
 
-| Kondisi `apps.json`                            | Snippet aman              | Snippet lama `...require('./apps.json')` |
-| ---------------------------------------------- | ------------------------- | ---------------------------------------- |
-| tidak ada                                      | `["hand"]` + baris stderr | **melempar `MODULE_NOT_FOUND`**          |
-| file kosong                                    | `["hand"]` + stderr       | melempar                                 |
-| JSON rusak `[{"name":`                         | `["hand"]` + stderr       | melempar                                 |
-| objek `{"name":"x"}`                           | `["hand"]`                | melempar (spread objek ke array)         |
-| `[]`                                           | `["hand"]`                | `["hand"]`                               |
-| `[{"name":"blog",…}]`                          | `["hand","blog"]`         | `["hand","blog"]`                        |
-| `apps.json` berupa direktori / tanpa izin baca | `["hand"]` + stderr       | melempar                                 |
+Filter hanya memeriksa `script`. Entri bentuk lain (grun dengan `./app` hilang) tidak difilter dan hanya
+crash-loop dirinya (E1f). Entri panel selalu `./run`, jadi filter selalu efektif untuk entri panel.
 
-Catatan: filter `a && typeof a.name === "string"` ditambahkan setelah uji (entri `null` membuat pm2 gagal memproses
-array); test repo §6 wajib mencakup `[null, {"name":"blog"}]`. Uji tingkat pm2-runtime nyata = E5 di §8.1.
+**Probe** (`src/server/sites/ecosystem.probe.ts`): `runTermux("node", ["-e", PROBE, ecosystemPath], { cwd: sitesDir,
+timeoutMs: 15_000, env: { PATH, HOME, PREFIX, PM2_HOME, LANG } })`. Env minimal, tanpa rahasia panel (C14). Probe
+memuat ecosystem seperti pm2, mencatat `require` atas `apps.json`, dan mencetak satu baris JSON
+`{ loadedAppsJson, names, envKeys: {<name>: string[]} }` (nama kunci `env` per app saja). Server menambahkan
+`snippetCurrent` = teks ecosystem memuat `panelApps` **dan** `existsSync`. `detail` stderr melewati
+`log.redact.ts` PLAN/02 dan dipotong 300 karakter. Mode fake: hasil kalengan dari sandbox, dengan flag untuk test.
 
-**Probe verifikasi** (`src/server/sites/ecosystem.probe.ts`, dijalankan `runTermux("node", ["-e", PROBE, ecosystemPath],
-{ cwd: sitesDir, timeoutMs: 15_000 })`). Memuat ecosystem seperti pm2, mencatat apakah `apps.json` ikut di-`require`,
-dan hanya mencetak nama aplikasi (env/args tidak pernah keluar):
+| Check                         | ok bila                                                                                         | state bila tidak                              | `ready` |
+| ----------------------------- | ----------------------------------------------------------------------------------------------- | --------------------------------------------- | ------- |
+| `sites_dir`                   | folder `sites.dir` ada                                                                          | error                                         | ya      |
+| `apps_json`                   | ada dan `parseApps` lolos                                                                       | error (`reason: missing/invalid`)             | ya      |
+| `ecosystem_file`              | `ecosystem.config.js` ada (nama tetap, E7)                                                      | error                                         | –       |
+| `ecosystem_loads`             | probe keluar 0 dan mencetak JSON                                                                | error (`reason: syntax/node_missing/timeout`) | ya      |
+| `ecosystem_spreads_apps_json` | `loadedAppsJson` dan setiap nama `apps.json` yang binary-nya ada muncul di `names`              | error                                         | ya      |
+| `snippet_current`             | teks memuat filter `existsSync`                                                                 | error "versi lama"                            | ya      |
+| `apps_entries_runnable`       | setiap entri: `entryBinary(a)` ada (`./run` → `run` + `app`; grun → `args[0]`; lain → `script`) | warning (danger bila `snippet_current` error) | –       |
+| `pm2_runtime`                 | layanan runit `pm2` `run` dan `rpc.sock` ada                                                    | error                                         | ya      |
+| `pm2_auto_exit`               | `$SVDIR/pm2/run` memuat `--no-auto-exit`                                                        | warning                                       | –       |
+| `pm2_guard`                   | ecosystem punya app selain milik panel (mis. `pm2-guard`)                                       | warning                                       | –       |
+| `tunnel`                      | `config.yml` terbaca + UUID tunnel                                                              | error                                         | ya      |
+| `cloudflare_token`            | token diisi                                                                                     | warning                                       | –       |
 
-```js
-const Module = require("module");
-const path = require("path");
-const eco = process.argv[1];
-const appsJson = path.join(path.dirname(eco), "apps.json");
-let loadedAppsJson = false;
-const orig = Module._load;
-Module._load = function (req, parent, isMain) {
-  try {
-    if (Module._resolveFilename(req, parent, isMain) === appsJson) loadedAppsJson = true;
-  } catch {}
-  return orig.apply(this, arguments);
-};
-const cfg = require(eco);
-const apps = Array.isArray(cfg) ? cfg : (cfg && cfg.apps) || [];
-process.stdout.write(
-  JSON.stringify({ loadedAppsJson, names: apps.map((a) => a && a.name).filter((n) => typeof n === "string") }) + "\n",
-);
-```
+Untuk PLAN/05, server tetap mengekspor `integration().ecosystemIncludesAppsJson` (= `ecosystem_spreads_apps_json` ok).
 
-(Diuji lokal: `{"loadedAppsJson":true,…}` dengan snippet, `false` tanpa snippet.) Catatan `-e`: `process.argv[1]` =
-argumen pertama setelah skrip. Ecosystem pemilik **dieksekusi** oleh probe (sama seperti oleh pm2); efek sampingnya
-tanggung jawab file itu — dicatat di README. Mode fake: probe membaca `apps.json` sandbox dan menganggap ecosystem
-menyebarnya (bisa dimatikan lewat flag fake untuk test).
+### 3.7 Adapter (`wkr-adapters-01`, B14)
 
-Pemeriksaan `Integration.checks` (urutan tampil):
+`Pm2Proc` (internal) += `cwd` (`pm_cwd`), `execPath` (`pm_exec_path`), `args`, `startedAtMs` (`pm_uptime`), `module`
+(`pmx_module` **atau** nama = `pm2-guard`). `Pm2Adapter` dibangun dengan `isSupervisorUp()` dan melempar
+`Pm2UnavailableError(reason)` di `list/control/remove/startFromEcosystem/readLog` bila layanan runit `pm2` ada dan
+tidak `run`; tidak pernah memanggil CLI dalam keadaan itu. `NetAdapter.httpStatus(port, path = "/", timeoutMs = 5000,
+host?)`. Bila Bun `fetch` mengabaikan header `Host` (diuji di kriteria), adapter memakai `node:http`. Fake: app
+dengan cwd di sandbox, satu tanpa binary, satu glibc, satu modul, `pm2-guard`; opsi `supervisorDown`,
+`onlineWithoutPid`, `runtimeExitsOnMissingNativeScript`, `exitsOnZeroAppsAtStart` (C18).
 
-| key                           | ok bila                                                                 | state bila tidak                                          |
-| ----------------------------- | ----------------------------------------------------------------------- | --------------------------------------------------------- |
-| `sites_dir`                   | folder `sites.dir` ada                                                  | error                                                     |
-| `apps_json`                   | `apps.json` ada dan `parseApps` lolos                                   | error (`params.reason: missing/invalid`)                  |
-| `ecosystem_file`              | `ecosystem.config.js` ada                                               | error                                                     |
-| `ecosystem_loads`             | probe keluar 0 dan mencetak JSON                                        | error (`detail` = 300 char stderr pertama, tanpa isi env) |
-| `ecosystem_spreads_apps_json` | `loadedAppsJson` true **dan** setiap nama di `apps.json` ada di `names` | error                                                     |
-| `apps_entries_runnable`       | setiap entri `apps.json` punya file `cwd/script` yang ada               | error (`params.names`) — lihat D5                         |
-| `tunnel`                      | `config.yml` terbaca + UUID tunnel                                      | error                                                     |
-| `cloudflare_token`            | token diisi                                                             | warning (tidak memengaruhi `ready`)                       |
-
-Untuk PLAN/05: fungsi server `integration()` tetap mengembalikan field turunan `ecosystemIncludesAppsJson` (= check
-`ecosystem_spreads_apps_json` ok) di objek internal yang dipakai `setup.service.ts`, sehingga item onboarding
-`apps_json` tidak berubah kontrak.
-
-### 3.7 Data adapter yang dibutuhkan (diminta ke PLAN/02, pemilik `src/server/system/*`)
-
-`Pm2Proc` (internal, tidak ke klien) ditambah: `cwd: string | null` (`pm2_env.pm_cwd`), `execPath: string | null`
-(`pm2_env.pm_exec_path`), `args: string[]` (`pm2_env.args`), `startedAtMs: number | null` (`pm2_env.pm_uptime`,
-juga saat tidak online), `module: boolean` (sudah direncanakan PLAN/02). `NetAdapter.httpStatus(port, path = "/",
-timeoutMs?)`. Fake adapter: app fake punya `cwd` di bawah sandbox `sites.dir`, satu app tanpa binary, satu app glibc
-(`execPath` `.../grun`), satu app modul. Bila PLAN/02 tidak bisa, W2a mengerjakannya **setelah** gelombang adapter
-PLAN/02 selesai (bukan paralel).
+Kontrak balik dari PLAN 03 untuk PLAN/02: `jobs.isLocked({ kind: "service" | "app"; name }): boolean`,
+`jobs.active(): ActiveJob | null`; runner memanggil `monitor.noteIntentionalRestart({ kind: "app", name })` di setiap
+`app_restart` (termasuk revert) dan `{ kind: "service", name: "cloudflared" }` di `tunnel_restart`.
 
 ---
 
 ## 4. Flow
 
-### 4.1 Persiapan integrasi (first run, termasuk HP baru)
+### 4.1 Persiapan integrasi
 
-1. Panel start (termux): bila `sites.dir` ada dan `apps.json` tidak ada → tulis `[]\n` atomik (0644), log info
-   `[sites] created apps.json`. Bila `sites.dir` tidak ada → tidak membuat apa pun (check `sites_dir` error).
-2. Admin membuka `/panel/sites` → `GET /integration` (cache 30 dtk, dihitung bila kosong; probe `node` ±0,3–0,5 dtk
-   di HP). `ready` false → kartu **Persiapan** di atas daftar (§5.1).
-3. Kartu menampilkan checklist, snippet + Salin, perintah `nano ~/sites/ecosystem.config.js` + Salin, dan tombol
-   **Periksa lagi** → `POST /integration/verify` (buat `apps.json` bila hilang, probe ulang, buang cache).
-4. Hasil: semua ok → kartu berubah jadi satu baris sukses "pm2 siap: 3 aplikasi terbaca, termasuk dari apps.json"
-   (bisa disembunyikan; muncul lagi bila `ready` turun).
-5. Gagal:
-   - `ecosystem_loads` error (sintaks salah setelah edit) → pesan "pm2 tidak bisa memuat ecosystem.config.js. Situs
-     yang sudah berjalan tidak terganggu sekarang, tetapi **semua aplikasi tidak akan jalan setelah HP dinyalakan
-     ulang**. Perbaiki file, lalu periksa lagi." + detail stderr. Nada danger.
-   - `node` tidak ada / timeout 15 dtk → `ecosystem_loads` error, `params.reason: "node_missing" | "timeout"`.
-   - `busy` → toast standar + tautan perubahan berjalan.
-6. Edge: `sites.dir` diubah (PLAN/05 memberi dialog) → cache integrasi dibuang saat setting berubah.
-7. **HP baru** (installer PLAN/05): ecosystem tanpa aplikasi tulisan tangan + `apps.json` `[]` → pm2-runtime keluar
-   karena 0 aplikasi (lab lokal E4: juga dengan `--no-auto-exit`). Lihat ketergantungan ke PLAN/05 §7.
+1. Panel start (termux): `ensureAppsJson()` (dipanggil `boot.ts`) menulis `[]\n` atomik (0644) bila `sites.dir` ada
+   dan `apps.json` tidak ada.
+2. `/panel/sites` → `GET /integration`. `ready` false → kartu **Persiapan** (§5.1).
+3. Kartu: checklist, snippet + Salin, perintah `nano ~/sites/ecosystem.config.js` + Salin, **Periksa lagi** →
+   `POST /integration/verify`.
+4. Gagal:
+   - `ecosystem_loads` error: "pm2 tidak bisa memuat ecosystem.config.js. Situs yang berjalan tidak terganggu sekarang,
+     tetapi semua aplikasi tidak akan jalan setelah HP dinyalakan ulang. Perbaiki file, lalu periksa lagi." (danger)
+   - `snippet_current` error: "Blok apps.json di ecosystem.config.js versi lama. Ganti dengan blok terbaru di bawah."
+   - `pm2_runtime` error: "Layanan pm2 tidak berjalan. Jalankan `sv up pm2` di HP, lalu periksa lagi." Panel tidak
+     menyalakannya sendiri.
+   - `pm2_auto_exit`/`pm2_guard` warning: teks saran (§5.9).
+5. `sites.dir` diubah (PLAN/05 dialog) → cache integrasi dibuang.
+6. HP baru: template installer (§7.2) sudah memuat snippet + `pm2-guard` + `--no-auto-exit` → `ready` setelah tunnel
+   diatur.
 
-### 4.2 Adopsi (dari aplikasi pm2 nyata)
+### 4.2 Adopsi
 
-1. `GET /sites/discovered`: ingress dari `config.yml` yang hostname-nya bukan milik situs + daftar app pm2 yang tidak
-   dipakai situs mana pun (`site.app`) dan bukan modul.
-2. Server per app: `cwd` = `realpath(pm_cwd)`; `insideSitesDir` = diawali `realpath(sitesDir) + "/"` (dan bukan
-   `sitesDir` itu sendiri); `hasBinary` = `<cwd>/app` adalah file; `runtime` = `detectRuntime(<cwd>/app)` (error →
-   blocker `invalid_binary`); `scriptRuntime` = `basename(execPath) === "grun"` → `grun`; `execPath === <cwd>/app` →
-   `native`; selain itu `other`; port = env pm2 → args → `.env PORT` (`readEnvPort`, D7).
-3. `readEnvPort(dir)`: baca `<dir>/.env` (maks 64 KiB), cari baris pertama `^\s*(?:export\s+)?PORT\s*=\s*(['"]?)(\d{1,5})\1\s*(?:#.*)?$`,
-   kembalikan integer 1–65535 atau null. Fungsi tidak mengembalikan/men-log teks lain; error baca → null.
-4. Ingress: `self` = hostname sama dengan host `APP_BASE_URL` **atau** port = `PORT` panel. `match` = app pertama tanpa
-   blocker yang port-nya = port ingress. Wildcard (`*.x`) → blocker `wildcard`.
-5. UI "Belum dikelola" (§5.1): baris per ingress; tombol **Adopsi** membuka dialog dengan app terpilih = `match`.
-6. Dialog: Select aplikasi pm2 (wajib; opsi ber-blocker tampil disabled dengan alasan), Nama situs (prefill = nama app
-   bila lolos `SITE_NAME_RE`, else kosong), ringkasan read-only: folder, runtime + script, port + sumbernya. Peringatan
-   non-blokir: `runtime_script_mismatch` ("Binary glibc tetapi pm2 menjalankannya langsung…"), `port_mismatch`
-   ("Domain mengarah ke port 3005, aplikasi mendengar di 3006"), `port_unknown`.
-7. Submit → `POST /sites/adopt {hostname, app, name}`. Server mengulang semua pemeriksaan (tidak percaya klien), lalu
-   menyisipkan `site {name, port: ingress port, app, runtime: ELF, managed: false, dir: cwd, health default}` +
-   `site_hostname {ingressManaged: false, dnsManaged: false}`. Audit `site.adopt` dengan meta {hostname, app, port}.
-8. Error: app hilang (dihapus di antara) → 404 `app_not_found` → dialog memuat ulang daftar; `self_hostname`; app sudah
-   dipakai (dua admin) → 409 `app_in_use{site}`; `busy` → banner.
-9. Setelah adopsi → navigasi ke `/panel/sites/<nama>`; toast "Situs makuro-solusi diadopsi."
-10. Kosong: tidak ada ingress tak tercatat → bagian tidak tampil. Ada ingress tapi semua app ber-blocker → baris tampil
-    dengan teks "Tidak ada aplikasi pm2 yang cocok. Pastikan aplikasinya berjalan dari folder di ~/sites."
+1. `GET /sites/discovered`: ingress tanpa situs + app pm2 tanpa situs, bukan modul/`pm2-guard`.
+2. Per app: `cwd = realpath(pm_cwd)` harus di dalam `realpath(sitesDir) + "/"`; binary `<cwd>/app`; `runtime` =
+   `detectRuntime` (error → `invalid_binary`); `scriptRuntime` = basename `realpath(execPath)` atau `execPath` ∈
+   {`grun`, `glibc-runner`} → `grun`, `execPath === <cwd>/app` → `native`, lain → `other` (warning `script_other`);
+   port: env pm2 → args → `.env PORT` (`findEnvLine` + `decodeEnvValue`, integer 1–65535).
+3. Ingress: `self` (host `APP_BASE_URL` atau port = `PORT` panel), `match`, wildcard → blocker.
+4. Dialog → `POST /sites/adopt {hostname, app, name}` → server mengulang semua cek → `site {managed: false, dir: cwd,
+   runtime, port: ingress port, health default}` + `site_hostname`. Audit `site.adopt`.
+5. Error: `app_not_found` (muat ulang daftar), `self_hostname`, `app_in_use`, `busy`, `pm2_not_running`.
+6. Sukses → `/panel/sites/<nama>`, toast "Situs makuro-solusi diadopsi."
+7. Kosong: tanpa ingress tak tercatat → bagian tidak tampil; semua app ber-blocker → "Tidak ada aplikasi pm2 yang
+   cocok. Pastikan aplikasinya berjalan dari folder di ~/sites."
 
-### 4.3 Jalur first-run konkret di POCO (kondisi hari ini: R3 §2.11)
+### 4.3 Jalur first-run di POCO
 
-1. **Upgrade panel** ke rilis yang memuat PLAN ini. Saat start, panel membuat `~/sites/apps.json` = `[]` (D3). Tidak
-   ada aplikasi yang terpengaruh: ecosystem belum menyebutnya.
-2. `/panel/sites` → kartu Persiapan: ✓ Folder situs, ✓ `apps.json`, ✓ ecosystem bisa dimuat (2 aplikasi:
-   makuro-solusi, adminneo), ✗ "ecosystem belum memuat apps.json", ✓ apps.json tanpa entri bermasalah, ✓ Tunnel `poco`,
-   ⚠ Token Cloudflare (opsional).
-3. Pemilik `ssh poco`, `nano ~/sites/ecosystem.config.js`: tempel blok snippet di atas `module.exports`, tambah
-   `...panelApps,` sebagai elemen terakhir `apps` (setelah entri `adminneo`). Contoh hasil (file pemilik memakai helper
-   `site(name)`; itu tidak berubah):
+1. Upgrade panel. Saat start panel membuat `~/sites/apps.json` = `[]` (ecosystem belum menyebutnya, jadi tidak ada
+   efek).
+2. Persiapan: ✓ folder, ✓ `apps.json`, ✓ ecosystem dimuat (makuro-solusi, adminneo), ✗ belum memuat apps.json, ✗ snippet
+   (belum ada), ✓ pm2 berjalan, ⚠ run script pm2 tanpa `--no-auto-exit` (POCO hari ini; aman karena ada app tangan),
+   ✓ ada app selain panel, ✓ tunnel `poco`, ⚠ token (opsional).
+3. Pemilik `nano ~/sites/ecosystem.config.js`: tempel snippet di atas `module.exports`, tambah `...panelApps,` di akhir
+   `apps`:
 
    ```js
    module.exports = {
      apps: [
        site("makuro-solusi"),
-       { name: "adminneo", /* …tetap… */ },
+       { name: "adminneo" /* …tetap… */ },
        ...panelApps,
      ],
    };
    ```
 
-   Tidak perlu `sv restart pm2` (pm2-runtime membaca ecosystem hanya saat start; reboot berikutnya memakai snippet).
-4. **Periksa lagi** → semua ✓ → `ready`.
-5. "Belum dikelola": `solusi.malikkurosaki.com · port 3005 → makuro-solusi` (port dari `.env`, karena env pm2 tidak
-   punya PORT) dan `panel.malikkurosaki.com · Panel Termux (domain ini)` tanpa tombol.
-6. **Adopsi** solusi → dialog: aplikasi `makuro-solusi` (Berjalan), nama `makuro-solusi`, folder
-   `~/sites/makuro-solusi` ✓, runtime glibc · dijalankan lewat grun ✓, port 3005 dari `.env` ✓. Teks: "Panel hanya
-   mencatat situs ini. File, aplikasi pm2, dan domainnya tidak diubah sampai kamu deploy."
-7. Detail situs: header "Berjalan", domain, **Cek kesehatan** → `GET /` 200. Bagian Pengaturan: pemilik boleh mengganti
-   path cek kesehatan (mis. `/api/health` bila aplikasinya punya) — opsional.
-8. **Deploy pertama ke makuro-solusi**: pemilik build `bun build --compile --target=bun-linux-arm64` (glibc, cocok
-   dengan script grun). Bila memilih build Android, server menolak di potongan 0 dengan `runtime_mismatch` + petunjuk
-   ganti `script` di helper `site()` menjadi `./app` (tanpa grun) lalu `sv restart pm2` **oleh pemilik** (blip semua
-   aplikasi; dijelaskan). Unggahan 89 MB bisa dilanjutkan bila VPN putus. Perubahan: assemble → detect (grun) →
-   chmod → swap (`app.prev` = binary tulisan tangan lama) → apps_entry dilewati (adopsi) → `pm2 restart makuro-solusi`
-   → cek kesehatan (2 jawaban + stabil 5 dtk). Situs terputus beberapa detik (dijelaskan sebelum mulai).
-9. Riwayat deploy: 1 baris "Aktif". **Kembalikan versi sebelumnya** aktif dengan dialog "dari `3f9a…` (app-v2, 26 Nov
-   22.40) → versi sebelum panel (89,2 MB, diubah 25 Nov 2026)". Dialog menyebut database tidak ikut kembali (aplikasi
-   ini memigrasi database dari Mac; versi lama bisa gagal bila skema sudah berubah).
-10. **Situs kedua**: Buat situs (wizard aktif karena `ready`) → perubahan `site.create` (tanpa `apps.json`) → halaman
-    hasil dengan CTA **Unggah binary pertama** → deploy pertama: … swap → apps_entry `apps_registered` → app_restart
-    `pm2 start ecosystem.config.js --only <nama>` (lab E2: masuk daemon pm2-runtime yang sama) → health.
-11. Reboot berikutnya: pm2-runtime memuat makuro-solusi, adminneo, dan situs kedua dari `apps.json`.
-
-Yang sengaja tidak otomatis: edit ecosystem, `sv restart pm2`, ubah situs adopsi jadi dikelola.
+   Tidak perlu `sv restart pm2`.
+4. **Periksa lagi** → `ready`.
+5. Belum dikelola: `solusi.malikkurosaki.com · port 3005 → makuro-solusi` (dari `.env`); `panel.malikkurosaki.com ·
+   Panel Termux (domain ini)`.
+6. Adopsi → nama `makuro-solusi`, folder ✓, runtime glibc · lewat grun ✓, port 3005 dari `.env` ✓.
+7. Detail: Cek kesehatan → 200. Editor env menandai kunci yang ditimpa `env` pm2 (makuro-solusi: tidak ada; PORT hanya
+   di `.env`).
+8. Deploy pertama makuro-solusi (build `bun-linux-arm64`): unggah yang bisa dilanjutkan → stage → detect (grun) → chmod
+   → swap (`app.prev` = binary lama, hardlink) → run_script & apps_entry dilewati (adopsi) → `pm2 restart` → health
+   (pid stabil + 2 probe + 5 dtk). Build Android → `runtime_mismatch` di potongan 0 + petunjuk mengubah `site()` di
+   ecosystem.
+9. Riwayat: 1 baris "Aktif"; rollback "dari app-v2 → versi tanpa catatan (89,2 MB, 25 Nov)" + daftar yang tidak ikut.
+10. Situs kedua: wizard → `site.create` → CTA Unggah binary pertama → deploy pertama: swap → `run_written native` →
+    `apps_registered` → `pm2 start ecosystem.config.js --only <nama>` (E2) → health.
+11. Reboot: pm2-runtime memuat makuro-solusi, adminneo, dan situs kedua (snippet).
 
 ### 4.4 Wizard buat situs
 
-1. `/panel/sites/new`: bila `!integration.ready` → wizard tetap tampil, kartu Persiapan ringkas di atas, tombol
-   **Buat situs** disabled + teks "Selesaikan persiapan pm2 dulu." (server juga 409 `integration_required`).
-2. Langkah 1 **Alamat**: Nama, Domain, Port (prefill `suggest-port`; port panel tidak pernah ditawarkan). Cek langsung
-   `POST /sites/check` debounce 400 ms (sudah ada, `site.api.ts:56-77`); hasil per field dengan kode → teks Indonesia
-   (§5.9). Cek DNS (bila token diisi): zona ditemukan? record ada? CNAME ke tunnel ini → catatan `dns_same_tunnel`
-   (lolos); record lain → `hostname_dns_conflict` (blokir); token kosong → catatan `dns_token_missing`; API gagal →
-   catatan `dns_check_failed` (tidak blokir, dicek lagi di langkah dns). Hasil DNS di-cache 30 dtk per hostname.
-   `name_leftover {jobId}` bila nama/folder dipakai sisa perubahan terputus → tautan "Bersihkan".
-3. Langkah 2 **Opsi**: toggle database dengan penjelasan ("Membuat database dan role PostgreSQL baru di HP ini.
-   `DATABASE_URL` ditulis ke `.env` situs dan memakai 127.0.0.1:5432."), editor variabel tambahan (komponen env §5.6,
-   termasuk Tempel `.env`).
-4. Langkah 3 **Ringkasan**: rencana per langkah (teks dari kode langkah) + peringatan blip cloudflared ("Semua domain di
-   HP ini, termasuk panel, terputus beberapa detik. Halaman progres lanjut otomatis.").
+1. `!ready` → kartu Persiapan ringkas di atas, **Buat situs** disabled + "Selesaikan persiapan pm2 dulu."
+2. Langkah 1 **Alamat**: Nama, Domain, "Tambah domain lain" (maks 4), Port (prefill; port panel tidak pernah). Cek
+   langsung debounce 400 ms; DNS per domain (zona, record, same-tunnel, token kosong, API gagal) tanpa cache tambahan.
+   `name_leftover {jobId}` → tautan "Pulihkan".
+3. Langkah 2 **Opsi**: database (penjelasan), variabel tambahan (editor §5.6 + Tempel `.env`).
+4. Langkah 3 **Ringkasan**: rencana per langkah + "cloudflared dimulai ulang sekali. Semua domain di HP ini terputus
+   3–10 dtk, termasuk solusi.malikkurosaki.com dan panel ini." (daftar dari ingress).
 5. **Buat situs** → 202 → `/panel/jobs/:id`.
-6. Halaman progres selesai `succeeded` → panel hasil: "Situs blog siap. Unggah binary pertama untuk menjalankannya."
-   CTA utama **Unggah binary pertama** (`/panel/sites/blog#deploy`), sekunder "Buka detail situs".
-7. Gagal: `rolled_back` → "Semua langkah sudah dikembalikan. Tidak ada yang perlu kamu bersihkan." + aksi **Coba lagi**
-   (`/panel/sites/new?from=<jobId>` — wizard diisi ulang dari `job.input` lewat `GET /jobs/:id`, variabel tambahan tidak
-   ikut karena nilainya tidak disimpan). `failed` (undo tidak bersih) → "Sebagian langkah tidak bisa dikembalikan" +
-   **Bersihkan**.
-8. Edge: dua admin membuat bersamaan → yang kedua 409 `busy` → banner "Perubahan _Buat situs · blog_ sedang berjalan ·
-   Lihat". Wizard ditinggal di tengah → tidak ada state server (tidak ada yang dibersihkan).
+6. Sukses → "Situs blog siap. Unggah binary pertama untuk menjalankannya." CTA **Unggah binary pertama**.
+7. `rolled_back` → "Semua langkah sudah dikembalikan." + **Coba lagi** (`/panel/sites/new?from=<jobId>`, isi dari
+   `job.input`; variabel tambahan tidak ikut). `failed`/`interrupted` → **Bersihkan** (`/recover`).
+8. 409 `busy` → banner "Perubahan _Buat situs · blog_ sedang berjalan · Lihat".
 
-### 4.5 Perubahan berjalan & halaman progres
+### 4.5 Halaman progres
 
-1. `GET /jobs/:id` dipoll 1 dtk selama `running` (pola sekarang, `job.state.ts:5`), berhenti saat status akhir.
-2. Selama langkah `tunnel_restart`/`domain_probe` berjalan, galat jaringan diharapkan: klien **tidak** menampilkan error;
-   tampilkan catatan "Panel terputus sebentar karena cloudflared dimulai ulang. Halaman ini lanjut sendiri." dan backoff
-   1→2→4→5 dtk hingga 120 dtk; lebih dari itu → `ErrorState` dengan **Coba lagi**.
-3. Galat jaringan di luar itu: 3 gagal berturut → banner offline + backoff yang sama; data terakhir tetap tampil.
-4. 401 Access → alur reload yang ada (`api.client.ts`); halaman progres bisa dibuka ulang dari URL.
-5. Ringkasan per langkah: ikon status + label + durasi (`finishedAt - startedAt`, format durasi guide) + `Detail` yang
-   bisa dibuka (log teknis + detail, tombol Salin).
-6. Status akhir: `succeeded` (hijau), `rolled_back` (peringatan: "aman, semua dikembalikan"), `failed` (danger: "butuh
-   tindakan"), `interrupted` (danger: "terputus karena panel dimulai ulang"). Aksi dari `job.next`.
-7. Deploy/rollback/restart/env gagal di `app_restart`/`health` → panel "Kenapa gagal" dengan ekor stderr (§4.9).
+1. Poll `GET /jobs/:id` dengan `usePoller` PLAN/01 (1 dtk) selama `running`.
+2. Selama `tunnel_restart`/`domain_probe`: galat jaringan disembunyikan dengan catatan "Panel terputus sebentar karena
+   cloudflared dimulai ulang. Halaman ini lanjut sendiri." (backoff milik poller PLAN/01, X19). Lebih dari 120 dtk →
+   `ErrorState` + Coba lagi.
+3. Langkah: ikon (sr-only), label, hasil singkat, durasi, Detail (log + detail + Salin).
+4. Status akhir via `job.status-key.ts`: `succeeded`; `rolled_back` "Dikembalikan" (warning) + "aman, tidak ada yang
+   perlu dibersihkan"; `failed` (danger) "butuh tindakan"; `interrupted` "Terputus" (warning) "panel dimulai ulang;
+   periksa dan pulihkan".
+5. Gagal di `app_restart`/`health` → kotak "Kenapa gagal" (§4.9).
 
-### 4.6 Deploy (unggah yang bisa dilanjutkan)
+### 4.6 Deploy
 
-1. Detail situs `#deploy`. Bila ada `GET /sites/:name/uploads/active` → kartu "Unggahan belum selesai: app-v2 · 89,2 MB ·
-   6 dari 11 potongan · kedaluwarsa 21.40" + [Pilih file yang sama] [Batalkan unggahan].
-2. Pilih file → cek ukuran (0 / > 300 MB ditolak) → bila ada unggahan aktif dan `name + size` sama → **resume**; else
-   `POST /sites/:name/uploads {sizeBytes, fileName}` (server: preflight ruang bebas ≥ `2 × size + 200 MB` di filesystem
-   `dataDir`, situs dikelola tanpa entri apps.json + `!ready` → 409 `integration_required`).
-3. Konfirmasi sebelum kirim (tier none, teks di kartu): "Setelah unggahan selesai, aplikasi dimulai ulang dan situs
-   terputus beberapa detik."
-4. Kirim potongan berurutan; tiap potongan: `slice` 8 MB → `crypto.subtle.digest` → bila `received` punya index ini
-   dengan sha sama → lewati; else `PUT` + header sha. Progres: persen, terkirim/total, kecepatan, sisa waktu.
-5. Potongan 0: server menjalankan `detectRuntime` pada `0.part`; tidak valid → 400 `invalid_binary` (unggahan dihapus);
-   situs adopsi dengan `scriptRuntime` ∉ {runtime baru} → 409 `runtime_mismatch` (unggahan dihapus) → kartu menampilkan
-   langkah perbaikan.
-6. Galat sementara → jadwal D15; `navigator.onLine === false` → jeda sampai event `online`. Habis → status "Unggahan
-   terhenti" + **Lanjutkan unggahan** (GET state → lanjut dari `received`).
-7. Unggahan 404 `upload_expired` → "Unggahan ini sudah kedaluwarsa (lebih dari 1 jam tanpa potongan baru). Unggah ulang
-   file-nya." + tombol Unggah ulang.
-8. Semua terkirim → `POST complete`: server cek kelengkapan, ruang bebas ≥ size + 100 MB, `assertIdle`, runtime ulang
-   (pm2 bisa berubah), integrasi untuk deploy pertama dikelola → job `site.deploy`. 409 `busy` → "Menunggu perubahan
-   lain selesai…" + tautan; klien mencoba `complete` lagi tiap 5 dtk selama halaman terbuka (maks 10 mnt), unggahan
-   tetap aman di server.
-9. Sukses → navigasi ke halaman progres (§4.5).
-10. Meninggalkan halaman: fetch yang berjalan dibatalkan, **unggahan di server tidak dihapus**; localStorage
-    `panel.upload.<site>` = `{uploadId, fileName, sizeBytes, lastModified}` (try/catch) untuk mencocokkan file. Reload
-    karena Access 401 → langkah 1.
-11. File berbeda saat resume (sha potongan yang sudah diterima tidak cocok) → dialog "File ini berbeda dari unggahan
-    sebelumnya. Mulai unggahan baru?" [Mulai unggahan baru] [Batal].
-12. **Batalkan unggahan** (tier none) → `DELETE /uploads/:id` → toast "Unggahan dibatalkan."
-13. Restart panel di tengah unggahan: meta dipersist (D13) → setelah panel kembali, PUT berikutnya sukses (retry
-    menutupi jeda restart ≤ 90 dtk); bila panel mati lebih lama → "Unggahan terhenti" → Lanjutkan.
-14. Dua admin mengunggah ke situs sama: unggahan kedua menggantikan yang pertama (satu aktif per situs, perilaku lama);
-    admin pertama mendapat 404 `upload_expired` dengan teks tambahan "mungkin admin lain memulai unggahan baru".
+1. `#deploy`: `GET /sites/:name/uploads/active` → bila ada: "Unggahan belum selesai: app-v2 · 89,2 MB · 6 dari 11
+   potongan · kedaluwarsa 21.40" + [Pilih file yang sama] [Batalkan unggahan].
+2. Pilih file → ukuran (0 / > 300 MB ditolak) → resume bila `name + size` sama, else `POST uploads`.
+3. Teks kartu: "Setelah unggahan selesai, aplikasi dimulai ulang dan situs terputus beberapa detik."
+4. Potongan berurutan: `slice` → `crypto.subtle.digest` → lewati bila `received` punya sha sama → `PUT`.
+5. Potongan 0 ditolak (`invalid_binary`/`runtime_mismatch`) → kartu menampilkan perbaikan.
+6. Galat sementara → D15; habis → "Unggahan terhenti" + **Lanjutkan unggahan** (GET state, lanjut).
+7. `upload_expired` → "Unggahan ini sudah tidak ada di server (lebih dari 1 jam tanpa potongan baru, atau admin lain
+   memulai unggahan baru). Unggah ulang file-nya."
+8. `complete` → `chunk_corrupt` → kirim ulang potongan itu otomatis lalu `complete` lagi; `busy` → "Menunggu perubahan
+   lain selesai…" + retry tiap 5 dtk maks 10 mnt; `pm2_not_running` → teks Persiapan.
+9. Sukses → halaman progres.
+10. Tinggalkan halaman: fetch dibatalkan, unggahan server tetap; `localStorage` `panel.upload.<site>` (try/catch).
+11. File berbeda saat resume → dialog "File ini berbeda dari unggahan sebelumnya. Mulai unggahan baru?".
+12. **Batalkan unggahan** → `DELETE` → "Unggahan dibatalkan."
+13. Restart panel di tengah unggahan → meta bertahan; retry menutupi ≤ 120 dtk.
 
 ### 4.7 Rollback
 
-1. Tombol **Kembalikan versi sebelumnya** aktif hanya bila `binary.previous !== null` dan `binary.live !== null`
-   (dari file, bukan tebakan riwayat).
-2. Dialog (tier confirm) "Kembalikan blog ke versi sebelumnya?": baris "Dari → Ke" (sha12 · nama file · waktu deploy ·
-   oleh) + tabel "Ikut dikembalikan / Tidak ikut" (§5.4).
-3. **Kembalikan** → `POST rollback` → job `site.rollback` (swap → apps_entry → app_restart → health). Gagal health →
-   swap dibalik + restart lagi → `rolled_back`.
-4. Setelah rollback sukses, versi yang diganti menjadi `app.prev` (rollback bisa diulang = maju lagi).
+1. Aktif bila `binary.previous` dan `binary.live` ada.
+2. Dialog confirm "Kembalikan blog ke versi sebelumnya?" + Dari → Ke + tabel ikut/tidak ikut (§5.4).
+3. Situs adopsi: `detectRuntime(app.prev)` ≠ `scriptRuntime` → 409 `runtime_mismatch` sebelum dialog dikirim.
+4. Job: swap (D23) → run_script → `pm2 restart` → health; gagal → swap balik + restart → `rolled_back`.
 
 ### 4.8 Cek kesehatan & mulai ulang
 
-1. **Cek kesehatan** (menu header): `GET /sites/:name/health` → toast "Sehat: HTTP 200 dalam 85 ms" atau "Tidak sehat:
-   GET /api/health menjawab 502" / "tidak menjawab". Tidak memakai kunci (read-only).
-2. **Mulai ulang** (tier confirm, "Situs terputus beberapa detik"): `POST /sites/:name/restart` → job `site.restart`
-   (app_restart → health). Gagal → `failed` + ekor stderr + aksi **Kembalikan versi sebelumnya** (bila ada) dan
-   **Lihat log aplikasi**.
-3. Algoritme `health` (D16), tiap iterasi 1 dtk: cek pm2 (maks tiap 3 dtk, memakai snapshot/adapter); status `errored`
-   → gagal cepat `app_errored`; port mendengar → `httpStatus(port, path, 5 dtk)` → lolos bila sesuai aturan → `streak++`
-   else `streak = 0`; `streak ≥ 2` → catat `restarts` awal, tunggu 5 dtk, baca lagi: naik atau bukan `online` →
-   `app_unstable`; deadline `timeoutSec` → `health_timeout {last}`.
+1. **Cek kesehatan**: `GET /sites/:name/health` → toast "Sehat: HTTP 200 dari /api/health dalam 85 ms" / "Tidak sehat:
+   … menjawab 502" / "tidak menjawab".
+2. **Mulai ulang** (confirm): job `site.restart`.
+3. Algoritme `health`:
+   1. Baseline segera setelah `app_restart`: `pid0`, `restarts0` (satu `jlist`).
+   2. Tiap 1 dtk: `isListening(port)` → `httpStatus(port, path, 5 dtk, host)`; lolos sesuai `expect` → `streak++`, else
+      0. Tiap 10 dtk: `jlist` → `errored` → `app_errored`; pid berubah/null → `app_no_pid`/`app_unstable`.
+   3. `streak ≥ 2` → `jlist` → pid = angka > 0 (bila `pid0` null, `pid0` := pid ini) dan `restarts == restarts0`; lalu
+      tunggu 5 dtk → `jlist` lagi, syarat sama + port masih menjawab → `healthy`.
+   4. Deadline `timeoutSec` → `health_timeout {last}`.
 
-### 4.9 Gagal deploy: alasan + aksi lanjutan
+### 4.9 Gagal: alasan + aksi
 
-1. Langkah `app_restart` atau `health` gagal → runner memanggil `captureAppLog(jobId, site)`: `pm2.readLog(app, "err",
-   50)` → redaksi (D17: setiap nilai `.env` situs dengan panjang ≥ 6 diganti `•••`, pola `://user:pass@` →
-   `://•••@`) → simpan di memori (`Map`, maks 20, TTL 1 jam). `job.hasAppLog` true selama tersimpan.
-2. Halaman progres: kotak "Kenapa gagal" = teks kode error + `LogViewer` (PLAN/01) berisi ekor stderr (mono, maks 50
-   baris) + catatan "Disamarkan: 2 nilai rahasia." + [Lihat log aplikasi] (`/panel/apps/<app>/log?stream=err`).
-3. `job.next`: `rolled_back` deploy → `redeploy`, `app_log`; `failed` deploy → `cleanup`, `app_log`; restart gagal →
+1. `Job.appLogApp` diisi saat `app_restart`/`health` gagal. Halaman progres memuat `GET /panel/apps/<app>/log?stream=err&lines=50`
+   dan menampilkannya di `LogViewer` statis + "Disamarkan: n nilai rahasia" (bila redaktor melaporkan) + [Lihat log
+aplikasi].
+2. `next`: deploy `rolled_back` → `redeploy`, `app_log`; deploy `failed` → `recover`, `app_log`; restart gagal →
    `rollback` (bila ada `app.prev`), `app_log`.
-4. Log kedaluwarsa (restart panel / > 1 jam) → `GET app-log` 404 → teks "Potongan log sudah tidak tersedia. Buka log
-   aplikasi untuk melihat semuanya."
+3. Log tidak tersedia (app tidak ada di pm2) → "Log aplikasi tidak tersedia."
 
 ### 4.10 Variabel lingkungan
 
-1. Bagian `#env`: daftar kunci (nilai tidak pernah tampil), kunci terkunci dengan lencana "Diatur panel" dan tanpa aksi
-   (hanya situs dikelola, D20).
-2. Aksi per kunci: **Ganti nilai** (input kosong, `type=password` + tombol tampilkan), **Hapus** (menandai). **Tambah
-   variabel**. **Tempel `.env`** (§5.6) → pratinjau → "Terapkan ke daftar".
-3. Footer muncul saat ada perubahan: ringkasan "2 diganti · 1 baru · 1 dihapus", **Simpan** (sekunder) dan
-   **Simpan dan mulai ulang** (utama).
-4. **Simpan** → `PUT {restart:false}` (server: `assertIdle`, validasi, `env_locked`, tulis atomik 0600, audit kunci saja)
-   → 200 → toast "Variabel lingkungan disimpan. Mulai ulang aplikasi agar berlaku." → banner `restartPending`.
-5. **Simpan dan mulai ulang** → `PUT {restart:true}` → 202 → job `site.env`: `env_write` (simpan byte lama di memori job
-   saja) → `app_restart` → `health`. Gagal → undo `env_write` (tulis byte lama) + afterRollback restart lagi →
-   `rolled_back` "Nilai lama dipulihkan dan aplikasi dimulai ulang." Panel terputus di tengah → `interrupted`; Bersihkan =
-   mulai ulang + cek (nilai lama **tidak** bisa dipulihkan; disebut jujur).
-6. Banner `restartPending`: "Variabel lingkungan berubah sejak aplikasi terakhir dimulai. Mulai ulang agar berlaku."
-   [Mulai ulang] (job `site.restart`).
-7. Error: `invalid_env{key, reason}` → pesan di baris kunci; `multiline` → "Nilai multi-baris belum didukung."
+1. Daftar kunci (nilai tak pernah tampil). Lencana "Diatur panel" (dikelola, `lockedEnvKeys`) dan "Diatur oleh pm2"
+   (adopsi, `pm2EnvKeys`: "Nilai di ecosystem.config.js menang; mengubahnya di sini tidak berpengaruh").
+2. Aksi: Ganti nilai, Hapus, Tambah, **Tempel `.env`** (§5.6).
+3. Footer: ringkasan + **Simpan** + **Simpan dan mulai ulang**.
+4. **Simpan** → `PUT {restart:false}` → 200 → "Variabel lingkungan disimpan. Mulai ulang aplikasi agar berlaku." →
+   banner `restartPending`.
+5. **Simpan dan mulai ulang** → job `site.env`: `env_write` (salin `.env` → `.env.panel-prev` 0600, lalu tulis) →
+   `app_restart` → `health`. Gagal → undo memulihkan `.env.panel-prev` + restart → `rolled_back` "Nilai lama dipulihkan
+   dan aplikasi dimulai ulang." Selesai (apa pun) → `.env.panel-prev` dihapus. Terputus → cleanup memulihkan file itu
+   bila ada.
+6. Error: `invalid_env {key, reason}` di baris; `multiline` → "Nilai multi-baris belum didukung."; `quote` →
+   "Nilai yang memuat `'` sekaligus `"` atau `\` tidak bisa disimpan."
 
-### 4.11 Perubahan terputus: Bersihkan / Ulangi
+### 4.11 Pulihkan perubahan terputus
 
-1. Boot: `UPDATE job SET status='interrupted', error={code:'interrupted'} WHERE status='running'`; baris `deploy`
-   `running` → `interrupted`. Log warn per job.
-2. Tampil di: halaman progres job itu (panel danger), banner di `/panel/sites` dan di detail situs target ("Perubahan
-   _Deploy · blog_ terputus saat panel dimulai ulang. Periksa dan bersihkan."), masalah Ringkasan `site_job_failed`
-   (§7), dan catatan wizard `name_leftover`.
-3. **Bersihkan** (tier none; tombol menjelaskan isinya: "Panel memeriksa file dan mengembalikan yang setengah jadi") →
-   `POST /jobs/:id/cleanup` → job `job.cleanup` (target = target asli, `input.jobId`). Langkah `inspect` membaca
-   keadaan nyata lalu runner menambahkan langkah perbaikan yang dibutuhkan (step list dibangun **setelah** inspect,
-   disimpan ke `job.steps`):
+1. Boot: `running` → `interrupted` (job + deploy); log warn.
+2. Tampil di halaman progres, banner `/panel/sites` dan detail target, masalah Ringkasan `site_job_failed` (PLAN/02),
+   catatan wizard `name_leftover`.
+3. **Pulihkan** (teks tombol dari `recoverMode`: "Bersihkan" atau "Ulangi hapus situs"/"Ulangi hapus domain") →
+   `POST /jobs/:id/recover`.
+4. Cleanup per jenis (langkah dibangun setelah `inspect`, semua idempoten):
 
-   | Jenis asli                 | Pemeriksaan & perbaikan (semua idempoten)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   |
-   | -------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-   | `site.create`              | Bila baris `site` sudah ada → `inspect_nothing` (onSuccess sempat jalan). Else: `ingress` hapus rule hostname bila ada dan tidak milik situs mana pun → `tunnel_restart` bila ingress berubah → `dns` hapus record bila dimiliki panel (`dns_record`) dan tidak dipakai situs → `apps_remove` entri bernama sama bila ada (baris lama sebelum PLAN ini) → `database_drop` hanya bila `input.database` **dan** langkah `database` asli `running`/`done` **dan** tidak ada situs dengan database itu → `folder_remove` hanya bila isinya ⊆ {`data/` kosong, `.env`}; selain itu `folder_not_empty {entries}` (dibiarkan, pengguna memutuskan) |
-   | `hostname.add`             | `ingress`/`tunnel_restart`/`dns` seperti di atas untuk `input.hostname`, hanya bila hostname tidak ada di `site_hostname`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   |
-   | `site.deploy`              | `app.new` ada → hapus. `swapped` = sha(`app`) == `input.sha256`. Swapped → `swap` balik: `app.prev`→`app`, `.app.prev.drop`→`app.prev` (yang ada). Tidak swapped → `.app.prev.drop` dikembalikan ke `app.prev` bila `app.prev` hilang, else dihapus. `apps_entry`: dikelola + `app` ada → setel runtime = ELF `app`; dikelola + `app` tidak ada → **hapus entri** (D5). `app_restart` bila pm2 mengenal app atau `app` ada → `health`                                                                                                                                                                                                       |
-   | `site.rollback`            | swapped = sha(`app`) == `input.toSha256` → swap balik; lalu `apps_entry`, `app_restart`, `health` seperti di atas                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                           |
-   | `site.env`, `site.restart` | `app_restart` → `health` (nilai `.env` lama tidak tersedia; teks jujur)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     |
-   | `job.cleanup`              | Cleanup baru atas job asli (pemeriksaan sama)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               |
+   | Jenis asli                     | Pemeriksaan & perbaikan                                                                                                                                                                                                                                                                                                                                                                                                                                               |
+   | ------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+   | `site.create`                  | Baris `site` ada → `inspect_nothing`. Else: `ingress` hapus rule `input.hostnames` yang ada dan bukan milik situs → `tunnel_restart` bila berubah → `dns` hapus record milik panel yang tidak dipakai situs (non-fatal) → `apps_remove` (entri sisa versi lama) → `database_drop` hanya bila `input.database` dan langkah `database` asli `running`/`done` dan tak dipakai situs → `folder_remove` hanya bila isi ⊆ {`data/` kosong, `.env`}, else `folder_not_empty` |
+   | `hostname.add`                 | `ingress`/`tunnel_restart`/`dns` untuk `input.hostnames` yang tidak ada di `site_hostname`                                                                                                                                                                                                                                                                                                                                                                            |
+   | `site.deploy`, `site.rollback` | Tabel keadaan di bawah → `run_script` (dikelola, `app` ada) → `apps_entry` (dikelola: entri dihapus **hanya** bila tidak ada `app` dan `input.firstDeploy`) → `app_restart` bila pm2 mengenal app atau `app` ada → `health`                                                                                                                                                                                                                                           |
+   | `site.env`                     | `.env.panel-prev` ada → kembalikan ke `.env` (`env_restored`) → `app_restart` → `health`                                                                                                                                                                                                                                                                                                                                                                              |
+   | `site.restart`                 | `app_restart` → `health`                                                                                                                                                                                                                                                                                                                                                                                                                                              |
+   | `job.cleanup`                  | Cleanup baru atas job asli                                                                                                                                                                                                                                                                                                                                                                                                                                            |
 
-4. Cleanup sukses → job asli `resolved_by = <cleanupId>`; banner hilang. Cleanup gagal → `failed` + ekor stderr bila
-   ada; banner tetap, aksi "Bersihkan lagi" dan teks "Bila tetap gagal, periksa lewat ssh: …" dengan path relevan.
-5. **Ulangi** (`site.delete`, `hostname.remove`): `POST /jobs/:id/retry` → job baru jenis sama dari `job.input`
-   (hapus situs: `?confirm` tidak diminta ulang karena konfirmasi sudah diberikan untuk job asli; aksi diaudit).
-6. Edge: target sudah tidak ada (situs dihapus lewat jalur lain) → inspect `inspect_nothing`, resolved. Dua admin
-   menekan Bersihkan → kedua 409 `busy` atau `already_resolved`.
+   **Tabel keadaan swap** (urutan D23; `=` berarti inode sama; `new` = `app.new`, `drop` = `.app.prev.drop`, `swp` =
+   `.app.swap`). Baris pertama yang cocok menang:
+
+   | #   | Keadaan                                                                          | Arti (titik crash)                                                      | Perbaikan                                                               |
+   | --- | -------------------------------------------------------------------------------- | ----------------------------------------------------------------------- | ----------------------------------------------------------------------- |
+   | S1  | `app` tidak ada, `swp` ada                                                       | tidak terjadi dengan urutan D23 (pengaman untuk keadaan lama/eksternal) | `rename(swp, app)`                                                      |
+   | S2  | `app` tidak ada, `prev` ada                                                      | keadaan lama/eksternal                                                  | `rename(prev, app)`; `drop` ada → `rename(drop, prev)`                  |
+   | S3  | `app` tidak ada, tidak ada `prev`/`swp`                                          | deploy pertama sebelum rename `new→app`                                 | hapus `new`; selesai (entri dihapus bila `firstDeploy`)                 |
+   | R1  | rollback, `swp` ada, `app = swp`                                                 | setelah link, sebelum `rename(prev, app)`                               | hapus `swp`                                                             |
+   | R2  | rollback, `swp` ada, `app ≠ swp`, `prev` tidak ada                               | setelah `rename(prev, app)`                                             | `rename(swp, prev)` (rollback jadi lengkap), lalu perlakukan seperti R3 |
+   | R3  | rollback, tanpa file sementara, sha(`app`) = `input.toSha256` ≠ `fromSha256`     | rollback selesai                                                        | jalankan pertukaran D23 sekali lagi → `app` = versi `fromSha256`        |
+   | D1  | deploy, `drop` ada, `prev` tidak ada                                             | setelah `prev→drop`                                                     | `rename(drop, prev)`; hapus `new`                                       |
+   | D2  | deploy, `drop` ada, `prev = app`                                                 | setelah link, sebelum `rename(new, app)`                                | hapus `prev` (link), `rename(drop, prev)`; hapus `new`                  |
+   | D3  | deploy, `prev` ada, `prev ≠ app`, `new` tidak ada, sha(`app`) = `input.sha256`   | swap selesai                                                            | balik: `rename(prev, app)`; `drop` ada → `rename(drop, prev)`           |
+   | D4  | deploy pertama, `app` ada, `prev` tidak ada, sha(`app`) = `input.sha256`         | swap selesai                                                            | hapus `app` (D27; entri dihapus karena `firstDeploy`)                   |
+   | D5  | lainnya (tidak ada file sementara, sha(`app`) = `fromSha256` atau tidak dikenal) | swap belum mulai / sudah dibalik                                        | hapus `new`; tidak ada perubahan                                        |
+
+   Rollback = pertukaran, jadi "kembali" = menjalankan pertukaran yang sama lagi setelah keadaan dirapikan menjadi
+   `app`/`prev` lengkap (R2 → R3). Redeploy atau rollback dengan sha sama: baris "selesai" dan "belum mulai" identik
+   isinya, jadi hasilnya aman apa pun yang dipilih. sha dihitung hanya saat inode tidak memutuskan (D3/D4/D5/R3), ±1 dtk
+   per file.
+
+5. Cleanup sukses → job asli `resolved_by`; gagal → `failed` + stderr bila ada + "Pulihkan lagi" + teks ssh dengan path.
+6. Retry `site.delete`/`hostname.remove` dari `job.input` (validate asli `done`), diaudit.
+7. Target sudah tidak ada → `inspect_nothing`, resolved. Dua admin → `busy`/`already_resolved`.
 
 ### 4.12 Shutdown vs perubahan terpanjang
 
-| Perubahan               | Tipikal di POCO (perkiraan dari R2/R3)          | Terburuk dengan default                                                                             |
-| ----------------------- | ----------------------------------------------- | --------------------------------------------------------------------------------------------------- |
-| site.create             | ±15 dtk (cloudflared 3–10 dtk + DNS 1–3 dtk)    | validate 20 (timeout pm2) + tunnel 30 + probe 30 + rollback reapply 30 ≈ 110 dtk                    |
-| hostname.add/remove     | ±10 dtk                                         | ≈ 90 dtk                                                                                            |
-| site.delete             | ±15 dtk (+ `rm -rf` data)                       | ≈ 80 dtk + ukuran `data/`                                                                           |
-| site.deploy (89 MB)     | ±20 dtk (assemble 2–4, restart 2–5, health 2–8) | assemble 5 + restart 40 (2 panggilan pm2 × 20) + health 60 + stabil 5 + revert restart 40 ≈ 150 dtk |
-| site.deploy, health 300 | –                                               | ≈ 390 dtk                                                                                           |
+| Perubahan               | Tipikal di POCO                                    | Terburuk dengan default                                   |
+| ----------------------- | -------------------------------------------------- | --------------------------------------------------------- |
+| site.create             | ±15 dtk                                            | validate 20 + tunnel 30 + probe 30 + reapply 30 ≈ 110 dtk |
+| hostname.add/remove     | ±10 dtk                                            | ≈ 90 dtk                                                  |
+| site.delete             | ±15 dtk + `rm -rf data/`                           | ≈ 80 dtk + ukuran `data/`                                 |
+| site.deploy (89 MB)     | ±15 dtk (stage rename ~0, restart 2–5, health 2–8) | restart 20 + health 60 + stabil 5 + revert 20 ≈ 105 dtk   |
+| site.deploy, health 300 | –                                                  | ≈ 345 dtk                                                 |
 
-`SHUTDOWN_TIMEOUT_MS = 120_000`. Saat SIGTERM: server berhenti menerima request (sudah), runner tidak menerima job baru,
-lalu menunggu. Lewat 120 dtk → keluar; job menjadi `interrupted` saat boot (§4.11). Konsekuensi: `sv restart panel`
-saat ada perubahan bisa membuat panel tak terjangkau hingga 2 menit. PLAN/02 sudah menolak restart `panel` dari UI saat
-ada job (409 `job_running`); installer (`install-phone.sh`, PLAN/05) diminta memakai `sv -w 130 restart panel` dan
-mencetak "Menunggu perubahan yang sedang berjalan selesai…".
+`SHUTDOWN_TIMEOUT_MS = 120_000`. Lewat itu → keluar; job `interrupted` saat boot. `sv restart panel` saat ada perubahan
+bisa membuat panel tak terjangkau hingga 2 menit, dan deploy dengan cek kesehatan panjang bisa terputus. Keduanya
+disebut jujur di pesan installer (§7.2) dan di README. PLAN/02 menolak restart `panel` dari UI bila
+`jobs.active() || backup.running || backup.restoring`.
 
-### 4.13 Domain: tambah & hapus
+### 4.13 Domain
 
-1. Bagian `#domains`: daftar domain situs (domain utama pertama), lencana "DNS otomatis"/"DNS manual", status HTTPS
-   (dari snapshot domain PLAN/02, bila ada), aksi Hapus.
-2. **Tambah domain** → dialog: input + cek langsung (`POST /sites/check {hostname, scope:"hostname"}`, termasuk DNS) +
-   peringatan blip → **Tambah domain** → job `hostname.add` → progres. Konflik DNS terdeteksi di dialog, bukan di langkah
-   ke-3.
-3. **Hapus domain** (tier confirm) "Hapus domain www.blog.com?" — akibat: rute cloudflared + record DNS otomatis dihapus,
-   semua domain terputus sebentar. Domain terakhir: tombol disabled + tooltip/teks `lastHostname`. Domain tulisan tangan
-   situs adopsi: tombol disabled + "Rute ini ditulis manual di config.yml. Hapus lewat ssh bila perlu."
-4. `ensureTunnelCname`: record CNAME yang sudah ada, tidak dimiliki panel, dengan `content` = `<tunnel>.cfargotunnel.com`
-   → `{created:false, managed:false}` (bukan konflik); langkah `dns_same_tunnel`. Record lain → `dns_conflict`.
+1. `#domains`: daftar, lencana DNS otomatis/manual, status HTTPS dari snapshot PLAN/02, Hapus.
+2. **Tambah domain** → dialog: satu atau lebih input (maks 5) + cek langsung (`scope:"hostname"`, DNS) + teks blip
+   bernama → **Tambah domain** → satu job, satu restart.
+3. **Hapus domain** (confirm): akibat + blip bernama. Domain terakhir disabled; domain tulisan tangan situs adopsi
+   disabled + "Rute ini ditulis manual di config.yml. Hapus lewat ssh bila perlu."
+4. `ensureTunnelCname`: CNAME tak dimiliki yang menunjuk `<tunnel>.cfargotunnel.com` → `dns_same_tunnel`, `managed:false`.
+5. Hapus: `ingress → tunnel_restart → dns`; DNS gagal → `dns_left` (selesai, warning, tautan dasbor). Tidak ada
+   restart kedua.
 
 ### 4.14 Hapus situs
 
-1. Menu header ⋯ → **Hapus situs** → dialog typed (komponen PLAN/01): judul "Hapus situs blog?", daftar akibat konkret
-   dari data detail (domain yang berhenti, folder `~/sites/blog` termasuk `data/`, database `blog` + role, aplikasi
-   pm2), checkbox "Simpan folder dan file situs" dan "Simpan database", info cadangan: "Cadangan terakhir database blog:
-   26 Nov 2026, 03.00" atau "Database ini belum pernah dicadangkan." + tautan **Cadangkan sekarang** (`/panel/backups`)
-   — data dari PLAN/04 (§7).
-2. Input "Ketik `blog` untuk konfirmasi" (case-sensitive, trim); tombol **Hapus situs blog** (destructive) aktif bila
-   cocok.
-3. `DELETE /sites/blog?keepData=…&keepDatabase=…&confirm=blog` → job `site.delete` → progres. Urutan langkah menjamin
-   entri `apps.json` dihapus **sebelum** binary/folder (D5).
-4. Situs adopsi: dialog tier confirm (bukan typed) karena hanya catatan + rule/record buatan panel yang dihapus; teks
-   `unmanaged` yang ada.
+1. Menu ⋯ → **Hapus situs** → `ConfirmAction tier="typed"` (dikelola) / `"confirm"` (adopsi).
+2. Isi: domain yang berhenti, folder `~/sites/blog` (+ `data/`), database + role, app pm2, teks blip bernama, info
+   cadangan (`lastGoodItem` PLAN/04: "Cadangan terakhir database blog: 26 Nov 2026, 03.00" / "belum pernah
+   dicadangkan" + tautan Cadangkan sekarang).
+3. Checkbox default: "Simpan database" dicentang bila database belum pernah dicadangkan atau cadangan > 24 jam; "Simpan
+   folder dan file situs" dicentang bila `data/` tidak kosong dan tidak ada cadangan folder situs < 24 jam. Teks
+   menjelaskan alasan centang otomatis.
+4. "Ketik `blog` untuk konfirmasi"; tombol **Hapus situs blog**.
+5. `DELETE …&confirm=blog` → job `site.delete` (entri `apps.json` lebih dulu, D5).
 
 ### 4.15 Izin, kosong, konkurensi
 
-- Peran `user` membuka `/panel/sites*` → SessionGate mengarahkan (perilaku sekarang); API 403.
-- Tidak ada situs + integrasi siap → `EmptyState` "Belum ada situs. Buat situs pertama untuk menghubungkan domain ke
-  aplikasi di HP ini." [Buat situs]; bila ada "Belum dikelola", teks tambahan "atau adopsi situs yang sudah berjalan di
-  bawah."
-- Semua aksi yang memulai perubahan saat ada perubahan lain → 409 `busy{job}` → banner dengan tautan, tombol aksi
-  disabled sampai `GET /jobs/active` kosong (dipoll 5 dtk hanya saat banner tampil).
-- `pm2 jlist` gagal → `Site.appStatus` "unknown" (bukan "not_deployed"), discovered menampilkan error di bagian itu saja.
+- Peran `user` → SessionGate (403 → `/login`, B20); API 403.
+- Kosong + `ready` → `EmptyState` "Belum ada situs. Buat situs pertama untuk menghubungkan domain ke aplikasi di HP ini."
+  [Buat situs] (+ "atau adopsi situs yang sudah berjalan di bawah").
+- 409 `busy{job}` → banner + tombol disabled sampai `GET /jobs/active` kosong (poll 5 dtk saat banner tampil).
+- pm2 tidak tersedia → `appStatus` "unknown" + catatan "Status aplikasi tidak bisa dibaca dari pm2."; aksi yang butuh
+  pm2 disabled dengan alasan.
+- Beranda super_admin = Ringkasan (A11); banner perubahan terputus juga muncul di Ringkasan lewat masalah
+  `site_job_failed`.
 
 ---
 
 ## 5. Spesifikasi UI per halaman
 
-Komponen dari `src/web/components/` (PLAN/01 memperluas API-nya): `PageHeader` (judul, meta, status, actions),
-`DataTable` (kolom, `rowActions` ⋯, baris-link, tampilan list di < md), `StatusBadge` + kamus status per jenis
-resource (PLAN/01 `status.vocab`), `EmptyState`, `ErrorState`, `RowsSkeleton`/`HeaderSkeleton`, `Section`,
-`KeyValue`, `InlineCode`, `CopyButton`, `RelativeTime`, `ConfirmAction` tier `none|confirm|typed`, `LogViewer`
-(PLAN/01/02). Primitive `ui/*`: `Dialog`, `AlertDialog`, `Sheet`, `Select`, `Switch`, `Checkbox`, `Progress`, `Input`,
-`Button`. Warna hanya token tone (tanpa kelas amber mentah: `integration.banner.tsx:22`, `wizard.summary.tsx:35` dihapus).
-Target sentuh ≥ 44 px di < md (default brief). Semua teks dari `src/web/i18n/*`.
+Komponen PLAN/01: `PageHeader` (judul, meta, status, actions, lengket), `DataTable` (`actions` per baris + list < md),
+`StatusBadge` dengan `StatusKey` kanonik (mapping di `job.status-key.ts` / `deploy.status-key.ts`), `EmptyState`,
+`ErrorState`, `QueryView`, skeleton, `Section`, `KeyValue`, `InlineCode`, `CopyButton`, `RelativeTime`,
+`ConfirmAction` (`tier: "confirm" | "typed"`), `LogViewer` (statis, `LogLine[]`), bar aksi lengket bawah HP, toaster
+tunggal. Primitive `ui/*`. Tanpa kelas warna mentah. Target sentuh ≥ 44 px di < md.
 
-### 5.1 `/panel/sites` — Situs
+### 5.1 `/panel/sites`
 
-- **Header**: `PageHeader` "Situs", meta `updatedAgo`, actions: **Buat situs** (utama; disabled + alasan bila
-  `!ready`), "Riwayat perubahan" (sekunder, `/panel/jobs`).
-- **Banner perubahan terputus/berjalan** (tone danger/info) di atas.
-- **Kartu Persiapan** (`site.setup.tsx`, `Section` tone warning/danger) bila `!ready`: judul "Siapkan pm2 untuk situs
-  buatan panel", daftar check (ikon + teks + detail lipat), blok kode snippet (`InlineCode` block + `CopyButton`), langkah
-  "1. Buka `ecosystem.config.js` di HP: `nano ~/sites/ecosystem.config.js` [Salin] · 2. Tempel blok ini di atas
-  `module.exports` · 3. Tambahkan `...panelApps,` di akhir daftar `apps` · 4. Simpan, lalu periksa lagi.", tombol
-  **Periksa lagi** (loading "Memeriksa…"). Teks peringatan penting: "Jangan menulis `...require('./apps.json')` tanpa
-  blok ini: bila file itu rusak, semua aplikasi tidak akan jalan setelah HP dinyalakan ulang."
-- **Daftar**: desktop `DataTable` kolom Nama (tautan, + lencana "Diadopsi"), Status (`StatusBadge` app), Domain utama
-  (+ "+2"), Deploy terakhir (`RelativeTime` + status kecil), Port (mono), ⋯ (Buka situs ↗, Deploy, Mulai ulang, Log
-  aplikasi). Urutan: bermasalah (errored/stopped tak sengaja/perubahan gagal) dulu. HP: list padat 2 baris (nama +
-  status; domain · deploy terakhir).
-- **Belum dikelola** (`site.discovered.tsx`): `Section` dengan deskripsi; baris: hostname · "port 3005 → makuro-solusi"
-  atau "port tidak diketahui"; tombol **Adopsi** (44 px); baris `self` = "Panel Termux (domain ini)" lencana netral tanpa
-  tombol.
-- **States**: loading → `HeaderSkeleton` + `RowsSkeleton`; error list → `ErrorState` + Coba lagi (kartu Persiapan tetap
-  dimuat terpisah); partial (pm2 gagal) → status "Tidak diketahui" + catatan "Status aplikasi tidak bisa dibaca dari pm2."
-- **a11y**: checklist sebagai `<ul>` dengan teks status (bukan hanya ikon); tombol Periksa lagi mengumumkan hasil lewat
-  `aria-live="polite"`.
+- `PageHeader` "Situs" + meta diperbarui + **Buat situs** (disabled + alasan bila `!ready`) + "Riwayat perubahan".
+- Banner perubahan berjalan/terputus.
+- **Kartu Persiapan** (`site.setup.tsx`) bila `!ready` atau ada warning pm2: checklist (§3.6), snippet + Salin, langkah
+  "1. Buka `ecosystem.config.js`: `nano ~/sites/ecosystem.config.js` [Salin] · 2. Tempel blok ini di atas
+  `module.exports` · 3. Tambahkan `...panelApps,` di akhir daftar `apps` · 4. Simpan, lalu periksa lagi.",
+  **Periksa lagi**. Peringatan: "Jangan menulis `...require('./apps.json')` tanpa blok ini: bila file itu rusak atau
+  binary situs hilang, semua aplikasi tidak akan jalan setelah HP dinyalakan ulang." Saat siap: satu baris sukses
+  "pm2 siap: 3 aplikasi terbaca, termasuk dari apps.json".
+- **Daftar**: `DataTable` Nama (+ "Diadopsi"), Status, Domain utama (+n), Deploy terakhir, Port, aksi ⋯ (Buka ↗, Deploy,
+  Mulai ulang, Log aplikasi). Bermasalah dulu. HP: list 2 baris.
+- **Belum dikelola** (`site.discovered.tsx`): baris hostname · port → app; **Adopsi**; baris `self` tanpa tombol.
+- States: skeleton; error list → `ErrorState`; pm2 tidak tersedia → status "Tidak diketahui".
+- a11y: checklist `<ul>` dengan teks status; hasil Periksa lagi `aria-live="polite"`.
 
-### 5.2 Dialog Adopsi (`adopt.dialog.tsx`)
+### 5.2 Dialog Adopsi
 
-- `Dialog` (desktop) / `Sheet` bawah (HP). Judul "Adopsi solusi.malikkurosaki.com".
-- Field: **Aplikasi pm2** (`Select`, opsi "makuro-solusi · Berjalan · port 3005"; opsi ber-blocker disabled + alasan),
-  **Nama situs** (`Input`, hint nama). `KeyValue` read-only: Folder, Runtime ("glibc · dijalankan lewat grun"), Port
-  ("3005 · dari `.env`"). Peringatan non-blokir di `Section` tone warning.
-- Tombol **Adopsi** / **Batal**. Error server ditampilkan inline di atas tombol (pola error).
-- Teks: "Panel hanya mencatat situs ini. File, aplikasi pm2, dan domainnya tidak diubah sampai kamu deploy."
+`Dialog` / `Sheet` bawah (HP). Select app (opsi ber-blocker disabled + alasan), Nama situs, `KeyValue` Folder,
+Runtime ("glibc · dijalankan lewat grun"), Port ("3005 · dari `.env`"), peringatan non-blokir. "Panel hanya mencatat
+situs ini. File, aplikasi pm2, dan domainnya tidak diubah sampai kamu deploy."
 
-### 5.3 `/panel/sites/new` — wizard
+### 5.3 Wizard
 
-- `PageHeader` "Buat situs baru" + indikator "Langkah 1 dari 3: Alamat" (teks + `aria-current="step"` pada daftar
-  langkah). Langkah: Alamat · Opsi · Ringkasan.
-- Field dengan `aria-describedby` → hint + pesan error, `aria-invalid` saat error (perbaiki `form.field.tsx:24`).
-- Status cek per field: "Memeriksa…", "Tersedia.", catatan DNS (info), error (danger).
-- HP: tombol Kembali/Lanjut di bar lengket bawah (safe-area), 44 px.
-- Ringkasan: daftar rencana dari kode langkah (teks `id.site.wizard.plan.*`), peringatan blip (tone warning).
-- Halaman hasil (di `job.page.tsx` untuk `site.create` sukses): `EmptyState`-like panel dengan CTA **Unggah binary
-  pertama**.
+`PageHeader` "Buat situs baru" + "Langkah 1 dari 3: Alamat" (`aria-current="step"`). Field dengan `aria-describedby` +
+`aria-invalid`. Status cek per field. "Tambah domain lain" (maks 4). HP: Kembali/Lanjut di bar lengket. Ringkasan
+rencana + teks blip bernama. Hasil: CTA **Unggah binary pertama**.
 
-### 5.4 `/panel/sites/:name` — detail
+### 5.4 `/panel/sites/:name`
 
-- **Header** (`site.header.tsx` → `PageHeader`): judul nama situs, `StatusBadge` app, meta: domain utama (tautan ↗),
-  "Deploy terakhir 3 mnt lalu oleh Malik". Actions: **Deploy** (utama → scroll `#deploy` dan buka pemilih file),
-  **Mulai ulang** (sekunder, confirm), menu ⋯: Cek kesehatan, Log aplikasi, Riwayat perubahan situs
-  (`/panel/jobs?target=blog`), Hapus situs (destructive). Header lengket di desktop.
-- **Navigasi jangkar** (`<nav aria-label="Bagian situs">`): Ringkasan · Deploy · Domain · Variabel lingkungan ·
-  Pengaturan. HP: chip horizontal lengket di bawah top bar, bisa di-scroll.
-- **Banner**: perubahan berjalan (info, tautan), terputus (danger, Bersihkan), `restartPending` (warning, Mulai ulang),
-  `deployBlocker=integration` (warning, ke Persiapan).
-- `#ringkasan`: `KeyValue` Aplikasi pm2, Port, Runtime ("Android native" / "glibc lewat grun"), Database, Folder (mono +
-  Salin), Dikelola ("Dibuat lewat panel" / "Diadopsi: entri pm2 ditulis manual"), Dibuat.
-- `#deploy` (`deploy.card.tsx`): kartu **Versi berjalan** (sha12 · nama file · ukuran · runtime · waktu · oleh; adopsi
-  tanpa deploy: "Binary 89,2 MB, belum di-deploy lewat panel"), kartu unggah (§4.6), tombol **Kembalikan versi
-  sebelumnya** (`deploy.rollback.tsx`), lalu **Riwayat deploy** (`deploy.history.tsx`): `DataTable` kolom Waktu, Jenis,
-  Versi (sha12 mono + nama file), Ukuran, Runtime, Oleh, Durasi, Status (+ lencana "Aktif"), ⋯ Lihat perubahan. HP: list.
-  Paginasi 10. Kosong: "Belum ada deploy. Unggah binary pertama untuk menjalankan situs ini."
-- **Dialog rollback** (confirm): judul "Kembalikan blog ke versi sebelumnya?"; "Dari: `3f9a2c1b7e0d` · app-v2 · 26 Nov
-  22.40 · Malik" → "Ke: `a17c…` · app-v1 · 25 Nov 19.02"; tabel dua kolom:
-  - Ikut dikembalikan: binary aplikasi; cara menjalankan (native/grun) untuk situs buatan panel.
-  - Tidak ikut: variabel lingkungan (`.env`); isi dan struktur database; file di `data/`; domain.
-  - Catatan: "Bila versi baru sudah mengubah struktur database, versi lama bisa gagal berjalan. Situs terputus beberapa
-    detik." Tombol **Kembalikan versi sebelumnya**.
-- `#domains` (`site.hostnames.tsx`): §4.13.
-- `#env` (`site.env-editor.tsx`): §5.6.
-- `#settings` (`site.settings.tsx`): form Cek kesehatan — Path (`Input`, mis. `/api/health`), Status yang diharapkan
-  (`Select`: "Apa pun di bawah 500" / "Harus 200" / "Lainnya…" → input angka), Batas waktu (detik, 10–300). **Simpan**.
-  Danger zone: **Hapus situs**.
-- **States**: loading skeleton header + bagian; 404 → `ErrorState` "Situs ini sudah tidak ada…" + Ke daftar situs;
-  pm2 gagal → status "Tidak diketahui", aksi Mulai ulang tetap ada.
+- Header: nama, `StatusBadge`, meta (domain ↗, "Deploy terakhir 3 mnt lalu oleh Malik"), **Deploy** (utama),
+  **Mulai ulang** (confirm), ⋯ Cek kesehatan, Log aplikasi, Riwayat perubahan situs, Hapus situs.
+- Jangkar: Ringkasan · Deploy · Domain · Variabel lingkungan · Pengaturan (chip lengket di HP).
+- Banner: berjalan, terputus (Pulihkan), `restartPending` (Mulai ulang), `deployBlocker` (integrasi / pm2 tidak
+  berjalan / folder tidak ada).
+- `#ringkasan`: `KeyValue` Aplikasi pm2, Port, Runtime ("Android native"/"glibc lewat grun"), Database, Folder,
+  Dikelola, Dibuat.
+- `#deploy`: **Versi berjalan** (sha12 · nama file · ukuran · runtime · waktu · oleh; "Versi tanpa catatan" bila tidak
+  cocok), kartu unggah, **Kembalikan versi sebelumnya**, **Riwayat deploy** (`DataTable` Waktu, Jenis, Versi, Ukuran,
+  Runtime, Oleh, Durasi, Status + lencana "Aktif", aksi Lihat perubahan; paginasi 10; kosong "Belum ada deploy. Unggah
+  binary pertama untuk menjalankan situs ini.").
+- **Dialog rollback** (confirm): "Dari: `3f9a2c1b7e0d` · app-v2 · 26 Nov 22.40 · Malik" → "Ke: `a17c…` · app-v1 · 25 Nov
+  19.02" (atau "versi tanpa catatan · 89,2 MB · diubah 25 Nov"). Ikut dikembalikan: binary aplikasi; cara menjalankannya
+  (native/grun) untuk situs buatan panel. Tidak ikut: variabel lingkungan (`.env`), isi dan struktur database, file di
+  `data/`, domain. Catatan: "Bila versi baru sudah mengubah struktur database, versi lama bisa gagal berjalan. Situs
+  terputus beberapa detik." Tombol **Kembalikan versi sebelumnya**.
+- `#domains`, `#env`, `#settings` (Path, Status yang diharapkan: Select "Apa pun di bawah 500" / "2xx atau 3xx", Batas
+  waktu 10–300 dtk, **Simpan**; danger zone **Hapus situs**).
+- States: skeleton; 404 → `ErrorState` + Ke daftar situs.
 
 ### 5.5 `/panel/jobs` dan `/panel/jobs/:id`
 
-- **Daftar**: `PageHeader` "Riwayat perubahan" (+ "· blog" bila `?target`), filter `Select` Situs dan Status. `DataTable`
-  kolom Perubahan ("Deploy · blog"), Status (`StatusBadge` kamus job: Berjalan/Berhasil/Dikembalikan/Gagal/Terputus),
-  Oleh, Mulai (`RelativeTime`), Durasi, ⋯ Lihat. Kosong: teks `jobs.empty` + filter aktif → "Tidak ada perubahan yang
-  cocok dengan filter."
-- **Progres** (`job.page.tsx` + `job.steps.tsx`): `PageHeader` "Deploy · blog" + `StatusBadge` + meta "Dimulai 21.40 oleh
-  Malik · 42 dtk". Stepper vertikal: tiap langkah = ikon status (teks sr-only), label (kode → i18n), hasil singkat
-  (outcome), durasi kanan, tombol "Detail" (`aria-expanded`) membuka log + detail + Salin. Region `aria-live="polite"`
-  tunggal mengumumkan "Langkah 4 dari 7: Menukar binary… selesai". Progress bar = langkah selesai/total, tone info saat
-  berjalan.
-- **Panel akhir**: sukses (create → CTA unggah; deploy → "Buka situs ↗"), `rolled_back` ("aman"), `failed` ("butuh
-  tindakan" + Bersihkan/Rollback/Log), `interrupted` ("terputus" + Bersihkan/Ulangi), kotak "Kenapa gagal" (§4.9).
-- HP: stepper satu kolom, durasi di bawah label; log di `Sheet` layar penuh.
+- Daftar: `PageHeader` "Riwayat perubahan" (+ "· blog"), filter Situs/Status, `DataTable` Perubahan, Status, Oleh, Mulai,
+  Durasi, Lihat. Kosong: `jobs.empty`; dengan filter: "Tidak ada perubahan yang cocok dengan filter."
+- Progres: `PageHeader` "Deploy · blog" + status + meta. Stepper vertikal (ikon sr-only, label, hasil, durasi, Detail
+  `aria-expanded`). Satu region `aria-live`: "Langkah 4 dari 8: Menukar binary… selesai". Progress bar tone info.
+- Panel akhir per status (§4.5) + kotak "Kenapa gagal" + tombol dari `next`.
+- HP: durasi di bawah label; log di `Sheet` layar penuh.
 
 ### 5.6 Editor variabel lingkungan & Tempel `.env`
 
-- Tabel kunci: Nama (mono), keterangan ("Diatur panel" lencana; "akan diganti"/"baru"/"akan dihapus" lencana tone),
-  aksi Ganti nilai / Hapus / Urungkan. Input nilai `type=password` + tombol Tampilkan (`aria-pressed`).
-- **Tempel `.env`** → `Dialog`/`Sheet`: `textarea` (mono, `autocomplete=off`, `spellcheck=false`), parser klien
-  `env.paste.ts` (baris `KEY=VALUE`, `export`, kutip tunggal/ganda, komentar `#`, baris kosong; nilai multi-baris
-  ditolak) → pratinjau `DataTable`: Nama, Aksi ("Baru"/"Ganti nilai"), Nilai ("•••• (24 karakter)"), Masalah (kunci
-  tidak valid, kunci terkunci, duplikat → baris terakhir menang + catatan, multi-baris). Tombol **Terapkan ke daftar**
-  (tidak menyimpan; perubahan masuk ke daftar, lalu Simpan seperti biasa). Teks: "Nilai tidak dikirim sampai kamu
-  menekan Simpan. Setelah disimpan, nilai tidak bisa dilihat lagi."
-- Footer sticky saat ada perubahan: ringkasan + **Simpan** + **Simpan dan mulai ulang**.
+- Tabel kunci: Nama, lencana ("Diatur panel", "Diatur oleh pm2", "akan diganti", "baru", "akan dihapus"), aksi. Input
+  `type=password` + Tampilkan (`aria-pressed`).
+- **Tempel `.env`**: `textarea` mono (`autocomplete=off`, `spellcheck=false`), parser `env.paste.ts` memakai
+  `decodeEnvValue` (D21) → pratinjau: Nama, Aksi (Baru/Ganti nilai), Nilai ("•••• (24 karakter)"), Masalah (kunci tidak
+  valid, terkunci, diatur pm2, duplikat → baris terakhir menang, multi-baris, `$` tanpa `\`: "Bun membaca `$NAMA`
+  sebagai variabel. Panel menyimpan nilainya apa adanya, jadi aplikasimu akan melihat `$` secara literal."). **Terapkan
+  ke daftar**. "Nilai tidak dikirim sampai kamu menekan Simpan. Setelah disimpan, nilai tidak bisa dilihat lagi."
+- Footer lengket: ringkasan + **Simpan** + **Simpan dan mulai ulang**.
 
-### 5.7 Konfirmasi (ringkas)
+### 5.7 Konfirmasi
 
-| Aksi                                                      | Tier                             | Tombol                      |
-| --------------------------------------------------------- | -------------------------------- | --------------------------- |
-| Cek kesehatan, Periksa lagi, Batalkan unggahan, Bersihkan | none                             | –                           |
-| Mulai ulang aplikasi situs                                | confirm                          | Mulai ulang                 |
-| Kembalikan versi sebelumnya                               | confirm                          | Kembalikan versi sebelumnya |
-| Hapus domain                                              | confirm                          | Hapus domain                |
-| Simpan dan mulai ulang                                    | none (tombolnya sudah eksplisit) | –                           |
-| Hapus situs dikelola                                      | typed                            | Hapus situs blog            |
-| Hapus situs adopsi                                        | confirm                          | Hapus situs                 |
-| Ulangi hapus situs                                        | confirm                          | Ulangi hapus situs          |
+| Aksi                                                     | Bentuk                                | Tombol                       |
+| -------------------------------------------------------- | ------------------------------------- | ---------------------------- |
+| Cek kesehatan, Periksa lagi, Batalkan unggahan, Pulihkan | `Button` biasa                        | –                            |
+| Mulai ulang aplikasi situs                               | `confirm`                             | Mulai ulang                  |
+| Kembalikan versi sebelumnya                              | `confirm`                             | Kembalikan versi sebelumnya  |
+| Tambah / hapus domain                                    | tambah: dialog form; hapus: `confirm` | Tambah domain / Hapus domain |
+| Simpan dan mulai ulang                                   | `Button` biasa (eksplisit)            | –                            |
+| Hapus situs dikelola                                     | `typed`                               | Hapus situs blog             |
+| Hapus situs adopsi                                       | `confirm`                             | Hapus situs                  |
+| Ulangi hapus situs (Pulihkan mode retry)                 | `confirm`                             | Ulangi hapus situs           |
 
-### 5.8 Kunci copy (file i18n)
+### 5.8 File i18n
 
-- `id.site.ts` (list, persiapan, adopsi, wizard): `list.*`, `setup.{title, checks.<IntegrationCheckKey>.{ok,warning,error}, snippetLead, steps[], recheck, warningNaive, readyLine}`, `discovered.*`, `adopt.{…, blockers.<code>, warnings.<code>, runtimeLabel.<runtime>, portSource.<src>}`, `wizard.{…, issues.<SiteIssueCode>, notes.<SiteNoteCode>, plan.<JobStepKey>}`.
-- `id.site-detail.ts` (baru): `header.*`, `anchors.*`, `banners.{running, interrupted, restartPending, integration}`, `info.*`, `domains.*`, `env.{…, paste.*}`, `settings.*`, `remove.*`.
-- `id.job.ts` (baru, dipindah dari `id.site.ts` bagian `job`/`jobs`): `kinds.<JobKind>`, `statuses.<JobStatus>`, `statusHelp.<JobStatus>`, `steps.<JobStepKey>`, `outcomes.<JobOutcomeCode>(params)`, `next.<JobNextAction>`, `appLog.*`, `blip`.
-- `id.deploy.ts`: `upload.{…, resume.*, paused, expired, retrying(n, sec)}`, `errorCodes.<code>`, `rollback.{…, carries[], notCarried[]}`, `history.*`.
-- Semua map memakai `satisfies Record<UnionType, …>` sehingga kode baru tanpa teks = error compile.
+- `id.site.ts` (list, persiapan, adopsi, wizard): `setup.checks.<IntegrationCheckKey>.{ok,warning,error}`, `issues.<SiteIssueCode>`, `notes.<SiteNoteCode>`, `plan.<JobStepKey>`, `adopt.blockers.<code>`, `adopt.warnings.<code>`, `blip(hosts)`.
+- `id.site-detail.ts` (baru): header, jangkar, banner, info, domain, env (+ paste), pengaturan, hapus.
+- `id.job.ts` (baru): `kinds`, `steps`, `outcomes(params)`, `next`, `recover.<mode>`, `appLog`, `blip`. Label status
+  dari `id.status.ts` PLAN/01 (bukan di sini).
+- `id.deploy.ts`: unggah (+ resume, paused, expired, retrying), `errorCodes`, rollback (carries/notCarried), history.
+- Semua `satisfies Record<Union, …>`. File baru digabung ke `id.ts` oleh shell (X17), tidak oleh worker halaman PLAN 03.
 
-### 5.9 Contoh teks (Indonesia, sesuai guide)
+### 5.9 Contoh teks
 
-| Kunci                                            | Teks                                                                                                                   |
-| ------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------- |
-| `steps.tunnel_restart`                           | Mulai ulang cloudflared                                                                                                |
-| `steps.app_restart`                              | Mulai ulang aplikasi                                                                                                   |
-| `steps.health`                                   | Cek kesehatan                                                                                                          |
-| `steps.assemble` / `detect` / `swap`             | Menyatukan unggahan / Mengenali runtime / Menukar binary                                                               |
-| `steps.apps_entry`                               | Mendaftarkan aplikasi di pm2                                                                                           |
-| `outcomes.healthy`                               | `HTTP {status} dari {path} dalam {ms} ms, stabil.`                                                                     |
-| `outcomes.health_timeout`                        | `Aplikasi tidak sehat setelah {seconds} dtk ({last}). Lihat log aplikasi di bawah.`                                    |
-| `outcomes.app_unstable`                          | `Aplikasi sempat menjawab, lalu dimulai ulang {restarts}× oleh pm2. Biasanya karena crash saat start.`                 |
-| `outcomes.dns_no_token`                          | `Dilewati: token API Cloudflare belum diisi. Buat record DNS sendiri.`                                                 |
-| `outcomes.dns_conflict`                          | `Sudah ada record DNS untuk {hostname} yang tidak dibuat panel. Hapus atau ubah di dasbor Cloudflare, lalu coba lagi.` |
-| `outcomes.runtime_mismatch`                      | `Binary ini untuk {got}, tetapi pm2 menjalankan situs ini sebagai {expected}.`                                         |
-| `outcomes.domain_not_yet`                        | `{hostname} belum bisa dibuka. DNS kadang butuh beberapa menit.`                                                       |
-| `outcomes.folder_not_empty`                      | `Folder {path} dibiarkan karena berisi file lain. Hapus sendiri bila tidak dipakai.`                                   |
-| `statusHelp.rolled_back`                         | Perubahan gagal, dan semua langkah sudah dikembalikan. Tidak ada yang perlu kamu bersihkan.                            |
-| `statusHelp.failed`                              | Perubahan gagal dan sebagian langkah tidak bisa dikembalikan. Bersihkan agar situs kembali konsisten.                  |
-| `statusHelp.interrupted`                         | Perubahan terputus karena panel dimulai ulang. Periksa dan bersihkan sisa langkahnya.                                  |
-| `errorCodes.busy`                                | Ada perubahan lain yang sedang berjalan: {kind} · {target}. Tunggu sampai selesai, lalu coba lagi.                     |
-| `errorCodes.integration_required`                | pm2 belum siap menjalankan situs buatan panel. Selesaikan persiapan di halaman Situs.                                  |
-| `errorCodes.no_space`                            | Penyimpanan HP tidak cukup: butuh {need}, tersisa {free}. Kosongkan ruang, lalu coba lagi.                             |
-| `errorCodes.upload_expired`                      | Unggahan ini sudah tidak ada di server. Unggah ulang file-nya.                                                         |
-| `upload.paused`                                  | Unggahan terhenti karena koneksi terputus. Potongan yang sudah terkirim aman.                                          |
-| `upload.retrying`                                | Koneksi terputus. Mencoba lagi dalam {sec} dtk (percobaan {n} dari 7)…                                                 |
-| `setup.checks.ecosystem_spreads_apps_json.error` | ecosystem.config.js belum memuat apps.json, jadi situs buatan panel tidak akan dijalankan pm2.                         |
-| `adopt.blockers.outside_sites_dir`               | Aplikasi ini berjalan dari folder di luar ~/sites, jadi tidak bisa dikelola panel.                                     |
-| `adopt.blockers.no_binary`                       | Tidak ada file `app` di folder aplikasi ini. Panel hanya bisa mengelola aplikasi berupa binary.                        |
+| Kunci                                            | Teks                                                                                                                               |
+| ------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------- |
+| `steps.tunnel_restart` / `app_restart`           | Mulai ulang cloudflared / Mulai ulang aplikasi                                                                                     |
+| `steps.stage` / `detect` / `swap` / `run_script` | Menyiapkan binary / Mengenali runtime / Menukar binary / Menulis skrip jalan                                                       |
+| `steps.apps_entry` / `health`                    | Mendaftarkan aplikasi di pm2 / Cek kesehatan                                                                                       |
+| `outcomes.healthy`                               | `HTTP {status} dari {path} dalam {ms} ms, stabil.`                                                                                 |
+| `outcomes.health_timeout`                        | `Aplikasi tidak sehat setelah {seconds} dtk ({last}). Lihat log aplikasi di bawah.`                                                |
+| `outcomes.app_unstable`                          | `Aplikasi sempat menjawab, lalu dimulai ulang {restarts}× oleh pm2. Biasanya karena crash saat start.`                             |
+| `outcomes.app_no_pid`                            | `pm2 melaporkan aplikasi berjalan, tetapi tidak ada prosesnya. Biasanya binary tidak bisa dijalankan.`                             |
+| `outcomes.pm2_not_running`                       | `Layanan pm2 tidak berjalan. Jalankan sv up pm2 di HP, lalu coba lagi.`                                                            |
+| `outcomes.dns_left`                              | `Record DNS {hostnames} tidak bisa dihapus dan dibiarkan. Hapus di dasbor Cloudflare bila tidak dipakai.`                          |
+| `outcomes.dns_conflict`                          | `Sudah ada record DNS untuk {hostname} yang tidak dibuat panel. Hapus atau ubah di dasbor Cloudflare, lalu coba lagi.`             |
+| `outcomes.runtime_mismatch`                      | `Binary ini untuk {got}, tetapi pm2 menjalankan situs ini sebagai {expected}.`                                                     |
+| `outcomes.folder_not_empty`                      | `Folder {path} dibiarkan karena berisi file lain. Hapus sendiri bila tidak dipakai.`                                               |
+| `outcomes.env_restored`                          | `Nilai variabel lingkungan sebelumnya dipulihkan.`                                                                                 |
+| `recover.cleanup` / `recover.retry`              | Bersihkan / Ulangi                                                                                                                 |
+| `blip`                                           | `cloudflared dimulai ulang sekali. Semua domain di HP ini terputus 3–10 dtk, termasuk {hosts}.`                                    |
+| `errorCodes.busy`                                | Ada perubahan lain yang sedang berjalan: {kind} · {target}. Tunggu sampai selesai, lalu coba lagi.                                 |
+| `errorCodes.integration_required`                | pm2 belum siap menjalankan situs buatan panel. Selesaikan persiapan di halaman Situs.                                              |
+| `errorCodes.no_space`                            | Penyimpanan HP tidak cukup: butuh {need}, tersisa {free}. Kosongkan ruang, lalu coba lagi.                                         |
+| `errorCodes.busy_backup`                         | Cadangan sedang berjalan. Tunggu sampai selesai, lalu hapus situs ini.                                                             |
+| `upload.paused`                                  | Unggahan terhenti karena koneksi terputus. Potongan yang sudah terkirim aman.                                                      |
+| `upload.retrying`                                | Koneksi terputus. Mencoba lagi dalam {sec} dtk (percobaan {n} dari 8)…                                                             |
+| `setup.checks.pm2_guard.warning`                 | Semua aplikasi pm2 di HP ini dibuat panel. Tambahkan aplikasi penjaga `pm2-guard` (lihat README) agar pm2 tetap hidup tanpa situs. |
+| `setup.checks.pm2_auto_exit.warning`             | Run script pm2 tidak memakai `--no-auto-exit`. pm2 berhenti bila aplikasi terakhir dihapus.                                        |
+| `setup.checks.snippet_current.error`             | Blok apps.json di ecosystem.config.js versi lama. Ganti dengan blok terbaru di bawah.                                              |
+| `adopt.blockers.outside_sites_dir`               | Aplikasi ini berjalan dari folder di luar ~/sites, jadi tidak bisa dikelola panel.                                                 |
+| `adopt.warnings.script_other`                    | Panel tidak tahu cara pm2 menjalankan binary ini. Cek kesehatan setelah deploy akan menunjukkan hasilnya.                          |
 
-Semua toast bentuk lampau ("Situs makuro-solusi diadopsi.", "Variabel lingkungan disimpan.").
+Toast bentuk lampau.
 
 ---
 
 ## 6. Kriteria penerimaan
 
-**Unit/integration (bun test, harness `tests/site.harness.ts` mode fake + temp dir):**
+**Unit/integration (bun test, `tests/site.harness.ts` fake + temp dir):**
 
-- [ ] `tests/ecosystem.snippet.test.ts`: snippet §3.6 dimuat `node` (skip bila `node` tidak ada) untuk 8 kondisi (7 tabel + `[null,{"name":"blog"}]`) → nama tulisan tangan selalu ada; probe mengembalikan `loadedAppsJson` true/false benar.
-- [ ] Integrasi: `apps.json` dibuat saat start bila hilang dan tidak pernah ditimpa bila ada (isi byte sama); `GET
-      /integration` tidak menulis file; `ready` false bila entri `apps.json` menunjuk script yang tidak ada.
-- [ ] `POST /sites` dan deploy pertama situs dikelola → 409 `integration_required` bila `!ready`.
-- [ ] `site.create` tidak menulis `apps.json`; deploy pertama menulis entri setelah swap; undo deploy pertama menghapus
-      entri dan `app`; `site.delete` menghapus entri sebelum `app_remove`/`folder_remove` (urutan langkah diuji).
-- [ ] Adopsi: cwd di luar `sites.dir` → `adopt_blocked`; tanpa `app` → `adopt_blocked`; hostname panel → `self_hostname`;
-      app modul tidak tampil; runtime dari ELF fixture (`tests/deploy.fixture.ts`); `readEnvPort` pada `.env` berisi
-      rahasia hanya mengembalikan angka dan tidak ada nilai lain di return/log (assert log buffer).
-- [ ] `suggestPort` tidak pernah mengembalikan `PORT` panel walau port itu tidak mendengar.
-- [ ] Runner: setiap langkah punya `code` dari union; tidak ada `label` di baris baru; `save()` melempar → job selesai di
-      memori dan `GET /jobs/:id` mengembalikan status akhir (tidak menggantung); boot menandai `running` → `interrupted`.
-- [ ] Cleanup per jenis (create, hostname.add, deploy swapped/not swapped, rollback, env): keadaan file setelah cleanup
-      sesuai tabel §4.11; menjalankan cleanup dua kali tidak mengubah apa pun pada run kedua (`inspect_nothing`).
-- [ ] Retry `site.delete` setelah terputus di tengah (DB sudah dijatuhkan) menyelesaikan sisanya tanpa error.
-- [ ] `job.input` tidak pernah berisi password/nilai env (scan JSON semua job dalam test create ber-database + env).
-- [ ] Unggah: meta bertahan saat `createUploadStore` dibuat ulang (simulasi restart); `GET /uploads/:id` mengembalikan
-      sha per potongan; header sha salah → 400 `chunk_sha_mismatch`; potongan 0 non-ELF → 400 `invalid_binary` dan
-      unggahan dihapus; situs adopsi `scriptRuntime=grun` + potongan 0 native → 409 `runtime_mismatch`; preflight ruang
-      (fake statfs) → 507 `no_space`; sha akhir server tercatat di baris `deploy`.
-- [ ] PUT chunk dengan header sha tetap tidak terkena rate limit mutasi (70 PUT dalam satu menit sukses; test yang
-      sudah ada di `tests/server.http.test.ts` diperluas bila belum mencakupnya).
-- [ ] Health: lolos hanya setelah 2 jawaban berturut; `restarts` naik dalam 5 dtk → `app_unstable`; `expectStatus=200`
-      dengan jawaban 302 → gagal; `healthTimeoutSec` dihormati (fake clock); path dikirim ke `httpStatus`.
-- [ ] Ekor stderr: diredaksi (nilai `.env` ≥ 6 char, `://u:p@`), tidak masuk DB, 404 `log_expired` setelah TTL.
-- [ ] Env: `restart:false` hanya menulis file; `restart:true` membuat job `site.env`; health gagal → `.env` byte lama
-      kembali; `PORT` pada situs dikelola → 400 `env_locked`; pada situs adopsi diterima; regex kunci klien = server
-      (impor dari shared).
-- [ ] `restartPending` true setelah `.env` lebih baru dari `pm_uptime` fake.
-- [ ] DNS: CNAME tak dimiliki ke tunnel sama → `dns_same_tunnel`, `dnsManaged=false`, bukan konflik; `/sites/check`
-      melaporkan `hostname_dns_conflict` sebelum job.
-- [ ] 409 `busy` membawa `job {id, kind, target}`; `jobs.isLocked({kind:"service",name:"cloudflared"})` true selama job.
-- [ ] `DELETE /sites/:name` tanpa `confirm` cocok → 400 `confirm_mismatch`.
-- [ ] Migration 00NN: DB v0.2.x dengan baris `site`/`job`/`deploy` → kolom baru terisi default; `legacyStep` memetakan
-      baris job lama tanpa error; `tests/db.migrate.test.ts` lulus.
-- [ ] Shutdown menunggu ≤ 120 dtk (`tests/server.shutdown.test.ts` dengan timeout injeksi).
-- [ ] i18n: compile gagal bila satu `JobStepKey`/`JobOutcomeCode`/`SiteIssueCode`/`IntegrationCheckKey`/kode error tanpa
-      teks (`satisfies`); test memastikan tidak ada string Inggris server yang dirender (snapshot `job.steps.tsx` dengan
-      job fixture hanya berisi kode).
-- [ ] `tests/web.deploy.test.ts`: rencana resume melewati potongan dengan sha sama; jadwal retry total ≥ 90 dtk; status
-      offline menjeda.
-- [ ] `tests/web.site.test.ts`: parser Tempel `.env` (export, kutip, komentar, duplikat, multi-baris ditolak, kunci
-      terkunci).
+- [ ] `tests/ecosystem.snippet.test.ts` (`node`, skip bila tidak ada): snippet §3.6 untuk tidak ada, kosong, rusak,
+      direktori, objek, `[null, blog]`, entri native hilang, entri `./run` tanpa `run`, entri grun dengan `./app` hilang
+      (tidak difilter) → nama app tangan selalu ada; filter benar untuk `script` absolut (`path.resolve`).
+- [ ] Probe: env proses anak hanya `{PATH, HOME, PREFIX, PM2_HOME, LANG}` (fake ecosystem mencetak `Object.keys(process.env)`);
+      `envKeys` tanpa nilai; `snippetCurrent` benar.
+- [ ] `apps.json` dibuat saat start bila hilang, tidak ditimpa bila ada; `GET /integration` tanpa tulis.
+- [ ] `ready` false bila `pm2_runtime`/`snippet_current` error; `apps_entries_runnable` hanya warning saat snippet terbaru.
+- [ ] Fake `supervisorDown`: semua langkah pm2 → `pm2_not_running`, tidak ada panggilan CLI pm2 (spy).
+- [ ] Deploy pertama menulis `run` (isi sesuai ELF) lalu entri `./run` tanpa `env`; deploy kedua tidak mengubah entri dan
+      memakai `pm2 restart`; entri lama `script: ./app` → `apps_migrated` sekali.
+- [ ] `site.delete`: `apps_remove` sebelum `app_remove`/`folder_remove`; DNS gagal → `dns_left`, job `succeeded`, tanpa
+      restart cloudflared kedua.
+- [ ] `hostname.add` dengan 3 domain → satu `tunnel_restart`.
+- [ ] Adopsi: cwd luar, tanpa `app`, host panel, modul, `pm2-guard` (tak tampil); `glibc-runner` → grun; `other` → warning;
+      `.env` berisi rahasia → hanya port yang keluar (assert return + buffer log).
+- [ ] `suggestPort` tidak pernah `PORT` panel; nama situs `pm2-guard` → `name_reserved`.
+- [ ] Runner: kode dari union; `save()` melempar → status akhir tetap tersedia; boot `running` → `interrupted`;
+      `noteIntentionalRestart` dipanggil di `app_restart`/`tunnel_restart` (spy).
+- [ ] **Swap crash**: inject throw di setiap titik antar operasi D23 (deploy pertama, deploy berikut, rollback) → cleanup →
+      `app` ada dan isinya = sebelum perubahan; entri hanya dihapus pada deploy pertama; cleanup kedua = `inspect_nothing`.
+- [ ] Fallback `copyFile` bila `link` melempar `EPERM`/`EXDEV`.
+- [ ] Cleanup create/hostname.add/env (dengan `.env.panel-prev`)/restart sesuai tabel; retry delete setelah DB dijatuhkan.
+- [ ] `job.input` tanpa password/nilai env (scan semua job dalam test ber-database + env).
+- [ ] Unggah: meta bertahan saat store dibuat ulang; meta ditulis setelah `fsync` (urutan via spy); boot membuang dir tanpa
+      meta, `.tmp`, `assembling`, kedaluwarsa; header sha salah → 400; potongan 0 non-ELF → 400 + unggahan dihapus;
+      adopsi grun + native → 409; preflight dengan dua unggahan aktif → 507; `complete` mendeteksi potongan rusak
+      (byte dibalik di `upload.bin`) → `chunk_corrupt`; sha tersimpan di `job.input` dan `deploy` sebelum langkah pertama;
+      hapus situs membuang unggahan.
+- [ ] PUT chunk tidak terkena limiter (70 PUT/menit sukses).
+- [ ] Health: lolos hanya dengan 2 probe + pid stabil + restarts tetap; `onlineWithoutPid` → `app_no_pid`; restarts naik di
+      jendela 5 dtk → `app_unstable`; `expect:"2xx3xx"` dengan 404 → gagal; header `Host` diterima server uji; jumlah
+      `jlist` per deploy sehat ≤ 4 + 1 per 10 dtk.
+- [ ] Rollback adopsi: `app.prev` glibc + script native → 409 `runtime_mismatch`.
+- [ ] Env: codec kasus A–J kritik terhadap `bun` nyata; `'` tanpa `"`/`\` tersimpan dengan kutip ganda; `restart:true` gagal →
+      `.env` byte lama kembali dan `.env.panel-prev` hilang; `PORT` dikelola → `env_locked`; `pm2EnvKeys` situs adopsi.
+- [ ] `restartPending` dari mtime vs `startedAtMs`.
+- [ ] DNS same-tunnel → bukan konflik; `/sites/check` melaporkan konflik per domain.
+- [ ] 409 `busy` membawa `job`; `isLocked` true untuk cloudflared/pm2/postgres/app target selama job; `database_drop` saat
+      backup berjalan → `busy_backup`.
+- [ ] `DELETE` tanpa `confirm` cocok → 400; retry delete ditolak bila `validate` asli tidak `done`.
+- [ ] Migration 0007 di DB v0.2.x berisi data → default terisi; `legacyStep` membaca baris lama; `db.migrate.test.ts` lulus.
+- [ ] Shutdown ≤ 120 dtk (timeout injeksi).
+- [ ] `job.status-key.ts`/`deploy.status-key.ts` `satisfies Record<…, StatusKey>`; `rolled_back` → `rolled_back` (warning),
+      `interrupted` → `interrupted` (warning), `running` → `processing`.
+- [ ] i18n lengkap (compile) dan tidak ada string Inggris server yang dirender (snapshot `job.steps.tsx` dari fixture berkode).
+- [ ] Web: rencana resume melewati potongan sha sama; jadwal retry total ≥ 120 dtk; parser tempel (export, kutip, komentar
+      inline, duplikat, multi-baris, `$`, kunci terkunci/pm2).
 - [ ] `bun run typecheck`, `bun run lint`, `bun test` hijau.
 
-**UI-QA di browser (mode fake, 390×844 dan 1440 px, tema terang dan gelap):**
+**UI-QA (mode fake, 390×844 dan 1440 px, terang + gelap):** kartu Persiapan (tiap check gagal satu per satu), Belum
+dikelola + baris panel, list kosong/bermasalah; dialog Adopsi sebagai sheet di HP dengan fokus kembali; wizard dengan 2
+domain + teks blip bernama, error terbaca pembaca layar, bar bawah tidak menutupi input saat keyboard; progres running /
+succeeded (CTA unggah) / Dikembalikan (warning) / failed + stderr / Terputus + Pulihkan, blip simulasi tanpa error;
+deploy putus → terhenti → Lanjutkan, reload → resume, file lain → dialog; rollback dari → ke; hapus situs typed dengan
+checkbox default tercentang saat tanpa cadangan; env tempel 12 kunci termasuk `$` → pratinjau → Simpan → banner;
+kontras token kedua tema; target ≥ 44 px.
 
-- [ ] `/panel/sites`: kartu Persiapan (tidak siap → siap setelah Periksa lagi di fake), Belum dikelola dengan baris
-      "Panel Termux (domain ini)", list kosong, list dengan situs bermasalah di atas.
-- [ ] Dialog Adopsi di HP sebagai sheet; opsi ber-blocker terbaca alasannya; fokus kembali ke tombol pemicu saat tutup.
-- [ ] Wizard: error per field terbaca pembaca layar (`aria-describedby`), tombol bawah lengket tidak menutupi input
-      saat keyboard terbuka (390 px).
-- [ ] Progres job: running, succeeded (create → CTA unggah), rolled_back, failed + kotak stderr, interrupted + Bersihkan;
-      blip simulasi (fake menolak request 5 dtk) tidak memunculkan error.
-- [ ] Deploy: unggah → putus jaringan (DevTools offline) → jeda → online → lanjut; reload halaman → kartu "Unggahan belum
-      selesai" → pilih file sama → lanjut dari potongan yang hilang; file lain → dialog mulai baru.
-- [ ] Dialog rollback "dari → ke" + tabel ikut/tidak ikut; hapus situs typed (tombol disabled sampai cocok).
-- [ ] Env: tempel `.env` 12 kunci → pratinjau masked → terapkan → Simpan → banner perlu mulai ulang.
-- [ ] Kontras token di kedua tema untuk banner warning/danger (tanpa kelas amber mentah); target sentuh ≥ 44 px di HP.
-
-**Di HP (POCO, setelah izin pemilik):** E1–E7 §8.1 dijalankan dan hasilnya dicatat di PLAN ini sebelum gelombang 2
-dikunci; first-run §4.3 langkah 1–7 (tanpa deploy) dijalankan pemilik/agent; deploy ke makuro-solusi hanya pada jendela
-waktu yang disetujui pemilik.
+**Di HP (POCO, izin pemilik):** E9 (hardlink), E10 (penjaga `sleep infinity`), E4b (modul logrotate) sebelum W2
+dikunci; first-run §4.3 langkah 1–7; deploy makuro-solusi hanya pada jendela yang disetujui.
 
 ---
 
 ## 7. Rencana kerja
 
-Nomor migration, urutan gelombang lintas PLAN, dan file bersama ditetapkan orkestrator. Tidak ada dua worker pada satu
-file di gelombang yang sama.
+Selaras dengan jadwal integrasi (`PLAN/debate/00-integration-critique.md` §5) dan `PLAN/DECISIONS.md`. Tidak ada dua
+worker pada satu file di gelombang yang sama.
 
-**Gelombang 0 — eksperimen POCO (bukan kode; butuh izin pemilik)**: `wkr-sites-lab-00` menjalankan §8.1 dan menulis hasil
-ke §8.1 dokumen ini. Gelombang 2 boleh dimulai setelah ini, atau dengan asumsi hasil lab lokal bila pemilik menunda.
+### 7.1 Gelombang
 
-**Gelombang 1 — kontrak & runner (paralel)**
+**W0 (prasyarat, orkestrator + kontrak):** merge `main` (hotfix CSRF) ke branch (B17); pecah `index.ts` → `boot.ts` +
+`http/spa.serve.ts` (B16); `wkr-contracts-00` menulis `src/shared/site.types.ts`, `deploy.types.ts`, `env.codec.ts`★,
+dan `ApiError` status kanonik + `extra` (`src/server/routes/http.error.ts`). Lab POCO tambahan E9/E10/E4b
+(`wkr-sites-lab-00`, izin pemilik; tidak memblokir W1).
 
-| Worker                  | File (kepemilikan eksklusif)                                                                                                                                                                                                                                                                                      | Ukuran |
-| ----------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------ |
-| `wkr-sites-contract-01` | `src/shared/site.types.ts`, `src/shared/deploy.types.ts`, `src/server/db/schema/site.schema.ts`, `src/server/db/schema/deploy.schema.ts`, `drizzle/00NN_sites_lifecycle.sql` + `drizzle/meta/*` + `drizzle/migrations.js`, `src/server/routes/http.error.ts`, `tests/db.migrate.test.ts`                          | ±350   |
-| `wkr-sites-runner-01`   | `src/server/sites/job.runner.ts` (kode/params/log/durasi, `interrupted`, `save()` aman, `isLocked`, `active()`, busy extra, step list dinamis untuk cleanup), `src/server/sites/job.legacy.ts` (baru, `legacyStep`), `src/server/shutdown.ts`, `tests/job.runner.test.ts` (baru), `tests/server.shutdown.test.ts` | ±450   |
+**W1:**
 
-Runner bergantung pada tipe dari contract worker: urutkan contract dulu dalam gelombang (selesai ±1 jam), atau berikan
-tipe final §3.1 di spec runner (tipe ditulis persis dari PLAN ini, jadi paralel aman).
+| Worker                | File (eksklusif)                                                                                                                                                                     | Ukuran           |
+| --------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ---------------- |
+| `wkr-db-01`           | `src/server/db/schema/*` (bagian PLAN 03: `site`, `job`, `deploy`), `drizzle/0007_sites_lifecycle.sql`, `drizzle/meta/*`, `drizzle/migrations.js`, `tests/db.migrate.test.ts`        | ±120 (bagian 03) |
+| `wkr-adapters-01`     | `src/server/system/*` (bagian PLAN 03 §3.7), `tests/panel.parsers.test.ts`, test adapter                                                                                             | ±200 (bagian 03) |
+| `wkr-sites-runner-01` | `src/server/sites/job.runner.ts`, `src/server/sites/job.legacy.ts`★, `src/server/shutdown.ts`, `tests/site.harness.ts`, `tests/job.runner.test.ts`★, `tests/server.shutdown.test.ts` | ±500             |
 
-**Gelombang 2 — fitur server (paralel; setelah G1 dan setelah adapter PLAN/02 §3.7)**
+**W2:**
 
-| Worker                | File                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               | Ukuran |
-| --------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------ |
-| `wkr-sites-setup-02`  | `src/server/sites/integration.service.ts` (baru), `src/server/sites/ecosystem.probe.ts` (baru), `src/server/sites/adopt.candidates.ts` (baru, termasuk `readEnvPort`), `src/server/sites/site.adopt.ts` (baru, server), `src/server/dev/setup.service.ts` (hanya baris `apps_json`), `tests/site.integration.test.ts`, `tests/ecosystem.snippet.test.ts`, `tests/site.adopt.test.ts` (baru)                                                                                                                                                                                                                                                        | ±650   |
-| `wkr-sites-jobs-02`   | `src/server/sites/site.service.ts` (list/detail/create/delete/hostnames/settings/restart; dipangkas ≤ 300 baris), `src/server/sites/site.env.service.ts` (baru), `src/server/sites/site.jobs.ts`, `src/server/sites/site.steps.ts`, `src/server/sites/site.checks.ts`, `src/server/sites/job.recovery.ts` (baru; cleanup create/hostname/env/restart, retry delete/remove), `src/server/sites/env.file.ts`, `src/server/cloudflare/dns.provider.ts` (`inspect` + same-tunnel), `src/server/routes/sites.routes.ts`, `tests/site.create.test.ts`, `tests/site.manage.test.ts`, `tests/site.recovery.test.ts` (baru), `tests/cloudflare.dns.test.ts` | ±1.100 |
-| `wkr-sites-deploy-02` | `src/server/deploy/deploy.service.ts`, `src/server/deploy/deploy.steps.ts`, `src/server/deploy/health.check.ts` (baru), `src/server/deploy/upload.store.ts`, `src/server/deploy/binary.hash.ts` (baru, cache sha), `src/server/deploy/app-log.tail.ts` (baru, redaksi + TTL), `src/server/deploy/deploy.recovery.ts` (baru), `src/server/routes/deploy.routes.ts`, `tests/deploy.api.test.ts`, `tests/deploy.health.test.ts` (baru), `tests/deploy.upload.test.ts` (baru)                                                                                                                                                                          | ±1.000 |
+| Worker                 | File                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               | Ukuran |
+| ---------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------ |
+| `wkr-sites-server-02`  | `src/server/sites/*` kecuali runner/legacy: `site.service.ts` (≤ 300 baris), `site.adopt.ts`★, `adopt.candidates.ts`★, `site.env.service.ts`★, `integration.service.ts`★, `ecosystem.probe.ts`★, `job.recovery.ts`★, `site.jobs.ts`, `site.steps.ts`, `site.checks.ts`, `env.file.ts`, `apps.file.ts`, `site.secrets.ts`★ (`siteSecretsFor`); `src/server/cloudflare/dns.provider.ts`; `src/server/routes/sites.routes.ts`; `tests/site.*.test.ts`, `tests/ecosystem.snippet.test.ts`★, `tests/cloudflare.dns.test.ts`, `tests/site.files.test.ts` | ±1.200 |
+| `wkr-deploy-server-02` | `src/server/deploy/*`: `deploy.service.ts`, `deploy.steps.ts`, `swap.ts`★ (D23), `run.script.ts`★, `health.check.ts`★, `upload.store.ts`, `binary.identity.ts`★, `deploy.recovery.ts`★, `elf.runtime.ts` (deteksi dari buffer); `src/server/routes/deploy.routes.ts`; `tests/deploy.*.test.ts`                                                                                                                                                                                                                                                     | ±1.000 |
 
-Antarmuka antar worker G2 (ditulis di spec): `job.recovery.ts` memanggil `deployRecoverySteps(ctx, job)` dari
-`deploy.recovery.ts`; `site.service.detail()` memanggil `binaryInfo(site)` dari `binary.hash.ts` dan
-`integration.service.ready()`; `site.service` mengimpor `adoptSite` dari `site.adopt.ts`. Rute adopsi/integrasi didaftarkan
-di `sites.routes.ts` (milik jobs-02) dengan handler yang diekspor setup-02. `src/server/index.ts` (wiring `apps.json` saat
-start + `PANEL_PORT` untuk `self`) = satu baris dari jobs-02, dikoordinasikan dengan PLAN/02/04 yang juga menyentuh file
-ini.
+Antarmuka W2 (di spec): `job.recovery.ts` memanggil `deployRecoverySteps(ctx, job)`; `site.service.detail()` memanggil
+`binaryInfo(site)`; `ensureAppsJson()` diekspor untuk `boot.ts` (wiring oleh worker boot W3).
 
-**Gelombang 3 — web (paralel; setelah G2 dan setelah gelombang komponen PLAN/01: `ConfirmAction` tier, `PageHeader`
-status/actions, `DataTable` rowActions + list, `status.vocab`, `LogViewer`, toaster tunggal)**
+**W3 (web; setelah komponen PLAN/01 W1/W2):**
 
-| Worker                    | File                                                                                                                                                                                                                                                                                                                                                                                                                                         | Ukuran |
-| ------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------ |
-| `wkr-sites-web-list-03`   | `src/web/site/sites.page.tsx`, `site.setup.tsx` (baru; hapus `integration.banner.tsx`), `site.discovered.tsx` (baru), `adopt.dialog.tsx`, `site.adopt.ts`, `site-new.page.tsx`, `wizard.target.tsx`, `wizard.options.tsx`, `wizard.summary.tsx`, `form.field.tsx`, `site.api.ts`, `site.check.ts`, `site.card.tsx` (hapus), `src/web/i18n/id.site.ts`, `src/web/i18n/id.ts` (daftarkan `id.site-detail`, `id.job`), `tests/web.site.test.ts` | ±900   |
-| `wkr-sites-web-detail-03` | `src/web/site/site-detail.page.tsx`, `site.header.tsx` (baru), `site.anchors.tsx` (baru), `site.hostnames.tsx`, `site.env-editor.tsx`, `env.editor.tsx`, `env.rows.ts`, `env.paste.ts` (baru), `site.settings.tsx` (baru), `site.delete.tsx`, `src/web/i18n/id.site-detail.ts` (baru), `tests/web.site-detail.test.ts` (baru)                                                                                                                | ±850   |
-| `wkr-sites-web-deploy-03` | `src/web/deploy/deploy.card.tsx`, `deploy.upload.ts`, `upload.resume.ts` (baru), `deploy.api.ts`, `deploy.state.ts`, `deploy.history.tsx`, `deploy.rollback.tsx` (baru), `src/web/site/job.page.tsx`, `job.steps.tsx`, `job.state.ts`, `jobs.page.tsx`, `job.failure.tsx` (baru), `src/web/i18n/id.deploy.ts`, `src/web/i18n/id.job.ts` (baru), `tests/web.deploy.test.ts`                                                                   | ±950   |
+| Worker                    | File                                                                                                                                                                                                                                                                                                          | Ukuran |
+| ------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------ |
+| `wkr-sites-web-list-03`   | `src/web/site/{sites.page,site.setup★,site.discovered★,adopt.dialog,site.adopt,site-new.page,wizard.target,wizard.options,wizard.summary,form.field,site.api,site.check,site.routes★}.tsx/ts` (hapus `site.card.tsx`, `integration.banner.tsx`), `src/web/i18n/id.site.ts`, `tests/web.site.test.ts`          | ±900   |
+| `wkr-sites-web-detail-03` | `src/web/site/{site-detail.page,site.header★,site.anchors★,site.hostnames,site.env-editor,env.editor,env.rows,env.paste★,site.settings★,site.delete}.tsx/ts`, `src/web/i18n/id.site-detail.ts`★, `tests/web.site-detail.test.ts`★                                                                             | ±850   |
+| `wkr-sites-web-deploy-03` | `src/web/deploy/{deploy.card,deploy.upload,upload.resume★,deploy.api,deploy.state,deploy.history,deploy.rollback★,deploy.status-key★}.tsx/ts`, `src/web/site/{job.page,job.steps,job.state,jobs.page,job.failure★,job.status-key★}.tsx/ts`, `src/web/i18n/{id.deploy,id.job★}.ts`, `tests/web.deploy.test.ts` | ±950   |
 
-`deploy.card.tsx` dipakai di detail: detail-03 hanya me-render `<DeployCard site=… detail=… />` dengan props yang
-disepakati di spec (`detail: SiteDetail`).
+`site.routes.tsx` = array route domain yang dirangkai shell (`app.routes.tsx`, PLAN/01). `id.ts` digabung shell (X17).
 
-**Gelombang 4 — QA & docs**: UI-QA browser §6 (orkestrator/QA worker, ego-browser diizinkan untuk QA). Dokumentasi
-sekali di akhir oleh satu worker (Rule 23): README bagian "Integrasi pm2" (snippet baru + peringatan snippet lama),
-"Situs" (adopsi, deploy yang bisa dilanjutkan, cek kesehatan, perubahan terputus, rollback tidak mengembalikan env/DB),
-catatan risiko admin = pemilik HP; CHANGELOG `Added/Changed/Fixed`.
+**W4:** UI-QA browser; dokumentasi satu worker (README "Integrasi pm2" dengan snippet baru, peringatan snippet lama,
+`pm2-guard`, situs/deploy/pemulihan/rollback, risiko admin = pemilik HP; CHANGELOG).
 
-Perkiraan total PLAN/03: ±6.200 baris diff termasuk test.
+Perkiraan PLAN 03 setelah revisi: ±5.600 baris termasuk test (C20 mengurangi ±600 tanpa mengurangi fitur).
 
-### Dependensi lintas PLAN (minta dihormati)
+### 7.2 Spec installer
 
-| Kepada      | Yang dibutuhkan PLAN/03                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     |
-| ----------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| PLAN/01     | `ConfirmAction` tier `typed` (input + label tombol kata kerja + objek); `PageHeader` dengan `status` dan `actions` + varian lengket; `DataTable` `rowActions` + tampilan list < md + baris-link; `status.vocab` dengan jenis `job` (5 status termasuk `interrupted` "Terputus" tone danger, `rolled_back` tone warning "Dikembalikan") dan `deploy`; `LogViewer` mode statis (tanpa follow) untuk ekor stderr dan log langkah; bar aksi lengket bawah HP; toaster tunggal                                                                                                                                                                                                                                                                                                                                                                   |
-| PLAN/02     | Adapter §3.7 (`cwd`, `execPath`, `args`, `startedAtMs`, `module`; `httpStatus(port, path, timeoutMs)`; fake data) di gelombang adapter mereka. Kontrol app/layanan memanggil `jobs.isLocked(resource: { kind: "service" \| "app"; name: string }): boolean` (sudah direncanakan dengan nama ini). `site_job_failed` dievaluasi dari: job terbaru per target berstatus `interrupted` atau `failed` dengan `resolvedBy = null` → severity danger, `params {jobId, kind, status}`, `href /panel/jobs/:id`. `site_crash_loop` **tidak dipakai** (cukup `app_crash_loop` dengan `params.site`); boleh dihapus dari union. Snapshot pm2 dipakai `toSites`/discovered/check (G28) — fungsi yang diekspos snapshot: `pm2Procs(): Promise<Pm2Proc[]>` (stale ≤ 15 dtk boleh untuk list, **tidak** untuk langkah job: job memanggil adapter langsung) |
-| PLAN/04     | Cakupan cadangan per situs: `.env` dan `data/` disertakan; `app`, `app.prev`, `app.new`, `.app.prev.drop`, `.app.swap` dikecualikan (binary bisa diunggah ulang; 89 MB × 2 per situs). Fungsi `lastSuccessfulBackupOf(database: string): { at: string; runId: string } \| null` untuk dialog hapus situs. Peringatan bahwa cadangan berisi rahasia `.env`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   |
-| PLAN/05     | `integration()` tetap memberi `ecosystemIncludesAppsJson` (dipertahankan, §3.6). Installer HP baru: ecosystem template **harus** memuat snippet §3.6 dan minimal satu aplikasi atau pm2-runtime yang tidak keluar saat 0 aplikasi (lab lokal: `--no-auto-exit` tidak cukup saat ecosystem kosong di pm2 5.4.3; tunggu E4 POCO); `sv -w 130 restart panel` saat upgrade. Teks onboarding `apps_json` menautkan ke kartu Persiapan `/panel/sites`. Gelombang `dns.provider.ts` PLAN/05 (`wkr-adm-cfverify-01`) setelah `wkr-sites-jobs-02`                                                                                                                                                                                                                                                                                                    |
-| Hotfix CSRF | Semua endpoint baru memakai klien `apiFetch` (header `X-Requested-With`); PUT chunk juga (klien unggah memakai `apiFetch` atau menambah header yang sama)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   |
+**`server-termux`** (`/Users/bip/test/server-termux`, repo kita; worker terpisah, izin pemilik; dirilis sebelum v0.3.0
+panel diumumkan):
+
+1. `files/sites/ecosystem.config.js` diganti template ini (`put_once`, tidak pernah menimpa milik pemilik):
+
+   ```js
+   // Daftar app yang dijalankan PM2 di HP ini. Tambah site('<nama>') untuk situs yang kamu tulis sendiri.
+   // Situs buatan Panel Termux ada di apps.json dan dimuat otomatis oleh blok panelApps di bawah.
+   const SITES = "/data/data/com.termux/files/home/sites";
+   const PREFIX = "/data/data/com.termux/files/usr";
+
+   // Binary Bun glibc dijalankan lewat grun; .env di folder situs dibaca binary saat start.
+   const site = (name) => ({
+     name,
+     cwd: `${SITES}/${name}`,
+     script: `${PREFIX}/bin/grun`,
+     args: "./app",
+     interpreter: "none",
+     exp_backoff_restart_delay: 1000,
+   });
+
+   // <snippet §3.6 persis>
+
+   // pm2-runtime keluar bila ecosystem tidak punya aplikasi saat start, juga dengan --no-auto-exit.
+   // Penjaga ini (sleep, ±1 MB) menahannya hidup di HP yang belum punya situs. Jangan dihapus.
+   const guard = { name: "pm2-guard", script: `${PREFIX}/bin/sleep`, args: "infinity", interpreter: "none", autorestart: true };
+
+   module.exports = {
+     apps: [
+       guard,
+       // site('blog'),
+       ...panelApps,
+     ],
+   };
+   ```
+
+2. `files/sites/apps.json` = `[]`; `put_once` di blok `step pm2` (`install.sh:59-62`).
+3. `files/sv/pm2/run`: tetap `--no-auto-exit`; tambah `export PM2_HOME=$HOME/.pm2` sebelum `exec`.
+4. `files/home/sites/README.md`: bagian "Situs buatan panel" (`apps.json`, jangan hapus `pm2-guard`, jangan hapus `app`
+   lewat ssh tanpa menghapus situs di panel).
+5. `test/install.test.sh`: template memuat `panelApps`, `existsSync`, `pm2-guard`; `apps.json` tidak ditimpa; bila `node`
+   ada: `require` template dengan `apps.json` hilang/rusak/berisi entri tanpa binary → nama tepat `pm2-guard`.
+6. `CHANGELOG.md` `## [0.2.0]` Added. HP yang sudah berjalan (POCO) tidak tersentuh.
+
+**`scripts/install-phone.sh`** (milik PLAN/05 `wkr-dist-01`):
+
+1. `sv -w 130 restart panel` sekali (ganti loop `install-phone.sh:76-79`). Sebelum: "Memulai ulang panel. Bila ada
+   perubahan situs yang sedang berjalan, panel menunggu sampai 2 menit." Sesudah: `sv status panel` harus `run:`; else
+   exit 1 "Panel belum berjalan setelah 130 dtk. Lihat $PREFIX/var/log/sv/panel/current."
+2. HP baru tanpa setup pm2 (`~/sites/ecosystem.config.js` dan `$SVDIR/pm2` sama-sama tidak ada): salin
+   `deploy/pm2/{ecosystem.config.js,apps.json,run}` (salinan persis `server-termux` §1–3, sumber disebut di README) lalu
+   `sv up pm2`. Bila salah satu ada: tidak menyentuh apa pun, cetak "pm2 sudah diatur; buka Situs → Persiapan di panel
+   untuk memeriksa integrasi."
+3. Tidak pernah memanggil CLI `pm2`.
+4. `scripts/install-phone.test.sh`: dua cabang; template lulus uji `node` yang sama.
+
+`deploy/pm2/*` ditulis `wkr-dist-01` dari teks §7.2 ini.
+
+### 7.3 Dependensi lintas PLAN
+
+| Kepada          | Yang dibutuhkan PLAN 03                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    |
+| --------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| PLAN/01         | `ConfirmAction` `confirm \| typed`; `PageHeader` status/actions/lengket; `DataTable` `actions` + list; `StatusKey` `processing`, `succeeded`, `failed`, `rolled_back` (warning, A10), `interrupted` (warning); `LogViewer` statis dengan `LogLine[]`; `usePoller` dengan backoff yang menahan error selama blip (X19); bar aksi lengket; shell menggabungkan `id.site-detail.ts`/`id.job.ts` ke `id.ts`; `app.routes.tsx` merangkai `site.routes.tsx`                                                                                                      |
+| PLAN/02         | Adapter §3.7 (`wkr-adapters-01`), termasuk `pm2-guard` → `module`; `jobs.isLocked`/`jobs.active` dipakai kontrol; `monitor.noteIntentionalRestart`; aturan `site_job_failed` (job terbaru per target `interrupted`/`failed`, `resolvedBy` null; `site_crash_loop` tidak dipakai); snapshot `pm2Procs()`; endpoint log app (`LogChunk`) + `redactLines(lines, extraSecrets)` memakai `siteSecretsFor(app)`; abaikan baris `PM2 error: … getconf` dan `[pidusage]` (lab); tolak restart panel bila `jobs.active() \|\| backup.running \|\| backup.restoring` |
+| PLAN/04         | Pengecualian cadangan: `*/app`, `*/app.prev`, `*/app.new`, `*/.app.prev.drop`, `*/.app.swap`, `*/run.panel-tmp`, `*/.env.panel-prev`, `<dataDir>/uploads/`; `lastGoodItem` untuk database dan folder situs; status `backup.running`/`backup.restoring` untuk `busy_backup`                                                                                                                                                                                                                                                                                 |
+| PLAN/05         | `install-phone.sh` + `deploy/pm2/*` sesuai §7.2; item onboarding `apps_json` memakai `ecosystemIncludesAppsJson` dan menautkan ke kartu Persiapan; `dns.provider.ts` PLAN/05 setelah `wkr-sites-server-02`                                                                                                                                                                                                                                                                                                                                                 |
+| `server-termux` | Perubahan §7.2 (repo terpisah, worker terpisah)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            |
 
 ---
 
 ## 8. Risiko, asumsi, pertanyaan terbuka
 
-### 8.1 Dua perilaku pm2 yang harus diuji sebelum PLAN dikunci
+### 8.1 Hasil lab pm2 (POCO, pm2 7.1.2) dan penerapannya
 
-**Pra-uji lokal (sudah dijalankan, 2026-11-26)** — pm2 5.4.3 di macOS, `PM2_HOME` terisolasi di path pendek
-(socket Unix > 104 karakter gagal `EINVAL`), lab dibongkar sesudahnya; log disalin ke scratchpad sesi:
+Detail lengkap: `PLAN/debate/03-pm2-lab-results.md`. Pra-uji lokal (pm2 5.4.3) di rev 0 cocok dengan semua hasil POCO.
 
-| Eksperimen                                                                                        | Hasil lokal                                                                                                                            |
-| ------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------- |
-| E1 pm2-runtime start, ecosystem = 1 app sehat + 1 entri `apps.json` dengan `./app` yang tidak ada | `PM2 error: Script not found …` → **menghentikan app sehat dan keluar** (exit 0). Sama dengan `--no-auto-exit`                         |
-| E2 `pm2 start ecosystem.config.js --only blog` dari CLI saat pm2-runtime jalan (PM2_HOME sama)    | `blog` masuk daemon yang sama (jlist berisi hand + blog); restart pm2-runtime → `blog` dimuat lagi dari `apps.json`                    |
-| E2b CLI `--only ghost` (script tidak ada) saat runtime jalan                                      | Error untuk ghost saja; runtime dan app lain tetap jalan                                                                               |
-| E3 `pm2 start eco --only blog` saat `blog` sudah ada dan `script` di `apps.json` diganti          | `blog` di-restart tetapi **tetap memakai script lama**; script baru baru terpakai setelah delete+start atau restart runtime            |
-| E4 hapus app terakhir saat runtime jalan; ecosystem 0 app saat start                              | 0 app online → runtime keluar ±8 dtk kemudian (exit 2). Ecosystem 0 app saat start → keluar seketika, **juga dengan `--no-auto-exit`** |
-| E7 nama file                                                                                      | pm2 hanya memperlakukan file sebagai ecosystem bila namanya cocok pola (`*.config.js`); `eco2.js` dijalankan sebagai skrip aplikasi    |
+| Lab | Hasil                                                                                                        | Diterapkan di                                             |
+| --- | ------------------------------------------------------------------------------------------------------------ | --------------------------------------------------------- |
+| E1  | Entri native dengan script hilang → semua app berhenti, runtime keluar, ±54 restart/mnt, flag tidak menolong | D2, D5, §3.6 (`snippet_current`, `apps_entries_runnable`) |
+| E1e | Filter `existsSync` di snippet → entri dilewati, app lain online                                             | D2, §3.6                                                  |
+| E1f | Entri grun dengan `./app` hilang → hanya app itu crash-loop                                                  | D6 (entri panel `./run`), §3.6                            |
+| E2  | `start --only` dari CLI masuk daemon runtime; kembali setelah restart; tanpa duplikat                        | §4.3 langkah 10, D6                                       |
+| E3  | `start --only` pada app lama: script lama dipakai; `online` dengan `pid=undefined`, port mati                | D6, D16                                                   |
+| E4  | `--no-auto-exit` menahan "app terakhir dihapus"; ecosystem 0 app saat start tetap keluar                     | D31, §3.6 (`pm2_auto_exit`, `pm2_guard`), §7.2            |
+| E5  | Snippet lulus 6 keadaan `apps.json`                                                                          | §3.6                                                      |
+| E6  | Bun membaca `.env` hanya saat start                                                                          | D19                                                       |
+| E6b | `env` entri pm2 mengalahkan `.env`                                                                           | D6 (entri tanpa `env`), D20 (`pm2EnvKeys`)                |
+| E7  | File tanpa pola `*.config.js` dijalankan sebagai skrip                                                       | §8.3 (asumsi nama tetap)                                  |
+| –   | `PM2 error: getconf …` / `[pidusage]` palsu                                                                  | §7.3 PLAN/02                                              |
 
-Catatan insiden kecil: perintah `pm2 -v` pertama (sebelum lab terisolasi) menyalakan daemon pm2 di `~/.pm2` laptop
-(tanpa aplikasi, `dump.pm2` = `[]`); daemon itu sudah dimatikan (`pm2 kill`), keadaan kembali seperti semula.
+Sisa (murah, gelombang 0, tidak memblokir W1):
 
-**Eksperimen di POCO (gelombang 0)** — tanpa menyentuh aplikasi produksi:
-
-Isolasi:
-
-- `PM2_HOME=$HOME/pm2lab/h` (bukan `~/.pm2`), sites di `$HOME/pm2lab/sites` (di **luar** `~/sites`, supaya run script
-  pm2 produksi yang membunuh proses yatim ber-cwd `~/sites` tidak terlibat, dan sebaliknya).
-- Layanan runit sementara `pm2lab`: `$PREFIX/var/service/pm2lab/run`:
-
-  ```sh
-  #!/data/data/com.termux/files/usr/bin/sh
-  export PM2_HOME=$HOME/pm2lab/h
-  exec 2>&1
-  exec pm2-runtime $HOME/pm2lab/sites/ecosystem.config.js
-  ```
-
-  (varian `run` kedua dengan `--no-auto-exit` untuk E4). Tanpa `log/` (output ke `$PREFIX/var/log/sv/pm2lab` bila
-  `svlogd` default ada; else `sv status` + `pm2 logs` lab).
-- Semua perintah pm2 lewat fungsi `lab() { PM2_HOME=$HOME/pm2lab/h pm2 "$@"; }`; **dilarang** `pm2` tanpa `PM2_HOME`,
-  `pm2 kill` global, `pkill -f`/`pgrep -f` (memory proyek: bisa membunuh shell ssh), restart `pm2`/`cloudflared`/`panel`.
-- Aplikasi uji: (a) `app` = skrip node HTTP (shebang `#!/data/data/com.termux/files/usr/bin/node`, `interpreter: none`)
-  di port 3991/3992/3993 (cek dulu tidak dipakai: `curl -s 127.0.0.1:399x` gagal); (b) satu binary Bun hello
-  `--target=bun-linux-arm64-android` untuk E6.
-- Sebelum dan sesudah: catat `pm2 jlist` produksi (nama, status, `restart_time`), `sv status pm2 cloudflared panel`,
-  `curl -s -o /dev/null -w '%{http_code}' https://solusi.malikkurosaki.com` — harus identik (restart_time
-  makuro-solusi tidak berubah).
-- Bongkar: `sv down pm2lab`, hapus `$PREFIX/var/service/pm2lab`, `lab kill`, `rm -rf ~/pm2lab`.
-
-Langkah dan pengukuran:
-
-| #   | Langkah                                                                                                                                                                                                          | Yang dicatat                                                                           |
-| --- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------- |
-| E1  | ecosystem (snippet) + app `hand`; `apps.json` berisi `ghost` dengan `./app` hilang (a: cwd ada, b: cwd tidak ada); `sv up pm2lab`                                                                                | runtime keluar? runsv me-restart berapa kali/menit? `hand` sempat online?              |
-| E2  | `apps.json` = `[]` → runtime jalan → tambah entri `blog` + binary → `lab start sites/ecosystem.config.js --only blog`, juga lewat `runTermux` panel (`$PREFIX/bin/node $PREFIX/bin/pm2` dengan env PM2_HOME lab) | `blog` di daemon runtime yang sama? `sv restart pm2lab` → `blog` kembali? tidak ganda? |
-| E3  | ubah `script` `blog` (native → grun) di `apps.json`, `lab start … --only blog`                                                                                                                                   | script lama atau baru yang jalan                                                       |
-| E4  | `lab delete` semua app (dengan/tanpa `--no-auto-exit`); start dengan ecosystem 0 app (dengan/tanpa flag)                                                                                                         | runtime keluar? setelah berapa detik?                                                  |
-| E5  | snippet §3.6 dengan `apps.json` hilang / kosong / rusak / objek → `sv restart pm2lab`                                                                                                                            | `hand` selalu online; pesan stderr `[ecosystem] apps.json dilewati`                    |
-| E6  | binary Bun hello membaca `FOO` dari `.env`; ubah `.env`, `lab restart hello` vs tanpa restart                                                                                                                    | `restartPending` semantik benar (env baru hanya setelah restart)                       |
-| E7  | `lab start sites/eco2.js --only x` (nama tanpa `.config.js`)                                                                                                                                                     | konfirmasi pola nama                                                                   |
-
-Bagaimana PLAN berubah menurut hasil:
-
-| Hasil POCO                                                 | Perubahan PLAN                                                                                                                                                                                                                                                                                                                                                                                                        |
-| ---------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| E1 = sama dengan lokal (runtime keluar)                    | D5 tetap **wajib** + check `apps_entries_runnable` = error dan ditampilkan di Ringkasan sebagai masalah danger; README memperingatkan jangan menghapus `app` lewat ssh tanpa menghapus entri. Dipertimbangkan: snippet memfilter entri yang `cwd/script`-nya tidak ada (`fs.existsSync(path.join(a.cwd, a.script))`) — **direkomendasikan** sebagai pengaman kedua bila E1 terkonfirmasi                              |
-| E1 = hanya app itu `errored`                               | D5 tetap (lebih bersih), check `apps_entries_runnable` turun ke warning                                                                                                                                                                                                                                                                                                                                               |
-| E2 = masuk daemon yang sama dan kembali setelah restart    | Desain sekarang (`pm2 start eco --only`) dipertahankan                                                                                                                                                                                                                                                                                                                                                                |
-| E2 = CLI membuat daemon kedua / app hilang setelah restart | Adapter pm2 harus memakai `PM2_HOME` yang sama dengan run script (setting/env eksplisit) dan deploy pertama menandai "akan berjalan penuh setelah pm2 dimulai ulang"; integrasi menambah check `pm2_home_match` (bandingkan `rpc.sock` yang dipakai)                                                                                                                                                                  |
-| E3 = script lama dipertahankan (seperti lokal)             | Pertahankan delete+start saat runtime berubah (sekarang, `deploy.steps.ts:197-201`), hanya bila entri berubah; restart biasa untuk deploy runtime sama                                                                                                                                                                                                                                                                |
-| E3 = script baru dipakai                                   | Ganti delete+start dengan `start --only` (tanpa jeda 0-app)                                                                                                                                                                                                                                                                                                                                                           |
-| E4 = runtime keluar saat 0 app online                      | Delete+start tetap berurutan langsung (jeda < 2 dtk, di bawah ±8 dtk lokal). Integrasi menambah check warning `pm2_single_app` bila ecosystem hanya berisi app panel: "Bila aplikasi ini satu-satunya, pm2 bisa berhenti saat deploy. Tambahkan `--no-auto-exit` di run script pm2" (hanya bila E4 membuktikan flag itu bekerja di 7.1.2; bila tidak, sarankan satu app penjaga ringan). Dependensi installer PLAN/05 |
-| E5 gagal (runtime tetap keluar)                            | Snippet direvisi sampai lulus E5; panel tidak dirilis dengan snippet itu                                                                                                                                                                                                                                                                                                                                              |
-| E6 = env baru terbaca tanpa restart                        | Tidak mungkin untuk binary Bun (dibaca saat start); bila terjadi, `restartPending` dihapus                                                                                                                                                                                                                                                                                                                            |
+| #   | Langkah (isolasi sama dengan lab POCO: `PM2_HOME` lab, folder di luar `~/sites`)                               | Bila hasil ≠ asumsi                                                                                                 |
+| --- | -------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------- |
+| E9  | `ln ~/pm2lab/a ~/pm2lab/b`, juga di folder di bawah `~/sites` uji; cek inode sama                              | `link` ditolak → fallback `copyFile` menjadi jalur utama (89 MB tulis per deploy); tidak ada perubahan desain       |
+| E10 | app `pm2-guard` (`sleep infinity`) di ecosystem lab tanpa app lain: runtime tetap hidup 60 dtk, RSS, restart 0 | `sleep infinity` tidak didukung → `args: "2147483647"`; bila runtime tetap keluar → penjaga skrip node HTTP 1 baris |
+| E4b | ecosystem 0 app + modul `pm2-logrotate` terpasang di lab                                                       | Hanya catatan; penjaga tetap dipakai (modul bisa dihapus)                                                           |
 
 ### 8.2 Risiko
 
-- **Uji end-to-end di POCO menyentuh produksi** (deploy makuro-solusi = situs berbayar; perubahan domain memutus panel).
-  Hanya dengan izin pemilik per sesi; eksperimen §8.1 dirancang tanpa menyentuh produksi.
-- **Probe mengeksekusi ecosystem pemilik** dengan `node`. Bila file itu membaca rahasia atau punya efek samping, probe
-  ikut menjalankannya (sama seperti pm2). Output dibatasi ke nama; stderr dipotong 300 karakter dan bisa berisi path.
-- **Redaksi stderr tidak sempurna**: rahasia yang tidak ada di `.env` (mis. token dari API lain) tetap tampil ke admin.
-  Admin dianggap setara pemilik (keputusan 1), jadi ini dicatat, bukan diblokir.
-- **Shutdown 120 dtk** memperpanjang jeda upgrade bila ada perubahan berjalan.
-- **sha cache** memakai `ino/size/mtimeMs`; binary yang diganti lewat ssh dengan mtime dipertahankan (`cp -p`) akan
-  dilaporkan dengan sha lama sampai panel restart. Diterima (kasus langka).
-- **`ingress.editor.ts`** hanya memahami bentuk YAML tertentu; config tulisan tangan lain → `ingress_unsupported` (aman,
-  pesan menjelaskan).
-- **Cleanup folder** sengaja konservatif (`folder_not_empty` dibiarkan) — pengguna mungkin harus `rm` manual.
-- File besar yang mendekati batas Rule 8: `site.service.ts` (285 baris) harus dipecah sebelum ditambah (`site.adopt.ts`,
-  `site.env.service.ts`, `integration.service.ts`); `id.site.ts` dipecah ke `id.job.ts` dan `id.site-detail.ts`.
+- Uji end-to-end di POCO menyentuh produksi; hanya dengan izin per sesi.
+- Probe mengeksekusi ecosystem pemilik (env minimal); efek samping file itu tanggung jawab pemilik (README).
+- Redaksi stderr tidak sempurna untuk rahasia di luar `.env`; admin = pemilik (A1).
+- Shutdown 120 dtk memperpanjang jeda upgrade saat ada perubahan.
+- `(ino, mtimeMs)` palsu-cocok bila file diganti dengan inode dan mtime sama (praktis mustahil tanpa sengaja).
+- `ingress.editor.ts` hanya memahami bentuk YAML tertentu → `ingress_unsupported`.
+- Cleanup folder konservatif (`folder_not_empty`).
+- Ukuran file: `site.service.ts` (285 baris) dipecah sebelum ditambah; `id.site.ts` dipecah.
+- Template `server-termux` dan salinan `deploy/pm2/*` di repo panel bisa menyimpang; README menyebut sumbernya dan test
+  kedua repo memakai uji `node` yang sama.
 
 ### 8.3 Asumsi
 
-- pm2 di POCO = 7.1.2 (memory proyek), `PM2_HOME` panel = `~/.pm2` = milik run script runit `pm2`.
-- `node` tersedia di `$PREFIX/bin/node` (dibutuhkan pm2 juga).
-- Header ELF + program header + PT_INTERP berada di 8 MB pertama untuk binary Bun (asumsi yang sudah dipakai kode sekarang).
-- Cloudflare body cap 100 MB per request (alasan potongan 8 MB) tetap.
-- Hotfix CSRF masuk sebelum gelombang 3.
-- LICENSE MIT (asumsi brief) tidak memengaruhi PLAN ini.
+- pm2 7.1.2 di POCO; `PM2_HOME` = `~/.pm2` untuk runit dan panel.
+- `node` di `$PREFIX/bin/node`.
+- Header ELF di 8 MB pertama binary Bun.
+- File ecosystem selalu bernama `ecosystem.config.js` di `sites.dir` (E7: nama lain dijalankan pm2 sebagai skrip).
+- `uploads/` (di `~/panel/data`) dan `~/sites` biasanya di filesystem yang sama (`$HOME`); bila tidak, `stage` menyalin.
+- Hotfix CSRF sudah di-merge sebelum W1 (B17).
 
-### 8.4 Pertanyaan terbuka (keputusan pemilik)
+### 8.4 Pertanyaan terbuka
 
-1. **Q1** — Setelah E1 terkonfirmasi, boleh snippet ikut memfilter entri yang binary-nya tidak ada (pengaman kedua, 1
-   baris lebih panjang)? Rekomendasi: ya.
-2. **Q2** — makuro-solusi tetap glibc (`grun`) atau pindah ke build Android? Bila pindah, pemilik sendiri yang mengubah
-   `site()` di ecosystem dan me-restart pm2 (panel tidak melakukannya). Rekomendasi: pindah ke Android native setelah
-   deploy glibc pertama lewat panel terbukti lancar.
-3. **Q3** — Cleanup deploy yang terputus: selalu kembali ke versi sebelumnya (D25), atau tambahkan pilihan "Pertahankan
-   versi baru" (jalankan cek kesehatan saja)? Rekomendasi: D25 dulu; tambah pilihan bila pemilik pernah membutuhkannya.
-4. **Q4** — TTL unggahan 1 jam sejak potongan terakhir cukup? (89 MB lewat 4G lambat ±15–30 mnt; jeda Access login
-   beberapa menit.) Rekomendasi: tetap 1 jam.
-5. **Q5** — Health check default untuk situs **adopsi** yang sudah ada: `/` dengan "apa pun < 500" (perilaku sekarang) —
-   atau pemilik menetapkan path khusus makuro-solusi saat adopsi? Rekomendasi: default, ubah di Pengaturan bila perlu.
+1. **Q1** — makuro-solusi tetap glibc atau pindah ke Android native (pemilik mengubah `site()` dan me-restart pm2
+   sendiri)? Rekomendasi: pindah setelah deploy glibc pertama lewat panel lancar.
+2. **Q2** — Cleanup deploy terputus selalu kembali ke versi sebelumnya (D27), atau tambah "Pertahankan versi baru"?
+   Rekomendasi: D27.
+3. **Q3** — TTL unggahan 1 jam cukup? Rekomendasi: ya.
+4. **Q4** — Butir "Keluar" §1 (deploy dari URL/CI, DB untuk situs lama, multi-line env, N versi) tetap di luar v0.3.0?
+   Rekomendasi: ya; tidak pernah direncanakan di PLAN mana pun.
