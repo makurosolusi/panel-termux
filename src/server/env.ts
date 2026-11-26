@@ -1,3 +1,5 @@
+import { log } from "./log.service";
+
 /** Validated runtime configuration. Values are never printed; errors name the variable only. */
 export type Env = {
   APP_BASE_URL: string;
@@ -10,7 +12,8 @@ export type Env = {
 
 const DEFAULT_PORT = 3200;
 const DEFAULT_DATA_DIR = "./data";
-const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+/** Loose email shape check shared by env parsing and invites. */
+export const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 /** Thrown when an env var is missing or invalid; message names the variable, never its value. */
 export class EnvError extends Error {}
@@ -60,7 +63,7 @@ export function loadEnvOrExit(): Env {
     return parseEnv();
   } catch (e) {
     if (!(e instanceof EnvError)) throw e;
-    console.error(`[panel] invalid configuration: ${e.message}`);
+    log.error(`[panel] invalid configuration: ${e.message}`);
     process.exit(1);
   }
 }

@@ -1,10 +1,13 @@
 import { betterAuth } from "better-auth";
 import { drizzleAdapter } from "better-auth/adapters/drizzle";
 import { APIError } from "better-auth/api";
+import { eq } from "drizzle-orm";
 import { ROLES } from "../../shared/roles";
+import { emailDomain, recordAudit } from "../audit.service";
 import type { Db } from "../db/client";
 import * as schema from "../db/schema";
 import type { Env } from "../env";
+import { log } from "../log.service";
 import { isEmailAllowed, NOT_INVITED, syncUserRole } from "./access.service";
 
 /** What createAuth needs; `secret` is the instance data secret from secret.ts. */
@@ -19,6 +22,11 @@ const NOT_INVITED_MESSAGE = "This account is not invited to the panel";
 /** Builds the Better Auth instance (Google only, invite-only, role synced on every session). */
 export function createAuth({ db, env, secret }: AuthDeps) {
   const superAdmins = env.SUPER_ADMIN_EMAILS;
+  // Domain only: a refused stranger's full address is PII we have no reason to keep.
+  const denied = (email: string) => {
+    recordAudit(db, { actorId: null, action: "auth.denied", target: emailDomain(email) || null });
+    log.warn(`[auth] sign-in refused for domain ${emailDomain(email) || "(none)"}`);
+  };
   return betterAuth({
     baseURL: env.APP_BASE_URL,
     basePath: "/api/auth",
@@ -37,6 +45,7 @@ export function createAuth({ db, env, secret }: AuthDeps) {
       // so strangers never get a user row. Rejections redirect to onAPIError.errorURL?error=not_invited.
       validateUserInfo: ({ user }) => {
         if (!user.email || !isEmailAllowed(db, user.email, superAdmins)) {
+          denied(user.email ?? "");
           return { error: NOT_INVITED, errorDescription: NOT_INVITED_MESSAGE };
         }
       },
@@ -47,8 +56,18 @@ export function createAuth({ db, env, secret }: AuthDeps) {
           // Every session creation: sync role with env/invites, refuse if access was revoked.
           before: async (session) => {
             if (!syncUserRole(db, session.userId, superAdmins).allowed) {
+              const row = db
+                .select({ email: schema.user.email })
+                .from(schema.user)
+                .where(eq(schema.user.id, session.userId))
+                .get();
+              denied(row?.email ?? "");
               throw new APIError("FORBIDDEN", { code: NOT_INVITED, message: NOT_INVITED_MESSAGE });
             }
+          },
+          after: async (session) => {
+            recordAudit(db, { actorId: session.userId, action: "auth.sign_in" });
+            log.info(`[auth] user ${session.userId} signed in`);
           },
         },
       },

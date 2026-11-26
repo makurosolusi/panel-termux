@@ -6,6 +6,7 @@ import { createAuth } from "./auth/auth.service";
 import { openDb } from "./db/client";
 import { runMigrations } from "./db/migrate";
 import { loadEnvOrExit } from "./env";
+import { log } from "./log.service";
 import { createApiRoutes } from "./routes/api.routes";
 import { loadOrCreateSecret } from "./secret";
 
@@ -22,7 +23,14 @@ export function start() {
   const db = openDb(env.PANEL_DATA_DIR);
   const schemaVersion = runMigrations(db);
   syncSuperAdminsOnBoot(db, env.SUPER_ADMIN_EMAILS);
-  const api = new Elysia().use(app).use(createApiRoutes(createAuth({ db, env, secret })));
+  const api = new Elysia().use(app).use(
+    createApiRoutes(createAuth({ db, env, secret }), {
+      db,
+      secret,
+      superAdmins: env.SUPER_ADMIN_EMAILS,
+      dataDir: env.PANEL_DATA_DIR,
+    }),
+  );
 
   const server = Bun.serve({
     hostname: LISTEN_HOST,
@@ -33,7 +41,7 @@ export function start() {
       "/*": spa,
     },
   });
-  console.info(`[panel] v${pkg.version} schema=${schemaVersion} listening on ${server.url}`);
+  log.info(`[panel] v${pkg.version} schema=${schemaVersion} listening on ${server.url}`);
   return server;
 }
 

@@ -2,6 +2,7 @@ import { eq } from "drizzle-orm";
 import { isRole, type Role } from "../../shared/roles";
 import type { Db } from "../db/client";
 import { allowedEmail, session, user } from "../db/schema";
+import { log } from "../log.service";
 
 /** Error code Better Auth puts in `/login?error=` when an account is not invited. */
 export const NOT_INVITED = "not_invited";
@@ -44,7 +45,7 @@ export function syncUserRole(db: Db, userId: string, superAdminEmails: readonly 
   const decision = decideAccess(row.email, current, superAdminEmails, isInvited(db, row.email));
   if (decision.allowed && decision.role !== row.role) {
     db.update(user).set({ role: decision.role }).where(eq(user.id, userId)).run();
-    console.info(`[auth] user ${userId} role ${row.role} -> ${decision.role}`);
+    log.info(`[auth] user ${userId} role ${row.role} -> ${decision.role}`);
   }
   return decision;
 }
@@ -59,7 +60,7 @@ export function syncSuperAdminsOnBoot(db: Db, superAdminEmails: readonly string[
   for (const { id } of rows) {
     if (!syncUserRole(db, id, superAdminEmails).allowed) {
       db.delete(session).where(eq(session.userId, id)).run();
-      console.info(`[auth] user ${id} lost access; sessions revoked`);
+      log.info(`[auth] user ${id} lost access; sessions revoked`);
     }
   }
 }

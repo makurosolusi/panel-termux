@@ -32,7 +32,7 @@ beforeAll(() => {
   db = openDb(dir);
   runMigrations(db);
   auth = createAuth({ db, env, secret: SECRET });
-  api = createApiRoutes(auth);
+  api = createApiRoutes(auth, { db, secret: SECRET, superAdmins: SUPER, dataDir: dir });
 });
 afterAll(() => {
   db.$client.close();
