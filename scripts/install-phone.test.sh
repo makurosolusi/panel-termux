@@ -48,7 +48,8 @@ PATH="$T/bin:$PATH"
 unset SVDIR
 
 fail() { echo "FAIL: $*" >&2; exit 1; }
-mode() { stat -f %Lp "$1" 2>/dev/null || stat -c %a "$1"; }
+# GNU first: GNU `stat -f` means filesystem status and prints it to stdout before failing, so a BSD-first fallback returns junk.
+mode() { stat -c %a "$1" 2>/dev/null || stat -f %Lp "$1"; }
 # run <expected exit code> <args...>
 run() {
   want=$1
