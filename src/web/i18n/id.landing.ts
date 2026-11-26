@@ -7,7 +7,8 @@ export const idLanding = {
     title: "Panel Termux — HP Android jadi server",
     description:
       "Panel web yang mengubah HP Android dengan Termux jadi server untuk aplikasi Bun single-binary: pantau, deploy, backup, dan domain lewat Cloudflare Tunnel.",
-    imageAlt: "Logo Panel Termux dan tulisan: HP Android jadi server untuk aplikasi Bun",
+    imageAlt:
+      "Logo dan nama Panel Termux, tulisan pantau · deploy · backup · domain, dan tangkapan layar Ringkasan di HP",
   },
   links: {
     github: REPO,
@@ -102,7 +103,6 @@ export const idLanding = {
     kicker: "§02 — tampilan",
     title: "Seperti ini rupanya.",
     label: "Galeri tangkapan layar panel, geser untuk melihat semuanya",
-    pending: "Tangkapan layar menyusul",
     items: {
       overview: {
         caption: "Ringkasan di HP",

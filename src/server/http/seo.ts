@@ -15,7 +15,8 @@ export const OG_TEXT: { title: string; description: string; imageAlt: string } =
   title: "Panel Termux — HP Android jadi server",
   description:
     "Panel web yang mengubah HP Android dengan Termux jadi server untuk aplikasi Bun single-binary: pantau, deploy, backup, dan domain lewat Cloudflare Tunnel.",
-  imageAlt: "Logo Panel Termux dan tulisan: HP Android jadi server untuk aplikasi Bun",
+  imageAlt:
+    "Logo dan nama Panel Termux, tulisan pantau · deploy · backup · domain, dan tangkapan layar Ringkasan di HP",
 };
 
 const escapeAttr = (s: string): string =>

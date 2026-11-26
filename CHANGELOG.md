@@ -20,7 +20,7 @@
 - Pengguna: cari, filter peran, terakhir aktif, cabut sesi pengguna lain, dan "Keluarkan semua pengguna". Audit sebagai kalimat yang bisa dibaca, dengan filter aksi/pelaku/tanggal dan ekspor CSV.
 - Profil: daftar sesi aktif yang bisa dicabut, pilihan tema, dan hapus akun sendiri untuk peran `user`.
 - Navigasi HP: bar atas dengan judul halaman dan bar bawah dengan menu Lainnya. Semua tombol dan kontrol minimal 44 px di layar sentuh.
-- Halaman perkenalan dengan panduan pasang lengkap, keterbatasan, FAQ, dan pratinjau tautan (OG); `robots.txt` dan `sitemap.xml`.
+- Halaman perkenalan dengan panduan pasang lengkap, keterbatasan, FAQ, tangkapan layar asli panel (terang dan gelap), gambar pratinjau tautan (OG) dan ikon layar utama iOS; `robots.txt` dan `sitemap.xml`.
 - Variabel env opsional `PANEL_CONNECTIVITY_URL` (alamat cek internet) dan `PANEL_SKIP_SNAPSHOT` (migrasi tanpa snapshot bila penyimpanan penuh).
 - Lisensi MIT.
 
@@ -42,6 +42,13 @@
 
 ### Fixed
 
+- Kartu Domain di Ringkasan ikut menghitung domain yang tertahan oleh masalah lain.
+- Situs panel kini terhubung ke domain dan port-nya di daftar Aplikasi, juga setelah "Cek ulang".
+- Fokus kembali ke tombol pemicu setelah dialog konfirmasi, adopsi, dan tempel `.env` ditutup.
+- Pilihan di menu dan dropdown setinggi minimal 44 px di layar sentuh.
+- Dialog tambah domain merapikan alamat yang ditempel lengkap dengan `https://` atau path.
+- "Deploy terakhir" di daftar dan detail situs menandai deploy yang tidak berhasil, dan alasan gagal di halaman perubahan tidak lagi tampil dua kali.
+- Halaman tetap menampilkan data terakhir tanpa dimuat ulang dari awal bila penyegaran gagal.
 - Halaman yang gagal memuat bagiannya saat server tidak terjangkau kini menampilkan "Server panel tidak terjangkau" di dalam aplikasi, bukan halaman kosong.
 - Suhu baterai yang tidak terbaca tampil "tidak ada data", bukan 0 °C.
 - Menghapus situs yang punya database ditolak selama cadangan berjalan, dan upload deploy yang belum selesai ikut dihapus bersama situsnya.

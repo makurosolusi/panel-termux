@@ -11,14 +11,14 @@ import type { idLanding } from "@/web/i18n/id.landing";
 /** The four landing screenshots (PLAN/05 §5.8): `-m` = phone 390×844, `-d` = desktop 1440×900. */
 export type ShotKey = keyof typeof idLanding.shots.items;
 
-/** One screenshot: CSS size (phone files are @2x) plus light/dark image URLs; null shows a placeholder. */
+/** One screenshot: CSS size (phone files are @2x) plus light/dark image URLs. */
 export type Shot = {
   key: ShotKey;
   device: "phone" | "desktop";
   width: number;
   height: number;
-  light: string | null;
-  dark: string | null;
+  light: string;
+  dark: string;
 };
 
 const PHONE = { device: "phone", width: 390, height: 844 } as const;
