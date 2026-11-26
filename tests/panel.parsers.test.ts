@@ -6,9 +6,9 @@ import { createHealthCache } from "@/server/panel/domain.health";
 import { parseIngress } from "@/server/system/cloudflared.termux";
 import { parseBattery, parseMeminfo } from "@/server/system/device.termux";
 import { tailFile } from "@/server/system/file.tail";
-import { parsePm2Jlist, portFromArgs } from "@/server/system/pm2.termux";
+import { type Pm2Proc, parsePm2Jlist, portFromArgs, toApp } from "@/server/system/pm2.termux";
 import { parsePsqlDatabases } from "@/server/system/postgres.termux";
-import { parseSvStatus } from "@/server/system/runit.termux";
+import { parseSuperviseStat, parseSvStatus } from "@/server/system/runit.termux";
 
 const dir = mkdtempSync(join(tmpdir(), "panel-parse-"));
 afterAll(() => rmSync(dir, { recursive: true, force: true }));
@@ -22,25 +22,35 @@ describe("parseSvStatus", () => {
       "down: old: 5s, normally up, want up",
       "run: pm2: (pid 77) 3s, want down",
       "finish: flappy: (pid 88) 1s",
+      "down: ssh-agent: 128024s; run: log: (pid 10604) 128024s",
       "fail: ghost: unable to change to service directory: file does not exist",
       "warning: half: unable to open supervise/ok: file does not exist",
       "",
     ].join("\n");
     expect(parseSvStatus(out)).toEqual([
-      { name: "sshd", state: "run", pid: 1234, uptimeSec: 102345, wantUp: true },
-      { name: "postgres", state: "run", pid: 2222, uptimeSec: 50, wantUp: true },
-      { name: "crond", state: "down", pid: null, uptimeSec: null, wantUp: false },
-      { name: "old", state: "down", pid: null, uptimeSec: null, wantUp: true },
-      { name: "pm2", state: "run", pid: 77, uptimeSec: 3, wantUp: false },
-      { name: "flappy", state: "finish", pid: 88, uptimeSec: null, wantUp: true },
-      { name: "ghost", state: "unknown", pid: null, uptimeSec: null, wantUp: false },
-      { name: "half", state: "unknown", pid: null, uptimeSec: null, wantUp: false },
+      { name: "sshd", state: "run", pid: 1234, uptimeSec: 102345, downSec: null, wantUp: true },
+      { name: "postgres", state: "run", pid: 2222, uptimeSec: 50, downSec: null, wantUp: true },
+      { name: "crond", state: "down", pid: null, uptimeSec: null, downSec: 12, wantUp: false },
+      { name: "old", state: "down", pid: null, uptimeSec: null, downSec: 5, wantUp: true },
+      { name: "pm2", state: "run", pid: 77, uptimeSec: 3, downSec: null, wantUp: false },
+      { name: "flappy", state: "finish", pid: 88, uptimeSec: null, downSec: null, wantUp: true },
+      { name: "ssh-agent", state: "down", pid: null, uptimeSec: null, downSec: 128024, wantUp: false },
+      { name: "ghost", state: "unknown", pid: null, uptimeSec: null, downSec: null, wantUp: false },
+      { name: "half", state: "unknown", pid: null, uptimeSec: null, downSec: null, wantUp: false },
     ]);
   });
 
   test("absolute service path prints basename", () => {
     expect(parseSvStatus("run: /x/var/service/sshd: (pid 1) 2s")[0]?.name).toBe("sshd");
   });
+});
+
+test("parseSuperviseStat (runsv supervise/stat, captured on POCO)", () => {
+  expect(parseSuperviseStat("run\n")).toBe("run");
+  expect(parseSuperviseStat("down\n")).toBe("down");
+  expect(parseSuperviseStat("run, want down\n")).toBe("run");
+  expect(parseSuperviseStat("finish, paused")).toBe("finish");
+  expect(parseSuperviseStat("")).toBe("unknown");
 });
 
 test("portFromArgs", () => {
@@ -76,26 +86,54 @@ describe("parsePm2Jlist", () => {
     proc("idle", "stopped", { env: {} }),
     proc("weird", "one-launch-status", { env: {}, PORT: 4000 }),
     proc("php", "online", { env: {}, args: ["-S", "127.0.0.1:8080", "/srv"] }),
+    // Field shapes captured from POCO's jlist (pm2 7.1.2): module, glibc site via grun, guard app.
+    proc("pm2-logrotate", "online", { env: {}, pmx_module: true, pm_cwd: "/h/.pm2/modules/pm2-logrotate" }),
+    proc("makuro-solusi", "online", {
+      pm_cwd: "/h/sites/makuro-solusi",
+      pm_exec_path: "/usr/bin/grun",
+      args: ["./app", 7],
+    }),
+    proc("pm2-guard", "online", { env: {}, pm_exec_path: "/usr/bin/sleep", args: ["infinity"] }),
   ])}\n`;
 
   test("keeps only whitelisted fields", () => {
-    const [a, b, c, d] = parsePm2Jlist(jlist, NOW);
+    const [a, b, c, d, mod, grun, guard] = parsePm2Jlist(jlist, NOW);
     expect(d?.port).toBe(8080);
     expect(a).toEqual({
       name: "solusi",
       status: "online",
       pid: 4242,
       memoryMb: 64,
-      cpu: 1.5,
+      cpu: null, // pm2's cpu is meaningless on Android
       restarts: 3,
       uptimeSec: 90,
       port: 3005,
+      module: false,
       outLog: "/h/.pm2/logs/solusi-out.log",
       errLog: "/h/.pm2/logs/solusi-error.log",
+      cwd: null,
+      execPath: null,
+      args: [],
+      startedAtMs: NOW - 90_000,
     });
+    expect(mod).toMatchObject({ module: true, cwd: "/h/.pm2/modules/pm2-logrotate" });
+    expect(grun).toMatchObject({
+      module: false,
+      cwd: "/h/sites/makuro-solusi",
+      execPath: "/usr/bin/grun",
+      args: ["./app"],
+    });
+    expect(guard).toMatchObject({ module: true, args: ["infinity"] });
     expect(b).toMatchObject({ status: "stopped", pid: null, memoryMb: null, cpu: null, uptimeSec: null, port: null });
     expect(c).toMatchObject({ status: "unknown", port: 4000 });
     expect(JSON.stringify([a, b, c])).not.toMatch(/hunter2|tok_test_only|DATABASE_URL/);
+  });
+
+  test("toApp drops internal fields", () => {
+    const [a] = parsePm2Jlist(jlist, NOW);
+    expect(Object.keys(toApp(a as Pm2Proc)).sort()).toEqual(
+      ["cpu", "memoryMb", "module", "name", "pid", "port", "restarts", "status", "uptimeSec"].sort(),
+    );
   });
 
   test("empty list and garbage", () => {
@@ -157,8 +195,30 @@ describe("device parsers", () => {
   "temperature": 30.100000381469727,
   "current": -312000
 }`;
-    expect(parseBattery(out)).toEqual({ percent: 56, charging: false, temperatureC: 30.1 });
-    expect(parseBattery('{"percentage":100,"status":"FULL","temperature":28}')?.charging).toBe(true);
+    expect(parseBattery(out)).toEqual({
+      percent: 56,
+      charging: false,
+      status: "discharging",
+      plugged: "unplugged",
+      temperatureC: 30.1,
+      health: "GOOD",
+    });
+    expect(parseBattery('{"percentage":100,"status":"FULL","plugged":"PLUGGED_AC","temperature":28}')).toMatchObject({
+      charging: true,
+      status: "full",
+      plugged: "ac",
+    });
+    expect(parseBattery('{"percentage":40,"status":"NOT_CHARGING","plugged":"PLUGGED_USB"}')).toMatchObject({
+      charging: false,
+      status: "not_charging",
+      plugged: "usb",
+      temperatureC: 0, // missing temperature: 0 until the shared type allows null (W7)
+      health: null,
+    });
+    expect(parseBattery('{"percentage":40,"status":"WEIRD","plugged":"PLUGGED_DOCK"}')).toMatchObject({
+      status: "unknown",
+      plugged: "unknown",
+    });
     expect(parseBattery("not json")).toBeNull();
     expect(parseBattery("{}")).toBeNull();
   });

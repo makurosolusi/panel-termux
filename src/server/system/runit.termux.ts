@@ -1,4 +1,5 @@
 import { existsSync, readdirSync } from "node:fs";
+import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 import type { ControlAction, ServiceState } from "../../shared/panel.types";
 import { runTermux, termuxPrefix } from "../exec/termux.exec";
@@ -7,6 +8,9 @@ import { type RunitAdapter, type RunitService, SystemError } from "./system.type
 
 const STATUS_LINE = /^(run|down|finish|fail|warning): ([^:]+): (.*)$/;
 const PID_UPTIME = /^\(pid (\d+)\) (\d+)s/;
+const DOWN_SECS = /^(\d+)s/;
+/** Service directory names under SVDIR (no path separators, no dot entries). */
+const SERVICE_NAME_RE = /^(?!\.{1,2}$)[\w.@-]+$/;
 /** sv waits up to 7 s for the state change by default; leave headroom. */
 const SV_TIMEOUT_MS = 15_000;
 
@@ -22,11 +26,12 @@ export function parseSvStatus(stdout: string): RunitService[] {
     const [, kind, path, rest] = m as unknown as [string, string, string, string];
     const name = path.split("/").pop() ?? path;
     if (kind === "fail" || kind === "warning") {
-      out.push({ name, state: "unknown", pid: null, uptimeSec: null, wantUp: false });
+      out.push({ name, state: "unknown", pid: null, uptimeSec: null, downSec: null, wantUp: false });
       continue;
     }
     const state = kind as ServiceState;
     const pu = rest.match(PID_UPTIME);
+    const down = state === "down" ? rest.match(DOWN_SECS) : null;
     const running = state === "run" || state === "finish";
     const wantUp = rest.includes("want up") ? true : rest.includes("want down") ? false : running;
     out.push({
@@ -34,10 +39,26 @@ export function parseSvStatus(stdout: string): RunitService[] {
       state,
       pid: pu ? Number(pu[1]) : null,
       uptimeSec: state === "run" && pu ? Number(pu[2]) : null,
+      downSec: down ? Number(down[1]) : null,
       wantUp,
     });
   }
   return out;
+}
+
+/** Parses runsv `supervise/stat` ("run", "down", "finish", optionally followed by ", want up" etc.). */
+export function parseSuperviseStat(text: string): ServiceState {
+  const word = text.trim().split(",")[0];
+  return word === "run" || word === "down" || word === "finish" ? word : "unknown";
+}
+
+async function readOptional(path: string): Promise<string | null> {
+  try {
+    return await readFile(path, "utf8");
+  } catch (e) {
+    if ((e as NodeJS.ErrnoException).code === "ENOENT") return null;
+    throw new SystemError(`read ${path}: ${(e as Error).message}`, { cause: e });
+  }
 }
 
 /** Real runit adapter: `sv` with SVDIR=$PREFIX/var/service, logs from $PREFIX/var/log/sv/<name>/current. */
@@ -72,6 +93,15 @@ export function createTermuxRunit(prefix = termuxPrefix()): RunitAdapter {
         throw new SystemError(`list runit services in ${svdir}: ${(e as Error).message}`, { cause: e });
       }
       return status(names);
+    },
+    async supervise(name: string) {
+      if (!SERVICE_NAME_RE.test(name) || !exists(name)) return null;
+      const dir = join(svdir, name, "supervise");
+      const [stat, pid] = await Promise.all([readOptional(join(dir, "stat")), readOptional(join(dir, "pid"))]);
+      // No stat file = runsv is not supervising this directory, so nothing runs it.
+      const state = stat === null ? "unknown" : parseSuperviseStat(stat);
+      const n = Number(pid?.trim());
+      return { state, pid: state === "run" && Number.isInteger(n) && n > 0 ? n : null };
     },
     async control(name: string, action: ControlAction) {
       if (!exists(name)) return null;

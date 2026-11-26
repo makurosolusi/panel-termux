@@ -1,20 +1,36 @@
 import { statfsSync } from "node:fs";
 import { readFile } from "node:fs/promises";
 import { availableParallelism, homedir, loadavg, uptime } from "node:os";
-import type { Battery } from "../../shared/panel.types";
+import type { Battery, BatteryPlug, BatteryStatus } from "../../shared/panel.types";
 import { runTermux } from "../exec/termux.exec";
 import { log } from "../log.service";
 import { type DeviceAdapter, SystemError } from "./system.types";
 
 /** termux-battery-status can hang when Termux:API is missing; cap it. */
 const BATTERY_TIMEOUT_MS = 5_000;
-/** The call takes ~0.7 s on the phone; overview polling must not pay that each time. */
-const BATTERY_CACHE_MS = 30_000;
+/** The call takes ~0.7 s on the phone and wakes Termux:API; battery changes slowly (PLAN/02 §3.5). */
+const BATTERY_CACHE_MS = 120_000;
 const KB_PER_MB = 1024;
 
-/** Parses termux-battery-status JSON; null when the shape is unexpected. */
+const STATUS: Record<string, BatteryStatus> = {
+  CHARGING: "charging",
+  DISCHARGING: "discharging",
+  FULL: "full",
+  NOT_CHARGING: "not_charging",
+};
+const PLUG: Record<string, BatteryPlug> = {
+  PLUGGED_AC: "ac",
+  PLUGGED_USB: "usb",
+  PLUGGED_WIRELESS: "wireless",
+  UNPLUGGED: "unplugged",
+};
+
+/**
+ * Parses termux-battery-status JSON; null when the shape is unexpected. A missing temperature is 0 until the
+ * shared Battery type makes it nullable (W7).
+ */
 export function parseBattery(stdout: string): Battery | null {
-  let j: { percentage?: unknown; status?: unknown; temperature?: unknown };
+  let j: { percentage?: unknown; status?: unknown; temperature?: unknown; plugged?: unknown; health?: unknown };
   try {
     j = JSON.parse(stdout);
   } catch (e) {
@@ -22,10 +38,14 @@ export function parseBattery(stdout: string): Battery | null {
     return null;
   }
   if (typeof j?.percentage !== "number") return null;
+  const status = STATUS[String(j.status)] ?? "unknown";
   return {
     percent: j.percentage,
-    charging: j.status === "CHARGING" || j.status === "FULL",
+    charging: status === "charging" || status === "full",
+    status,
+    plugged: PLUG[String(j.plugged)] ?? "unknown",
     temperatureC: typeof j.temperature === "number" ? Math.round(j.temperature * 10) / 10 : 0,
+    health: typeof j.health === "string" && j.health !== "" ? j.health : null,
   };
 }
 

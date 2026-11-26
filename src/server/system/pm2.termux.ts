@@ -1,13 +1,13 @@
-import { existsSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import type { App, AppStatus, ControlAction, LogStream } from "../../shared/panel.types";
+import { PM2_GUARD_NAME } from "../../shared/site.types";
 import { runTermux } from "../exec/termux.exec";
 import { tailFile } from "./file.tail";
-import { type Pm2Adapter, SystemError } from "./system.types";
+import { unixSocketAlive } from "./net.termux";
+import { type Pm2Adapter, type Pm2Proc, Pm2UnavailableError, SystemError } from "./system.types";
 
-/** App plus its log paths (internal; paths are never sent to clients). */
-export type Pm2Proc = App & { outLog: string | null; errLog: string | null };
+export type { Pm2Proc } from "./system.types";
 
 const BYTES_PER_MB = 1024 * 1024;
 const MS_PER_SEC = 1000;
@@ -74,39 +74,62 @@ export function parsePm2Jlist(stdout: string, nowMs = Date.now()): Pm2Proc[] {
     const pid = num(p.pid);
     const mem = num(monit.memory);
     const started = num(env.pm_uptime);
+    const name = String(p.name ?? "");
+    const args = Array.isArray(env.args) ? env.args.filter((x): x is string => typeof x === "string") : [];
     return {
-      name: String(p.name ?? ""),
+      name,
       status,
       pid: pid && pid > 0 ? pid : null,
       memoryMb: online && mem !== null ? Math.round((mem / BYTES_PER_MB) * 10) / 10 : null,
-      cpu: online ? num(monit.cpu) : null,
+      // Android hides other processes' /proc/<pid>/stat, so pm2's cpu figure is meaningless there.
+      cpu: null,
       restarts: num(env.restart_time) ?? 0,
       uptimeSec: online && started ? Math.max(0, Math.floor((nowMs - started) / MS_PER_SEC)) : null,
       // Env PORT first; otherwise the listen address in args (on Android /proc/net/tcp is EACCES).
-      port:
-        portOf(obj(env.env)) ??
-        portOf(env) ??
-        portFromArgs(Array.isArray(env.args) ? env.args.filter((x): x is string => typeof x === "string") : []),
+      port: portOf(obj(env.env)) ?? portOf(env) ?? portFromArgs(args),
+      module: env.pmx_module === true || name === PM2_GUARD_NAME,
       outLog: str(env.pm_out_log_path),
       errLog: str(env.pm_err_log_path),
+      cwd: str(env.pm_cwd),
+      execPath: str(env.pm_exec_path),
+      args,
+      startedAtMs: started,
     };
   });
 }
 
-const toApp = ({ outLog: _o, errLog: _e, ...app }: Pm2Proc): App => app;
+/** Public view of a process (drops paths, script and args). */
+export const toApp = ({
+  outLog: _o,
+  errLog: _e,
+  cwd: _c,
+  execPath: _x,
+  args: _a,
+  startedAtMs: _s,
+  ...app
+}: Pm2Proc): App => app;
 
-/** Real pm2 adapter. Never starts a pm2 daemon: without `$PM2_HOME/rpc.sock` the app list is empty. */
-export function createTermuxPm2(pm2Home = process.env.PM2_HOME || join(homedir(), ".pm2")): Pm2Adapter {
+/** Options of createTermuxPm2. `isSupervisorUp`: runit `pm2` is `run` (true/false), or null when no such service. */
+export type TermuxPm2Options = { pm2Home?: string; isSupervisorUp?: () => Promise<boolean | null> };
+
+/**
+ * Real pm2 adapter. It never starts a pm2 daemon: any pm2 CLI call without a reachable daemon spawns one outside
+ * runit, so before each call it throws Pm2UnavailableError when runit `pm2` is not `run` ("service_down") or
+ * `$PM2_HOME/rpc.sock` does not accept connections (missing or stale after a crash: "no_daemon").
+ */
+export function createTermuxPm2({
+  pm2Home = process.env.PM2_HOME || join(homedir(), ".pm2"),
+  isSupervisorUp = async () => null,
+}: TermuxPm2Options = {}): Pm2Adapter {
   async function pm2(args: string[]): Promise<string> {
+    if ((await isSupervisorUp()) === false) throw new Pm2UnavailableError("service_down");
+    if (!(await unixSocketAlive(join(pm2Home, "rpc.sock")))) throw new Pm2UnavailableError("no_daemon");
     const r = await runTermux("pm2", args, { timeoutMs: PM2_TIMEOUT_MS });
     if (r.code !== 0) throw new SystemError(`pm2 ${args[0]} exited ${r.code}`);
     return r.stdout;
   }
 
-  async function procs(): Promise<Pm2Proc[]> {
-    if (!existsSync(join(pm2Home, "rpc.sock"))) return [];
-    return parsePm2Jlist(await pm2(["jlist"]));
-  }
+  const procs = async (): Promise<Pm2Proc[]> => parsePm2Jlist(await pm2(["jlist"]));
 
   const find = async (name: string) => (await procs()).find((p) => p.name === name) ?? null;
 
@@ -114,6 +137,7 @@ export function createTermuxPm2(pm2Home = process.env.PM2_HOME || join(homedir()
     async list() {
       return (await procs()).map(toApp);
     },
+    procs,
     async control(name: string, action: ControlAction) {
       if (!(await find(name))) return null;
       await pm2([action, name]);
