@@ -37,6 +37,11 @@ function Overview({ o }: { o: PanelOverview }) {
         dataAt={o.dataAt ?? null}
       />
       <DeviceTiles device={device} baseline={o.loadBaseline} problems={problems} />
+      {/* Phone: after the tiles so they stay above the bottom bar (PLAN/02 §6, QA N4); wider screens: first.
+          empty:hidden drops the slot (and its gap) when the banner renders nothing. */}
+      <div className="empty:hidden sm:order-first">
+        <OnboardingBanner />
+      </div>
       <Suspense fallback={null}>
         <MetricTrends />
       </Suspense>
@@ -65,10 +70,6 @@ export function OverviewPage() {
   const fake = query.data?.mode === "fake";
   return (
     <>
-      {/* own gap so the banner does not touch the h1 / demo badge (QA #12); empty:hidden when it renders nothing */}
-      <div className="mb-6 empty:hidden">
-        <OnboardingBanner />
-      </div>
       <PageHeader
         title={t.title}
         status={fake && <StatusBadge tone="warning" label={idPanel.fakeMode} />}

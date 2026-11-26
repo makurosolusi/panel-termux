@@ -12,6 +12,7 @@ import { idPanel } from "@/web/i18n/id.panel";
 import { formatBytes } from "@/web/shared/format";
 import { useApiQuery } from "@/web/shared/use-api-query";
 import { panelUrl } from "./panel.api";
+import { TOUCH_HIT } from "./panel.touch";
 
 const t = idPanel.databases;
 
@@ -27,14 +28,17 @@ const columns: DataColumn<DatabaseInfo>[] = [
   {
     key: "site",
     header: t.cols.site,
+    // null when unlinked: the phone meta line skips it (QA #18), the table cell shows "–" via CSS.
+    className: "empty:before:text-muted-foreground empty:before:content-['–']",
     cell: (d) =>
       d.site ? (
-        <Link to={`/panel/sites/${encodeURIComponent(d.site)}`} className="underline-offset-4 hover:underline">
+        <Link
+          to={`/panel/sites/${encodeURIComponent(d.site)}`}
+          className={`${TOUCH_HIT} z-10 underline-offset-4 hover:underline`}
+        >
           {d.site}
         </Link>
-      ) : (
-        idPanel.dash
-      ),
+      ) : null,
   },
   {
     key: "owner",

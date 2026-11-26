@@ -86,7 +86,8 @@ export const idDevAudit = {
     backupRestoreDrop: (a: string, db: string) => `${a} menghapus database hasil uji pulih ${db}`,
     sessionOne: (a: string) => `${a} mengakhiri salah satu sesinya`,
     sessionOthers: (a: string, n: number) => `${a} keluar dari perangkat lain (${n} sesi)`,
-    sessionUser: (a: string, who: string, n: number) => `${a} mengeluarkan ${who} dari ${n} sesi`,
+    sessionUser: (a: string, who: string, n: number | null) =>
+      n === null ? `${a} mengeluarkan ${who} dari semua sesinya` : `${a} mengeluarkan ${who} dari ${n} sesi`,
     sessionAll: (a: string, n: number) => `${a} mengeluarkan semua pengguna (${n} sesi)`,
     secretMismatch: (n: number) => `Kunci data tidak cocok: ${n} rahasia tersimpan tidak bisa dibaca`,
     secretExport: (a: string) => `${a} mengunduh kunci data`,
@@ -95,6 +96,9 @@ export const idDevAudit = {
     auditPrune: (n: number) => `Sistem menghapus ${n} entri audit lama`,
     auditExport: (a: string) => `${a} mengunduh audit sebagai CSV`,
     logDownload: (a: string, name: string) => `${a} mengunduh log ${name}`,
+    logDownloadApp: (a: string, name: string, err: boolean) =>
+      `${a} mengunduh log ${err ? "error " : ""}aplikasi ${name}`,
+    logDownloadService: (a: string, name: string) => `${a} mengunduh log layanan ${name}`,
     jobRecover: (a: string, target: string) => `${a} memulihkan perubahan yang terputus pada ${target}`,
     setupUpdate: (a: string, item: string, state: string) => `${a} menandai "${item}" ${state}`,
   },

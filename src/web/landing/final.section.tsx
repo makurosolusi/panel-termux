@@ -37,7 +37,7 @@ export function FinalSection() {
 /** Page footer: tagline, GitHub, MIT license, changelog and releases. */
 export function LandingFooter() {
   const link =
-    "inline-flex min-h-11 items-center gap-2 rounded hover:text-lp-ink focus-visible:outline-2 focus-visible:outline-lp-signal";
+    "inline-flex min-h-11 min-w-11 items-center justify-center gap-2 rounded hover:text-lp-ink focus-visible:outline-2 focus-visible:outline-lp-signal";
   return (
     <footer className="border-t border-lp-line">
       <div className="mx-auto flex max-w-6xl flex-col gap-3 px-4 py-8 font-lp-mono text-xs text-lp-dim md:flex-row md:items-center md:justify-between sm:px-6">

@@ -1,6 +1,6 @@
 // Ringkasan decisions (PLAN/02 §5.1), pure so they are unit-tested: problem split, count badges, battery and load.
 import type { LoadBaseline, OverviewSection, Problem, ProblemKind } from "@/shared/monitor.types";
-import type { Battery } from "@/shared/panel.types";
+import type { App, Battery, Domain } from "@/shared/panel.types";
 import type { StatusTone } from "@/web/components/status.tone";
 import { idOverview } from "@/web/i18n/id.overview";
 import { formatDuration, formatNumber } from "@/web/shared/format";
@@ -57,16 +57,41 @@ export const isFrozen = (p: Pick<Problem, "kind">, unavailable: readonly Overvie
 
 const DOWN_CODES = new Set<Problem["code"]>(["service_down", "pm2_unavailable", "app_errored", "domain_unreachable"]);
 
-/** Badge of a count card: "Semua berjalan", "1 mati" or "1 perlu dicek", from the problems of that kind. */
+/**
+ * Badge of a count card: "Semua berjalan", "1 mati" or "1 perlu dicek", from the problems of that kind plus `held`
+ * items that are down but whose own problem the server holds back behind a root cause (K3; QA N1).
+ */
 export function countBadge(
   kinds: readonly ProblemKind[],
   problems: readonly Problem[],
+  held = 0,
 ): { tone: StatusTone; text: string } {
   const mine = problems.filter((p) => p.severity !== "info" && kinds.includes(p.kind));
-  if (mine.length === 0) return { tone: "success", text: t.counts.allRunning };
-  const down = mine.filter((p) => DOWN_CODES.has(p.code)).length;
-  const tone: StatusTone = mine.some((p) => p.severity === "danger") ? "danger" : "warning";
+  if (mine.length === 0 && held === 0) return { tone: "success", text: t.counts.allRunning };
+  const down = mine.filter((p) => DOWN_CODES.has(p.code)).length + held;
+  const tone: StatusTone = held > 0 || mine.some((p) => p.severity === "danger") ? "danger" : "warning";
   return { tone, text: down > 0 ? t.counts.down(down) : t.counts.attention(mine.length) };
+}
+
+/** Failed probes before the server opens a domain problem (DOMAIN_FAILS_TO_PROBLEM; not imported: keeps /panel lean). */
+const DOMAIN_FAILS = 3;
+
+/**
+ * Domains down for good (≥ 3 failed probes, no answer or 5xx) without a problem of their own: the server holds it back
+ * behind a root cause such as their errored app (K3). Wildcards are never probed; a stopped app's domain is intentional.
+ */
+export function heldDomains(domains: readonly Domain[], problems: readonly Problem[], apps: readonly App[]): number {
+  return domains.filter((d) => {
+    const { status, checkedAt, failures } = d.health;
+    return (
+      checkedAt !== null &&
+      (failures ?? 0) >= DOMAIN_FAILS &&
+      (status === null || status >= 500) &&
+      !d.hostname.startsWith("*.") &&
+      !apps.some((a) => a.name === d.app && a.status === "stopped") &&
+      !problems.some((p) => p.kind === "domain" && p.target === d.hostname)
+    );
+  }).length;
 }
 
 /** Battery hint: charge state is always neutral (A9); the tone comes only from an open battery_low problem. */

@@ -42,7 +42,16 @@ function backupRun(c: Ctx): string {
 function sessionRevoke(c: Ctx): string {
   if (c.m.scope === "one") return s.sessionOne(c.a);
   if (c.m.scope === "others") return s.sessionOthers(c.a, num(c.m.count));
-  return s.sessionUser(c.a, who(c), num(c.m.revoked));
+  // No count in the meta (older rows) → "dari semua sesinya", never a made-up "0 sesi" (QA m3).
+  return s.sessionUser(c.a, who(c), typeof c.m.revoked === "number" ? c.m.revoked : null);
+}
+
+/** Target "app:<name>:<out|err>" / "service:<name>" (panel.service logFile) → readable; older rows hold a bare name. */
+function logDownload(c: Ctx): string {
+  const [kind, name, stream] = c.target.split(":");
+  if (kind === "app" && name) return s.logDownloadApp(c.a, name, stream === "err");
+  if (kind === "service" && name) return s.logDownloadService(c.a, name);
+  return s.logDownload(c.a, c.target);
 }
 
 const SENTENCES = {
@@ -87,7 +96,7 @@ const SENTENCES = {
   "panel.start": (c) => s.panelStart(str(c.m.version, "?")),
   "audit.prune": (c) => s.auditPrune(num(c.m.deleted)),
   "audit.export": (c) => s.auditExport(c.a),
-  "log.download": (c) => s.logDownload(c.a, c.target),
+  "log.download": logDownload,
   "job.recover": (c) => s.jobRecover(c.a, c.target),
   "setup.update": (c) => s.setupUpdate(c.a, setupLabel(c.target), c.m.done ? t.done : t.notDone),
 } satisfies Record<AuditAction, (c: Ctx) => string>;

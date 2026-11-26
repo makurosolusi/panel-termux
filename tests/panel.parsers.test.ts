@@ -2,6 +2,7 @@ import { afterAll, describe, expect, test } from "bun:test";
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { buildDomains, siteApps } from "@/server/panel/domain.health";
 import { parseIngress } from "@/server/system/cloudflared.termux";
 import { parseBattery, parseMeminfo } from "@/server/system/device.termux";
 import { tailFile } from "@/server/system/file.tail";
@@ -181,6 +182,26 @@ test("parsePsqlDatabases", () => {
   ]);
   expect(parsePsqlDatabases("")).toEqual([]);
   expect(() => parsePsqlDatabases("broken\n")).toThrow("unexpected");
+});
+
+test("siteApps: guard hidden, site joined, a panel site's app takes the site port so its domain links (QA N8)", () => {
+  const procs = parsePm2Jlist(
+    JSON.stringify([
+      { name: "toko-kopi", pid: 1, monit: {}, pm2_env: { status: "online", env: {} } },
+      { name: "solusi", pid: 2, monit: {}, pm2_env: { status: "online", env: { PORT: "3005" } } },
+      { name: "pm2-guard", pid: 3, monit: {}, pm2_env: { status: "online", env: {} } },
+    ]),
+  );
+  const apps = siteApps(procs, [
+    { name: "toko-kopi", app: null, port: 3010 },
+    { name: "web", app: "solusi", port: 3999 },
+  ]);
+  expect(apps.map((a) => [a.name, a.port, a.site])).toEqual([
+    ["toko-kopi", 3010, "toko-kopi"],
+    ["solusi", 3005, "web"], // pm2's own port wins
+  ]);
+  const [d] = buildDomains([{ hostname: "kopi.x.co", service: "http://localhost:3010", port: 3010 }], apps, [], 3200);
+  expect(d).toMatchObject({ app: "toko-kopi", site: "toko-kopi", target: "app" });
 });
 
 describe("device parsers", () => {

@@ -1,6 +1,8 @@
 // Domain list of GET /panel/domains and the overview: ingress rules + pm2 apps + the sampler's stored checks.
-import type { Domain } from "../../shared/panel.types";
+import type { App, Domain } from "../../shared/panel.types";
+import { PM2_GUARD_NAME } from "../../shared/site.types";
 import { isProbeFailure } from "../monitor/monitor.state";
+import { toApp } from "../system/pm2.termux";
 import type { IngressRule, Pm2Proc } from "../system/system.types";
 
 /** Checks shown per domain in the heartbeat strip (PLAN/02 §3.2 `recent`). */
@@ -49,4 +51,21 @@ export function buildDomains(
       recent: list.map((c) => ({ at: new Date(c.at).toISOString(), status: c.status })),
     };
   });
+}
+
+/** Site row fields that `siteApps` joins onto pm2 apps (`app` null = app named like the site). */
+export type SiteLink = { name: string; app: string | null; port: number };
+
+/**
+ * pm2 apps as the UI sees them: pm2-guard hidden everywhere (B24, D-W9-1), each with its site. A panel site's pm2
+ * entry has no env PORT (`.env` is read by its run script, E6b), so its port falls back to the site's: Aplikasi shows
+ * it and its domains link to the site instead of "Layanan lain" (QA N8).
+ */
+export function siteApps(procs: readonly Pm2Proc[], sites: readonly SiteLink[]): App[] {
+  return procs
+    .filter((p) => p.name !== PM2_GUARD_NAME)
+    .map((p) => {
+      const s = sites.find((x) => (x.app ?? x.name) === p.name);
+      return { ...toApp(p), port: p.port ?? s?.port ?? null, site: s?.name ?? null };
+    });
 }

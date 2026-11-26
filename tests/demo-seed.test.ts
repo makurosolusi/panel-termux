@@ -72,6 +72,25 @@ describe("scripts/demo-seed", () => {
     db.$client.close();
   });
 
+  test("audit rows look like the server's: device label 'Browser di OS', revoke names its user (QA N3, m3)", () => {
+    const db = openDb(dir);
+    const rows = db.$client.query("SELECT action, target, meta, user_agent AS ua FROM audit_log").all() as {
+      action: string;
+      target: string | null;
+      meta: string | null;
+      ua: string | null;
+    }[];
+    db.$client.close();
+    for (const r of rows) if (r.ua !== null) expect(r.ua).toMatch(/^\S+ di \S+/);
+    const revoke = rows.find((r) => r.action === "session.revoke");
+    expect(JSON.parse(revoke?.meta ?? "{}")).toMatchObject({
+      scope: "user",
+      revoked: 2,
+      targetEmail: "tamu@contoh.com",
+    });
+    expect(rows.find((r) => r.action === "log.download")?.target).toMatch(/^app:[\w-]+:(out|err)$/);
+  });
+
   test("fake HOME matches the rows: pm2 runs toko-kopi on its port, rollback has app.prev, pm2 setup passes", async () => {
     const home = join(dir, FAKE_HOME_DIR);
     const sys = createFakeSystem({ home, offline: true }); // what boot builds for this data dir

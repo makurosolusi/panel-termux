@@ -82,7 +82,7 @@ export const idLanding = {
       },
       {
         title: "Pasang Cloudflare Access",
-        body: "Tidak wajib untuk menyalakan panel, tapi tanpa Access siapa pun dengan akun Google bisa sampai ke halaman login. Lindungi path /panel, /dev, /profile, dan API-nya.",
+        body: "Tidak wajib untuk menyalakan panel, tapi tanpa Access siapa pun dengan akun Google bisa sampai ke halaman login. Lindungi path /panel, /dev, dan API-nya (/api/panel, /api/dev).",
       },
       {
         title: "Jalankan skrip sekali lagi",

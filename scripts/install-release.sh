@@ -10,6 +10,7 @@ PANEL_VERSION_DEFAULT=""
 VERSION=${PANEL_VERSION:-$PANEL_VERSION_DEFAULT}
 RELEASES_URL=${PANEL_RELEASES_URL:-https://github.com/makurosolusi/panel-termux/releases/download}
 README_URL="https://github.com/makurosolusi/panel-termux#readme"
+README_INSTALL_URL="https://github.com/makurosolusi/panel-termux#instal-di-hp"
 TARBALL=panel-termux-android-arm64.tar.gz
 PREFIX=${PREFIX:-/data/data/com.termux/files/usr}
 SRC_DIR="$HOME/panel-src/$VERSION"
@@ -67,7 +68,7 @@ tar -xzf "$SRC_DIR/$TARBALL" -C "$SRC_DIR"
 rc=0
 (cd "$SRC_DIR" && sh scripts/install-phone.sh ./panel-android-arm64) || rc=$?
 case "$rc" in
-  0) echo "Panel menyala. Lanjutkan: hubungkan Cloudflare Tunnel dan pasang Access (README langkah 3–4: $README_URL)." ;;
+  0) echo "Panel menyala. Lanjutkan: hubungkan Cloudflare Tunnel dan pasang Access (README langkah 3–4: $README_INSTALL_URL)." ;;
   "$EXIT_ENV_INCOMPLETE")
     echo "Langkah berikutnya: buat OAuth client Google (panduan: $README_URL), isi ~/panel/.env, lalu jalankan sh install.sh lagi."
     ;;

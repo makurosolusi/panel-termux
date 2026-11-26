@@ -20,6 +20,8 @@ import { usePanelControl } from "./use-panel-control";
 
 const t = idPanel.apps;
 const dash = idPanel.dash;
+/** Missing values render as null (the phone meta line skips them, QA #18); the table cell shows "–" via CSS instead. */
+const EMPTY_DASH = "empty:before:text-muted-foreground empty:before:content-['–']";
 
 /** Restart count of a crash-looping or errored app is worth a warning colour. */
 const restartsTone = (a: App) => (a.status === "errored" ? "text-warning font-medium" : undefined);
@@ -31,6 +33,7 @@ export const appColumns: DataColumn<App>[] = [
   {
     key: "site",
     header: t.cols.site,
+    className: EMPTY_DASH,
     cell: (a) =>
       a.site ? (
         <Link
@@ -39,21 +42,21 @@ export const appColumns: DataColumn<App>[] = [
         >
           {a.site}
         </Link>
-      ) : (
-        dash
-      ),
+      ) : null,
   },
   {
     key: "memory",
     header: t.cols.memory,
     align: "right",
-    cell: (a) => (a.memoryMb === null ? dash : formatMegabytes(a.memoryMb)),
+    className: EMPTY_DASH,
+    cell: (a) => (a.memoryMb === null ? null : formatMegabytes(a.memoryMb)),
   },
   {
     key: "uptime",
     header: t.cols.uptime,
     align: "right",
-    cell: (a) => (a.uptimeSec === null ? dash : formatDuration(a.uptimeSec)),
+    className: EMPTY_DASH,
+    cell: (a) => (a.uptimeSec === null ? null : formatDuration(a.uptimeSec)),
   },
   {
     key: "restarts",

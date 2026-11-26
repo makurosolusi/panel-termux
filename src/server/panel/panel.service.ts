@@ -14,7 +14,6 @@ import type {
   PanelOverview,
   Service,
 } from "../../shared/panel.types";
-import { PM2_GUARD_NAME } from "../../shared/site.types";
 import { listAudit, recordAudit } from "../audit.service";
 import type { BackupService } from "../backup/backup.service";
 import type { Db } from "../db/client";
@@ -28,10 +27,9 @@ import { getSetting } from "../settings.service";
 import type { JobRunner } from "../sites/job.runner";
 import { siteSecretsFor } from "../sites/site.secrets";
 import { redactLines } from "../system/log.redact";
-import { toApp } from "../system/pm2.termux";
 import { type Pm2Proc, type SystemAdapters, SystemError } from "../system/system.types";
 import { createActionLocks } from "./action.lock";
-import { buildDomains, RECENT_CHECKS } from "./domain.health";
+import { buildDomains, RECENT_CHECKS, siteApps } from "./domain.health";
 
 /** Fallback boot id when boot does not pass one; boot should report the same value in GET /health. */
 export const PROCESS_BOOT_ID = crypto.randomUUID();
@@ -124,12 +122,9 @@ export function createPanelService(deps: PanelDeps) {
 
   const protectedSet = () =>
     new Set((getSetting(deps, "panel.protected_services") ?? "").split(",").map((s) => s.trim()));
-  const sites = () => db.select({ name: site.name, app: site.app, database: site.database }).from(site).all();
-  // pm2-guard is the panel's own keep-alive process: hidden everywhere in the UI, also from "Modul pm2" (B24, D-W9-1).
-  const publicApps = (procs: Pm2Proc[], list = sites()): App[] =>
-    procs
-      .filter((p) => p.name !== PM2_GUARD_NAME)
-      .map((p) => ({ ...toApp(p), site: list.find((s) => (s.app ?? s.name) === p.name)?.name ?? null }));
+  const sites = () =>
+    db.select({ name: site.name, app: site.app, database: site.database, port: site.port }).from(site).all();
+  const publicApps = (procs: Pm2Proc[], list = sites()): App[] => siteApps(procs, list);
   const domains = (snap: MonitorSnapshot, apps: App[]): Domain[] =>
     buildDomains(required(snap.ingress, "ingress"), apps, lastChecksPerHost(db, RECENT_CHECKS), deps.panelPort ?? null);
 

@@ -295,6 +295,11 @@ describe("describeAudit", () => {
       { action: "session.revoke", meta: { scope: "user", revoked: 2, targetEmail: "rina@contoh.test" } },
       "Citra mengeluarkan rina@contoh.test dari 2 sesi",
     ],
+    [{ action: "session.revoke", meta: { scope: "user" } }, "Citra mengeluarkan pengguna lain dari semua sesinya"],
+    [{ action: "log.download", target: "app:kasir-lama:err" }, "Citra mengunduh log error aplikasi kasir-lama"],
+    [{ action: "log.download", target: "app:blog:out" }, "Citra mengunduh log aplikasi blog"],
+    [{ action: "log.download", target: "service:sshd" }, "Citra mengunduh log layanan sshd"],
+    [{ action: "log.download", target: "web" }, "Citra mengunduh log web"],
     [
       { action: "hostname.add", target: "blog", meta: { hostnames: ["a.x.co"] } },
       "Citra menambah domain a.x.co ke situs blog",

@@ -232,7 +232,7 @@ function seedAudit(tx: Tx, ago: (h: number) => Date): void {
     ["demo-super", "site.create", "toko-kopi", { port: 3010 }],
     ["demo-admin", "site.create", "blog", { port: 3011 }],
     ["demo-super", "site.adopt", "makuro-solusi", { app: "makuro-solusi" }],
-    ["demo-super", "user.role_change", "demo-admin", { from: "user", to: "admin" }],
+    ["demo-super", "user.role_change", "demo-admin", { from: "user", to: "admin", targetEmail: "admin@contoh.test" }],
     ["demo-super", "settings.update", null, { keys: ["backup.s3_bucket"] }],
     ["demo-admin", "site.deploy", "toko-kopi", { jobId: "job-demo-03" }],
     ["demo-admin", "site.env_update", "toko-kopi", { keys: ["TZ"] }],
@@ -245,9 +245,15 @@ function seedAudit(tx: Tx, ago: (h: number) => Date): void {
     ["demo-admin", "hostname.add", "blog", { hostname: "blog.contoh.test" }],
     ["demo-super", "dns.create", "toko-kopi.contoh.com", null],
     ["demo-admin", "site.restart", "blog", null],
-    ["demo-super", "session.revoke", "demo-user2", null],
+    // meta as revokeUserSessions writes it, so the sentence names the user and the count (QA m3)
+    [
+      "demo-super",
+      "session.revoke",
+      "demo-user2",
+      { scope: "user", userId: "demo-user2", revoked: 2, targetEmail: "tamu@contoh.com" },
+    ],
     ["demo-super", "audit.export", null, { rows: 120 }],
-    ["demo-admin", "log.download", "makuro-solusi", null],
+    ["demo-admin", "log.download", "app:makuro-solusi:out", null],
     ["demo-super", "site.settings_update", "blog", { healthPath: "/health" }],
   ];
   const byId = new Map(USERS.map((u) => [u.id, u]));
@@ -261,7 +267,7 @@ function seedAudit(tx: Tx, ago: (h: number) => Date): void {
     actorLabel: byId.get(actorId)?.name ?? null,
     actorEmail: byId.get(actorId)?.email ?? null,
     ipMasked: "203.0.113.x",
-    userAgent: "Chrome · Android",
+    userAgent: "Chrome di Android", // shortUserAgent's format (QA N3)
   }));
   tx.insert(t.auditLog).values(rows).run();
 }

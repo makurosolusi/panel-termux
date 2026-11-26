@@ -21,21 +21,20 @@ import { TOUCH_HIT } from "./panel.touch";
 
 const t = idHistory.problems;
 const PAGE_SIZE = 20;
-/** Ringkasan shows the 5 newest closed events; 10 fetched so a few still-open ones do not leave it short. */
+/** Ringkasan shows the 5 newest closed events; 10 fetched so still-open ones do not leave it short. */
 const RECENT_FETCH = 10;
 const RECENT_SHOWN = 5;
 const RECENT_REFRESH_MS = 60_000;
+const DAY_MS = 86_400_000;
 const LINK = `${TOUCH_HIT} text-sm font-medium underline-offset-4 hover:underline`;
+// Fixed layout aligns all day tables (QA #15); last toned row regains the edge ui/table's last-child border-0 strips (N6).
+const DAY_TABLE = "[&_table]:min-w-[44rem] [&_table]:table-fixed";
 
 /** One local calendar day of history, newest first like the page. */
 export type DayGroup = { key: string; label: string; items: ProblemEvent[] };
 
-const dayKey = (iso: string) => {
-  const d = new Date(iso);
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
-};
-
-const DAY_MS = 86_400_000;
+/** Local calendar day "YYYY-MM-DD" (the sv-SE date format). */
+const dayKey = (iso: string) => new Date(iso).toLocaleDateString("sv-SE");
 
 /**
  * "hari ini 21.40" / "kemarin 21.40" by local calendar day (PLAN/02 §5.1 item 8), older → "25 Nov 2026, 23.52".
@@ -95,7 +94,7 @@ const columns: DataColumn<ProblemEvent>[] = [
     key: "duration",
     header: t.cols.duration,
     align: "right",
-    className: "w-44",
+    className: "w-52",
     cell: (e) => {
       const d = formatDuration(eventDurationSec(e));
       return <span className="tabular-nums">{e.closedAt ? d : t.ongoing(d)}</span>;
@@ -138,6 +137,7 @@ export function ProblemsPage() {
                     columns={columns}
                     rows={g.items}
                     rowKey={(e) => String(e.id)}
+                    className={DAY_TABLE}
                     rowTone={(e) => (e.closedAt ? undefined : PROBLEM_TONE[e.severity])}
                     // one footer for the whole page, under the last day
                     pagination={

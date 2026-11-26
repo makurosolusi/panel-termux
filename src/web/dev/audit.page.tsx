@@ -117,6 +117,14 @@ export function AuditPage() {
         </span>
       ),
     },
+    {
+      // a column, not `actions`: on a phone the ⓘ sits beside the sentence instead of a footer of its own (QA N7)
+      key: "detail",
+      header: <span className="sr-only">{t.details}</span>,
+      mobile: "badge",
+      className: "w-12 py-1 text-right",
+      cell: (e) => <AuditDetail e={e} text={describeAudit(e).text} />,
+    },
   ];
 
   const actorName = query.data?.items.find((e) => e.actor?.id === actorId)?.actor?.name ?? null;
@@ -165,7 +173,6 @@ export function AuditPage() {
                 const tone = describeAudit(e).tone;
                 return tone === "neutral" ? undefined : tone;
               }}
-              actions={(e) => <AuditDetail e={e} text={describeAudit(e).text} />}
               empty={<EmptyState title={t.emptyFiltered} />}
               pagination={{
                 page: d.page,

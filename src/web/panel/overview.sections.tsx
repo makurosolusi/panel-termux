@@ -10,7 +10,7 @@ import { Section } from "@/web/components/section";
 import { StatusBadge } from "@/web/components/status-badge";
 import { idOverview } from "@/web/i18n/id.overview";
 import { formatDateTime, formatNumber } from "@/web/shared/format";
-import { countBadge } from "./overview.state";
+import { countBadge, heldDomains } from "./overview.state";
 import { TOUCH_HIT } from "./panel.touch";
 
 const t = idOverview;
@@ -61,7 +61,11 @@ export function CountCards({ o, problems }: { o: PanelOverview; problems: readon
     <ul className="grid grid-cols-2 gap-3 lg:grid-cols-4">
       {cards.map((c) => {
         const down = c.section !== undefined && unavailable.includes(c.section);
-        const badge = countBadge(c.kinds, problems);
+        const badge = countBadge(
+          c.kinds,
+          problems,
+          c.section === "domains" ? heldDomains(o.domains, problems, o.apps) : 0,
+        );
         return (
           <li key={c.to} className={CARD}>
             <Link

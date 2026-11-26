@@ -11,6 +11,7 @@ import {
   batteryView,
   countBadge,
   DESKTOP_PROBLEM_ROWS,
+  heldDomains,
   hiddenProblems,
   isFrozen,
   loadView,
@@ -276,6 +277,19 @@ describe("Ringkasan state", () => {
     expect(countBadge(["service"], [danger])).toEqual({ tone: "danger", text: "1 mati" });
     const loop = problem({ code: "app_crash_loop", kind: "app", severity: "warning" });
     expect(countBadge(["app"], [loop])).toEqual({ tone: "warning", text: "1 perlu dicek" });
+  });
+  test("domain tile counts held domains: 'Semua berjalan' only when every domain is healthy (QA N1)", () => {
+    const errored = problem({ code: "app_errored", kind: "app", target: "blog-app" });
+    const held = domain({ health: health({ status: 502, failures: 3 }) });
+    const healthy = domain({ hostname: "ok.example.com" });
+    expect(heldDomains([held, healthy], [errored], [])).toBe(1);
+    const own = problem({ code: "domain_unreachable", kind: "domain", target: held.hostname });
+    expect(heldDomains([held], [own], [])).toBe(0); // its own problem already counts
+    expect(heldDomains([domain({ health: health({ status: 502, failures: 1 }) })], [errored], [])).toBe(0);
+    expect(heldDomains([held], [], [app({ status: "stopped" })])).toBe(0); // stopped on purpose
+    expect(heldDomains([domain({ hostname: "*.x.co", health: health({ status: 502, failures: 3 }) })], [], [])).toBe(0);
+    expect(countBadge(["domain", "network"], [errored], 1)).toEqual({ tone: "danger", text: "1 mati" });
+    expect(countBadge(["domain", "network"], [errored], 0)).toEqual({ tone: "success", text: "Semua berjalan" });
   });
   test("problem set key ignores order (live region speaks only on change)", () => {
     const b = problem({ code: "disk_low", kind: "disk", target: "x" });
