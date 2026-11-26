@@ -28,6 +28,7 @@ import {
 import { idSiteDetail } from "@/web/i18n/id.site-detail";
 import { ERROR_TOAST_MS } from "@/web/shared/api.action";
 import { apiErrorMessage, apiFetch, type ErrorCodes } from "@/web/shared/api.client";
+import { deployOutcomeSuffix } from "./job.status-key";
 import { jobPath, siteUrl } from "./site.api";
 import { canRestart, HostLink, SiteAppBadge } from "./site.card";
 import { healthToast, type SiteBanner, siteBanners, siteBusy } from "./site-detail.state";
@@ -88,7 +89,14 @@ export function SiteHeader(props: { site: SiteDetail; meta: PageMeta; codes: Err
         <span className="flex flex-wrap items-center gap-x-3 gap-y-1">
           {primary && <HostLink host={primary} />}
           <span>
-            {last ? <RelativeTime at={last.at} format={(rel) => t.lastDeploy(rel, last.actorName)} /> : t.neverDeployed}
+            {last ? (
+              <RelativeTime
+                at={last.at}
+                format={(rel) => t.lastDeploy(rel, last.actorName) + deployOutcomeSuffix(last.status)}
+              />
+            ) : (
+              t.neverDeployed
+            )}
           </span>
           {!site.managed && <span>{t.adopted}</span>}
           {site.appStatus === "unknown" && <span>{t.pm2Unknown}</span>}

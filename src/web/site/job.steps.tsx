@@ -2,6 +2,7 @@ import { cn } from "cn";
 import { ChevronDownIcon } from "lucide-react";
 import { useId, useState } from "react";
 import type { Job, JobStep } from "@/shared/job.types";
+import { CodeText } from "@/web/components/code-text";
 import { CopyButton } from "@/web/components/copy-button";
 import { StatusIcon } from "@/web/components/status-icon";
 import { Button } from "@/web/components/ui/button";
@@ -37,7 +38,7 @@ function Step({ step, job, last }: { step: JobStep; job: Job; last: boolean }) {
         </div>
         {outcome && (
           <p className={cn("text-xs break-words", status === "failed" ? "text-danger" : "text-muted-foreground")}>
-            {outcome}
+            <CodeText>{outcome}</CodeText>
           </p>
         )}
         {details && (

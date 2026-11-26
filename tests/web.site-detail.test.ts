@@ -183,7 +183,7 @@ describe("site detail decisions", () => {
   });
 
   test("domains dialog: normalize, check request, blinking hosts, per-domain feedback", () => {
-    expect(normalizeHostnames([" A.contoh.com ", "", "a.contoh.com", "b.contoh.com"])).toEqual([
+    expect(normalizeHostnames([" A.contoh.com ", "", "https://a.contoh.com/", "b.contoh.com"])).toEqual([
       "a.contoh.com",
       "b.contoh.com",
     ]);
@@ -199,6 +199,7 @@ describe("site detail decisions", () => {
     expect(hostnameFeedback(result, "b.x")).toMatchObject({ blocking: false });
     expect(hostnameFeedback(result, "c.x")).toBeNull();
     expect(hostnameFeedback(undefined, "a.x")).toBeNull();
+    expect(hostnameFeedback(result, "https://A.x/")).toMatchObject({ blocking: true }); // pasted URL, like the wizard
   });
 
   test("health settings: bounds, path rule, patch only changed fields", () => {

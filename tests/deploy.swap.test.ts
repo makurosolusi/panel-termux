@@ -221,6 +221,32 @@ describe("job.cleanup of an interrupted deploy (POST /jobs/:id/recover path)", (
     expect(h.jobs.get(id).resolvedBy).toBe(cleanupId);
   });
 
+  test("first deploy cut off before any binary was live → swap_nothing_live, not 'old binary back' (QA N9)", async () => {
+    const { dir } = h.addSite("fresh");
+    const p = binPaths(dir);
+    rmSync(p.app, { force: true });
+    const { fakeElf } = await import("./deploy.fixture");
+    writeFileSync(p.next, fakeElf({ fill: 4 }));
+    const id = "j-first";
+    const input = { site: "fresh", sha256: sha256(fakeElf({ fill: 4 })), fromSha256: null, firstDeploy: true };
+    h.db
+      .insert(job)
+      .values({
+        id,
+        kind: "site.deploy",
+        target: "fresh",
+        status: "interrupted",
+        steps: [],
+        actorId: h.adminId,
+        startedAt: new Date(),
+        input,
+      })
+      .run();
+    const j = await h.waitJob(h.deploys.recover(h.adminId, { jobId: id, kind: "site.deploy", target: "fresh", input }));
+    expect(j.steps.find((s) => s.key === "swap")).toMatchObject({ code: "swap_nothing_live", params: { row: "S3" } });
+    expect(existsSync(p.next)).toBe(false);
+  });
+
   test("site gone → inspect_nothing, still resolves", async () => {
     const id = "j-gone";
     h.db

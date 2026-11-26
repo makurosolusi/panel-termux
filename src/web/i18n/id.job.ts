@@ -137,6 +137,8 @@ export const idJob = {
     swap_first: () => "Binary pertama dipasang.",
     swap_kept_previous: (p) => (p.linked === false ? "Versi lama disalin sebagai cadangan." : "Versi lama disimpan."),
     swap_back: () => "Binary lama dipasang lagi.",
+    swap_nothing_live: () =>
+      "Belum ada binary yang pernah berjalan, jadi tidak ada yang dipasang lagi. Sisa unggahan dibersihkan.",
     swap_failed: () => "Binary tidak bisa ditukar. Lihat detail teknis.",
     run_written: (p) => `Skrip jalan ditulis (${runtime(p.runtime)}).`,
     run_unchanged: () => "Skrip jalan sudah sesuai.",
@@ -150,7 +152,7 @@ export const idJob = {
     app_started: (p) => `Aplikasi ${s(p.name)} dijalankan.`,
     app_missing: (p) => `Aplikasi ${s(p.name)} tidak ada di pm2.`,
     app_not_loaded: (p) => `pm2 tidak memuat aplikasi ${s(p.name)} dari ecosystem.config.js.`,
-    healthy: (p) => `HTTP ${s(p.status)} dari ${s(p.path)} dalam ${s(p.ms)} ms, stabil.`,
+    healthy: (p) => `HTTP ${s(p.status)} dari \`${s(p.path)}\` dalam ${s(p.ms)} ms, stabil.`,
     health_timeout: (p) =>
       `Aplikasi tidak sehat setelah ${s(p.seconds)} dtk (${lastAnswer(p.last)}). Lihat log aplikasi di bawah.`,
     app_errored: (p) => `pm2 melaporkan aplikasi ${s(p.name)} bermasalah. Lihat log aplikasi di bawah.`,

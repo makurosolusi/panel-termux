@@ -2,6 +2,7 @@ import { cn } from "cn";
 import { useNavigate } from "react-router";
 import type { LogChunk } from "@/shared/log.types";
 import type { Job, JobAccepted, SiteDetail } from "@/shared/site.types";
+import { CodeText } from "@/web/components/code-text";
 import { ConfirmAction } from "@/web/components/confirm-action";
 import { LogViewer } from "@/web/components/log-viewer";
 import type { StatusTone } from "@/web/components/status.tone";
@@ -13,7 +14,7 @@ import { panelUrl } from "@/web/panel/panel.api";
 import { runApiAction } from "@/web/shared/api.action";
 import { apiFetch } from "@/web/shared/api.client";
 import { useApiQuery } from "@/web/shared/use-api-query";
-import { outcomeText, recoverAction } from "./job.state";
+import { finalReason, recoverAction } from "./job.state";
 import { jobPath, siteUrl } from "./site.api";
 
 const t = idJob;
@@ -79,13 +80,16 @@ function AppLog({ app }: { app: string }) {
 export function JobFinal({ job }: { job: Job }) {
   if (job.status === "running") return null;
   const tone = job.resolvedBy ? "info" : FINAL_TONE[job.status];
-  // "interrupted" is already the headline (final.interrupted) and the cut-off step's outcome: no third copy
-  const reason = job.error && job.error.code !== "interrupted" ? outcomeText(job.error.code, job.error.params) : null;
+  const reason = finalReason(job);
   return (
     <div className="flex flex-col gap-3">
       <div role="status" className={cn("flex flex-col gap-1 rounded-lg border p-3 text-sm", TONE_CLASS[tone])}>
         <p className="font-medium">{job.resolvedBy ? t.final.resolved : t.final[job.status]}</p>
-        {reason && <p className="text-foreground">{reason}</p>}
+        {reason && (
+          <p className="text-foreground">
+            <CodeText>{reason}</CodeText>
+          </p>
+        )}
       </div>
       {job.error?.detail && (
         <details className="rounded-lg border p-3 text-sm">

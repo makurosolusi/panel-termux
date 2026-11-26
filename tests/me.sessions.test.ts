@@ -72,7 +72,11 @@ beforeAll(() => {
   db = openDb(dir);
   runMigrations(db);
   auth = createAuth({ db, env, secret: SECRET });
-  api = createApiRoutes(auth, { db, secret: SECRET, superAdmins: SUPER, dataDir: dir }, createFakeSystem());
+  api = createApiRoutes(
+    auth,
+    { db, secret: SECRET, superAdmins: SUPER, dataDir: dir },
+    createFakeSystem({ home: join(dir, "home") }),
+  );
 });
 afterAll(() => {
   db.$client.close();

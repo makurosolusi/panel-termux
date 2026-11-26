@@ -114,7 +114,10 @@ async function compute(ctx: SiteCtx, probe: EcosystemProbe): Promise<Integration
   ];
   // Without the file, "cannot load / old block / no guard" only restate ecosystem_file: show the root cause alone.
   // `ready` stays false: the hidden READY_KEYS are missing, so they do not count as ok.
-  const shown = eco === null ? checks.filter((c) => !NEEDS_ECOSYSTEM.has(c.key)) : checks;
+  // With `--no-auto-exit` pm2 survives zero apps, so the guard is moot: showing it would contradict pm2_auto_exit.
+  const moot = (k: IntegrationCheckKey) =>
+    (eco === null && NEEDS_ECOSYSTEM.has(k)) || (k === "pm2_guard" && autoExitOff(svRun));
+  const shown = checks.filter((c) => !moot(c.key));
   const failing = shown.filter((c) => c.state !== "ok");
   return {
     ready: READY_KEYS.every((k) => shown.find((c) => c.key === k)?.state === "ok"),

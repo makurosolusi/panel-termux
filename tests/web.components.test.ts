@@ -11,8 +11,8 @@ import { Select, SelectTrigger, SelectValue } from "@/web/components/ui/select";
 import { Switch } from "@/web/components/ui/switch";
 import { parsePageParam } from "@/web/components/use-page-param";
 import { ApiError } from "@/web/shared/api.client";
+import { focusOpener } from "@/web/shared/focus.return";
 import type { ApiQuery } from "@/web/shared/use-api-query";
-import { focusOpener } from "@/web/site/focus.return";
 
 const err = new ApiError("network", null, null, null); // test-only
 

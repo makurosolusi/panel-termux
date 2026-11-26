@@ -118,3 +118,13 @@ export function jobResultLink(job: Pick<Job, "kind" | "status" | "target">): str
   if (job.kind === "site.create" && job.status !== "succeeded") return "/panel/sites";
   return `/panel/sites/${encodeURIComponent(job.target)}`;
 }
+
+/**
+ * Reason under the final banner, or null when a step already says it: "interrupted" (headline + cut-off step) and a
+ * reason whose code a step shows as its outcome (e.g. health_timeout on a rolled-back deploy) are not repeated.
+ */
+export function finalReason(job: Pick<Job, "error" | "steps">): string | null {
+  const e = job.error;
+  if (!e || e.code === "interrupted" || job.steps.some((s) => s.code === e.code)) return null;
+  return outcomeText(e.code, e.params);
+}

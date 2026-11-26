@@ -13,7 +13,7 @@ import {
   type SiteSettingsUpdate,
 } from "@/shared/site.types";
 import { idSiteDetail } from "@/web/i18n/id.site-detail";
-import { issueText, noteText } from "./site.check";
+import { cleanHost, issueText, noteText } from "./site.check";
 
 const t = idSiteDetail;
 const DAY_MS = 86_400_000;
@@ -46,7 +46,7 @@ export const MAX_NEW_HOSTNAMES = 5;
 
 /** Typed domains trimmed, lower-cased, blanks dropped, duplicates kept once. */
 export const normalizeHostnames = (values: readonly string[]): string[] => [
-  ...new Set(values.map((v) => v.trim().toLowerCase()).filter((v) => v !== "")),
+  ...new Set(values.map(cleanHost).filter((v) => v !== "")),
 ];
 
 /** Live check request (`scope: "hostname"`, DNS included) for the dialog's domains, or null when nothing is typed. */
@@ -64,7 +64,7 @@ export function hostnameFeedback(
   result: SiteCheckResult | undefined,
   typed: string,
 ): { text: string; blocking: boolean } | null {
-  const host = typed.trim().toLowerCase();
+  const host = cleanHost(typed);
   if (!result || host === "") return null;
   const issue = result.issues.find((i) => i.field === "hostname" && (i.hostname ?? host) === host);
   if (issue) return { text: issueText(issue), blocking: true };

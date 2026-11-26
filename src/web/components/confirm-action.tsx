@@ -17,6 +17,7 @@ import { Input } from "@/web/components/ui/input";
 import { idCommon } from "@/web/i18n/id.common";
 import { idShell } from "@/web/i18n/id.shell";
 import { apiErrorMessage, type ErrorCodes } from "@/web/shared/api.client";
+import { useReturnFocus } from "@/web/shared/focus.return";
 
 const t = idShell.confirm;
 
@@ -57,6 +58,7 @@ export function ConfirmAction(props: ConfirmActionProps) {
   const typedValue = props.tier === "typed" ? props.typedValue : null;
   const [innerOpen, setInnerOpen] = useState(false);
   const open = props.open ?? innerOpen;
+  const returnFocus = useReturnFocus(open); // opened by state (no trigger): back to the opener, not <body>
   const [typed, setTyped] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
@@ -99,6 +101,7 @@ export function ConfirmAction(props: ConfirmActionProps) {
     <AlertDialog open={open} onOpenChange={setOpen}>
       {trigger && <AlertDialogTrigger asChild>{trigger}</AlertDialogTrigger>}
       <AlertDialogContent
+        onCloseAutoFocus={returnFocus}
         onOpenAutoFocus={(e) => {
           if (typedValue === null) return; // confirm tier: radix focuses Batal (safe default)
           e.preventDefault(); // typed tier: the next step is typing, so focus the input

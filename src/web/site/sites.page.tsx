@@ -56,7 +56,7 @@ function CreateButton({ ready }: { ready: boolean }) {
     );
   }
   return (
-    <span className="flex flex-col items-end gap-1">
+    <span className="flex flex-col items-start gap-1 sm:items-end">
       <Button disabled aria-describedby="create-blocked">
         <PlusIcon aria-hidden />
         {t.create}
@@ -102,7 +102,7 @@ export function SitesPage() {
         }}
         actions={
           <>
-            <Button asChild variant="outline">
+            <Button asChild variant="outline" className="self-start">
               <Link to="/panel/jobs">
                 <HistoryIcon aria-hidden />
                 {t.jobs}

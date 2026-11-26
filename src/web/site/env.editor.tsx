@@ -13,6 +13,7 @@ import {
 } from "@/web/components/ui/dialog";
 import { Input } from "@/web/components/ui/input";
 import { idSiteDetail } from "@/web/i18n/id.site-detail";
+import { useReturnFocus } from "@/web/shared/focus.return";
 import { applyPaste, type PasteEntry, parseEnvPaste, pasteApplicable } from "./env.paste";
 import { type EnvDraft, type EnvRow, envRowErrors, newEnvRow } from "./env.rows";
 import { SecretInput } from "./env.secret-input";
@@ -111,6 +112,7 @@ export function EnvPasteDialog({
   onApply: (merge: (draft: EnvDraft) => EnvDraft) => void;
 }) {
   const [open, setOpen] = useState(false);
+  const returnFocus = useReturnFocus(open);
   const [text, setText] = useState("");
   const entries = parseEnvPaste(text, ctx);
   const apply = () => {
@@ -121,7 +123,7 @@ export function EnvPasteDialog({
   return (
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger asChild>{trigger}</DialogTrigger>
-      <DialogContent className="max-h-[90dvh] overflow-y-auto sm:max-w-2xl">
+      <DialogContent className="max-h-[90dvh] overflow-y-auto sm:max-w-2xl" onCloseAutoFocus={returnFocus}>
         <DialogHeader>
           <DialogTitle>{p.title}</DialogTitle>
           <DialogDescription>{p.body}</DialogDescription>

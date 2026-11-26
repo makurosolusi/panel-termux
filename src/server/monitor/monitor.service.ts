@@ -7,8 +7,9 @@ import { type AlertSettings, createAlertEngine } from "../alerts/alert.engine";
 import { createTelegramClient, TELEGRAM_API_URL, TelegramError } from "../alerts/telegram.client";
 import { recordAudit } from "../audit.service";
 import type { Db } from "../db/client";
-import { setting } from "../db/schema";
+import { setting, site } from "../db/schema";
 import { log } from "../log.service";
+import { siteApps } from "../panel/domain.health";
 import { INTENTIONAL_RESTART_GRACE_MS, type ProblemContext } from "../panel/overview.problems";
 import { ApiError } from "../routes/http.error";
 import { getSetting, KeyMismatchError, SETTINGS, type SettingsDeps } from "../settings.service";
@@ -246,7 +247,9 @@ export function createMonitor(deps: MonitorDeps): MonitorService {
       recordProbe(state, hostname, health);
       history.insertCheck(db, { hostname, at: t, status: res.status, ms: res.ms, localStatus: local });
       const procs = await snapshot.pm2Procs().catch(() => []); // pm2 down: the domain still reports its own health
-      const app = rule.port === null ? undefined : procs.find((a) => a.port === rule.port);
+      // Same join as GET /domains: a panel site's pm2 entry has no PORT, so match it through its site's port.
+      const sites = db.select({ name: site.name, app: site.app, port: site.port }).from(site).all();
+      const app = rule.port === null ? undefined : siteApps(procs, sites).find((a) => a.port === rule.port);
       const target = rule.port === null ? "none" : rule.port === deps.panelPort ? "panel" : app ? "app" : "other";
       const recent = history
         .hostChecks(db, hostname, RECENT_CHECKS)

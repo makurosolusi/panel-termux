@@ -18,6 +18,7 @@ import {
 } from "@/web/components/ui/dropdown-menu";
 import { idSite } from "@/web/i18n/id.site";
 import { apiFetch } from "@/web/shared/api.client";
+import { deployOutcomeSuffix } from "./job.status-key";
 import { jobPath, SITE_ERROR_CODES, siteUrl } from "./site.api";
 
 const t = idSite.list;
@@ -102,12 +103,15 @@ export const SITE_COLUMNS: readonly DataColumn<Site>[] = [
   {
     key: "deploy",
     header: t.cols.deploy,
-    cell: (s) => (s.lastDeploy ? <RelativeTime at={s.lastDeploy.at} /> : t.neverDeployed),
+    cell: (s) => {
+      const d = s.lastDeploy;
+      return d ? <RelativeTime at={d.at} format={(rel) => rel + deployOutcomeSuffix(d.status)} /> : t.neverDeployed;
+    },
   },
   { key: "port", header: t.cols.port, align: "right", cell: (s) => t.port(s.port), className: "font-mono" },
 ];
 
-/** "⋯" menu of one site: open, deploy, restart (confirm → job page), app log. */
+/** "⋯" menu of one site (open, deploy, restart → job page, app log), plus a Deploy button on phone cards. */
 export function SiteRowActions({ site }: { site: Site }) {
   const navigate = useNavigate();
   const [restarting, setRestarting] = useState(false);
@@ -117,8 +121,15 @@ export function SiteRowActions({ site }: { site: Site }) {
     const { jobId } = await apiFetch<JobAccepted>("POST", siteUrl(site.name, "/restart"));
     navigate(jobPath(jobId));
   };
+  const deployTo = `/panel/sites/${encodeURIComponent(site.name)}#deploy`;
   return (
     <>
+      {/* phone card footer: the common next step, so the row is not just a lone "⋯" (QA N6) */}
+      {site.managed && (
+        <Button asChild variant="outline" size="sm" className="md:hidden">
+          <Link to={deployTo}>{t.deploy}</Link>
+        </Button>
+      )}
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
           <Button variant="ghost" size="icon-sm" aria-label={t.actions(site.name)} className="ml-auto">
@@ -135,7 +146,7 @@ export function SiteRowActions({ site }: { site: Site }) {
             </DropdownMenuItem>
           )}
           <DropdownMenuItem asChild>
-            <Link to={`/panel/sites/${encodeURIComponent(site.name)}#deploy`}>{t.deploy}</Link>
+            <Link to={deployTo}>{t.deploy}</Link>
           </DropdownMenuItem>
           <DropdownMenuItem disabled={!canRestart(site)} onSelect={() => setRestarting(true)}>
             {t.restart}

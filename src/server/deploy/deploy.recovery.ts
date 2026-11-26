@@ -80,9 +80,9 @@ export function cleanupSteps(
       } catch (e) {
         throw new StepError("swap_failed", {}, errMsg(e));
       }
-      return row === "D5"
-        ? { code: "swap_back", params: { row }, skipped: true }
-        : { code: "swap_back", params: { row } };
+      if (row === "D5") return { code: "swap_back", params: { row }, skipped: true };
+      // S3: no live binary and none to put back (a first deploy cut off): only leftovers were removed.
+      return { code: row === "S3" ? "swap_nothing_live" : "swap_back", params: { row } };
     },
   };
 

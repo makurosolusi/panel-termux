@@ -1,4 +1,4 @@
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 // @ts-expect-error TS7016: Bun embeds the shipped template as text (`type: "text"`); tsc has no type for a .js text import.
@@ -109,10 +109,23 @@ const logLines = (name: string, n: number) =>
     (_, i) => `2026-01-01T00:00:${String(i % 60).padStart(2, "0")}Z ${name}: demo line ${i + 1}`,
   );
 
+/** Temp sandbox HOMEs made by createFakeSystem without `home`, removed on process exit (bun test fires no exit: pass `home`). */
+const tempHomes: string[] = [];
+const tempHome = (): string => {
+  if (tempHomes.length === 0) {
+    process.on("exit", () => {
+      for (const dir of tempHomes) rmSync(dir, { recursive: true, force: true });
+    });
+  }
+  const dir = mkdtempSync(join(tmpdir(), "panel-fake-home-"));
+  tempHomes.push(dir);
+  return dir;
+};
+
 /** In-memory demo system for development on a non-Termux host and for tests; control actions mutate state. */
 export function createFakeSystem({
   delayMs = 0,
-  home = mkdtempSync(join(tmpdir(), "panel-fake-home-")),
+  home = tempHome(),
   listeningPorts = [],
   supervisorDown = false,
   exitsOnZeroAppsAtStart = false,

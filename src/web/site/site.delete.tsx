@@ -12,7 +12,6 @@ import { idSiteDetail } from "@/web/i18n/id.site-detail";
 import { panelUrl } from "@/web/panel/panel.api";
 import { apiFetch, type ErrorCodes } from "@/web/shared/api.client";
 import { useApiQuery } from "@/web/shared/use-api-query";
-import { useReturnFocus } from "./focus.return";
 import { jobPath, siteUrl } from "./site.api";
 import { deleteDefaults, deleteQuery, siteDbBackup } from "./site-detail.state";
 
@@ -91,7 +90,6 @@ export function SiteDelete(props: {
   const { site } = props;
   const navigate = useNavigate();
   const [keep, setKeep] = useState<Keep>({ data: false, database: false });
-  useReturnFocus(props.open);
   const onConfirm = async (typed?: string) => {
     const url = siteUrl(site.name, deleteQuery(site.managed, typed ?? "", keep));
     navigate(jobPath((await apiFetch<JobAccepted>("DELETE", url)).jobId));

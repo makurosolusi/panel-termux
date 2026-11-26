@@ -3,8 +3,8 @@ import type { Job, JobStep } from "@/shared/job.types";
 import type { Site } from "@/shared/site.types";
 import { missingFromPm2 } from "@/shared/site.types";
 import { idJob } from "@/web/i18n/id.job";
-import { liveAnnouncement, shownStepStatus, stepDurationMs, stepEndMs } from "@/web/site/job.state";
-import { JOB_STEP_STATUS_KEY } from "@/web/site/job.status-key";
+import { finalReason, liveAnnouncement, shownStepStatus, stepDurationMs, stepEndMs } from "@/web/site/job.state";
+import { deployOutcomeSuffix, JOB_STEP_STATUS_KEY } from "@/web/site/job.status-key";
 import { canRestart, siteRowTone } from "@/web/site/site.card";
 
 const step = (key: string, status: JobStep["status"], over: Partial<JobStep> = {}): JobStep => ({
@@ -67,5 +67,24 @@ describe("site missing from pm2 (D-W9-3, QA M7)", () => {
     expect(missingFromPm2(facts({ lastDeploy: deployed("failed") }))).toBe(false);
     expect(missingFromPm2(facts({ appStatus: "online", lastDeploy: deployed("succeeded") }))).toBe(false);
     expect(canRestart(facts())).toBe(false);
+  });
+});
+
+describe("deployOutcomeSuffix", () => {
+  test("a failed or interrupted last deploy is labelled, a successful one is not", () => {
+    expect(deployOutcomeSuffix("interrupted")).toBe(" · Terputus");
+    expect(deployOutcomeSuffix("failed")).toBe(" · Gagal");
+    expect(deployOutcomeSuffix("rolled_back")).toBe(" · Dikembalikan");
+    expect(deployOutcomeSuffix("succeeded")).toBe("");
+  });
+});
+
+describe("finalReason (QA N7)", () => {
+  const error: Job["error"] = { code: "health_timeout", params: { seconds: 60, last: 502 }, detail: null };
+  test("a reason a step already shows is not repeated under the banner", () => {
+    expect(finalReason({ error, steps: [step("health", "failed", { code: "health_timeout" })] })).toBeNull();
+    expect(finalReason({ error, steps: [step("health", "failed")] })).toContain("60 dtk");
+    expect(finalReason({ error: { code: "interrupted", params: {}, detail: null }, steps: [] })).toBeNull();
+    expect(finalReason({ error: null, steps: [] })).toBeNull();
   });
 });

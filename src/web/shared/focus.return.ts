@@ -12,19 +12,22 @@ export function focusOpener(active: Element | null): HTMLElement | null {
 }
 
 /**
- * Returns focus to the element that was focused when `open` turned true, once it turns false again. Radix restores
- * focus only to its own Trigger, so dialogs opened by state (row buttons, menus) otherwise leave focus on <body>.
- * Layout effect: it runs before Radix's FocusScope moves focus into the dialog.
+ * Remembers the element focused when `open` turns true and returns the `onCloseAutoFocus` handler for the dialog's
+ * content, which focuses it again. Radix restores focus only to its own Trigger, so dialogs opened by state (row
+ * buttons, menus, a button that also changes the page) otherwise leave focus on <body>. The handler runs after the
+ * content unmounted; focusing earlier (on `open=false`) loses to the still-active focus trap. Layout effect: it runs
+ * before Radix's FocusScope moves focus into the dialog.
  */
-export function useReturnFocus(open: boolean) {
+export function useReturnFocus(open: boolean): (e: Event) => void {
   const opener = useRef<HTMLElement | null>(null);
   useLayoutEffect(() => {
-    if (open) {
-      opener.current = focusOpener(document.activeElement);
-      return;
-    }
+    if (open) opener.current = focusOpener(document.activeElement);
+  }, [open]);
+  return (e) => {
     const el = opener.current;
     opener.current = null;
-    if (el?.isConnected) el.focus();
-  }, [open]);
+    if (!el?.isConnected) return; // Radix's default (trigger, if any) applies
+    e.preventDefault();
+    el.focus();
+  };
 }

@@ -1,4 +1,5 @@
 import { uptime } from "node:os";
+import { join } from "node:path";
 import { eq } from "drizzle-orm";
 import { Elysia } from "elysia";
 import { handleAuthRequest } from "../auth/auth.audit";
@@ -16,6 +17,7 @@ import type { HealthTiming } from "../deploy/health.check";
 import { DEFAULT_PORT } from "../env";
 import { type MonitorDeps, monitorFor } from "../monitor/monitor.service";
 import { createSiteService } from "../sites/site.service";
+import { FAKE_HOME_DIR } from "../system/system.fake";
 import { selectSystem } from "../system/system.select";
 import type { SystemAdapters } from "../system/system.types";
 import { createAlertRoutes } from "./alerts.routes";
@@ -50,7 +52,7 @@ export type ApiDeps = DevDeps & {
 export function createApiRoutes(
   auth: Auth,
   dev: ApiDeps,
-  system: SystemAdapters = selectSystem(),
+  system: SystemAdapters = selectSystem({ fakeHome: join(dev.dataDir, FAKE_HOME_DIR) }), // fake HOME inside the data dir, like boot
   dns: SiteDnsProvider = system.offline?.dns ?? createDnsProvider({ db: dev.db, secret: dev.secret }),
   deploy: { healthTimeoutMs?: number; healthTiming?: HealthTiming } = {},
 ) {

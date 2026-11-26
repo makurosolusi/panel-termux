@@ -136,9 +136,9 @@ export const idSite = {
         warning: "Run script pm2 tidak memakai `--no-auto-exit`. pm2 berhenti bila aplikasi terakhir dihapus.",
       },
       pm2_guard: {
-        ok: "Ada aplikasi pm2 selain buatan panel",
+        ok: "Ada aplikasi pm2 selain situs panel",
         warning:
-          "Semua aplikasi pm2 di HP ini dibuat panel. Tambahkan aplikasi penjaga `pm2-guard` (lihat README) agar pm2 tetap hidup tanpa situs.",
+          "ecosystem.config.js hanya memuat situs panel, dan pm2 berhenti bila tidak ada aplikasi. Tambahkan aplikasi penjaga `pm2-guard` (lihat README) agar pm2 tetap hidup saat situs terakhir dihapus.",
       },
       tunnel: {
         ok: "Tunnel cloudflared terdeteksi",

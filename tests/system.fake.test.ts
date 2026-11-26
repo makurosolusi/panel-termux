@@ -238,3 +238,13 @@ describe("fake postgres + archive", () => {
     await sys.archive.list(file);
   });
 });
+
+describe("temp sandbox HOME", () => {
+  test("a fake without `home` removes its temp dir when the process exits", () => {
+    const script = `import { createFakeSystem } from "${join(import.meta.dir, "../src/server/system/system.fake")}"; console.log(createFakeSystem().home);`;
+    const out = Bun.spawnSync(["bun", "-e", script], { cwd: join(import.meta.dir, "..") });
+    const home = out.stdout.toString().trim();
+    expect(home).toContain("panel-fake-home-");
+    expect(existsSync(home)).toBe(false);
+  });
+});

@@ -111,7 +111,7 @@ export function JobsPage() {
         all={t.allStatuses}
         value={status}
         options={STATUSES}
-        text={(s) => idStatus[JOB_STATUS_KEY[s]]}
+        text={(s) => idStatus[JOB_STATUS_KEY[s]].replace(/…$/, "")} // a filter is a category, not "in progress…"
         onChange={(v) => setFilter("status", v)}
       />
       {filtered && (

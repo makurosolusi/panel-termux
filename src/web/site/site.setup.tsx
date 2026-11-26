@@ -23,11 +23,13 @@ import { SITE_ERROR_CODES } from "./site.api";
 const t = idSite.setup;
 const CHECK_STATE: Record<IntegrationCheck["state"], StatusKey> = { ok: "done", warning: "attention", error: "failed" };
 
-/** Code block with a copy button in its corner. */
+/** Code block with a copy button in its corner, above the first line (scrolled lines never slide under it). */
 function CodeBlock({ code, copyLabel }: { code: string; copyLabel?: string }) {
   return (
     <div className="relative">
-      <pre className="overflow-x-auto rounded-md border bg-muted p-3 pr-10 font-mono text-xs leading-relaxed">
+      <pre
+        className={`overflow-x-auto rounded-md border bg-muted p-3 font-mono text-xs leading-relaxed ${copyLabel ? "pt-11" : ""}`}
+      >
         {code}
       </pre>
       {copyLabel && (
@@ -78,9 +80,9 @@ function SnippetSteps({ integration }: { integration: Integration }) {
           </p>
           {integration.snippet && <CodeBlock code={integration.snippet} copyLabel={t.copySnippet} />}
           {oldSnippet(integration) && (
-            <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+            <div className="flex flex-col items-start gap-1 text-xs text-muted-foreground">
               <StatusBadge tone="warning" label={t.oldSnippet} />
-              <span className="min-w-0 flex-1 basis-48">
+              <span>
                 <CodeText>{t.oldSnippetBody}</CodeText>
               </span>
             </div>

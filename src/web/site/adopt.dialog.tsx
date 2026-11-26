@@ -18,7 +18,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { idSite } from "@/web/i18n/id.site";
 import { panelUrl } from "@/web/panel/panel.api";
 import { apiFetch } from "@/web/shared/api.client";
-import { useReturnFocus } from "./focus.return";
+import { useReturnFocus } from "@/web/shared/focus.return";
 import { FormField } from "./form.field";
 import { type AdoptForm, adoptBody, adoptOptions, adoptPrefill, appFacts, appWarnings } from "./site.adopt";
 import { runSiteAction } from "./site.api";
@@ -42,10 +42,10 @@ export function AdoptDialog({
   onDone: (name: string) => void;
   onFailed: () => void;
 }) {
-  useReturnFocus(entry !== null);
+  const returnFocus = useReturnFocus(entry !== null);
   return (
     <Dialog open={entry !== null} onOpenChange={(open) => !open && onClose()}>
-      <DialogContent className={PHONE_SHEET}>
+      <DialogContent className={PHONE_SHEET} onCloseAutoFocus={returnFocus}>
         {entry && <AdoptFormBody key={entry.hostname} entry={entry} apps={apps} onDone={onDone} onFailed={onFailed} />}
       </DialogContent>
     </Dialog>

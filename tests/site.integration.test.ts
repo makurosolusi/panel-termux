@@ -63,7 +63,7 @@ describe.skipIf(!node)("integration checks (real node probe)", () => {
     writeFileSync(eco, snippetEco());
     const ok = await verify();
     expect(ok.ready).toBe(true);
-    expect(states(ok)).toMatchObject({ snippet_current: "ok", pm2_guard: "ok", apps_entries_runnable: "ok" });
+    expect(states(ok)).toMatchObject({ snippet_current: "ok", apps_entries_runnable: "ok" });
     expect(ok.appNames).toEqual(["pm2-guard"]);
     expect(ok.ecosystemIncludesAppsJson).toBe(true);
     writeFileSync(appsJson, JSON.stringify([{ name: "blog", cwd: join(home, "sites", "blog"), script: "./run" }]));
@@ -76,10 +76,12 @@ describe.skipIf(!node)("integration checks (real node probe)", () => {
   test("pm2_auto_exit reads the sandbox's runit script in fake mode, not the host $PREFIX", async () => {
     expect(system.prefix).toBe(join(home, "usr"));
     expect(checkOf(await verify(), "pm2_auto_exit")?.state).toBe("ok");
+    expect(checkOf(await verify(), "pm2_guard")).toBeUndefined(); // moot with --no-auto-exit (QA N5)
     const run = join(home, "usr", "var", "service", "pm2", "run");
     const shipped = readFileSync(run, "utf8");
     writeFileSync(run, shipped.replace("--no-auto-exit ", ""));
     expect(checkOf(await verify(), "pm2_auto_exit")?.state).toBe("warning");
+    expect(checkOf(await verify(), "pm2_guard")).toBeDefined();
     writeFileSync(run, shipped);
   });
 
