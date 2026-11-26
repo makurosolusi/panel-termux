@@ -1,91 +1,282 @@
-import type { JobKind } from "@/shared/site.types";
+import type {
+  AdoptCandidateApp,
+  IntegrationCheckKey,
+  JobKind,
+  JobParams,
+  JobStepKey,
+  SiteIssueCode,
+  SiteNoteCode,
+} from "@/shared/site.types";
 
-/** Indonesian strings of the /panel Situs (site) pages: list, wizard, detail and job progress (merged into `id.site`). */
+/** Copy that may interpolate server params (`{hostname}`, `{port}` …). */
+type Copy = string | ((p: JobParams) => string);
+type CheckCopy = { ok: Copy; warning?: Copy; error?: Copy };
+const s = (v: JobParams[string] | undefined) => String(v ?? "");
+
+/** Indonesian strings of the Situs pages: list, persiapan, adopsi, wizard (+ detail/job copy until W7 moves it). */
 export const idSite = {
-  section: "Situs",
-  jobsSection: "Riwayat perubahan",
   errorCodes: {
     busy: "Ada perubahan lain yang sedang berjalan. Tunggu sampai selesai, lalu coba lagi.",
     not_found: "Situs ini sudah tidak ada, mungkin baru dihapus. Buka daftar situs untuk melihat yang masih ada.",
+    integration_required: "pm2 belum siap menjalankan situs buatan panel. Selesaikan persiapan di halaman Situs.",
+    pm2_unavailable: "Layanan pm2 tidak berjalan. Jalankan sv up pm2 di HP, lalu muat ulang halaman ini.",
+    pm2_not_running: "Layanan pm2 tidak berjalan. Jalankan sv up pm2 di HP, lalu coba lagi.",
+    no_free_port: "Semua port di rentang situs sudah dipakai. Isi port lain secara manual.",
+    app_not_found: "Aplikasi pm2 ini sudah tidak ada. Muat ulang daftar, lalu pilih lagi.",
+    app_in_use: "Aplikasi pm2 ini sudah dipakai situs lain. Pilih aplikasi lain.",
+    self_hostname: "Domain ini alamat Panel Termux sendiri, jadi tidak bisa diadopsi.",
+    adopt_blocked: "Aplikasi ini tidak bisa dikelola panel. Lihat alasannya di daftar aplikasi.",
+    exists: "Nama, domain, atau port ini sudah dipakai situs lain. Ganti nama situs, lalu coba lagi.",
+    invalid_name: "Nama situs tidak valid. Pakai huruf kecil, angka, dan tanda minus, diawali huruf.",
+    name_reserved: "Nama ini dipakai panel. Pilih nama lain.",
+    invalid_site: "Isian situs tidak valid. Periksa kolom yang ditandai, lalu coba lagi.",
+    invalid_env: "Ada variabel lingkungan yang tidak valid. Periksa namanya, lalu coba lagi.",
   },
   list: {
+    title: "Situs",
+    description: "Domain yang diarahkan cloudflared ke aplikasi pm2 di HP ini.",
+    label: "Daftar situs",
     create: "Buat situs",
+    createBlocked: "Selesaikan persiapan pm2 dulu.",
     jobs: "Riwayat perubahan",
+    empty: "Belum ada situs",
+    emptyBody: "Buat situs pertama untuk menghubungkan domain ke aplikasi Bun di HP ini.",
+    cols: { name: "Nama", status: "Status", domain: "Domain utama", deploy: "Deploy terakhir", port: "Port" },
+    adopted: "Diadopsi",
+    more: (n: number) => `+${n}`,
+    neverDeployed: "Belum pernah",
     port: (p: number) => `port ${p}`,
-    db: (name: string) => `database ${name}`,
     noDb: "tanpa database",
-    adopted: "diadopsi",
-    grun: "grun",
-    detail: (name: string) => `Detail ${name}`,
-    open: (host: string) => `Buka ${host} di tab baru`,
-    noApp: "Belum ada aplikasi",
-    empty: "Belum ada situs. Buat situs pertama untuk menghubungkan domain ke aplikasi Bun di HP ini.",
+    actions: (name: string) => `Aksi untuk ${name}`,
+    open: "Buka",
+    openHost: (host: string) => `Buka ${host} di tab baru`,
+    deploy: "Deploy",
+    restart: "Mulai ulang",
+    restartTitle: (name: string) => `Mulai ulang aplikasi ${name}?`,
+    restartBody:
+      "Situs ini tidak bisa dibuka beberapa detik selama aplikasinya dimulai ulang. Situs lain tidak terganggu.",
+    appLog: "Log aplikasi",
+    running: (kind: string, target: string) => `Perubahan ${kind} · ${target} sedang berjalan.`,
+    interrupted: (kind: string, target: string) =>
+      `Perubahan ${kind} · ${target} terputus. Pulihkan agar tidak ada sisa setengah jadi.`,
+    viewJob: "Lihat",
+  },
+  setup: {
+    title: "Persiapan",
+    description:
+      "Sekali saja: hubungkan pm2 dengan apps.json agar situs buatan panel ikut berjalan, juga setelah HP dinyalakan ulang.",
+    checklist: "Hasil pemeriksaan",
+    recheck: "Periksa lagi",
+    checking: "Memeriksa…",
+    checkedAt: (ago: string) => `Diperiksa ${ago}`,
+    readyLine: (n: number) => `pm2 siap: ${n} aplikasi terbaca, termasuk dari apps.json.`,
+    stillFailing: (n: number) => `Masih ada ${n} hal yang perlu diperbaiki.`,
+    allOk: "Pemeriksaan wajib lolos. pm2 siap menjalankan situs buatan panel.",
+    stepsTitle: "Cara memasang blok apps.json",
+    step1: "Buka file ecosystem di Termux:",
+    step2: "Tempel blok ini di atas `module.exports`:",
+    step3: "Tambahkan `...panelApps,` di akhir daftar `apps`, seperti contoh ini:",
+    exampleExports:
+      "module.exports = {\n  apps: [\n    // …aplikasi yang sudah ada, tetap…\n    ...panelApps,\n  ],\n};",
+    step4: "Simpan, lalu tekan Periksa lagi. pm2 tidak perlu dimulai ulang.",
+    copySnippet: "Salin blok apps.json",
+    copyCommand: "Salin perintah",
+    oldSnippet: "versi lama",
+    oldSnippetBody:
+      "Ecosystem kamu masih memakai `...require('./apps.json')` tanpa pengaman. Ganti dengan blok di atas.",
+    warning:
+      "Jangan menulis `...require('./apps.json')` tanpa blok ini: bila file itu rusak atau binary situs hilang, semua aplikasi tidak akan jalan setelah HP dinyalakan ulang.",
+    tokenLink: "Isi token di Pengaturan",
+    adoptTitle: "Situs yang sudah berjalan",
+    adoptBody: (n: number) =>
+      `${n} domain sudah diarahkan ke aplikasi di HP ini tetapi belum tercatat. Adopsi agar bisa di-deploy dari panel.`,
+    adoptLink: "Lihat yang belum dikelola",
+    checks: {
+      sites_dir: {
+        ok: "Folder situs ada",
+        error: (p) => `Folder ${s(p.path)} tidak ada. Buat foldernya, atau ubah folder situs di Pengaturan.`,
+      },
+      apps_json: {
+        ok: "apps.json terbaca",
+        error: (p) =>
+          p.reason === "invalid"
+            ? "apps.json rusak (bukan daftar JSON). Tekan Periksa lagi setelah memperbaikinya, atau hapus file itu agar panel membuatnya ulang."
+            : "apps.json belum ada. Tekan Periksa lagi, panel akan membuatnya.",
+      },
+      ecosystem_file: {
+        ok: "ecosystem.config.js ada",
+        error: (p) => `File ${s(p.path)} tidak ada. pm2 di HP ini belum memakai ecosystem.`,
+      },
+      ecosystem_loads: {
+        ok: "pm2 bisa memuat ecosystem.config.js",
+        error:
+          "pm2 tidak bisa memuat ecosystem.config.js. Situs yang berjalan tidak terganggu sekarang, tetapi semua aplikasi tidak akan jalan setelah HP dinyalakan ulang. Perbaiki file, lalu periksa lagi.",
+      },
+      ecosystem_spreads_apps_json: {
+        ok: "ecosystem memuat apps.json",
+        error: "ecosystem.config.js belum memuat apps.json. Pasang blok di bawah.",
+      },
+      snippet_current: {
+        ok: "Blok apps.json versi terbaru",
+        error: "Blok apps.json di ecosystem.config.js versi lama. Ganti dengan blok terbaru di bawah.",
+      },
+      apps_entries_runnable: {
+        ok: "Semua situs di apps.json punya binary",
+        warning: (p) =>
+          `${s(p.count)} situs di apps.json belum punya binary. Blok apps.json melewatinya sampai di-deploy.`,
+        error: (p) =>
+          `${s(p.count)} situs di apps.json belum punya binary, dan blok apps.json versi lama tidak melewatinya. Ganti bloknya dulu.`,
+      },
+      pm2_runtime: {
+        ok: "Layanan pm2 berjalan",
+        error: "Layanan pm2 tidak berjalan. Jalankan `sv up pm2` di HP, lalu periksa lagi.",
+      },
+      pm2_auto_exit: {
+        ok: "pm2 tetap hidup tanpa aplikasi",
+        warning: "Run script pm2 tidak memakai `--no-auto-exit`. pm2 berhenti bila aplikasi terakhir dihapus.",
+      },
+      pm2_guard: {
+        ok: "Ada aplikasi pm2 selain buatan panel",
+        warning:
+          "Semua aplikasi pm2 di HP ini dibuat panel. Tambahkan aplikasi penjaga `pm2-guard` (lihat README) agar pm2 tetap hidup tanpa situs.",
+      },
+      tunnel: {
+        ok: "Tunnel cloudflared terdeteksi",
+        error: "Tunnel cloudflared belum terdeteksi. Periksa ~/.cloudflared/config.yml di HP, lalu periksa lagi.",
+      },
+      cloudflare_token: {
+        ok: "Token API Cloudflare terisi",
+        warning: "Token API Cloudflare belum diisi (opsional). Tanpa token, buat record DNS domain baru secara manual.",
+      },
+    } satisfies Record<IntegrationCheckKey, CheckCopy>,
+    notReady: "pm2 belum siap menjalankan situs buatan panel.",
+    notReadyLink: "Selesaikan persiapan di halaman Situs",
   },
   discovered: {
     title: "Belum dikelola",
     description:
       "Domain di config cloudflared yang belum tercatat sebagai situs. Adopsi agar bisa dikelola dari panel.",
-    adopt: "Adopsi",
+    label: "Domain yang belum dikelola",
+    cols: { hostname: "Domain", target: "Mengarah ke" },
+    self: "Panel Termux (domain ini)",
     noPort: "port tidak diketahui",
-    app: (app: string) => `aplikasi ${app}`,
+    noApp: "belum ada aplikasi pm2 yang cocok",
+    wildcard: "Domain wildcard tidak bisa diadopsi.",
+    adopt: "Adopsi",
+    adoptLabel: (host: string) => `Adopsi ${host}`,
+    unavailable: "Daftar aplikasi pm2 tidak bisa dibaca, jadi yang belum dikelola tidak ditampilkan.",
+    noCandidates: "Tidak ada aplikasi pm2 yang cocok. Pastikan aplikasinya berjalan dari folder di ~/sites.",
   },
   adopt: {
     title: (host: string) => `Adopsi ${host}`,
-    description: "Situs ini hanya dicatat di panel. Folder, aplikasi, dan domainnya tidak diubah.",
+    description: "Panel hanya mencatat situs ini. File, aplikasi pm2, dan domainnya tidak diubah sampai kamu deploy.",
+    app: "Aplikasi pm2",
+    appPlaceholder: "Pilih aplikasi",
     name: "Nama situs",
-    namePlaceholder: "mis. blog",
-    hostname: "Domain",
+    nameHint: "Huruf kecil, angka, dan tanda minus. Biasanya sama dengan nama aplikasi.",
+    folder: "Folder",
+    runtime: "Runtime",
     port: "Port",
-    app: "Aplikasi pm2 (opsional)",
+    runtimes: { native: "Android native", grun: "glibc" },
+    scriptRuntimes: {
+      native: "dijalankan langsung",
+      grun: "dijalankan lewat grun",
+      other: "cara jalan tidak dikenali",
+    },
+    portSources: { pm2_env: "dari env pm2", pm2_args: "dari argumen pm2", dotenv: "dari `.env`" },
+    unknown: "tidak diketahui",
     submit: "Adopsi",
+    cancel: "Batal",
     done: (name: string) => `Situs ${name} diadopsi.`,
-  },
-  integration: {
-    title: "Integrasi belum lengkap",
-    appsJson:
-      "Tambahkan `...require('./apps.json')` ke daftar apps di ~/sites/ecosystem.config.js agar situs baru ikut dijalankan pm2.",
-    appsJsonMissing: "File ~/sites/apps.json belum ada. Panel membuatnya otomatis saat situs pertama dibuat.",
-    tunnel:
-      "Tunnel cloudflared belum terdeteksi. Periksa ~/.cloudflared/config.yml di HP, lalu muat ulang halaman ini.",
-    token: "Isi token API Cloudflare agar DNS domain baru dibuat otomatis. Tanpa token, buat record DNS secara manual.",
-    tokenLink: "Buka Administrasi → Pengaturan",
-    details: "Detail dari server",
+    blockers: {
+      outside_sites_dir: "Aplikasi ini berjalan dari folder di luar ~/sites, jadi tidak bisa dikelola panel.",
+      no_binary: "Folder aplikasi ini tidak punya file `app`.",
+      invalid_binary: "File `app` di folder ini bukan binary yang bisa dijalankan.",
+      pm2_module: "Ini modul pm2, bukan aplikasi.",
+      name_invalid: "Nama aplikasi ini tidak bisa dipakai sebagai nama situs.",
+    } satisfies Record<AdoptCandidateApp["blockers"][number], string>,
+    warnings: {
+      runtime_script_mismatch:
+        "Runtime binary tidak cocok dengan cara pm2 menjalankannya. Cek ecosystem.config.js sebelum deploy.",
+      script_other:
+        "Panel tidak tahu cara pm2 menjalankan binary ini. Cek kesehatan setelah deploy akan menunjukkan hasilnya.",
+      port_unknown:
+        "Port aplikasi tidak ditemukan di env pm2, argumen, atau `.env`. Panel memakai port dari config cloudflared.",
+      port_mismatch: "Port aplikasi berbeda dengan port domain ini di config cloudflared.",
+    } satisfies Record<AdoptCandidateApp["warnings"][number], string>,
   },
   wizard: {
     title: "Buat situs baru",
+    description: "Situs baru mendapat folder, port, dan domain. Binary diunggah setelah situs dibuat.",
     back: "Kembali",
     next: "Lanjut",
-    create: "Buat",
+    create: "Buat situs",
+    cancel: "Batal",
     steps: ["Alamat", "Opsi", "Ringkasan"],
+    stepsLabel: "Langkah wizard",
     stepOf: (n: number, total: number, label: string) => `Langkah ${n} dari ${total}: ${label}`,
     name: "Nama situs",
     nameHint: "Huruf kecil, angka, dan tanda minus. Dipakai sebagai nama folder dan nama aplikasi.",
     hostname: "Domain",
+    hostnameExtra: (n: number) => `Domain tambahan ${n}`,
     hostnamePlaceholder: "mis. blog.contoh.com",
+    addHostname: "Tambah domain lain",
+    removeHostname: (host: string) => `Hapus ${host || "domain kosong"}`,
     port: "Port",
     portHint: "Terisi otomatis dengan port yang belum dipakai. Boleh diubah.",
-    checking: "Memeriksa…",
-    available: "Tersedia.",
     portInvalid: "Isi port dengan angka 1–65535.",
+    checking: "Memeriksa…",
+    available: "Nama, domain, dan port bisa dipakai.",
+    recover: "Pulihkan",
     database: "Buat database PostgreSQL",
-    databaseHint: "Membuat database dan role baru. DATABASE_URL otomatis ditulis ke .env.",
+    databaseHint: "Membuat database dan role baru khusus situs ini. DATABASE_URL otomatis ditulis ke .env.",
     env: "Variabel lingkungan tambahan",
     envHint: "Disimpan di .env situs. PORT dan DATABASE_URL diisi otomatis oleh panel.",
     summary: "Yang akan dilakukan",
+    blip: (hosts: string[]) =>
+      `cloudflared dimulai ulang sekali. Semua domain di HP ini terputus 3–10 dtk${hosts.length ? `, termasuk ${hosts.join(", ")}` : ""}.`,
     blinkWarning: "cloudflared akan dimulai ulang, jadi semua domain terputus beberapa detik.",
+    after: "Setelah selesai, unggah binary pertama dari halaman situs untuk menjalankannya.",
     plan: {
-      folder: (name: string) => `Membuat folder ~/sites/${name}`,
-      database: (name: string) => `Membuat database ${name} beserta role-nya`,
-      noDatabase: "Tanpa database",
-      env: (n: number) => `Menulis .env (PORT${n > 0 ? ` + ${n} variabel` : ""})`,
-      envDb: "DATABASE_URL ikut ditulis ke .env",
-      appsJson: (name: string, port: number | null) =>
-        `Mendaftarkan aplikasi ${name} di apps.json${port ? ` (port ${port})` : ""}`,
-      routing: (host: string) => `Menambahkan rute ${host} di config cloudflared`,
-      dns: (host: string) => `Membuat record DNS ${host} di Cloudflare (dilewati bila token belum diisi)`,
-      restart: "Memulai ulang cloudflared",
-    },
+      validate: "Memeriksa ulang nama, domain, dan port",
+      folder: (p) => `Membuat folder ~/sites/${s(p.name)}`,
+      database: (p) => (p.database ? `Membuat database ${s(p.name)} beserta role-nya` : "Tanpa database"),
+      env_write: (p) =>
+        `Menulis .env (PORT${p.database ? " dan DATABASE_URL" : ""}${Number(p.env) > 0 ? ` + ${s(p.env)} variabel` : ""})`,
+      ingress: (p) => `Menambahkan rute ${s(p.hosts)}${p.port ? ` ke port ${s(p.port)}` : ""} di config cloudflared`,
+      dns: (p) =>
+        `Membuat record DNS ${s(p.hosts)} di Cloudflare${p.token ? "" : " (dilewati: token belum diisi, buat manual)"}`,
+      tunnel_restart: "Memulai ulang cloudflared",
+      domain_probe: "Mengecek domain bisa dijangkau",
+    } satisfies Partial<Record<JobStepKey, Copy>>,
   },
+  issues: {
+    name_invalid: "Pakai 2–31 huruf kecil, angka, atau tanda minus, diawali huruf.",
+    name_taken: "Nama ini sudah dipakai situs atau aplikasi pm2 lain.",
+    name_reserved: "Nama ini dipakai panel. Pilih nama lain.",
+    name_folder_exists: "Folder dengan nama ini sudah ada di ~/sites. Pilih nama lain, atau adopsi aplikasinya.",
+    name_database_exists: (p) => `Database ${s(p.name)} sudah ada. Pilih nama lain, atau matikan opsi database.`,
+    name_leftover: "Pembuatan situs dengan nama ini sebelumnya terputus. Pulihkan dulu, lalu coba lagi.",
+    hostname_invalid: "Tulis domain lengkap dengan huruf kecil, mis. blog.contoh.com.",
+    hostname_in_use: (p) => `${s(p.hostname)} sudah diarahkan ke aplikasi lain di config cloudflared.`,
+    hostname_self: "Ini alamat Panel Termux sendiri.",
+    hostname_duplicate: "Domain ini sudah ditulis di baris lain.",
+    hostname_zone_missing: (p) =>
+      `Tidak ada zona Cloudflare untuk ${s(p.hostname)} di akun token ini. Tambahkan domainnya ke Cloudflare dulu.`,
+    hostname_dns_conflict: (p) =>
+      `Sudah ada record DNS untuk ${s(p.hostname)} yang tidak dibuat panel. Hapus atau ubah di dasbor Cloudflare, lalu coba lagi.`,
+    port_invalid: "Isi port dengan angka 1–65535.",
+    port_out_of_range: (p) => `Pakai port di rentang situs ${s(p.from)}–${s(p.to)}.`,
+    port_in_use: (p) => `Port ${s(p.port)} sudah dipakai aplikasi lain.`,
+    port_panel: "Ini port Panel Termux sendiri.",
+  } satisfies Record<SiteIssueCode, Copy>,
+  notes: {
+    dns_same_tunnel: "Record DNS sudah mengarah ke tunnel HP ini, jadi dipakai apa adanya.",
+    dns_owned: "Record DNS dibuat panel sebelumnya dan akan dipakai ulang.",
+    dns_token_missing: "Token Cloudflare belum diisi. Buat record DNS domain ini secara manual setelah situs dibuat.",
+    dns_check_failed: "DNS tidak bisa dicek sekarang. Situs tetap bisa dibuat; panel mencoba lagi saat membuat record.",
+  } satisfies Record<SiteNoteCode, Copy>,
+  // Detail/job copy below: still read by the detail and job pages until W7 moves it to id.site-detail/id.job.
   env: {
     key: "Nama",
     value: "Nilai",

@@ -1,41 +1,36 @@
-import { AlertTriangleIcon, CheckIcon } from "lucide-react";
+import { CircleDashedIcon, TriangleAlertIcon } from "lucide-react";
 import type { SiteCreateRequest } from "@/shared/site.types";
-import { id } from "@/web/i18n/id";
+import { idSite } from "@/web/i18n/id.site";
+import { createPlan } from "./site.check";
 
-const p = id.site.wizard.plan;
+const t = idSite.wizard;
 
-/** Ordered list of what creating `body` will do (mirrors the server's job steps). */
-export function createPlan(body: SiteCreateRequest): string[] {
-  const envCount = Object.keys(body.env ?? {}).length;
-  return [
-    p.folder(body.name),
-    body.database ? p.database(body.name) : p.noDatabase,
-    p.env(envCount),
-    ...(body.database ? [p.envDb] : []),
-    p.appsJson(body.name, body.port ?? null),
-    p.routing(body.hostname),
-    p.dns(body.hostname),
-    p.restart,
-  ];
-}
-
-/** Wizard step 3: the plan and the "all domains blink" warning. */
-export function WizardSummary({ body }: { body: SiteCreateRequest }) {
+/** Wizard step 3 (Ringkasan): the job's steps in order, the named cloudflared blip, and what comes after. */
+export function WizardSummary({
+  body,
+  tokenSet,
+  blipHosts,
+}: {
+  body: SiteCreateRequest;
+  tokenSet: boolean;
+  blipHosts: string[];
+}) {
   return (
     <div className="flex flex-col gap-4">
-      <h2 className="font-medium">{id.site.wizard.summary}</h2>
+      <h2 className="text-base font-semibold">{t.summary}</h2>
       <ol className="flex flex-col gap-2 text-sm">
-        {createPlan(body).map((line) => (
+        {createPlan(body, tokenSet).map((line) => (
           <li key={line} className="flex items-start gap-2">
-            <CheckIcon className="mt-0.5 size-4 shrink-0 text-muted-foreground" aria-hidden />
+            <CircleDashedIcon className="mt-0.5 size-4 shrink-0 text-muted-foreground" aria-hidden />
             {line}
           </li>
         ))}
       </ol>
-      <p className="flex items-start gap-2 rounded-lg border border-amber-500/40 bg-amber-500/10 p-3 text-sm text-amber-900 dark:text-amber-200">
-        <AlertTriangleIcon className="mt-0.5 size-4 shrink-0" aria-hidden />
-        {id.site.wizard.blinkWarning}
+      <p className="flex items-start gap-2 rounded-md border border-warning/25 bg-warning-subtle p-3 text-sm">
+        <TriangleAlertIcon className="mt-0.5 size-4 shrink-0 text-warning" aria-hidden />
+        {t.blip(blipHosts)}
       </p>
+      <p className="text-sm text-muted-foreground">{t.after}</p>
     </div>
   );
 }

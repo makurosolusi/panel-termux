@@ -1,13 +1,13 @@
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import type { JobAccepted, SiteCheckRequest, SiteCheckResult } from "@/shared/site.types";
-import { id } from "@/web/i18n/id";
+import { idSite } from "@/web/i18n/id.site";
 import { panelUrl } from "@/web/panel/panel.api";
 import { runApiAction } from "@/web/shared/api.action";
 import { apiErrorMessage, apiFetch } from "@/web/shared/api.client";
 
-/** Panel error codes with the site overrides (409 `busy` = another change is running). */
-export const SITE_ERROR_CODES: Readonly<Record<string, string>> = { ...id.panel.errorCodes, ...id.site.errorCodes };
+/** Error copy of the site API by code (409 `busy` = another change is running). */
+export const SITE_ERROR_CODES: Readonly<Record<string, string>> = idSite.errorCodes;
 
 /** `/api/panel/sites/<name>` (+ `rest`), name URL-encoded. */
 export const siteUrl = (name: string, rest = ""): string => panelUrl(`/sites/${encodeURIComponent(name)}${rest}`);
