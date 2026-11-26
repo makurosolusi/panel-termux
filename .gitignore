@@ -7,3 +7,4 @@ spike/
 *.db
 *.db-*
 .DS_Store
+.claude/

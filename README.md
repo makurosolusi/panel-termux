@@ -12,6 +12,8 @@ Panel web untuk mengelola server HP Android (Termux): layanan runit, aplikasi pm
 
 Peran lebih tinggi bisa membuka semua halaman peran di bawahnya.
 
+`/` adalah halaman perkenalan publik (tanpa login); tombolnya "Masuk dengan Google" untuk tamu atau "Buka panel" ke halaman awal peran bila sudah login. Setelah login Google, pengguna kembali ke `/login` lalu diteruskan ke halaman awal perannya. Alamat yang tidak dikenal menampilkan halaman perkenalan.
+
 ## Arsitektur singkat
 
 - Satu binary hasil `bun build --compile`: server Elysia (`/api/*`) dan SPA React yang di-embed (`/*`).

@@ -1,5 +1,15 @@
 # Changelog
 
+## [0.2.0] - 2026-11-26
+
+### Added
+
+- Halaman perkenalan publik di `/` yang bisa dibuka tanpa login: kenapa HP bekas, fitur, langkah pemasangan, diagram tunnel, dan FAQ. Tombolnya "Masuk dengan Google" untuk tamu atau "Buka panel" ke halaman awal peran bila sudah login. Setelah login Google kamu tetap langsung masuk ke halaman awal peranmu, dan alamat yang tidak dikenal kini menampilkan halaman perkenalan.
+
+### Fixed
+
+- `scripts/install-phone.sh` kini berhasil menjalankan `sv restart panel` saat dipanggil lewat ssh (sebelumnya `sv` tidak menemukan service karena `SVDIR` tidak di-set).
+
 ## [0.1.0] - 2026-11-26
 
 ### Added
