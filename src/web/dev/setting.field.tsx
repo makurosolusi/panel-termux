@@ -7,6 +7,7 @@ import { Input } from "@/web/components/ui/input";
 import { Label } from "@/web/components/ui/label";
 import { id } from "@/web/i18n/id";
 import { formatDateTime } from "@/web/shared/format";
+import { CLOUDFLARE_TOKEN_KEY, CloudflareVerifyButton } from "./cloudflare.verify";
 import { devFetch, devUrl, runDevAction } from "./dev.api";
 import { canReset, initialDraft, RESET_BODY, saveBody, settingStatus } from "./settings.state";
 
@@ -75,6 +76,7 @@ export function SettingField({ setting, onSaved }: { setting: DevSetting; onSave
           </Button>
         )}
       </div>
+      {setting.key === CLOUDFLARE_TOKEN_KEY && <CloudflareVerifyButton />}
       {setting.updatedAt && (
         <p className="text-xs text-muted-foreground">{t.updatedAt(formatDateTime(setting.updatedAt))}</p>
       )}

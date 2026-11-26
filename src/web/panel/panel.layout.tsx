@@ -8,6 +8,7 @@ import { type SectionTab, SectionTabs } from "@/web/shared/section.tabs";
 const t = id.panel.sections;
 const SECTIONS: readonly SectionTab[] = [
   { to: "/panel", label: t.overview, end: true },
+  { to: "/panel/sites", label: id.site.section },
   { to: "/panel/services", label: t.services },
   { to: "/panel/apps", label: t.apps },
   { to: "/panel/domains", label: t.domains },

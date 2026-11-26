@@ -21,6 +21,11 @@ import { SessionError } from "@/web/session/session.error";
 import { SessionFallback } from "@/web/session/session.fallback";
 import { SessionGate } from "@/web/session/session.gate";
 import { ROOT_ROUTE_ID } from "@/web/session/use-me";
+import { JobPage } from "@/web/site/job.page";
+import { JobsPage } from "@/web/site/jobs.page";
+import { SiteDetailPage } from "@/web/site/site-detail.page";
+import { SiteNewPage } from "@/web/site/site-new.page";
+import { SitesPage } from "@/web/site/sites.page";
 
 /**
  * SPA route tree. The root loader fetches `/api/me` once per page load (it does not re-run on plain path
@@ -46,6 +51,11 @@ export const router = createBrowserRouter([
             Component: PanelLayout,
             children: [
               { index: true, Component: OverviewPage },
+              { path: "sites", Component: SitesPage },
+              { path: "sites/new", Component: SiteNewPage },
+              { path: "sites/:name", Component: SiteDetailPage },
+              { path: "jobs", Component: JobsPage },
+              { path: "jobs/:id", Component: JobPage },
               { path: "services", Component: ServicesPage },
               { path: "services/:name/log", element: <LogPage kind="services" /> },
               { path: "apps", Component: AppsPage },

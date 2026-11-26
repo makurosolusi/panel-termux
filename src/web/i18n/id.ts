@@ -2,6 +2,7 @@ import type { Role } from "@/shared/roles";
 import { idCommon } from "./id.common";
 import { idDev } from "./id.dev";
 import { idPanel } from "./id.panel";
+import { idSite } from "./id.site";
 
 /** All Indonesian UI strings of the SPA, grouped by screen. */
 export const id = {
@@ -29,5 +30,6 @@ export const id = {
   profile: { title: "Profil", role: "Peran", email: "Email" },
   common: idCommon,
   panel: idPanel,
+  site: idSite,
   dev: idDev,
 } as const;

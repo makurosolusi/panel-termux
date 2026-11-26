@@ -95,5 +95,7 @@ export const idDev = {
     updatedAt: (at: string) => `Diubah ${at}`,
     savedToast: (label: string) => `${label} disimpan.`,
     resetToast: (label: string) => `${label} dikembalikan.`,
+    verify: "Tes token",
+    verifying: "Mengetes…",
   },
 } as const;

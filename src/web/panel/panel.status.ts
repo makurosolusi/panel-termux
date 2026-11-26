@@ -22,8 +22,11 @@ const APP_TONE: Record<App["status"], Tone> = {
   unknown: "muted",
 };
 
+/** Badge tone of a pm2 status. */
+export const appStatusTone = (status: App["status"]): Tone => APP_TONE[status];
+
 /** pm2 app badge tone. */
-export const appTone = (a: App): Tone => APP_TONE[a.status];
+export const appTone = (a: App): Tone => appStatusTone(a.status);
 
 /** Domain health verdict: not checked yet, reachable with a 2xx/3xx answer, or failing (other status or no answer). */
 export function healthTone(h: DomainHealth): Tone {
@@ -39,10 +42,13 @@ export function healthLabel(h: DomainHealth, text: { unchecked: string; unreacha
   return h.ms === null ? String(h.status) : `${h.status} · ${h.ms} ms`;
 }
 
-/** Problem counts shown on the overview: services not running, apps not online, failing domains. */
+/**
+ * Problem counts shown on the overview: services not running although wanted up (stopped on purpose is not a
+ * problem), apps not online, failing domains.
+ */
 export function countProblems(data: { services: Service[]; apps: App[]; domains: Domain[] }) {
   return {
-    services: data.services.filter((s) => s.state !== "run").length,
+    services: data.services.filter((s) => s.state !== "run" && s.wantUp).length,
     apps: data.apps.filter((a) => a.status !== "online").length,
     domains: data.domains.filter((d) => healthTone(d.health) === "bad").length,
   };

@@ -95,6 +95,14 @@ describe("countProblems", () => {
         domains: [domain({}), domain({ status: 503 }), domain({ status: null }), domain({ checkedAt: null })],
       }),
     ).toEqual({ services: 2, apps: 3, domains: 2 }));
+  test("services stopped on purpose (wantUp=false) are not problems", () =>
+    expect(
+      countProblems({
+        services: [svc({ state: "down", wantUp: false }), svc({ state: "down", wantUp: true })],
+        apps: [],
+        domains: [],
+      }).services,
+    ).toBe(1));
   test("all healthy → zeros", () =>
     expect(countProblems({ services: [svc()], apps: [app()], domains: [domain({})] })).toEqual({
       services: 0,

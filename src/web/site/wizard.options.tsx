@@ -1,0 +1,27 @@
+import { Label } from "@/web/components/ui/label";
+import { Switch } from "@/web/components/ui/switch";
+import { id } from "@/web/i18n/id";
+import { EnvRowsEditor } from "./env.editor";
+import type { SiteForm } from "./site.check";
+
+const t = id.site.wizard;
+
+/** Wizard step 2: database toggle and extra env rows. */
+export function WizardOptions({ form, onChange }: { form: SiteForm; onChange: (patch: Partial<SiteForm>) => void }) {
+  return (
+    <div className="flex flex-col gap-6">
+      <div className="flex items-start gap-3">
+        <Switch id="site-db" checked={form.database} onCheckedChange={(database) => onChange({ database })} />
+        <div className="flex flex-col gap-1">
+          <Label htmlFor="site-db">{t.database}</Label>
+          <p className="text-xs text-muted-foreground">{t.databaseHint}</p>
+        </div>
+      </div>
+      <div className="flex flex-col gap-2">
+        <Label>{t.env}</Label>
+        <p className="text-xs text-muted-foreground">{t.envHint}</p>
+        <EnvRowsEditor rows={form.env} onChange={(env) => onChange({ env })} />
+      </div>
+    </div>
+  );
+}
