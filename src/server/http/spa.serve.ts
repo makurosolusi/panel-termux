@@ -1,14 +1,17 @@
 import { DEPLOY_CHUNK_SIZE } from "../../shared/deploy.types";
-import { isKnownSpaPath } from "../../shared/roles";
+// @ts-expect-error -- Bun `type: "file"` import (embedded in the binary, value = its path); no *.png module types
+import touchIconPng from "../../web/assets/apple-touch-icon.png" with { type: "file" };
+// @ts-expect-error -- same as apple-touch-icon.png above
+import ogPng from "../../web/assets/og.png" with { type: "file" };
 import spa from "../../web/index.html";
 import { createApiHandler } from "./api.handler";
 import { applySecurityHeaders, pageCsp } from "./security.headers";
+import { pageHead, robotsTxt, sitemapXml } from "./seo";
 
 /** Loopback only: the panel is reached through the Cloudflare tunnel, never exposed on the LAN. */
 export const LISTEN_HOST = "127.0.0.1";
 /** Hard cap on any request body (one deploy chunk + headroom); JSON routes are capped lower in api.handler. */
 const MAX_BODY_BYTES = DEPLOY_CHUNK_SIZE + 1024 * 1024;
-const HTTP_NOT_MODIFIED = 304;
 const HTTP_NOT_FOUND = 404;
 
 /** Development only: path the bundle is mounted on in this server (HMR needs it here). */
@@ -17,6 +20,8 @@ const DEV_SPA_PATH = "/__spa";
 const HASHED_ASSET = /^\/[\w.-]+-[a-z0-9]{8}\.(js|css|svg|png|webp|woff2)$/;
 const ASSET_CACHE = "public, max-age=31536000, immutable";
 const HTML_CACHE = "no-cache";
+/** og.png / apple-touch-icon.png: fixed names, so a day instead of immutable (PLAN/05 §3.3). */
+const IMAGE_CACHE = "public, max-age=86400";
 
 /**
  * 302 to the same path+query on APP_BASE_URL when a page request's host differs from it, else null.
@@ -52,13 +57,32 @@ const missingAsset = () =>
     },
   });
 
+/** A fixed public file (robots, sitemap, images) with nosniff and `cache-control`. */
+const publicFile = (body: BodyInit, type: string, cache: string) => () =>
+  new Response(body, {
+    headers: { "content-type": type, "cache-control": cache, "x-content-type-options": "nosniff" },
+  });
+
+/** `/robots.txt`, `/sitemap.xml`, `/og.png`, `/apple-touch-icon.png`, `/favicon.ico` (PNG icon) — PLAN/05 K17. */
+function seoRoutes(appBaseUrl: string) {
+  const touchIcon = publicFile(Bun.file(touchIconPng as string), "image/png", IMAGE_CACHE);
+  return {
+    "/robots.txt": publicFile(robotsTxt(appBaseUrl), "text/plain; charset=utf-8", HTML_CACHE),
+    "/sitemap.xml": publicFile(sitemapXml(appBaseUrl), "application/xml; charset=utf-8", HTML_CACHE),
+    "/og.png": publicFile(Bun.file(ogPng as string), "image/png", IMAGE_CACHE),
+    "/apple-touch-icon.png": touchIcon,
+    "/favicon.ico": touchIcon,
+  };
+}
+
 /**
  * HTTP server on loopback: /api/* → `api` through createApiHandler (host check, CSRF, limits, error bodies,
  * headers, log; never redirected: install script and probes curl 127.0.0.1); everything else is proxied to
  * the SPA bundle, which lives on an internal loopback server because Bun has no header hook for HTMLBundle
  * routes and cannot return one from a handler. Headers per B11: hashed asset → `immutable` + nosniff, or
- * 404 text `no-store` when missing; HTML (canonicalRedirect first) → `no-cache` + CSP, status 404 +
- * `noindex` for unknown paths (incl. the bundle's old `/__spa`). `development` = Bun dev bundling/HMR:
+ * 404 text `no-store` when missing; HTML (canonicalRedirect first) → `no-cache` + CSP, head rewritten by
+ * seo.pageHead (OG for `/`, `noindex` elsewhere, status 404 for unknown paths incl. the bundle's old
+ * `/__spa`), never ETag/304 since the body differs from the bundle's. SEO files: seoRoutes. `development` = Bun dev bundling/HMR:
  * the bundle stays on this server (HMR websocket) so its assets bypass the proxy (note: Bun's dev server
  * answers 403 to non-loopback Host headers, so the tunnel needs production).
  */
@@ -95,25 +119,23 @@ export function servePanel(
   async function page(req: Request, path: string): Promise<Response> {
     const redirect = canonicalRedirect(req, appBaseUrl);
     if (redirect) return redirect;
-    const known = isKnownSpaPath(path);
     const headers = new Headers(req.headers);
     // fetch() decodes bodies, a forwarded content-encoding would then lie; the bundle has its own host.
     headers.delete("accept-encoding");
     headers.delete("host");
-    if (!known) headers.delete("if-none-match"); // an unknown path is always a full 404, never 304
+    // The body is rewritten below, so the bundle's validators never describe it: no 304, ever.
+    headers.delete("if-none-match");
+    headers.delete("if-modified-since");
     // Always GET "/": the CSP hashes the inline scripts of the real body, also for HEAD.
     const res = await fetch(bundleUrl(development ? DEV_SPA_PATH : "/"), { headers });
-    const html = await res.text();
-    const out = applySecurityHeaders(new Headers(res.headers), cspFor(html), https);
-    out.delete("content-length");
+    const raw = await res.text();
+    const head = pageHead(raw, path, appBaseUrl);
+    const out = applySecurityHeaders(new Headers(res.headers), cspFor(raw), https);
+    for (const h of ["content-length", "etag", "last-modified"]) out.delete(h);
     out.set("cache-control", HTML_CACHE);
-    if (!known) {
-      out.delete("etag");
-      out.set("x-robots-tag", "noindex, nofollow");
-    }
-    const status = known ? res.status : HTTP_NOT_FOUND;
-    const noBody = req.method === "HEAD" || status === HTTP_NOT_MODIFIED;
-    return new Response(noBody ? null : html, { status, headers: out });
+    if (head.robots) out.set("x-robots-tag", head.robots);
+    const status = res.ok ? head.status : res.status;
+    return new Response(req.method === "HEAD" ? null : head.html, { status, headers: out });
   }
 
   const devBundle: Record<string, typeof spa> = development ? { [DEV_SPA_PATH]: spa } : {};
@@ -124,6 +146,7 @@ export function servePanel(
     maxRequestBodySize: MAX_BODY_BYTES,
     routes: {
       "/api/*": (req, srv) => handleApi(req, srv),
+      ...seoRoutes(appBaseUrl),
       ...devBundle,
       "/*": (req) => {
         const path = new URL(req.url).pathname;
