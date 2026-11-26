@@ -3,7 +3,6 @@ import { BackupsPage } from "@/web/backup/backups.page";
 import { AuditPage } from "@/web/dev/audit.page";
 import { DevLayout } from "@/web/dev/dev.layout";
 import { HealthPage } from "@/web/dev/health.page";
-import { InvitesPage } from "@/web/dev/invites.page";
 import { LogsPage } from "@/web/dev/logs.page";
 import { SettingsPage } from "@/web/dev/settings.page";
 import { UsersPage } from "@/web/dev/users.page";
@@ -72,7 +71,6 @@ export const router = createBrowserRouter([
             children: [
               { index: true, Component: HealthPage },
               { path: "users", Component: UsersPage },
-              { path: "invites", Component: InvitesPage },
               { path: "audit", Component: AuditPage },
               { path: "logs", Component: LogsPage },
               { path: "settings", Component: SettingsPage },

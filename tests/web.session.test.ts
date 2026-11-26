@@ -40,7 +40,7 @@ describe("resolveRedirect", () => {
 
 describe("loginErrorMessage", () => {
   test("no error code → no message", () => expect(loginErrorMessage(null)).toBeNull());
-  test("not_invited has its own message", () => expect(loginErrorMessage("not_invited")).toContain("belum diundang"));
-  test("other codes fall back to the generic message", () =>
-    expect(loginErrorMessage("state_mismatch")).toBe("Gagal masuk. Silakan coba lagi."));
+  test.each(["state_mismatch", "access_denied"])("%p → generic message", (code) =>
+    expect(loginErrorMessage(code)).toBe("Gagal masuk. Silakan coba lagi."),
+  );
 });

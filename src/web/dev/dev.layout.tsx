@@ -7,7 +7,6 @@ import { type SectionTab, SectionTabs } from "@/web/shared/section.tabs";
 const SECTIONS: readonly SectionTab[] = [
   { to: "/dev", label: id.dev.sections.health, end: true },
   { to: "/dev/users", label: id.dev.sections.users },
-  { to: "/dev/invites", label: id.dev.sections.invites },
   { to: "/dev/audit", label: id.dev.sections.audit },
   { to: "/dev/logs", label: id.dev.sections.logs },
   { to: "/dev/settings", label: id.dev.sections.settings },

@@ -2,7 +2,6 @@ import { afterEach, describe, expect, test } from "bun:test";
 import type { DevSetting, DevUser } from "@/shared/dev.types";
 import { devErrorMessage, devFetch, devUrl } from "@/web/dev/dev.api";
 import { pageCount, parsePageParam, withFilter, withPage } from "@/web/dev/dev.pagination";
-import { normalizeInviteEmail } from "@/web/dev/invite.email";
 import { canReset, initialDraft, RESET_BODY, saveBody, settingStatus } from "@/web/dev/settings.state";
 import { isLockedUser } from "@/web/dev/users.list";
 import { ApiError as DevApiError, errorFromResponse, redirectFor } from "@/web/shared/api.client";
@@ -24,9 +23,9 @@ describe("errorFromResponse / redirectFor / devErrorMessage", () => {
   });
 
   test("reads code and message from the error body", () => {
-    const err = errorFromResponse(409, { error: "exists", message: "already invited" });
+    const err = errorFromResponse(409, { error: "exists", message: "site exists" });
     expect(err.code).toBe("exists");
-    expect(err.serverMessage).toBe("already invited");
+    expect(err.serverMessage).toBe("site exists");
   });
 
   test("ignores bodies that are not { error: string }", () => {
@@ -74,7 +73,7 @@ describe("devFetch", () => {
 
   test("409 with body → client error carrying the code", async () => {
     stub(() => Promise.resolve(Response.json({ error: "exists", message: "dup" }, { status: 409 })));
-    const err = (await devFetch("POST", "/api/dev/invites", { email: "a@b.co" }).catch(
+    const err = (await devFetch("PATCH", "/api/dev/users/u1", { role: "admin" }).catch(
       (e: unknown) => e,
     )) as DevApiError;
     expect([err.kind, err.code]).toEqual(["client", "exists"]);
@@ -192,16 +191,7 @@ describe("settings form state", () => {
   );
 });
 
-describe("invite email + user lock", () => {
-  test.each([
-    ["  A@Gmail.com ", "a@gmail.com"],
-    ["a@b.co", "a@b.co"],
-    ["no-at", null],
-    ["a@b", null],
-    ["a b@c.de", null],
-    ["", null],
-  ] as const)("normalizeInviteEmail(%p) = %p", (raw, out) => expect(normalizeInviteEmail(raw)).toBe(out));
-
+describe("user lock", () => {
   const user = (over: Partial<DevUser>): DevUser => ({
     id: "u2",
     email: "u@x.co",

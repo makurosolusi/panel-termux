@@ -13,11 +13,10 @@ export const id = {
   roles: { user: "Pengguna", admin: "Admin", super_admin: "Super Admin" } satisfies Record<Role, string>,
   login: {
     title: "Masuk ke Panel Termux",
-    subtitle: "Gunakan akun Google yang sudah diundang.",
+    subtitle: "Masuk dengan akun Google kamu.",
     google: "Masuk dengan Google",
     redirecting: "Mengalihkan ke Google…",
     errors: {
-      not_invited: "Akun Google ini belum diundang. Minta admin mengundang email kamu, lalu coba lagi.",
       generic: "Gagal masuk. Silakan coba lagi.",
       start: "Tidak bisa memulai login Google. Periksa koneksi lalu coba lagi.",
     },

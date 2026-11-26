@@ -13,15 +13,7 @@ import { SearchBox } from "./search.box";
 const t = id.dev.audit;
 
 /** Actions the server records today; offered as suggestions only, any value can be typed. */
-const KNOWN_ACTIONS = [
-  "auth.sign_in",
-  "auth.denied",
-  "user.role_change",
-  "user.delete",
-  "invite.create",
-  "invite.delete",
-  "settings.update",
-] as const;
+const KNOWN_ACTIONS = ["auth.sign_in", "user.role_change", "user.delete", "settings.update"] as const;
 
 function AuditRow({ e }: { e: DevAuditEntry }) {
   return (

@@ -44,6 +44,7 @@ export function UsersPage() {
 
   return (
     <section className="flex flex-col gap-4">
+      <p className="text-sm text-muted-foreground">{t.newAccounts}</p>
       <SearchBox
         initial={q}
         placeholder={t.searchPlaceholder}

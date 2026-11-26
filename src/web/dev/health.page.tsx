@@ -43,7 +43,7 @@ function HealthCards({ h }: { h: DevHealth }) {
         {t.diskFree(formatBytes(h.dataDir.freeBytes), formatBytes(h.dataDir.totalBytes))}
       </StatCard>
       <StatCard icon={UsersIcon} label={t.counts} value={String(h.counts.users)}>
-        {h.counts.users} {t.users} · {h.counts.sessions} {t.sessions} · {h.counts.invites} {t.invites}
+        {h.counts.users} {t.users} · {h.counts.sessions} {t.sessions}
       </StatCard>
     </div>
   );
