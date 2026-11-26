@@ -1,6 +1,6 @@
 import type { DatabaseInfo } from "../../shared/panel.types";
 import { runTermux } from "../exec/termux.exec";
-import { type PostgresAdapter, SystemError } from "./system.types";
+import { type PostgresAdapter, SQL_IDENT_RE, SystemError } from "./system.types";
 
 /**
  * Role postgres has `trust` only on the local unix socket (TCP 127.0.0.1 is scram-sha-256, verified on the
@@ -27,15 +27,51 @@ export function parsePsqlDatabases(stdout: string): DatabaseInfo[] {
     });
 }
 
+/** Random site passwords are hex; anything else could break the psql `\set` quoting below. */
+const PASSWORD_RE = /^[0-9a-f]{16,128}$/;
+
+function assertIdent(name: string): void {
+  if (!SQL_IDENT_RE.test(name)) throw new SystemError(`postgres: invalid identifier ${JSON.stringify(name)}`);
+}
+
+/**
+ * psql script for create/drop. Values go through psql variables (`:"name"` quotes an identifier,
+ * `:'pw'` a literal) and the whole script is fed on stdin, so the password never appears on argv.
+ */
+export const createSql = (name: string, password: string) =>
+  `\\set ON_ERROR_STOP on\n\\set name '${name}'\n\\set pw '${password}'\n` +
+  `CREATE ROLE :"name" LOGIN PASSWORD :'pw';\nCREATE DATABASE :"name" OWNER :"name";\n`;
+export const dropSql = (name: string) =>
+  `\\set ON_ERROR_STOP on\n\\set name '${name}'\n` +
+  `DROP DATABASE IF EXISTS :"name" WITH (FORCE);\nDROP ROLE IF EXISTS :"name";\n`;
+
 /** Real PostgreSQL adapter via `psql`. */
 export function createTermuxPostgres(): PostgresAdapter {
+  const env = () => ({ ...process.env, PGUSER: process.env.PGUSER || DEFAULT_PGUSER });
+  async function script(op: string, input: string, redact?: string): Promise<void> {
+    // -w: never prompt for a password (fail instead of hanging).
+    const r = await runTermux("psql", ["-X", "-w", "-q", "-d", "postgres", "-f", "-"], { env: env(), input });
+    if (r.code === 0) return;
+    // An error context line ("LINE 1: CREATE ROLE ...") could quote the password literal; mask it first.
+    const err = redact ? r.stderr.replaceAll(redact, "***") : r.stderr;
+    throw new SystemError(`psql ${op} exited ${r.code}: ${err.trim().slice(0, 200)}`);
+  }
   return {
     async listDatabases() {
-      const env = { ...process.env, PGUSER: process.env.PGUSER || DEFAULT_PGUSER };
-      // -w: never prompt for a password (fail instead of hanging).
-      const r = await runTermux("psql", ["-X", "-w", "-At", "-F", "\t", "-d", "postgres", "-c", LIST_SQL], { env });
+      const r = await runTermux("psql", ["-X", "-w", "-At", "-F", "\t", "-d", "postgres", "-c", LIST_SQL], {
+        env: env(),
+      });
       if (r.code !== 0) throw new SystemError(`psql list databases exited ${r.code}: ${r.stderr.trim().slice(0, 200)}`);
       return parsePsqlDatabases(r.stdout);
+    },
+    async createRoleAndDatabase(name, password) {
+      assertIdent(name);
+      if (!PASSWORD_RE.test(password)) throw new SystemError("postgres: password must be hex");
+      await script(`create ${name}`, createSql(name, password), password);
+    },
+    async dropRoleAndDatabase(name) {
+      assertIdent(name);
+      await script(`drop ${name}`, dropSql(name));
     },
   };
 }

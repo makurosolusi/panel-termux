@@ -115,7 +115,7 @@ describe("GET /health", () => {
     const h = await json<DevHealth>(await call("GET", "/health", root));
     expect(h).toEqual({
       version: expect.any(String),
-      schemaVersion: expect.stringContaining("dev"),
+      schemaVersion: expect.stringMatching(/^\d{4}_/),
       startedAt: expect.any(String),
       uptimeSec: expect.any(Number),
       memory: { rssMb: expect.any(Number), heapUsedMb: expect.any(Number) },

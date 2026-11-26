@@ -23,19 +23,25 @@ function logStream(raw: string | undefined): LogStream {
   throw new ApiError(400, "invalid_stream", 'stream must be "out" or "err"');
 }
 
+type ErrorCtx = { error: unknown; code: unknown; status: (code: number, body: unknown) => unknown };
+
+/** onError shared by the /panel route groups: ApiError → its status, SystemError → 502, else logged 500. */
+export function panelOnError({ error, code, status }: ErrorCtx) {
+  if (error instanceof ApiError) return status(error.status, { error: error.code, message: error.message });
+  if (error instanceof SystemError) {
+    log.error(`[panel] system command failed: ${error.message}`);
+    return status(HTTP_BAD_GATEWAY, { error: "system_error", message: error.message });
+  }
+  if (code === "PARSE") return status(400, { error: "invalid_body", message: "request body must be JSON" });
+  if (code === "NOT_FOUND") return;
+  log.error(`[panel] request failed: ${error instanceof Error ? error.message : String(code)}`);
+}
+
 /** admin monitoring + control API under /panel (services, apps, domains, databases, overview). */
 export function createPanelRoutes(auth: Auth, deps: PanelDeps) {
   const panel = createPanelService(deps);
   return roleGuard(auth, "/panel", "admin")
-    .onError(({ error, code, status }) => {
-      if (error instanceof ApiError) return status(error.status, { error: error.code, message: error.message });
-      if (error instanceof SystemError) {
-        log.error(`[panel] system command failed: ${error.message}`);
-        return status(HTTP_BAD_GATEWAY, { error: "system_error", message: error.message });
-      }
-      if (code === "NOT_FOUND") return;
-      log.error(`[panel] request failed: ${error instanceof Error ? error.message : String(code)}`);
-    })
+    .onError(panelOnError as never)
     .get("/ping", () => ({ ok: true }))
     .get("/overview", () => panel.overview())
     .get("/services", () => panel.services())

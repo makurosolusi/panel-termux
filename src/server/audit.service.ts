@@ -14,8 +14,16 @@ export type AuditAction =
   | "invite.create"
   | "invite.delete"
   | "settings.update"
+  | "dns.create"
+  | "dns.delete"
   | `service.${ControlAction}`
-  | `app.${ControlAction}`;
+  | `app.${ControlAction}`
+  | "site.create"
+  | "site.delete"
+  | "site.adopt"
+  | "site.env_update"
+  | "hostname.add"
+  | "hostname.remove";
 
 /** One audit event. `meta` must never carry secrets or setting values. */
 export type AuditEvent = {

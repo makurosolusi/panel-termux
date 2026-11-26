@@ -11,7 +11,13 @@ const ENV_SHEBANG = /^#!\s*\/usr\/bin\/env\s+(?:-S\s+)?(\S+)(.*)$/;
 export type ExecResult = { code: number; stdout: string; stderr: string };
 
 /** Options for runTermux. */
-export type ExecOptions = { timeoutMs?: number; env?: Record<string, string | undefined>; cwd?: string };
+/** `input` is written to the child's stdin (e.g. a psql script holding a password, kept off argv). */
+export type ExecOptions = {
+  timeoutMs?: number;
+  env?: Record<string, string | undefined>;
+  cwd?: string;
+  input?: string;
+};
 
 /** Thrown when a command cannot be spawned or times out; message names the command. */
 export class TermuxExecError extends Error {}
@@ -58,12 +64,12 @@ export async function runTermux(
   } catch (e) {
     throw new TermuxExecError(`exec ${tool} failed: ${(e as Error).message}`, { cause: e });
   }
-  let proc: Bun.Subprocess<"ignore", "pipe", "pipe">;
+  let proc: Bun.Subprocess<"pipe" | "ignore", "pipe", "pipe">;
   try {
     proc = Bun.spawn(argv, {
       env: opts.env ?? process.env,
       cwd: opts.cwd,
-      stdin: "ignore",
+      stdin: opts.input === undefined ? "ignore" : "pipe",
       stdout: "pipe",
       stderr: "pipe",
       timeout: timeoutMs,
@@ -71,6 +77,10 @@ export async function runTermux(
     });
   } catch (e) {
     throw new TermuxExecError(`exec ${tool} failed to spawn: ${(e as Error).message}`, { cause: e });
+  }
+  if (opts.input !== undefined && proc.stdin) {
+    proc.stdin.write(opts.input);
+    proc.stdin.end();
   }
   const [stdout, stderr, code] = await Promise.all([
     new Response(proc.stdout).text(),

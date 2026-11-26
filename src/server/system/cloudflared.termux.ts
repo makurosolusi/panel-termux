@@ -1,6 +1,7 @@
 import { readFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import { join } from "node:path";
+import { runTermux } from "../exec/termux.exec";
 import { log } from "../log.service";
 import { type CloudflaredAdapter, type IngressRule, type ProbeResult, SystemError } from "./system.types";
 
@@ -51,11 +52,16 @@ export async function probeHttps(hostname: string, timeoutMs = PROBE_TIMEOUT_MS)
   }
 }
 
+/** `ingress validate` only parses config + rules; a few seconds is plenty even on a slow phone. */
+const VALIDATE_TIMEOUT_MS = 20_000;
+const VALIDATE_MSG_MAX = 300;
+
 /** Real cloudflared adapter reading `~/.cloudflared/config.yml` (missing file = no domains). */
 export function createTermuxCloudflared(
   configPath = join(process.env.HOME || homedir(), ".cloudflared", "config.yml"),
 ): CloudflaredAdapter {
   return {
+    configPath,
     async listIngress() {
       let text: string;
       try {
@@ -67,5 +73,11 @@ export function createTermuxCloudflared(
       return parseIngress(text);
     },
     probe: (hostname) => probeHttps(hostname),
+    async validate(path) {
+      const r = await runTermux("cloudflared", ["tunnel", "--config", path, "ingress", "validate"], {
+        timeoutMs: VALIDATE_TIMEOUT_MS,
+      });
+      return { ok: r.code === 0, message: (r.stdout + r.stderr).trim().slice(0, VALIDATE_MSG_MAX) };
+    },
   };
 }

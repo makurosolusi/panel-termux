@@ -127,5 +127,10 @@ export function createTermuxPm2(pm2Home = process.env.PM2_HOME || join(homedir()
       const path = (stream === "out" ? p.outLog : p.errLog) ?? fallback;
       return (await tailFile(path, lines)) ?? [];
     },
+    async remove(name: string) {
+      if (!(await find(name))) return false;
+      await pm2(["delete", name]);
+      return true;
+    },
   };
 }
