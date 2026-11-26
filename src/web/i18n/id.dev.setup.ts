@@ -5,15 +5,18 @@ type SetupItemCopy = { title: string; body: string; action: string };
 /** Indonesian strings of the onboarding card and banner (`id.dev.setup`, PLAN/05 §5.1, F1). */
 export const idDevSetup = {
   title: "Siapkan Panel Termux",
+  description: "Langkah wajib dan disarankan agar panel aman dan datamu bisa dipulihkan.",
   progress: (n: number, total: number) => `${n} dari ${total} selesai`,
   hide: "Sembunyikan panduan",
   reopen: "Panduan penyiapan",
+  hidden: "Panduan disembunyikan. Buka lagi lewat tombol Panduan penyiapan.",
+  shown: "Panduan penyiapan ditampilkan.",
   levels: { required: "Wajib", recommended: "Disarankan", optional: "Opsional" } satisfies Record<SetupLevel, string>,
   done: "Selesai",
-  markDone: "Sudah",
   markUndone: "Tandai belum",
   manual: "dicentang manual",
-  saveFailed: "Panduan tidak bisa diperbarui. Periksa koneksi internet, lalu coba lagi.",
+  markedDone: "Langkah ditandai selesai.",
+  markedUndone: "Langkah ditandai belum selesai.",
   banner: {
     title: (n: number, total: number) => `Siapkan Panel Termux: ${n} dari ${total} selesai`,
     continue: "Lanjutkan",
