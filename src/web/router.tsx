@@ -1,4 +1,5 @@
 import { createBrowserRouter, Navigate } from "react-router";
+import { BackupsPage } from "@/web/backup/backups.page";
 import { AuditPage } from "@/web/dev/audit.page";
 import { DevLayout } from "@/web/dev/dev.layout";
 import { HealthPage } from "@/web/dev/health.page";
@@ -62,6 +63,7 @@ export const router = createBrowserRouter([
               { path: "apps/:name/log", element: <LogPage kind="apps" /> },
               { path: "domains", Component: DomainsPage },
               { path: "databases", Component: DatabasesPage },
+              { path: "backups", Component: BackupsPage },
             ],
           },
           {

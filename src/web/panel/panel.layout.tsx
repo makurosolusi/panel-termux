@@ -13,6 +13,7 @@ const SECTIONS: readonly SectionTab[] = [
   { to: "/panel/apps", label: t.apps },
   { to: "/panel/domains", label: t.domains },
   { to: "/panel/databases", label: t.databases },
+  { to: "/panel/backups", label: id.backup.section },
 ];
 
 /** /panel shell: title, section tabs, tooltip provider and the toast outlet. */

@@ -19,12 +19,17 @@ export const jobPath = (jobId: string): string => `/panel/jobs/${encodeURICompon
 export const runSiteAction = (mutation: () => Promise<unknown>, success: string): Promise<boolean> =>
   runApiAction(mutation, success, SITE_ERROR_CODES);
 
-/** Starts a job (202 `{ jobId }`); toasts the error and resolves to null on failure. */
-export async function startJob(method: "POST" | "DELETE", url: string, body?: unknown): Promise<string | null> {
+/** Starts a job (202 `{ jobId }`); toasts the error (mapped via `codes`) and resolves to null on failure. */
+export async function startJob(
+  method: "POST" | "DELETE",
+  url: string,
+  body?: unknown,
+  codes: Readonly<Record<string, string>> = SITE_ERROR_CODES,
+): Promise<string | null> {
   try {
     return (await apiFetch<JobAccepted>(method, url, body)).jobId;
   } catch (err) {
-    toast.error(apiErrorMessage(err, SITE_ERROR_CODES));
+    toast.error(apiErrorMessage(err, codes));
     return null;
   }
 }

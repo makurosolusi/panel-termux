@@ -1,5 +1,7 @@
 import type { Role } from "@/shared/roles";
+import { idBackup } from "./id.backup";
 import { idCommon } from "./id.common";
+import { idDeploy } from "./id.deploy";
 import { idDev } from "./id.dev";
 import { idPanel } from "./id.panel";
 import { idSite } from "./id.site";
@@ -31,5 +33,7 @@ export const id = {
   common: idCommon,
   panel: idPanel,
   site: idSite,
+  deploy: idDeploy,
+  backup: idBackup,
   dev: idDev,
 } as const;

@@ -25,7 +25,7 @@ function JobView({ job }: { job: Job }) {
       <CardContent className="flex flex-col gap-4 px-4">
         <div className="flex flex-wrap items-center gap-2">
           <span className="mr-auto font-mono text-sm">
-            {job.kind} · {job.target}
+            {t.kinds[job.kind] ?? job.kind} · {job.target}
           </span>
           <StatusBadge tone={jobTone(job)} label={t.statuses[job.status]} />
         </div>

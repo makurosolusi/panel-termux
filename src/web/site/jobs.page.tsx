@@ -36,7 +36,7 @@ export function JobsPage() {
                   >
                     <span className="mr-auto flex min-w-0 flex-col">
                       <span className="truncate font-mono text-sm">
-                        {j.kind} · {j.target}
+                        {t.job.kinds[j.kind] ?? j.kind} · {j.target}
                       </span>
                       <span className="text-xs text-muted-foreground">{formatDateTime(j.startedAt)}</span>
                     </span>

@@ -1,3 +1,5 @@
+import type { JobKind } from "@/shared/site.types";
+
 /** Indonesian strings of the /panel Site pages: list, wizard, detail and job progress (merged into `id.site`). */
 export const idSite = {
   section: "Site",
@@ -152,6 +154,14 @@ export const idSite = {
     startedAt: (at: string) => `Mulai ${at}`,
     finishedAt: (at: string) => `Selesai ${at}`,
     progress: (pct: number) => `${pct}%`,
+    kinds: {
+      "site.create": "Buat site",
+      "site.delete": "Hapus site",
+      "hostname.add": "Tambah domain",
+      "hostname.remove": "Hapus domain",
+      "site.deploy": "Deploy",
+      "site.rollback": "Rollback",
+    } satisfies Record<JobKind, string>,
     stepStatuses: {
       pending: "Menunggu",
       running: "Berjalan",

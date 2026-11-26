@@ -3,6 +3,8 @@ import type { ReactNode } from "react";
 import { Link, useParams } from "react-router";
 import type { SiteDetail } from "@/shared/site.types";
 import { Card, CardContent, CardHeader, CardTitle } from "@/web/components/ui/card";
+import { DeployCard } from "@/web/deploy/deploy.card";
+import { DeployHistory } from "@/web/deploy/deploy.history";
 import { id } from "@/web/i18n/id";
 import { formatDateTime } from "@/web/shared/format";
 import { QueryView } from "@/web/shared/query.state";
@@ -48,7 +50,7 @@ function SiteInfo({ site }: { site: SiteDetail }) {
   );
 }
 
-/** /panel/sites/:name: info, hostnames, write-only env editor and delete. */
+/** /panel/sites/:name: info, hostnames, deploy + history (managed and adopted), write-only env editor and delete. */
 export function SiteDetailPage() {
   const { name = "" } = useParams();
   const query = useApiQuery<SiteDetail>(siteUrl(name));
@@ -67,6 +69,13 @@ export function SiteDetailPage() {
             </Section>
             <Section title={t.hostnames}>
               <SiteHostnames site={site} />
+            </Section>
+            <Section title={id.deploy.title}>
+              {!site.managed && <p className="text-sm text-muted-foreground">{id.deploy.adoptedNote}</p>}
+              <DeployCard site={site.name} />
+            </Section>
+            <Section title={id.deploy.history.title}>
+              <DeployHistory site={site.name} />
             </Section>
             <Section title={id.site.envEditor.title}>
               <SiteEnvEditor site={site} onSaved={query.reload} />
