@@ -377,20 +377,3 @@ describe("computeProblems", () => {
     ]);
   });
 });
-
-describe("transitional", () => {
-  test("0.2.x call shape still answers for the old panel.service (transitional)", () => {
-    const list = computeProblems({
-      services: [svc("s", { state: "down" })],
-      apps: [app("b", { status: "stopped" })],
-      domains: [],
-      device: device(),
-      backup: { configured: true, running: false, lastRun: run("succeeded") },
-      now: new Date(NOW),
-    });
-    expect(list).toEqual([
-      { kind: "service", target: "s", severity: "danger" },
-      { kind: "app", target: "b", severity: "warning" },
-    ]);
-  });
-});

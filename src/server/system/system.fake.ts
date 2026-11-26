@@ -154,7 +154,14 @@ export function createFakeSystem({
     postgres: createFakePostgres(),
     device: {
       read: async () => ({
-        battery: { percent: 76, charging: true, temperatureC: 31.5 },
+        battery: {
+          percent: 81,
+          charging: false,
+          status: "discharging",
+          plugged: "unplugged",
+          temperatureC: 31.5,
+          health: "GOOD",
+        },
         cpuCores: 8,
         memory: { totalMb: 11_776, availableMb: 3_788 },
         disk: { freeBytes: 182 * GB, totalBytes: 249 * GB },

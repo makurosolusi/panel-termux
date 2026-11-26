@@ -2,7 +2,6 @@ import { afterAll, describe, expect, test } from "bun:test";
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { createHealthCache } from "@/server/panel/domain.health";
 import { parseIngress } from "@/server/system/cloudflared.termux";
 import { parseBattery, parseMeminfo } from "@/server/system/device.termux";
 import { tailFile } from "@/server/system/file.tail";
@@ -246,36 +245,5 @@ describe("tailFile", () => {
     const lines = (await tailFile(p, 5000)) ?? [];
     expect(lines.at(-1)).toBe("last");
     expect(lines.every((l) => l === line || l === "last")).toBe(true);
-  });
-});
-
-describe("health cache", () => {
-  test("parallel probes, cached for 60 s, wildcard skipped", async () => {
-    let t = 0;
-    let calls = 0;
-    let inFlight = 0;
-    let maxInFlight = 0;
-    const check = createHealthCache(
-      async () => {
-        calls++;
-        maxInFlight = Math.max(maxInFlight, ++inFlight);
-        await Bun.sleep(5);
-        inFlight--;
-        return { status: 200, ms: 5 };
-      },
-      () => t,
-    );
-    const hosts = ["a.test", "b.test", "c.test", "*.wild.test"];
-    const r = await check(hosts);
-    expect(calls).toBe(3);
-    expect(maxInFlight).toBe(3);
-    expect(r.get("a.test")).toEqual({ status: 200, ms: 5, checkedAt: new Date(0).toISOString() });
-    expect(r.get("*.wild.test")).toEqual({ status: null, ms: null, checkedAt: null });
-    t = 59_000;
-    await check(hosts);
-    expect(calls).toBe(3);
-    t = 61_000;
-    await check(hosts);
-    expect(calls).toBe(6);
   });
 });

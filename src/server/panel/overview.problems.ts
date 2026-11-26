@@ -9,7 +9,7 @@ import type {
   ProblemParams,
   ProblemSeverity,
 } from "../../shared/monitor.types";
-import type { App, DeviceInfo, Domain, DomainHealth, Service } from "../../shared/panel.types";
+import type { DeviceInfo, DomainHealth } from "../../shared/panel.types";
 import type { SecurityStatus } from "../../shared/security.types";
 import type { MonitorSnapshot, MonitorState, ProblemResult, SnapshotSection } from "../monitor/monitor.contract";
 
@@ -232,14 +232,7 @@ export function computeProblems(
   state: MonitorState,
   ctx: ProblemContext,
   now: number,
-): ProblemResult;
-/** @deprecated 0.2.x overview call, see legacyProblems. */
-export function computeProblems(input: LegacyProblemInput): LegacyProblem[];
-export function computeProblems(
-  ...args: [MonitorSnapshot, MonitorState, ProblemContext, number] | [LegacyProblemInput]
-): ProblemResult | LegacyProblem[] {
-  if (args.length === 1) return legacyProblems(args[0]);
-  const [snap, state, ctx, now] = args;
+): ProblemResult {
   const out: Problem[] = [];
   const unknownKinds = new Set<ProblemKind>();
   const unknown = (...kinds: ProblemKind[]) => {
@@ -364,40 +357,4 @@ function suppress(list: Problem[], appOfDomain: Map<string, string | null>): Omi
       a.target.localeCompare(b.target),
   );
   return { problems, suppressed };
-}
-
-// TRANSITIONAL(wkr-mon-api-03, W3): the 0.2.x panel.service still calls computeProblems(input) and
-// tests/panel.api.test.ts asserts its 0.2.x results. Delete this block when panel.service reads monitor.problems().
-/** 0.2.x input of computeProblems. */
-export type LegacyProblemInput = {
-  services: Service[];
-  apps: App[];
-  domains: Domain[];
-  device: DeviceInfo;
-  backup: Pick<BackupStatus, "configured" | "running" | "lastRun">;
-  now: Date;
-};
-/** 0.2.x problem shape (panel.types Problem without the optional fields). */
-export type LegacyProblem = Pick<Problem, "kind" | "target" | "severity">;
-
-function legacyProblems({ services, apps, domains, device, backup, now }: LegacyProblemInput): LegacyProblem[] {
-  const out: LegacyProblem[] = [];
-  const add = (kind: ProblemKind, target: string, bad: boolean) =>
-    out.push({ kind, target, severity: bad ? "danger" : "warning" });
-  for (const s of services) if (s.wantUp && s.state !== "run") add("service", s.name, true);
-  for (const a of apps) if (a.status !== "online") add("app", a.name, a.status === "errored");
-  for (const { hostname, health: h } of domains)
-    if (h.checkedAt !== null && (h.status === null || h.status >= 400))
-      add("domain", hostname, isProbeFailure(h.status));
-  const run = backup.running ? undefined : backup.lastRun;
-  if (!backup.configured || run?.status === "partial") add("backup", "backup", false);
-  else if (run?.status === "failed") add("backup", "backup", true);
-  else if (run === null || (run && now.getTime() - Date.parse(run.startedAt) > BACKUP_STALE_MS))
-    add("backup", "backup", false);
-  const r = device.disk.totalBytes > 0 ? device.disk.freeBytes / device.disk.totalBytes : 1;
-  if (r < DISK_WARN_RATIO) add("disk", "disk", r < DISK_DANGER_RATIO);
-  const b = device.battery;
-  if (b && b.percent < 20 && !b.charging) add("battery", "battery", false);
-  if (b && b.temperatureC >= BATTERY_HOT_C) add("battery", "battery", false);
-  return out.sort((x, y) => severityRank(y.severity) - severityRank(x.severity));
 }
