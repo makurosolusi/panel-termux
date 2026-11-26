@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.2.2] - 2026-11-26
+
+### Security
+
+- Permintaan yang mengubah data (menjalankan/menghentikan layanan, membuat/menghapus site, deploy, mengubah pengguna dan pengaturan, dll.) kini hanya diterima dari halaman panel sendiri. Halaman lain, termasuk site yang di-host di subdomain yang sama, tidak bisa lagi memicu aksi atas nama kamu saat kamu sedang login.
+
 ## [0.2.1] - 2026-11-26
 
 ### Fixed
