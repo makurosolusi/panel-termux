@@ -81,6 +81,8 @@ export function siteHarness(opts: { healthTimeoutMs?: number } = {}) {
       new Request(`${BASE}/api/${area}${path}`, {
         method,
         headers: {
+          origin: BASE,
+          "x-requested-with": "XMLHttpRequest",
           ...(cookie ? { cookie } : {}),
           ...(body !== undefined ? { "content-type": "application/json" } : {}),
         },
@@ -92,7 +94,12 @@ export function siteHarness(opts: { healthTimeoutMs?: number } = {}) {
     api.handle(
       new Request(`${BASE}/api/panel${path}`, {
         method,
-        headers: { ...(cookie ? { cookie } : {}), "content-type": "application/octet-stream" },
+        headers: {
+          origin: BASE,
+          "x-requested-with": "XMLHttpRequest",
+          ...(cookie ? { cookie } : {}),
+          "content-type": "application/octet-stream",
+        },
         body,
       }),
     );

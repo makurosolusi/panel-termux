@@ -57,7 +57,12 @@ async function cookieFor(auth: ReturnType<typeof createAuth>, email: string, rol
 }
 
 async function call(method: string, path: string, cookie = admin): Promise<Response> {
-  const res = await api.handle(new Request(`${BASE}/api/panel/backups${path}`, { method, headers: { cookie } }));
+  const res = await api.handle(
+    new Request(`${BASE}/api/panel/backups${path}`, {
+      method,
+      headers: { origin: BASE, "x-requested-with": "XMLHttpRequest", cookie },
+    }),
+  );
   texts.push(`${res.headers.get("location") ?? ""} ${await res.clone().text()}`);
   return res;
 }

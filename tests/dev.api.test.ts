@@ -58,7 +58,12 @@ const call = (method: string, path: string, cookie?: string, body?: unknown) =>
   api.handle(
     new Request(`${BASE}/api/dev${path}`, {
       method,
-      headers: { ...(cookie ? { cookie } : {}), ...(body !== undefined ? { "content-type": "application/json" } : {}) },
+      headers: {
+        origin: BASE,
+        "x-requested-with": "XMLHttpRequest",
+        ...(cookie ? { cookie } : {}),
+        ...(body !== undefined ? { "content-type": "application/json" } : {}),
+      },
       body: body !== undefined ? JSON.stringify(body) : undefined,
     }),
   );
