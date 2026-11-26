@@ -1,0 +1,58 @@
+/** Indonesian strings of the app shell, shared components and route pages (merged into `id.shell`). */
+export const idShell = {
+  skipToContent: "Lewati ke konten",
+  groups: { server: "Server", admin: "Administrasi", account: "Akun" },
+  nav: {
+    overview: "Ringkasan",
+    sites: "Situs",
+    jobs: "Riwayat perubahan",
+    services: "Layanan",
+    apps: "Aplikasi",
+    domains: "Domain",
+    databases: "Database",
+    backups: "Cadangan",
+    health: "Kesehatan sistem",
+    users: "Pengguna",
+    audit: "Audit",
+    logs: "Log",
+    settings: "Pengaturan",
+    profile: "Profil",
+  },
+  /** Labels for trailing path segments in breadcrumbs (others show the raw, decoded segment). */
+  segments: { new: "Baru", log: "Log" } as Record<string, string>,
+  sidebar: {
+    label: "Navigasi utama",
+    collapse: "Ciutkan sidebar",
+    expand: "Lebarkan sidebar",
+    openMenu: "Buka menu",
+    menuTitle: "Menu",
+  },
+  breadcrumb: "Breadcrumb",
+  theme: { label: "Tema", system: "Sistem", light: "Terang", dark: "Gelap" },
+  account: "Menu akun",
+  time: {
+    justNow: "baru saja",
+    ago: (s: string) => `${s} lalu`,
+    yesterday: "kemarin",
+    refresh: "Muat ulang",
+    live: "Pembaruan otomatis aktif",
+  },
+  copy: { copy: "Salin", copied: "Tersalin", failed: "Tidak bisa menyalin. Salin manual dari teks di atas." },
+  table: {
+    loading: "Memuat data…",
+    page: (p: number, n: number) => `Halaman ${p} dari ${n}`,
+    prev: "Sebelumnya",
+    next: "Berikutnya",
+  },
+  notFound: {
+    title: "Halaman tidak ditemukan",
+    body: "Alamat ini tidak ada atau sudah dipindahkan. Periksa lagi URL-nya atau kembali ke beranda.",
+    home: "Kembali ke beranda",
+  },
+  routeError: {
+    title: "Halaman ini gagal dimuat",
+    body: "Terjadi kesalahan saat menampilkan halaman. Coba muat ulang; kalau berulang, laporkan ke admin.",
+    retry: "Muat ulang",
+    back: "Kembali",
+  },
+} as const;
