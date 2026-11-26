@@ -1,11 +1,23 @@
-/** Error a handler/service throws to send `{ error: code, message }` with `status` (mapped in dev.routes onError). */
+/** Canonical HTTP statuses an ApiError may carry (one list for every route group). */
+export type ApiErrorStatus = 400 | 401 | 403 | 404 | 409 | 410 | 421 | 429 | 502 | 503 | 507;
+
+/**
+ * Error a handler/service throws to send `{ error: code, message, ...extra }` with `status` (mapped in the route
+ * groups' onError). `extra` carries machine-readable detail such as `{ index }` or `{ fields }`; never secrets.
+ */
 export class ApiError extends Error {
   constructor(
-    readonly status: 400 | 401 | 404 | 409,
+    readonly status: ApiErrorStatus,
     readonly code: string,
     message: string,
+    readonly extra?: Record<string, unknown>,
   ) {
     super(message);
+  }
+
+  /** Response body; `extra` cannot override `error`/`message`. */
+  get body(): Record<string, unknown> & { error: string; message: string } {
+    return { ...this.extra, error: this.code, message: this.message };
   }
 }
 
