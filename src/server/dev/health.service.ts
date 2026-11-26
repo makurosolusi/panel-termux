@@ -1,9 +1,11 @@
 import { statfsSync } from "node:fs";
+import { availableParallelism } from "node:os";
 import { count, eq, gt } from "drizzle-orm";
 import pkg from "../../../package.json" with { type: "json" };
 import type { DevHealth } from "../../shared/dev.types";
 import type { Db } from "../db/client";
 import { appMeta, session, user } from "../db/schema";
+import { requestStats } from "../http/request.log";
 
 const MB = 1024 * 1024;
 /** Process start time (ms since epoch), fixed at module load. */
@@ -28,7 +30,9 @@ export function getHealth(db: Db, dataDir: string): DevHealth {
     memory: { rssMb: round1(mem.rss / MB), heapUsedMb: round1(mem.heapUsed / MB) },
     db: { sizeBytes: dbSize?.n ?? 0 },
     dataDir: { freeBytes: fs.bavail * fs.bsize, totalBytes: fs.blocks * fs.bsize },
-    runtime: { bun: Bun.version, platform: process.platform, arch: process.arch },
+    runtime: { bun: Bun.version, node: process.versions.node, platform: process.platform, arch: process.arch },
+    cpuCores: availableParallelism(),
+    ...requestStats(),
     counts: {
       users: db.select({ n: count() }).from(user).get()?.n ?? 0,
       sessions: db.select({ n: count() }).from(session).where(gt(session.expiresAt, new Date())).get()?.n ?? 0,

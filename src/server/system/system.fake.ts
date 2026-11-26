@@ -208,6 +208,7 @@ export function createFakeSystem({
     device: {
       read: async () => ({
         battery: { percent: 76, charging: true, temperatureC: 31.5 },
+        cpuCores: 8,
         memory: { totalMb: 11_776, availableMb: 3_788 },
         disk: { freeBytes: 182 * GB, totalBytes: 249 * GB },
         load: [1.2, 0.9, 0.7],

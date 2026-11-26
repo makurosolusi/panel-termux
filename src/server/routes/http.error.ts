@@ -1,7 +1,7 @@
 /** Error a handler/service throws to send `{ error: code, message }` with `status` (mapped in dev.routes onError). */
 export class ApiError extends Error {
   constructor(
-    readonly status: 400 | 404 | 409,
+    readonly status: 400 | 401 | 404 | 409,
     readonly code: string,
     message: string,
   ) {

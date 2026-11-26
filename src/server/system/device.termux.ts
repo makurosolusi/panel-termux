@@ -1,6 +1,6 @@
 import { statfsSync } from "node:fs";
 import { readFile } from "node:fs/promises";
-import { homedir, loadavg, uptime } from "node:os";
+import { availableParallelism, homedir, loadavg, uptime } from "node:os";
 import type { Battery } from "../../shared/panel.types";
 import { runTermux } from "../exec/termux.exec";
 import { log } from "../log.service";
@@ -71,6 +71,7 @@ export function createTermuxDevice(diskPath = process.env.HOME || homedir()): De
       const [l1 = 0, l5 = 0, l15 = 0] = loadavg();
       return {
         battery: await battery.value,
+        cpuCores: availableParallelism(),
         memory: parseMeminfo(memText),
         disk: { freeBytes: fs.bavail * fs.bsize, totalBytes: fs.blocks * fs.bsize },
         load: [l1, l5, l15].map((n) => Math.round(n * 100) / 100) as [number, number, number],

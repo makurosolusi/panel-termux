@@ -27,7 +27,8 @@ export type AuditAction =
   | "backup.run"
   | "backup.download"
   | "site.deploy"
-  | "site.rollback";
+  | "site.rollback"
+  | "session.revoke";
 
 /** One audit event. `meta` must never carry secrets or setting values. */
 export type AuditEvent = {

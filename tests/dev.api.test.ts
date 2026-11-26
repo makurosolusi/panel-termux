@@ -126,7 +126,10 @@ describe("GET /health", () => {
       memory: { rssMb: expect.any(Number), heapUsedMb: expect.any(Number) },
       db: { sizeBytes: expect.any(Number) },
       dataDir: { freeBytes: expect.any(Number), totalBytes: expect.any(Number) },
-      runtime: { bun: Bun.version, platform: process.platform, arch: process.arch },
+      runtime: { bun: Bun.version, node: process.versions.node, platform: process.platform, arch: process.arch },
+      cpuCores: expect.any(Number),
+      requestsPerMinute: expect.any(Number),
+      errorCount5m: expect.any(Number),
       counts: { users: 3, sessions: 3 },
     });
     expect(h.db.sizeBytes).toBeGreaterThan(0);

@@ -1,5 +1,6 @@
 import { Elysia } from "elysia";
 import pkg from "../../package.json" with { type: "json" };
+import { DEPLOY_CHUNK_SIZE } from "../shared/deploy.types";
 import spa from "../web/index.html";
 import { syncSuperAdminsOnBoot } from "./auth/access.service";
 import { createAuth } from "./auth/auth.service";
@@ -7,20 +8,26 @@ import { backupServiceFor } from "./backup/backup.service";
 import { openDb } from "./db/client";
 import { runMigrations } from "./db/migrate";
 import { loadEnvOrExit } from "./env";
+import { createApiHandler } from "./http/api.handler";
+import { applySecurityHeaders, pageCsp } from "./http/security.headers";
 import { log } from "./log.service";
 import { createApiRoutes } from "./routes/api.routes";
 import { loadOrCreateSecret } from "./secret";
+import { createShutdown } from "./shutdown";
 import { selectSystem } from "./system/system.select";
 
 /** Loopback only: the panel is reached through the Cloudflare tunnel, never exposed on the LAN. */
 const LISTEN_HOST = "127.0.0.1";
+/** Hard cap on any request body (one deploy chunk + headroom); JSON routes are capped lower in api.handler. */
+const MAX_BODY_BYTES = DEPLOY_CHUNK_SIZE + 1024 * 1024;
+const HTTP_NOT_MODIFIED = 304;
 
 /** Dependency-free API part (health); tests call `app.handle(new Request(...))` without starting a server. */
 export const app = new Elysia({ prefix: "/api" }).get("/health", () => ({ ok: true, version: pkg.version }));
 
 /**
  * Boots the panel: env → data dir + secret → DB migrations → auth → HTTP server (API + embedded SPA)
- * → daily backup scheduler (its timer dies with the process; no explicit stop needed under runit).
+ * → daily backup scheduler. SIGTERM (runit `sv down`) / SIGINT shut down gracefully (see shutdown.ts).
  */
 export function start() {
   const env = loadEnvOrExit();
@@ -30,18 +37,23 @@ export function start() {
   syncSuperAdminsOnBoot(db, env.SUPER_ADMIN_EMAILS);
   // One adapter set shared by the API and the backup scheduler (same backup service instance per DB).
   const system = selectSystem();
-  const api = new Elysia()
-    .use(app)
-    .use(
-      createApiRoutes(
-        createAuth({ db, env, secret }),
-        { db, secret, superAdmins: env.SUPER_ADMIN_EMAILS, dataDir: env.PANEL_DATA_DIR },
-        system,
-      ),
-    );
-  backupServiceFor({ db, secret, dataDir: env.PANEL_DATA_DIR, system }).startScheduler();
+  const routes = createApiRoutes(
+    createAuth({ db, env, secret }),
+    { db, secret, superAdmins: env.SUPER_ADMIN_EMAILS, dataDir: env.PANEL_DATA_DIR },
+    system,
+  );
+  const api = new Elysia().use(app).use(routes);
+  const backup = backupServiceFor({ db, secret, dataDir: env.PANEL_DATA_DIR, system });
+  const stopScheduler = backup.startScheduler();
 
   const server = servePanel(api, env.APP_BASE_URL, env.PORT);
+  const shutdown = createShutdown({
+    server,
+    stopScheduler,
+    idle: [() => routes.decorator.siteJobs.idle(), () => backup.idle()],
+    closeDb: () => db.$client.close(),
+  });
+  for (const sig of ["SIGTERM", "SIGINT"] as const) process.on(sig, () => void shutdown(sig));
   log.info(
     `[panel] v${pkg.version} schema=${schemaVersion} open ${env.APP_BASE_URL} (listening on ${LISTEN_HOST}:${server.port})`,
   );
@@ -65,10 +77,20 @@ export function canonicalRedirect(req: Request, appBaseUrl: string): Response | 
   return Response.redirect(`${base.origin}${url.pathname}${url.search}`, 302);
 }
 
+/** Page CSP per served HTML (the bundle's HTML is fixed per process, so this hashes once). */
+function pageCspCache(development: boolean) {
+  let last: { html: string; csp: string } | null = null;
+  return (html: string) => {
+    if (last?.html !== html) last = { html, csp: pageCsp(html, development) };
+    return last.csp;
+  };
+}
+
 /**
- * HTTP server on loopback: /api/* → `api` (never redirected: install script and probes curl
- * 127.0.0.1), everything else → embedded SPA behind canonicalRedirect. Bundle assets keep their own
- * exact routes, so only HTML navigations pass through the check. `development` = Bun dev bundling/HMR
+ * HTTP server on loopback: /api/* → `api` through createApiHandler (limits, error bodies, headers, log;
+ * never redirected: install script and probes curl 127.0.0.1), everything else → embedded SPA behind
+ * canonicalRedirect with security headers. Bundle assets keep their own exact routes, so only HTML
+ * navigations pass through the check (and get the CSP). `development` = Bun dev bundling/HMR
  * (note: Bun's dev server answers 403 to non-loopback Host headers, so the tunnel needs production).
  */
 export function servePanel(
@@ -77,21 +99,31 @@ export function servePanel(
   port: number,
   development = process.env.NODE_ENV !== "production",
 ) {
+  const https = new URL(appBaseUrl).protocol === "https:";
+  const handleApi = createApiHandler(api, { https });
+  const cspFor = pageCspCache(development);
   const server: Bun.Server<undefined> = Bun.serve({
     hostname: LISTEN_HOST,
     port,
     development,
+    maxRequestBodySize: MAX_BODY_BYTES,
     routes: {
-      "/api/*": (req) => api.handle(req),
+      "/api/*": (req, srv) => handleApi(req, srv),
       [SPA_PATH]: spa,
       // Bun routes cannot return an HTMLBundle from a handler, so matching requests fetch it over loopback.
       // accept-encoding dropped: fetch() decodes bodies, a forwarded content-encoding would then lie.
-      "/*": (req): Response | Promise<Response> => {
+      "/*": async (req): Promise<Response> => {
         const redirect = canonicalRedirect(req, appBaseUrl);
         if (redirect) return redirect;
         const headers = new Headers(req.headers);
         headers.delete("accept-encoding");
-        return fetch(new URL(SPA_PATH, server.url), { method: req.method, headers });
+        // Always GET: the CSP hashes the inline scripts of the real body, also for HEAD.
+        const page = await fetch(new URL(SPA_PATH, server.url), { headers });
+        const html = await page.text();
+        const out = applySecurityHeaders(new Headers(page.headers), cspFor(html), https);
+        out.delete("content-length");
+        const noBody = req.method === "HEAD" || page.status === HTTP_NOT_MODIFIED;
+        return new Response(noBody ? null : html, { status: page.status, headers: out });
       },
     },
   });

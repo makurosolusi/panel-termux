@@ -108,6 +108,21 @@ describe("monitoring", () => {
     expect(o.domains.length).toBeGreaterThan(0);
   });
 
+  test("overview: cpuCores, problems from fake adapters, backup/sites summary, activity, generatedAt", async () => {
+    const o = await json<PanelOverview>(await call("GET", "/overview"));
+    expect(o.device.cpuCores).toBe(8);
+    const keys = o.problems.map((p) => `${p.kind}:${p.target}:${p.severity}`);
+    expect(keys).toContain("app:demo-api:warning"); // stopped demo app
+    expect(keys).toContain("domain:old.example.test:danger"); // fake probe answers 502
+    expect(keys).toContain("backup:backup:warning"); // S3 not configured
+    expect(keys.some((k) => k.startsWith("service:crond"))).toBe(false); // crond is intentionally down
+    expect(o.backup).toEqual({ configured: false, lastRunAt: null, lastStatus: null, nextRunAt: null });
+    expect(o.sites).toEqual({ total: 0, deployed: 0 });
+    expect(Array.isArray(o.recentActivity)).toBe(true);
+    expect(o.recentActivity.length).toBeLessThanOrEqual(8);
+    expect(Date.parse(o.generatedAt)).toBeLessThanOrEqual(Date.now());
+  });
+
   test("services carry protected flag from settings", async () => {
     const s = await json<Service[]>(await call("GET", "/services"));
     const sshd = s.find((x) => x.name === "sshd");

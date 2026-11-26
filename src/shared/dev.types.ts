@@ -8,7 +8,7 @@ export type Page<T> = { items: T[]; total: number; page: number; pageSize: numbe
 /** Error body for 4xx responses, e.g. `{ error: "invalid_email", message: "..." }`. */
 export type ApiErrorBody = { error: string; message?: string };
 
-/** GET /api/dev/health */
+/** GET /api/dev/health. `requestsPerMinute` = API requests in the last 60 s; `errorCount5m` = 5xx in 5 min. */
 export type DevHealth = {
   version: string;
   schemaVersion: string;
@@ -17,7 +17,10 @@ export type DevHealth = {
   memory: { rssMb: number; heapUsedMb: number };
   db: { sizeBytes: number };
   dataDir: { freeBytes: number; totalBytes: number };
-  runtime: { bun: string; platform: string; arch: string };
+  runtime: { bun: string; node: string; platform: string; arch: string };
+  cpuCores: number;
+  requestsPerMinute: number;
+  errorCount5m: number;
   counts: { users: number; sessions: number };
 };
 
@@ -83,3 +86,12 @@ export type DevSettings = { items: DevSetting[] };
 
 /** Body of PUT /api/dev/settings/:key (null resets to the default). */
 export type DevSettingPut = { value: string | null };
+
+/** Key of one GET /api/dev/setup checklist item. */
+export type SetupItemKey = "cloudflare_token" | "backup" | "apps_json" | "adopt_sites" | "admins";
+
+/** One first-run setup step; `hint` = short English pointer to where it is done. */
+export type SetupItem = { key: SetupItemKey; done: boolean; hint: string };
+
+/** GET /api/dev/setup */
+export type DevSetup = { items: SetupItem[] };

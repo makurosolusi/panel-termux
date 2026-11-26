@@ -5,11 +5,15 @@ import type { Auth } from "./auth.service";
 /** Authenticated user as seen by API handlers. */
 export type SessionUser = { id: string; email: string; name: string; image: string | null; role: Role };
 
+/** Signed-in user id per request headers object, so the request logger can name the user afterwards. */
+export const requestUserIds = new WeakMap<Headers, string>();
+
 /** Reads the Better Auth session from request cookies; null when not signed in. */
 export async function getSessionUser(auth: Auth, headers: Headers): Promise<SessionUser | null> {
   const s = await auth.api.getSession({ headers });
   if (!s) return null;
   const { id, email, name, image, role } = s.user;
+  requestUserIds.set(headers, id);
   return { id, email, name, image: image ?? null, role: isRole(role) ? role : "user" };
 }
 

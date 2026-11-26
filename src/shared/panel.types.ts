@@ -1,4 +1,6 @@
 // Response types of the admin monitoring/control API under /api/panel. Errors are `{ error, message }`.
+import type { BackupRunStatus } from "./backup.types";
+import type { DevAuditEntry } from "./dev.types";
 
 /** Which system adapter backs the panel: real Termux tools, or in-memory demo data (dev/tests). */
 export type PanelMode = "termux" | "fake";
@@ -55,22 +57,45 @@ export type DatabaseInfo = { name: string; owner: string; sizeBytes: number };
 /** Battery reading; null in DeviceInfo when termux-battery-status is unavailable or hangs. */
 export type Battery = { percent: number; charging: boolean; temperatureC: number };
 
-/** Device metrics in GET /overview. `load` = 1/5/15-minute load average. */
+/** Device metrics in GET /overview. `load` = 1/5/15-minute load average; `cpuCores` = logical CPUs. */
 export type DeviceInfo = {
   battery: Battery | null;
+  cpuCores: number;
   memory: { totalMb: number; availableMb: number };
   disk: { freeBytes: number; totalBytes: number };
   load: [number, number, number];
   uptimeSec: number;
 };
 
-/** GET /overview */
+/** What a problem in GET /overview is about. */
+export type ProblemKind = "service" | "app" | "domain" | "backup" | "disk" | "battery";
+
+/** Severity of an overview problem. */
+export type ProblemSeverity = "warning" | "danger";
+
+/** Something an admin should look at; `target` = service/app/hostname name, or the kind for device/backup. */
+export type Problem = { kind: ProblemKind; target: string; severity: ProblemSeverity; message: string };
+
+/** Backup summary in GET /overview. `lastRunAt` = start time of the newest run. */
+export type OverviewBackup = {
+  configured: boolean;
+  lastRunAt: string | null;
+  lastStatus: BackupRunStatus | null;
+  nextRunAt: string | null;
+};
+
+/** GET /overview. `recentActivity` = newest 8 audit entries; `deployed` = sites whose pm2 app exists. */
 export type PanelOverview = {
   mode: PanelMode;
   device: DeviceInfo;
   services: Service[];
   apps: App[];
   domains: Domain[];
+  problems: Problem[];
+  recentActivity: DevAuditEntry[];
+  backup: OverviewBackup;
+  sites: { total: number; deployed: number };
+  generatedAt: string;
 };
 
 /** Log stream of a pm2 app. */

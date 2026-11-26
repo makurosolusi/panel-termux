@@ -7,17 +7,22 @@ import {
   type PanelOverview,
   type Service,
 } from "../../shared/panel.types";
-import { recordAudit } from "../audit.service";
+import { listAudit, recordAudit } from "../audit.service";
+import { backupServiceFor } from "../backup/backup.service";
 import type { Db } from "../db/client";
+import { site } from "../db/schema";
 import { log } from "../log.service";
 import { ApiError } from "../routes/http.error";
 import { getSetting } from "../settings.service";
 import type { RunitService, SystemAdapters } from "../system/system.types";
 import { createActionLocks } from "./action.lock";
 import { createHealthCache } from "./domain.health";
+import { computeProblems } from "./overview.problems";
 
-/** What the panel service needs: DB + data secret (settings, audit) and the system adapters. */
-export type PanelDeps = { db: Db; secret: string; system: SystemAdapters };
+/** What the panel service needs: DB + data secret (settings, audit), data dir (backups) and the system adapters. */
+export type PanelDeps = { db: Db; secret: string; dataDir: string; system: SystemAdapters };
+
+const RECENT_ACTIVITY = 8;
 
 /** Allowed service/app name; checked before a name reaches any argv or path. */
 export const RESOURCE_NAME_RE = /^[a-z0-9][a-z0-9._-]*$/;
@@ -37,7 +42,8 @@ export function assertAction(action: string): ControlAction {
 }
 
 /** Monitoring + control operations behind /api/panel. */
-export function createPanelService({ db, secret, system }: PanelDeps) {
+export function createPanelService({ db, secret, dataDir, system }: PanelDeps) {
+  const backup = backupServiceFor({ db, secret, dataDir, system });
   const withLock = createActionLocks();
   const checkHealth = createHealthCache((h) => system.cloudflared.probe(h));
 
@@ -85,7 +91,26 @@ export function createPanelService({ db, secret, system }: PanelDeps) {
         orEmpty("services", services()),
         orEmpty("domains", domains(apps)),
       ]);
-      return { mode: system.mode, device, services: svc, apps, domains: dom };
+      const now = new Date();
+      const b = backup.status(now);
+      const sites = db.select({ app: site.app }).from(site).all();
+      return {
+        mode: system.mode,
+        device,
+        services: svc,
+        apps,
+        domains: dom,
+        problems: computeProblems({ services: svc, apps, domains: dom, device, backup: b, now }),
+        recentActivity: listAudit(db, { page: 1, pageSize: RECENT_ACTIVITY, offset: 0 }).items,
+        backup: {
+          configured: b.configured,
+          lastRunAt: b.lastRun?.startedAt ?? null,
+          lastStatus: b.lastRun?.status ?? null,
+          nextRunAt: b.nextRunAt,
+        },
+        sites: { total: sites.length, deployed: sites.filter((s) => apps.some((a) => a.name === s.app)).length },
+        generatedAt: now.toISOString(),
+      };
     },
 
     async controlService(actorId: string, name: string, action: ControlAction): Promise<Service> {

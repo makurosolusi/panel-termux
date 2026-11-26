@@ -47,6 +47,9 @@ export function createAuth({ db, env, secret }: AuthDeps) {
         },
       },
     },
+    // cloudflared sets CF-Connecting-IP to the visitor (and the panel only listens on loopback), so session
+    // IPs and Better Auth's own rate limit see the real client instead of 127.0.0.1.
+    advanced: { ipAddress: { ipAddressHeaders: ["cf-connecting-ip", "x-forwarded-for"] } },
     // OAuth callback errors land on the SPA login page as /login?error=<code>.
     onAPIError: { errorURL: `${env.APP_BASE_URL}/login` },
   });

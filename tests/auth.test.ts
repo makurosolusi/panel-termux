@@ -113,7 +113,7 @@ describe("HTTP API", () => {
   test("GET /api/me → 401 without session", async () => {
     const res = await get("/api/me");
     expect(res.status).toBe(401);
-    expect(await res.json()).toEqual({ error: "unauthorized" });
+    expect(await res.json()).toEqual({ error: "unauthorized", message: "sign in required" });
   });
 
   test("GET /api/me → 200 with session", async () => {
@@ -127,6 +127,7 @@ describe("HTTP API", () => {
       image: null,
       role: "user",
       home: "/profile",
+      createdAt: expect.stringMatching(/^\d{4}-\d\d-\d\dT/),
     });
   });
 
