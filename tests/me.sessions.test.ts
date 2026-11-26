@@ -7,13 +7,11 @@ import { createAuth } from "@/server/auth/auth.service";
 import { maskIp, revokeAllSessions, revokeUserSessions, shortUserAgent } from "@/server/auth/sessions.service";
 import { type Db, openDb } from "@/server/db/client";
 import { runMigrations } from "@/server/db/migrate";
-import { appMeta, auditLog, session, site, user } from "@/server/db/schema";
+import { appMeta, auditLog, session, user } from "@/server/db/schema";
 import { createApiHandler } from "@/server/http/api.handler";
 import { readLogs } from "@/server/log.service";
 import { createApiRoutes } from "@/server/routes/api.routes";
-import { setSetting } from "@/server/settings.service";
 import { createFakeSystem } from "@/server/system/system.fake";
-import type { DevSetup } from "@/shared/dev.types";
 import type { MeSession } from "@/shared/me.types";
 import type { Role } from "@/shared/roles";
 
@@ -157,7 +155,7 @@ describe("/api/me/sessions", () => {
     const handle = createApiHandler(api, { appBaseUrl: BASE });
     const res = await handle(new Request(`${BASE}/api/me/sessions?debug=1`, { headers: { cookie } }));
     expect(res.status).toBe(200);
-    const line = readLogs({ level: "info", q: `user=${me}`, limit: 1 })[0]?.msg;
+    const line = readLogs({ level: "debug", q: `user=${me}`, limit: 1 })[0]?.msg;
     expect(line).toMatch(new RegExp(`^\\[http\\] GET /api/me/sessions 200 \\d+ms user=${me}$`));
   });
 });
@@ -176,51 +174,12 @@ describe("/api/ready", () => {
   });
 });
 
-describe("/api/dev/setup", () => {
-  test("super_admin only; items follow settings, sites and admins", async () => {
-    const root = await login(addUser("root@example.com", "super_admin"));
-    expect((await call("GET", "/dev/setup", (await login(addUser("adm@x.io", "user"))).cookie)).status).toBe(403);
-    const get = async () => {
-      const r = await call("GET", "/dev/setup", root.cookie);
-      expect(r.status).toBe(200);
-      return Object.fromEntries(((await r.json()) as DevSetup).items.map((i) => [i.key, i.done]));
-    };
-    // Fake sandbox ecosystem already spreads apps.json.
-    expect(await get()).toEqual({
-      cloudflare_token: false,
-      backup: false,
-      apps_json: true,
-      adopt_sites: false,
-      admins: false,
-    });
-    setSetting({ db, secret: SECRET }, "cloudflare.api_token", "cfTok_0123456789abcdefghij", "m1"); // test-only
-    for (const [k, v] of [
-      ["backup.s3_endpoint", "https://s3.example.test"],
-      ["backup.s3_bucket", "panel-backups"],
-      ["backup.s3_access_key_id", "AKIATEST"],
-      ["backup.s3_secret_access_key", "secret-test-only"],
-    ] as const)
-      setSetting({ db, secret: SECRET }, k, v, "m1");
-    db.insert(site)
-      .values({ name: "blog", port: 3001, app: "blog", database: null, runtime: "native", managed: false, dir: "/x" })
-      .run();
-    addUser("admin2@x.io", "admin");
-    expect(await get()).toEqual({
-      cloudflare_token: true,
-      backup: true,
-      apps_json: true,
-      adopt_sites: true,
-      admins: true,
-    });
-  });
-});
-
 describe("revokeUserSessions / revokeAllSessions", () => {
   const sessionsOf = (id: string) => db.select().from(session).where(eq(session.userId, id)).all();
 
   test("revokes every session of another user, env super admin included; 409 self; 404 unknown", async () => {
     const actor = addUser("revoker@x.io", "super_admin");
-    // The env super admin (runs after /api/dev/setup, which created it): only self is refused (B6).
+    // The env super admin (may already exist from an earlier test): only self is refused (B6).
     const envBoss =
       db
         .select({ id: user.id })

@@ -1,7 +1,5 @@
 import { DEPLOY_CHUNK_SIZE } from "../../shared/deploy.types";
-// @ts-expect-error -- Bun `type: "file"` import (embedded in the binary, value = its path); no *.png module types
 import touchIconPng from "../../web/assets/apple-touch-icon.png" with { type: "file" };
-// @ts-expect-error -- same as apple-touch-icon.png above
 import ogPng from "../../web/assets/og.png" with { type: "file" };
 import spa from "../../web/index.html";
 import { createApiHandler } from "./api.handler";

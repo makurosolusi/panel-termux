@@ -8,15 +8,30 @@ export type Env = {
   SUPER_ADMIN_EMAILS: string[];
   PORT: number;
   PANEL_DATA_DIR: string;
+  /** Override of the monitor's internet probe (PLAN/02 K18); undefined → the built-in default. */
+  PANEL_CONNECTIVITY_URL?: string;
+  /** `PANEL_SKIP_SNAPSHOT=1`: migrate even when the pre-migration snapshot fails (PLAN/04 K9). */
+  PANEL_SKIP_SNAPSHOT: boolean;
 };
 
-const DEFAULT_PORT = 3200;
+/** Port used when PORT is unset. */
+export const DEFAULT_PORT = 3200;
 const DEFAULT_DATA_DIR = "./data";
 /** Loose email shape check for SUPER_ADMIN_EMAILS entries. */
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 /** Thrown when an env var is missing or invalid; message names the variable, never its value. */
 export class EnvError extends Error {}
+
+const httpUrl = (name: string, value: string): string => {
+  try {
+    const u = new URL(value);
+    if (u.protocol !== "http:" && u.protocol !== "https:") throw new Error("protocol must be http(s)");
+  } catch (e) {
+    throw new EnvError(`env ${name} is not a valid http(s) URL (${(e as Error).message})`);
+  }
+  return value;
+};
 
 const required = (src: Record<string, string | undefined>, name: string): string => {
   const v = src[name]?.trim();
@@ -26,13 +41,8 @@ const required = (src: Record<string, string | undefined>, name: string): string
 
 /** Parses and validates env from `src` (defaults to process.env). Throws EnvError on invalid input. */
 export function parseEnv(src: Record<string, string | undefined> = process.env): Env {
-  const APP_BASE_URL = required(src, "APP_BASE_URL");
-  try {
-    const u = new URL(APP_BASE_URL);
-    if (u.protocol !== "http:" && u.protocol !== "https:") throw new Error("protocol must be http(s)");
-  } catch (e) {
-    throw new EnvError(`env APP_BASE_URL is not a valid http(s) URL (${(e as Error).message})`);
-  }
+  const APP_BASE_URL = httpUrl("APP_BASE_URL", required(src, "APP_BASE_URL"));
+  const connectivity = src.PANEL_CONNECTIVITY_URL?.trim();
 
   const emails = required(src, "SUPER_ADMIN_EMAILS")
     .split(",")
@@ -54,6 +64,8 @@ export function parseEnv(src: Record<string, string | undefined> = process.env):
     SUPER_ADMIN_EMAILS: emails,
     PORT,
     PANEL_DATA_DIR: src.PANEL_DATA_DIR?.trim() || DEFAULT_DATA_DIR,
+    PANEL_CONNECTIVITY_URL: connectivity ? httpUrl("PANEL_CONNECTIVITY_URL", connectivity) : undefined,
+    PANEL_SKIP_SNAPSHOT: src.PANEL_SKIP_SNAPSHOT?.trim() === "1",
   };
 }
 

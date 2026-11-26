@@ -54,12 +54,11 @@ describe("graceful shutdown", () => {
       actorId: null as unknown as string, // test-only: no user row needed
       steps: [
         {
-          key: "slow",
-          label: "slow",
+          key: "app_restart",
           run: async () => {
             await gate;
             calls.push("job-done");
-            return null;
+            return { code: "ok" };
           },
         },
       ],
@@ -81,7 +80,7 @@ describe("graceful shutdown", () => {
       kind: "site.deploy",
       target: "stuck",
       actorId: null as unknown as string, // test-only
-      steps: [{ key: "hang", label: "hang", run: () => new Promise(() => {}) }],
+      steps: [{ key: "app_restart", run: () => new Promise(() => {}) }],
     });
     const first = shutdown("SIGTERM");
     await shutdown("SIGINT");
