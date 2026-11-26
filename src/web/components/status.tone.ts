@@ -1,48 +1,6 @@
 /** Semantic colour family of a badge, dot or tile. */
 export type StatusTone = "success" | "warning" | "danger" | "info" | "neutral" | "accent";
 
-/**
- * The one status → tone table for every state string the panel shows (runit services, pm2 apps, deploy jobs,
- * job steps, backups). Unknown strings are neutral. Context-dependent cases (a service "down" that should be up)
- * are decided by the caller, which passes `tone` directly.
- */
-const STATUS_TONE: Record<string, StatusTone> = {
-  // healthy / finished well
-  run: "success",
-  online: "success",
-  succeeded: "success",
-  done: "success",
-  ok: "success",
-  // in flight
-  running: "info",
-  launching: "warning",
-  pending: "neutral",
-  finish: "warning",
-  partial: "warning",
-  rolled_back: "warning", // failed, but the old version was restored (DECISIONS A10)
-  interrupted: "warning", // cut off by a panel restart; guided clean-up, not a failure (B12)
-  // failure
-  errored: "danger",
-  failed: "danger",
-  // deliberately idle / unknown
-  down: "neutral",
-  stopped: "neutral",
-  skipped: "neutral",
-  not_deployed: "neutral",
-  unknown: "neutral",
-};
-
-/** Tone of a status string. */
-export const toneForStatus = (status: string): StatusTone => STATUS_TONE[status] ?? "neutral";
-
-/** Legacy panel tones (panel.status.ts) → semantic tones, so old call sites render with the new palette. */
-export const LEGACY_TONE = {
-  ok: "success",
-  warn: "warning",
-  bad: "danger",
-  muted: "neutral",
-} as const satisfies Record<string, StatusTone>;
-
 /** Text + subtle background + border classes per tone (AA contrast pairs, see styles.css). */
 export const TONE_CLASS: Record<StatusTone, string> = {
   success: "border-success/25 bg-success-subtle text-success",

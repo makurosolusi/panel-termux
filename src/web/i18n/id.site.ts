@@ -13,7 +13,7 @@ type Copy = string | ((p: JobParams) => string);
 type CheckCopy = { ok: Copy; warning?: Copy; error?: Copy };
 const s = (v: JobParams[string] | undefined) => String(v ?? "");
 
-/** Indonesian strings of the Situs pages: list, persiapan, adopsi, wizard (+ detail/job copy until W7 moves it). */
+/** Indonesian strings of the Situs pages: list, persiapan, adopsi, wizard and the running-job banner. */
 export const idSite = {
   errorCodes: {
     busy: "Ada perubahan lain yang sedang berjalan. Tunggu sampai selesai, lalu coba lagi.",
@@ -46,7 +46,6 @@ export const idSite = {
     more: (n: number) => `+${n}`,
     neverDeployed: "Belum pernah",
     port: (p: number) => `port ${p}`,
-    noDb: "tanpa database",
     actions: (name: string) => `Aksi untuk ${name}`,
     open: "Buka",
     openHost: (host: string) => `Buka ${host} di tab baru`,
@@ -235,7 +234,6 @@ export const idSite = {
     summary: "Yang akan dilakukan",
     blip: (hosts: string[]) =>
       `cloudflared dimulai ulang sekali. Semua domain di HP ini terputus 3–10 dtk${hosts.length ? `, termasuk ${hosts.join(", ")}` : ""}.`,
-    blinkWarning: "cloudflared akan dimulai ulang, jadi semua domain terputus beberapa detik.",
     after: "Setelah selesai, unggah binary pertama dari halaman situs untuk menjalankannya.",
     plan: {
       validate: "Memeriksa ulang nama, domain, dan port",
@@ -276,86 +274,8 @@ export const idSite = {
     dns_token_missing: "Token Cloudflare belum diisi. Buat record DNS domain ini secara manual setelah situs dibuat.",
     dns_check_failed: "DNS tidak bisa dicek sekarang. Situs tetap bisa dibuat; panel mencoba lagi saat membuat record.",
   } satisfies Record<SiteNoteCode, Copy>,
-  // Detail/job copy below: still read by the detail and job pages until W7 moves it to id.site-detail/id.job.
-  env: {
-    key: "Nama",
-    value: "Nilai",
-    add: "Tambah variabel",
-    remove: (key: string) => `Hapus baris ${key || "kosong"}`,
-    show: "Tampilkan nilai",
-    hide: "Sembunyikan nilai",
-    errors: {
-      invalid: "Pakai huruf besar, angka, dan _ saja, dan jangan diawali angka.",
-      reserved: "Diisi otomatis oleh panel.",
-      duplicate: "Nama ini sudah dipakai di baris lain.",
-      empty: "Nama wajib diisi.",
-    },
-  },
-  detail: {
-    back: "Semua situs",
-    info: "Informasi",
-    dir: "Folder",
-    port: "Port",
-    runtime: "Runtime",
-    database: "Database",
-    app: "Aplikasi",
-    createdAt: "Dibuat",
-    managed: "Dikelola",
-    managedYes: "Dibuat lewat panel",
-    managedNo: "Diadopsi",
-    hostnames: "Domain",
-    dnsManaged: "DNS otomatis",
-    dnsManual: "DNS manual",
-    addHostname: "Tambah domain",
-    addHostnamePlaceholder: "mis. www.contoh.com",
-    removeHostname: (host: string) => `Hapus domain ${host}`,
-    removeHostnameTitle: (host: string) => `Hapus ${host}?`,
-    removeHostnameBody:
-      "Domain ini berhenti mengarah ke situs: rutenya di cloudflared dan record DNS otomatisnya dihapus.",
-    lastHostname: "Situs harus punya minimal satu domain. Untuk melepas domain terakhir, hapus situsnya.",
-  },
-  envEditor: {
-    title: "Variabel lingkungan",
-    description:
-      "Nilai tidak pernah ditampilkan. Isi kolom untuk mengganti nilai, atau centang untuk menghapus variabel.",
-    restartWarning: "Menyimpan akan memulai ulang aplikasi situs ini.",
-    replacePlaceholder: "Isi untuk mengganti",
-    unset: "hapus",
-    noKeys: "Belum ada variabel. Tambah variabel bila aplikasi butuh konfigurasi selain PORT dan DATABASE_URL.",
-    save: "Simpan",
-    saved: "Variabel lingkungan disimpan dan aplikasi dimulai ulang.",
-  },
-  remove: {
-    button: "Hapus situs",
-    title: (name: string) => `Hapus situs ${name}?`,
-    body: "Semua domain situs ini berhenti bisa dibuka: rute cloudflared dan aplikasi pm2-nya dihapus, lalu cloudflared dimulai ulang. Tindakan ini tidak bisa dibatalkan.",
-    unmanaged:
-      "Situs ini diadopsi, jadi hanya catatannya di panel yang dihapus. Folder, aplikasi, dan domainnya tidak disentuh.",
-    keepData: "Simpan folder dan file situs",
-    keepDatabase: "Simpan database",
-    confirm: "Hapus situs",
-  },
+  // Job kind names for the running-job banner on /panel/sites (the job pages read id.job).
   job: {
-    title: "Progres perubahan",
-    running: "Sedang berjalan…",
-    statuses: {
-      running: "Berjalan",
-      succeeded: "Berhasil",
-      failed: "Gagal",
-      rolled_back: "Dikembalikan",
-      interrupted: "Terputus",
-    },
-    outcome: {
-      failed: "Perubahan gagal. Lihat langkah yang gagal di bawah untuk penyebabnya, lalu coba lagi.",
-      rolled_back:
-        "Perubahan gagal, dan semua langkah sudah dikembalikan seperti semula. Aman, tidak ada yang perlu dibersihkan.",
-      interrupted: "Perubahan terputus karena panel dimulai ulang. Periksa langkahnya, lalu pulihkan.",
-    },
-    openSite: "Buka detail situs",
-    allSites: "Ke daftar situs",
-    startedAt: (at: string) => `Mulai ${at}`,
-    finishedAt: (at: string) => `Selesai ${at}`,
-    progress: (pct: number) => `${pct}%`,
     kinds: {
       "site.create": "Buat situs",
       "site.delete": "Hapus situs",
@@ -367,22 +287,5 @@ export const idSite = {
       "site.env": "Ubah variabel lingkungan",
       "job.cleanup": "Bersihkan perubahan terputus",
     } satisfies Record<JobKind, string>,
-    errors: {
-      unexpected: "Terjadi kesalahan tak terduga. Lihat detail teknis di bawah.",
-      interrupted: "Panel dimulai ulang saat perubahan ini berjalan.",
-    } as Readonly<Record<string, string>>,
-    stepStatuses: {
-      pending: "Menunggu",
-      running: "Berjalan",
-      done: "Selesai",
-      failed: "Gagal",
-      rolled_back: "Dikembalikan",
-      skipped: "Dilewati",
-    },
-  },
-  jobs: {
-    title: "Riwayat perubahan",
-    open: "Lihat",
-    empty: "Belum ada perubahan. Membuat, mengubah, atau men-deploy situs akan tercatat di sini.",
   },
 } as const;

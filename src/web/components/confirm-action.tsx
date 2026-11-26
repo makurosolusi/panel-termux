@@ -13,10 +13,11 @@ import {
 } from "@/web/components/ui/alert-dialog";
 import { Button } from "@/web/components/ui/button";
 import { Input } from "@/web/components/ui/input";
-import { id } from "@/web/i18n/id";
+import { idCommon } from "@/web/i18n/id.common";
+import { idShell } from "@/web/i18n/id.shell";
 import { apiErrorMessage, type ErrorCodes } from "@/web/shared/api.client";
 
-const t = id.shell.confirm;
+const t = idShell.confirm;
 
 type ConfirmBase = {
   /** The question: "Hapus situs blog?" */
@@ -142,7 +143,7 @@ export function ConfirmAction(props: ConfirmActionProps) {
           </form>
         )}
         <AlertDialogFooter>
-          <AlertDialogCancel disabled={pending}>{id.common.cancel}</AlertDialogCancel>
+          <AlertDialogCancel disabled={pending}>{idCommon.cancel}</AlertDialogCancel>
           <Button
             type="button"
             variant={destructive ? "destructive" : "default"}

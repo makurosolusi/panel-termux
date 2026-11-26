@@ -3,12 +3,12 @@ import { isRouteErrorResponse, Link, useRouteError } from "react-router";
 import { homeFor } from "@/shared/roles";
 import { ErrorState } from "@/web/components/error-state";
 import { Button } from "@/web/components/ui/button";
-import { id } from "@/web/i18n/id";
+import { idShell } from "@/web/i18n/id.shell";
 import { useMe } from "@/web/session/use-me";
 import { CHUNK_RELOAD_KEY, isChunkLoadError, reloadOnce } from "@/web/shared/chunk.error";
 import { NotFoundPage } from "./not-found.page";
 
-const t = id.shell.routeError;
+const t = idShell.routeError;
 
 /**
  * Route ErrorBoundary inside the shell (sidebar stays usable): a thrown 404 response shows the 404 page; a failed
@@ -26,10 +26,10 @@ export function RouteErrorPage() {
   return (
     <ErrorState
       className="mt-10"
-      title={chunk ? id.shell.chunkError.title : t.title}
+      title={chunk ? idShell.chunkError.title : t.title}
       description={
         <>
-          {chunk ? id.shell.chunkError.body : t.body}
+          {chunk ? idShell.chunkError.body : t.body}
           {detail && <span className="mt-2 block font-mono text-xs break-all text-muted-foreground">{detail}</span>}
         </>
       }
@@ -39,7 +39,7 @@ export function RouteErrorPage() {
             <Link to={homeFor(me.role)}>{t.home}</Link>
           </Button>
           <Button size="sm" onClick={() => window.location.reload()}>
-            {chunk ? id.shell.chunkError.reload : t.retry}
+            {chunk ? idShell.chunkError.reload : t.retry}
           </Button>
         </>
       }

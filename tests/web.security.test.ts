@@ -1,15 +1,9 @@
 import { afterEach, describe, expect, test } from "bun:test";
 import { idSecurity } from "@/web/i18n/id.security";
 import { settingLabel } from "@/web/security/data-key.card";
-import {
-  attachmentName,
-  isReauthRequired,
-  REAUTH_REQUIRED,
-  SECURITY_ERROR_CODES,
-  sensitiveFetch,
-} from "@/web/security/security.api";
+import { attachmentName, isReauthRequired, SECURITY_ERROR_CODES, sensitiveFetch } from "@/web/security/security.api";
 import { accessState, dataKeyStatusKey } from "@/web/security/security.state";
-import { ApiError, apiErrorMessage, errorFromResponse } from "@/web/shared/api.client";
+import { ApiError, apiErrorMessage, errorFromResponse, REAUTH_REQUIRED } from "@/web/shared/api.client";
 
 const realFetch = globalThis.fetch;
 afterEach(() => {

@@ -6,14 +6,15 @@ import { useSignOut } from "@/web/auth/use-sign-out";
 import { RoleBadge } from "@/web/components/role-badge";
 import { Sheet, SheetContent, SheetTitle } from "@/web/components/ui/sheet";
 import { UserAvatar } from "@/web/components/user-avatar";
-import { id } from "@/web/i18n/id";
+import { idApp } from "@/web/i18n/id.app";
+import { idShell } from "@/web/i18n/id.shell";
 import type { Me } from "@/web/session/session.api";
 import type { ThemePreference } from "@/web/theme/theme.preference";
 import { setThemePreference, useTheme } from "@/web/theme/theme.store";
 import type { NavGroup } from "./nav.items";
 import { SidebarNav } from "./sidebar.nav";
 
-const t = id.shell;
+const t = idShell;
 const THEMES: readonly { value: ThemePreference; label: string; icon: typeof SunIcon }[] = [
   { value: "system", label: t.theme.system, icon: MonitorIcon },
   { value: "light", label: t.theme.light, icon: SunIcon },
@@ -99,7 +100,7 @@ export function MobileMore({
               className={cn(ROW, "text-left text-danger disabled:opacity-60")}
             >
               <LogOutIcon className="size-4" aria-hidden />
-              {id.menu.signOut}
+              {idApp.menu.signOut}
             </button>
             {error && (
               <p role="alert" className="px-2.5 pb-2 text-sm text-danger">

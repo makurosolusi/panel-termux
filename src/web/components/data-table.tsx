@@ -1,14 +1,12 @@
 import { cn } from "cn";
-import { ChevronLeftIcon, ChevronRightIcon } from "lucide-react";
 import { Fragment, type ReactNode } from "react";
 import { Link } from "react-router";
-import { Button } from "@/web/components/ui/button";
 import { TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/web/components/ui/table";
-import { id } from "@/web/i18n/id";
-import { formatNumber } from "@/web/shared/format";
+import { idShell } from "@/web/i18n/id.shell";
+import { type DataPagination, PaginationFooter } from "./pagination-footer";
 import type { StatusTone } from "./status.tone";
 
-const t = id.shell.table;
+const t = idShell.table;
 
 /** One column. `mobile` = its slot in the phone card (default "meta"); `align` for numbers. */
 export type DataColumn<T> = {
@@ -20,9 +18,6 @@ export type DataColumn<T> = {
   /** Phone card slot; default "meta". */
   mobile?: "title" | "badge" | "meta" | "hidden";
 };
-
-/** 1-based page state for the footer; `total` = number of entries across all pages. */
-export type DataPagination = { page: number; pageCount: number; total?: number; onPageChange: (page: number) => void };
 
 /** 2 px left edge per row tone (tokens only). */
 const TONE_EDGE: Record<StatusTone, string> = {
@@ -151,7 +146,7 @@ export function DataTable<T>({
           </ul>
         </>
       )}
-      {pagination && pagination.pageCount > 1 && <PaginationFooter p={pagination} />}
+      {pagination && <PaginationFooter p={pagination} />}
     </div>
   );
 }
@@ -192,25 +187,5 @@ function MobileCard<T>({
         </p>
       )}
     </>
-  );
-}
-
-function PaginationFooter({ p }: { p: DataPagination }) {
-  const text =
-    p.total === undefined ? t.page(p.page, p.pageCount) : t.pageWithTotal(p.page, p.pageCount, formatNumber(p.total));
-  return (
-    <nav aria-label={t.pagination} className="flex items-center justify-between gap-2 text-sm">
-      <Button variant="outline" size="sm" disabled={p.page <= 1} onClick={() => p.onPageChange(p.page - 1)}>
-        <ChevronLeftIcon aria-hidden />
-        <span className="sr-only sm:not-sr-only">{t.prev}</span>
-      </Button>
-      <span className="text-center text-muted-foreground tabular-nums" aria-live="polite">
-        {text}
-      </span>
-      <Button variant="outline" size="sm" disabled={p.page >= p.pageCount} onClick={() => p.onPageChange(p.page + 1)}>
-        <span className="sr-only sm:not-sr-only">{t.next}</span>
-        <ChevronRightIcon aria-hidden />
-      </Button>
-    </nav>
   );
 }

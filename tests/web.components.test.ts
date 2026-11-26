@@ -1,5 +1,8 @@
 import { describe, expect, test } from "bun:test";
+import { createElement } from "react";
+import { renderToStaticMarkup } from "react-dom/server";
 import { typedMatches } from "@/web/components/confirm-action";
+import { PaginationFooter } from "@/web/components/pagination-footer";
 import { isEmptyData, queryViewState } from "@/web/components/query-view";
 import { buttonVariants } from "@/web/components/ui/button";
 import { parsePageParam } from "@/web/components/use-page-param";
@@ -73,5 +76,15 @@ describe("touch targets", () => {
   test("ConfirmAction never uses AlertDialogAction (it would close before the request settles)", async () => {
     const src = await Bun.file(`${import.meta.dir}/../src/web/components/confirm-action.tsx`).text();
     expect(src).not.toContain("AlertDialogAction");
+  });
+});
+
+describe("PaginationFooter", () => {
+  const p = (pageCount: number) => ({ page: 2, pageCount, total: 40, onPageChange: () => {} }); // test-only
+  test("hidden when everything fits on one page", () => {
+    expect(renderToStaticMarkup(createElement(PaginationFooter, { p: p(1) }))).toBe("");
+  });
+  test("shows position with total", () => {
+    expect(renderToStaticMarkup(createElement(PaginationFooter, { p: p(3) }))).toContain("Halaman 2 dari 3 · 40 entri");
   });
 });

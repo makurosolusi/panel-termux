@@ -66,13 +66,8 @@ export function lastGoodRows(s: BackupStatus, now: Date): LastGoodRow[] {
   return rows;
 }
 
-// ponytail: the server marks interrupted runs/restores only by this error text (backup.service.ts, backup.restore.ts);
-// switch to an error code when the API grows one.
-const INTERRUPTED_PREFIX = "interrupted";
-
 /** A run or restore that a panel restart cut off ("Terputus", warning, not a failure). */
-export const isInterrupted = (x: { status: string; error: string | null }): boolean =>
-  x.status === "failed" && (x.error?.startsWith(INTERRUPTED_PREFIX) ?? false);
+export const isInterrupted = (x: { errorCode?: string | null }): boolean => x.errorCode === "interrupted";
 
 /** The item behind a last good copy, looked up in the runs already loaded (for its restore command). */
 export function findItem(runs: readonly BackupRun[], runId: string, index: number): BackupItem | null {

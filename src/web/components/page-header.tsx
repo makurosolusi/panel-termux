@@ -2,10 +2,11 @@ import { cn } from "cn";
 import { RefreshCwIcon } from "lucide-react";
 import { createContext, type ReactNode, useContext, useLayoutEffect } from "react";
 import { Button } from "@/web/components/ui/button";
-import { id } from "@/web/i18n/id";
+import { idCommon } from "@/web/i18n/id.common";
+import { idShell } from "@/web/i18n/id.shell";
 import { RelativeTime } from "./relative-time";
 
-const t = id.shell.time;
+const t = idShell.time;
 
 /** Freshness line for live pages: live dot + "Diperbarui 3 mnt lalu" + refresh button. */
 export type PageMeta = {
@@ -92,7 +93,7 @@ function MetaLine({ meta }: { meta: PageMeta }) {
           <span className="sr-only">{t.live}</span>
         </span>
       )}
-      {meta.updatedAt && <RelativeTime at={meta.updatedAt} format={id.common.updatedAgo} />}
+      {meta.updatedAt && <RelativeTime at={meta.updatedAt} format={idCommon.updatedAgo} />}
       {meta.onRefresh && (
         <Button
           variant="ghost"

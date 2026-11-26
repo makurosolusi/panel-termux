@@ -55,6 +55,7 @@ const good = (kind: BackupLastGood["kind"], name: string, at: string): BackupLas
   itemIndex: 0,
   sizeBytes: 1,
   checked: true,
+  restoreHint: "", // test-only
 });
 const NOW = new Date("2026-11-27T12:00:00.000Z");
 

@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, mock, test } from "bun:test";
-import { id } from "@/web/i18n/id";
+import { idCommon } from "@/web/i18n/id.common";
 import {
   AJAX_HEADERS,
   ApiError,
@@ -31,7 +31,7 @@ describe("Cloudflare Access 401 vs panel 401", () => {
     const access = errorFromResponse(401, null);
     expect(access.kind).toBe("access");
     expect(redirectFor(access)).toBeNull();
-    expect(apiErrorMessage(access)).toBe(id.common.errors.access);
+    expect(apiErrorMessage(access)).toBe(idCommon.errors.access);
 
     const forbidden = errorFromResponse(403, { error: "forbidden" });
     expect(forbidden.kind).toBe("forbidden");
@@ -50,16 +50,16 @@ describe("Cloudflare Access 401 vs panel 401", () => {
 describe("error copy", () => {
   test("every error kind has a title", () => {
     const kinds: ApiErrorKind[] = ["network", "unauthorized", "access", "forbidden", "client", "server"];
-    expect(Object.keys(id.common.errorTitles).sort()).toEqual([...kinds].sort());
-    for (const kind of kinds) expect(id.common.errorTitles[kind]).toBeTruthy();
+    expect(Object.keys(idCommon.errorTitles).sort()).toEqual([...kinds].sort());
+    for (const kind of kinds) expect(idCommon.errorTitles[kind]).toBeTruthy();
   });
 
   test("known code first, then 4xx server message, then per kind", () => {
     const conflict = errorFromResponse(409, { error: "name_taken", message: "Name taken" });
     expect(apiErrorMessage(conflict, { name_taken: "Nama sudah dipakai." })).toBe("Nama sudah dipakai.");
     expect(apiErrorMessage(conflict)).toBe("Name taken");
-    expect(apiErrorMessage(errorFromResponse(503, null))).toBe(id.common.errors.server);
-    expect(apiErrorMessage(new Error("x"))).toBe(id.common.errors.generic);
+    expect(apiErrorMessage(errorFromResponse(503, null))).toBe(idCommon.errors.server);
+    expect(apiErrorMessage(new Error("x"))).toBe(idCommon.errors.generic);
   });
 });
 

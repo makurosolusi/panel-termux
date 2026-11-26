@@ -1,12 +1,9 @@
 import type { RevokedSessions, SecurityStatus } from "@/shared/security.types";
 import { idSecurity } from "@/web/i18n/id.security";
-import { AJAX_HEADERS, ApiError, apiFetch, errorFromResponse, failedResponse } from "@/web/shared/api.client";
+import { AJAX_HEADERS, ApiError, apiFetch, failedResponse, REAUTH_REQUIRED } from "@/web/shared/api.client";
 
 /** GET: data key state, Access, sessions (super_admin only; never call it for admins, a 403 navigates to /login). */
 export const SECURITY_STATUS_URL = "/api/dev/security";
-
-/** Server code of a stale session on sensitive actions (403, fresh session = signed in < 15 min ago). */
-export const REAUTH_REQUIRED = "reauth_required";
 
 /** Security error codes → Indonesian messages. */
 export const SECURITY_ERROR_CODES: Readonly<Record<string, string>> = idSecurity.errorCodes;
@@ -15,9 +12,8 @@ export const SECURITY_ERROR_CODES: Readonly<Record<string, string>> = idSecurity
 export const isReauthRequired = (err: unknown): boolean => err instanceof ApiError && err.code === REAUTH_REQUIRED;
 
 /**
- * Fetch for fresh-session endpoints. Same contract as apiFetch, except a 403 `reauth_required` is thrown without the
- * /login navigation apiFetch does for every 403, so the page can offer "Masuk ulang". Returns the raw response
- * (blob downloads, or an opaque redirect when `redirect` is "manual").
+ * Fetch for fresh-session endpoints that need the raw response (blob downloads, or an opaque redirect when `redirect`
+ * is "manual"). Errors follow apiFetch: a 403 `reauth_required` is thrown without navigating (see `redirectFor`).
  */
 export async function sensitiveFetch(
   method: "GET" | "POST",
@@ -39,8 +35,6 @@ export async function sensitiveFetch(
   }
   if (res.ok || res.type === "opaqueredirect") return res;
   const parsed: unknown = await res.json().catch(() => null); // non-JSON body (proxy page) → no code
-  const err = errorFromResponse(res.status, parsed);
-  if (err.code === REAUTH_REQUIRED) throw err;
   throw failedResponse(res.status, parsed);
 }
 

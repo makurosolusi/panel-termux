@@ -1,7 +1,8 @@
 import { TriangleAlertIcon } from "lucide-react";
 import type { ReactNode } from "react";
 import { Button } from "@/web/components/ui/button";
-import { id } from "@/web/i18n/id";
+import { idCommon } from "@/web/i18n/id.common";
+import { idShell } from "@/web/i18n/id.shell";
 import { apiErrorMessage, type ErrorCodes } from "@/web/shared/api.client";
 import type { ApiQuery } from "@/web/shared/use-api-query";
 import { ErrorState } from "./error-state";
@@ -57,7 +58,7 @@ export function QueryView<T>({
     case "failed":
       return (
         <ErrorState
-          title={id.common.errorTitles[error?.kind ?? "network"]}
+          title={idCommon.errorTitles[error?.kind ?? "network"]}
           description={apiErrorMessage(error, codes)}
           onRetry={reload}
           retrying={loading}
@@ -95,16 +96,16 @@ export function StaleNotice({
       <TriangleAlertIcon className="size-4 shrink-0 text-warning" aria-hidden />
       <div className="min-w-0 flex-1">
         <p role="status" className="font-medium text-warning">
-          {id.shell.staleTitle}
+          {idShell.staleTitle}
         </p>
         {updatedAt && (
           <p className="text-xs text-foreground/80">
-            <RelativeTime at={updatedAt} format={id.shell.staleSince} />
+            <RelativeTime at={updatedAt} format={idShell.staleSince} />
           </p>
         )}
       </div>
       <Button size="sm" variant="outline" onClick={onRetry} disabled={retrying}>
-        {id.common.retry}
+        {idCommon.retry}
       </Button>
     </div>
   );

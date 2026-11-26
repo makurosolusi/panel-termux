@@ -80,6 +80,7 @@ export const idDevAudit = {
     backupFailed: (text: string) => `${text}, tetapi gagal`,
     backupDownload: (a: string, item: string) => `${a} mengunduh cadangan ${item}`,
     backupVerify: (a: string, result: string) => `${a} menguji penyimpanan cadangan: ${result}`,
+    cloudflareVerify: (a: string, result: string) => `${a} menguji token Cloudflare: ${result}`,
     backupPrune: (a: string) => `${a} menghapus cadangan lama sesuai masa simpan`,
     backupRestore: (a: string, db: string) => `${a} memulihkan cadangan ke database ${db}`,
     backupRestoreDrop: (a: string, db: string) => `${a} menghapus database hasil uji pulih ${db}`,

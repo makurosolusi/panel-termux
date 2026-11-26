@@ -10,7 +10,6 @@ import {
   isAuditFiltered,
 } from "@/web/dev/audit.describe";
 import { devErrorMessage, devFetch, devUrl } from "@/web/dev/dev.api";
-import { pageCount, parsePageParam, withFilter, withPage } from "@/web/dev/dev.pagination";
 import { levelParam, toViewerLines } from "@/web/dev/logs.page";
 import { lastSeenText, userActions } from "@/web/dev/users.list";
 import { ApiError as DevApiError, errorFromResponse, redirectFor } from "@/web/shared/api.client";
@@ -103,32 +102,6 @@ describe("devFetch", () => {
     stub(() => Promise.resolve(new Response("<html>", { status: 200 })));
     const err = (await devFetch("GET", "/api/dev/health").catch((e: unknown) => e)) as DevApiError;
     expect([err.kind, err.code]).toEqual(["server", "invalid_json"]);
-  });
-});
-
-describe("pagination", () => {
-  test.each([
-    [0, 20, 1],
-    [20, 20, 1],
-    [21, 20, 2],
-    [100, 0, 100],
-  ] as const)("pageCount(%d, %d) = %d", (total, size, pages) => expect(pageCount(total, size)).toBe(pages));
-  test.each([
-    [null, 1],
-    ["3", 3],
-    ["0", 1],
-    ["-2", 1],
-    ["1.5", 1],
-    ["abc", 1],
-  ] as const)("parsePageParam(%p) = %d", (raw, n) => expect(parsePageParam(raw)).toBe(n));
-  test("withFilter sets the filter and resets page", () => {
-    const next = withFilter(new URLSearchParams("q=old&page=4"), "q", "new");
-    expect(next.toString()).toBe("q=new");
-    expect(withFilter(next, "q", "").toString()).toBe("");
-  });
-  test("withPage keeps filters; page 1 drops the param", () => {
-    expect(withPage(new URLSearchParams("q=x"), 3).toString()).toBe("q=x&page=3");
-    expect(withPage(new URLSearchParams("q=x&page=3"), 1).toString()).toBe("q=x");
   });
 });
 
@@ -275,6 +248,7 @@ describe("describeAudit", () => {
     "backup.run": { meta: { trigger: "manual", status: "succeeded" } },
     "backup.download": { target: "db.sqlite.gz" },
     "backup.verify": { meta: { ok: true } },
+    "cloudflare.verify": { meta: { ok: false, code: "cf_unauthorized" } },
     "backup.prune": { actor: null, actorKind: "system" },
     "backup.restore": { target: "blog_restore" },
     "backup.restore_drop": { target: "blog_restore" },
@@ -337,6 +311,13 @@ describe("describeAudit", () => {
       tone: "danger",
     });
     expect(describeAudit(entry({})).tone).toBe("neutral");
+    expect(describeAudit(entry({ action: "cloudflare.verify", meta: { ok: false, code: "cf_unauthorized" } }))).toEqual(
+      {
+        text: "Citra menguji token Cloudflare: gagal",
+        tone: "warning",
+      },
+    );
+    expect(describeAudit(entry({ action: "cloudflare.verify", meta: { ok: true } })).tone).toBe("neutral");
   });
 });
 

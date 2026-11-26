@@ -1,15 +1,8 @@
-import type { Role } from "@/shared/roles";
+import type { Me } from "@/shared/me.types";
 import { AJAX_HEADERS, ApiError } from "@/web/shared/api.client";
 
-/** Signed-in account as returned by `GET /api/me`. */
-export type Me = {
-  id: string;
-  email: string;
-  name: string;
-  image: string | null;
-  role: Role;
-  home: string;
-};
+/** Signed-in account as returned by `GET /api/me` (re-exported from the shared contract). */
+export type { Me };
 
 /** Outcome of the session check; network/server failures are thrown, not returned. */
 export type MeResult = { status: "ok"; me: Me } | { status: "unauthorized" };

@@ -37,6 +37,7 @@ const run = (over: Partial<BackupRun> = {}): BackupRun => ({
   finishedAt: "2026-11-26T03:01:00Z",
   items: [],
   error: null,
+  errorCode: null,
   ...over,
 });
 const good = (over: Partial<BackupLastGood> = {}): BackupLastGood => ({
@@ -47,6 +48,7 @@ const good = (over: Partial<BackupLastGood> = {}): BackupLastGood => ({
   at: "2026-11-26T03:00:00Z",
   sizeBytes: 1024,
   checked: true,
+  restoreHint: "pg_restore -d blog blog.dump",
   ...over,
 });
 const status = (over: Partial<BackupStatus> = {}): BackupStatus => ({
@@ -76,7 +78,6 @@ const restore = (over: Partial<BackupRestore> = {}): BackupRestore => ({
   actor: null,
   ...over,
 });
-const INTERRUPTED = "interrupted by panel restart";
 
 describe("run button", () => {
   test.each([
@@ -183,13 +184,19 @@ describe("status keys", () => {
     expect(runStatusKey(run())).toBe("succeeded");
     expect(runStatusKey(run({ status: "partial" }))).toBe("partial");
     expect(runStatusKey(run({ status: "failed", error: "s3 down" }))).toBe("failed");
-    expect(runStatusKey(run({ status: "failed", error: INTERRUPTED }))).toBe("interrupted");
+    expect(
+      runStatusKey(run({ status: "failed", error: "interrupted by panel restart", errorCode: "interrupted" })),
+    ).toBe("interrupted");
   });
   test("restores", () => {
     expect(restoreStatusKey(restore({ status: "running" }))).toBe("processing");
-    expect(restoreStatusKey(restore({ status: "failed", error: INTERRUPTED }))).toBe("interrupted");
+    expect(
+      restoreStatusKey(restore({ status: "failed", error: "interrupted by panel restart", errorCode: "interrupted" })),
+    ).toBe("interrupted");
     expect(restoreStatusKey(restore({ status: "failed", error: "pg_restore: x" }))).toBe("failed");
-    expect(isInterrupted({ status: "succeeded", error: INTERRUPTED })).toBe(false);
+    // the code decides, not the error text
+    expect(isInterrupted({ errorCode: null })).toBe(false);
+    expect(restoreStatusKey(restore({ status: "failed", error: "interrupted by panel restart" }))).toBe("failed");
   });
   test("headline", () => {
     expect(backupHeadline(status({ keyMismatch: true, configured: false })).state).toBe("key_mismatch");

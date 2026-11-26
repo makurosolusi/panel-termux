@@ -6,10 +6,14 @@ import { join } from "node:path";
 import tailwind from "bun-plugin-tailwind";
 
 const KB = 1024;
-/** gzip budgets: `/` = entry JS; `/panel` = entry + app (shell) + Ringkasan page JS on first load. */
-const BUDGET = { landing: 150 * KB, panel: 200 * KB } as const;
+/** gzip budgets: `/` = entry JS; `/panel` = entry + app (shell) + Ringkasan page JS on first load (DECISIONS B30). */
+const BUDGET = { landing: 150 * KB, panel: 215 * KB } as const;
 /** Source modules that must stay out of the entry (they belong to the lazy `app` chunk). */
 const APP_ONLY = /^src\/web\/(panel|dev|site|backup|deploy|layout\/app\.layout)/;
+/** The only dictionaries the entry may carry; any other `src/web/i18n/id*.ts` there (domain or aggregate) is a leak. */
+const ENTRY_I18N = /^src\/web\/i18n\/id\.(app|common|shell|session|landing)\.ts$/;
+const isLeak = (input: string) =>
+  APP_ONLY.test(input) || (input.startsWith("src/web/i18n/") && !ENTRY_I18N.test(input));
 const LOGIN_INPUT = "src/web/pages/login.page.tsx";
 const APP_INPUT = "src/web/app.routes.tsx";
 /** The page `/panel` opens on (its own lazy chunk since pages load per route). */
@@ -68,7 +72,7 @@ try {
   const app = only(closure(appJs));
   const panel = new Set([...app, ...only(closure(homeJs))]);
   const kb = (n: number) => `${(n / KB).toFixed(1)} KB`;
-  const leaked = [...entry].flatMap((f) => Object.keys(byName.get(f)?.inputs ?? {}).filter((i) => APP_ONLY.test(i)));
+  const leaked = [...entry].flatMap((f) => Object.keys(byName.get(f)?.inputs ?? {}).filter(isLeak));
 
   const rows = [
     { group: "entry (/)", files: entry.size, gzip: sum(entry), budget: BUDGET.landing },

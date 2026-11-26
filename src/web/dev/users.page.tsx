@@ -14,7 +14,7 @@ import { SearchField } from "@/web/components/search-field";
 import { Button } from "@/web/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/web/components/ui/select";
 import { usePageParam } from "@/web/components/use-page-param";
-import { id } from "@/web/i18n/id";
+import { idApp } from "@/web/i18n/id.app";
 import { idDevUsers } from "@/web/i18n/id.dev.users";
 import { revokeAllSessions } from "@/web/security/security.api";
 import { useMe } from "@/web/session/use-me";
@@ -68,7 +68,7 @@ export function UsersPage() {
           <SelectItem value={ALL}>{t.allRoles}</SelectItem>
           {ROLES.map((r) => (
             <SelectItem key={r} value={r}>
-              {id.roles[r]}
+              {idApp.roles[r]}
             </SelectItem>
           ))}
         </SelectContent>

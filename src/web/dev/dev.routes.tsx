@@ -1,8 +1,8 @@
 import type { RouteObject } from "react-router";
-import { id } from "@/web/i18n/id";
+import { idShell } from "@/web/i18n/id.shell";
 import type { RouteHandle } from "@/web/layout/shell.page";
 
-const n = id.shell.nav;
+const n = idShell.nav;
 const h = (title: string): RouteHandle => ({ title });
 
 /** Administration routes (PLAN/05, super_admin): health, users, audit, panel log, settings. */

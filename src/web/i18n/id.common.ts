@@ -1,17 +1,10 @@
-/** Indonesian strings shared by every section (merged into `id.common`). Wording follows docs/content-guide.md. */
+/** Indonesian strings shared by every section (imported directly, DECISIONS B30). Wording follows docs/content-guide.md. */
 export const idCommon = {
   retry: "Coba lagi",
   cancel: "Batal",
-  save: "Simpan",
   close: "Tutup",
-  delete: "Hapus",
-  copy: "Salin",
-  loading: "Memuat…",
-  empty: "Belum ada yang bisa ditampilkan di sini.",
   /** "Diperbarui 3 mnt lalu" — replaces the static "Diperbarui otomatis tiap N detik" lines; relative pieces live in `id.shell.time`. */
   updatedAgo: (rel: string) => `Diperbarui ${rel}`,
-  /** Duration unit labels: "7 mnt 17 dtk", "1 hari 9 jam". */
-  units: { day: "hari", hour: "jam", minute: "mnt", second: "dtk" },
   /** Short heading per ApiErrorKind (ErrorState title); the sentence below it comes from `errors`. */
   errorTitles: {
     network: "Tidak bisa terhubung ke server",

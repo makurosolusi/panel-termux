@@ -38,8 +38,6 @@ const memberSince = (iso: string): string => new Date(iso).toLocaleDateString("i
 
 function AccountCard({ me }: { me: Me }) {
   const { signOut, pending, error } = useSignOut();
-  // GET /api/me sends createdAt; the web `Me` type (session.api.ts) does not declare it yet
-  const createdAt = (me as Me & { createdAt?: string }).createdAt;
   return (
     <Section title={t.account}>
       <div className="flex flex-col gap-4 rounded-lg border bg-card p-4 sm:flex-row sm:items-start sm:p-5">
@@ -52,9 +50,7 @@ function AccountCard({ me }: { me: Me }) {
           <KeyValue
             items={[
               { label: t.role, value: <RoleBadge role={me.role} /> },
-              ...(createdAt
-                ? [{ label: t.memberSince, value: <time dateTime={createdAt}>{memberSince(createdAt)}</time> }]
-                : []),
+              { label: t.memberSince, value: <time dateTime={me.createdAt}>{memberSince(me.createdAt)}</time> },
             ]}
           />
           {error && (

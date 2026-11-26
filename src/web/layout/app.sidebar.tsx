@@ -2,14 +2,14 @@ import { cn } from "cn";
 import { PanelLeftCloseIcon, PanelLeftOpenIcon } from "lucide-react";
 import { Link } from "react-router";
 import { Button } from "@/web/components/ui/button";
-import { id } from "@/web/i18n/id";
+import { idShell } from "@/web/i18n/id.shell";
 import type { Me } from "@/web/session/session.api";
 import { BrandLogo } from "./brand.logo";
 import type { NavGroup } from "./nav.items";
 import { SidebarNav } from "./sidebar.nav";
 import { UserMenu } from "./user.menu";
 
-const t = id.shell.sidebar;
+const t = idShell.sidebar;
 
 /** Desktop sidebar (≥ md): logo, grouped nav, collapse toggle and the account menu pinned to the bottom. */
 export function AppSidebar({

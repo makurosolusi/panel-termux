@@ -2,11 +2,10 @@
 import type { RouteObject } from "react-router";
 import { backupRoutes } from "@/web/backup/backup.routes";
 import { devRoutes } from "@/web/dev/dev.routes";
-import { id } from "@/web/i18n/id";
+import { idShell } from "@/web/i18n/id.shell";
 import { AppLayout } from "@/web/layout/app.layout";
 import type { RouteHandle } from "@/web/layout/shell.page";
 import { NotFoundPage } from "@/web/pages/not-found.page";
-import { ProfilePage } from "@/web/pages/profile.page";
 import { RouteErrorPage } from "@/web/pages/route-error.page";
 import { panelRoutes } from "@/web/panel/panel.routes";
 import { siteRoutes } from "@/web/site/site.routes";
@@ -20,7 +19,11 @@ export const appRoutes: RouteObject[] = [
         // pathless: route errors render inside the shell, so the navigation stays usable
         ErrorBoundary: RouteErrorPage,
         children: [
-          { path: "/profile", Component: ProfilePage, handle: { title: id.profile.title } satisfies RouteHandle },
+          {
+            path: "/profile",
+            handle: { title: idShell.nav.profile } satisfies RouteHandle,
+            lazy: { Component: () => import("@/web/pages/profile.page").then((m) => m.ProfilePage) },
+          },
           ...panelRoutes,
           ...siteRoutes,
           ...backupRoutes,

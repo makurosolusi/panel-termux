@@ -2,10 +2,10 @@
 import { cn } from "cn";
 import { memo } from "react";
 import { type BufferedLogLine, LOG_LINE_DISPLAY_MAX, stripAnsi } from "@/web/components/log.buffer";
-import { id } from "@/web/i18n/id";
+import { idShell } from "@/web/i18n/id.shell";
 import { formatClock, formatDayLabel, formatNumber } from "@/web/shared/format";
 
-const t = id.shell.log;
+const t = idShell.log;
 
 /** Display text of a line: ANSI stripped, cut at `max` characters; `cut` = how many characters were hidden. */
 export function cutLogText(raw: string, max = LOG_LINE_DISPLAY_MAX): { shown: string; cut: number } {

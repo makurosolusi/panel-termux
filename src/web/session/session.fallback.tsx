@@ -1,5 +1,5 @@
 import { Skeleton } from "@/web/components/ui/skeleton";
-import { id } from "@/web/i18n/id";
+import { idSession } from "@/web/i18n/id.session";
 import { LANDING_PATH, LOGIN_PATH } from "./session.redirect";
 
 /**
@@ -13,7 +13,7 @@ export function SessionFallback() {
   }
   return (
     <div className="flex min-h-svh bg-background" aria-busy="true">
-      <span className="sr-only">{id.session.loading}</span>
+      <span className="sr-only">{idSession.loading}</span>
       <div className="hidden w-60 shrink-0 flex-col gap-3 border-r border-sidebar-border bg-sidebar p-3 md:flex">
         <Skeleton className="h-7 w-32" />
         <Skeleton className="mt-4 h-4 w-20" />

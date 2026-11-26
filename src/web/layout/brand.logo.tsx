@@ -1,5 +1,5 @@
 import { cn } from "cn";
-import { id } from "@/web/i18n/id";
+import { idApp } from "@/web/i18n/id.app";
 
 /** Logomark: `>_` prompt in a rounded brand square (same artwork as the favicon). */
 export function LogoMark({ className }: { className?: string }) {
@@ -21,7 +21,7 @@ export function BrandLogo({ compact = false }: { compact?: boolean }) {
   return (
     <span className="flex min-w-0 items-center gap-2.5">
       <LogoMark />
-      <span className={cn("truncate text-sm font-semibold tracking-tight", compact && "sr-only")}>{id.appName}</span>
+      <span className={cn("truncate text-sm font-semibold tracking-tight", compact && "sr-only")}>{idApp.appName}</span>
     </span>
   );
 }

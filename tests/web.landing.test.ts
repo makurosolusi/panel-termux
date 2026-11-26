@@ -11,7 +11,15 @@ import type { MeResult } from "@/web/session/session.api";
 // test-only fixture
 const as = (role: Role): MeResult => ({
   status: "ok",
-  me: { id: "u1", email: "a@example.test", name: "A", image: null, role, home: "https://evil.example" },
+  me: {
+    id: "u1",
+    email: "a@example.test",
+    name: "A",
+    image: null,
+    role,
+    home: "https://evil.example",
+    createdAt: "2026-01-01T00:00:00.000Z",
+  },
 });
 
 describe("landingCta (header account link)", () => {

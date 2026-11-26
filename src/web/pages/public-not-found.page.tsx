@@ -2,12 +2,12 @@ import { CompassIcon } from "lucide-react";
 import { Link } from "react-router";
 import { EmptyState } from "@/web/components/empty-state";
 import { Button } from "@/web/components/ui/button";
-import { id } from "@/web/i18n/id";
+import { idShell } from "@/web/i18n/id.shell";
 import { BrandLogo } from "@/web/layout/brand.logo";
 import { useDocumentTitle } from "@/web/layout/document.title";
 import { LANDING_PATH, LOGIN_PATH } from "@/web/session/session.redirect";
 
-const t = id.shell.publicNotFound;
+const t = idShell.publicNotFound;
 
 /** Guest 404 (DECISIONS A7, copy PLAN/05 §5.7): compact header with logo + "Masuk", then home/sign-in actions. */
 export function PublicNotFoundPage() {

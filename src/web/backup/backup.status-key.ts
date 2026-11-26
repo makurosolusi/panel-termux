@@ -12,7 +12,7 @@ const RUN_KEY: Record<BackupRun["status"], StatusKey> = {
 };
 
 /** Status key of a run; a run cut off by a panel restart is `interrupted` ("Terputus"). */
-export const runStatusKey = (run: Pick<BackupRun, "status" | "error">): StatusKey =>
+export const runStatusKey = (run: Pick<BackupRun, "status" | "errorCode">): StatusKey =>
   isInterrupted(run) ? "interrupted" : RUN_KEY[run.status];
 
 const RESTORE_KEY: Record<BackupRestore["status"], StatusKey> = {
@@ -22,7 +22,7 @@ const RESTORE_KEY: Record<BackupRestore["status"], StatusKey> = {
 };
 
 /** Status key of a "Pulihkan ke database baru" entry. */
-export const restoreStatusKey = (r: Pick<BackupRestore, "status" | "error">): StatusKey =>
+export const restoreStatusKey = (r: Pick<BackupRestore, "status" | "errorCode">): StatusKey =>
   isInterrupted(r) ? "interrupted" : RESTORE_KEY[r.status];
 
 /** Header badge of the page: most urgent state first; `label` overrides the vocabulary text where it is too generic. */

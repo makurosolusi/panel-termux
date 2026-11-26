@@ -160,6 +160,9 @@ export function siteHarness(opts: { healthTimeoutMs?: number } = {}) {
     get db() {
       return db;
     },
+    get api() {
+      return api;
+    },
     get admin() {
       return admin;
     },

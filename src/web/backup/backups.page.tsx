@@ -5,14 +5,13 @@ import type { Page } from "@/shared/dev.types";
 import type { SecurityStatus } from "@/shared/security.types";
 import { EmptyState } from "@/web/components/empty-state";
 import { PageHeader } from "@/web/components/page-header";
+import { PaginationFooter } from "@/web/components/pagination-footer";
 import { QueryView } from "@/web/components/query-view";
 import { Section } from "@/web/components/section";
 import { HeaderSkeleton, RowsSkeleton } from "@/web/components/skeletons";
 import { StatusBadge } from "@/web/components/status-badge";
 import { Button } from "@/web/components/ui/button";
 import { usePageParam } from "@/web/components/use-page-param";
-import { DEV_PAGE_SIZE } from "@/web/dev/dev.pagination";
-import { Pager } from "@/web/dev/pager";
 import { idBackup } from "@/web/i18n/id.backup";
 import { SECURITY_STATUS_URL } from "@/web/security/security.api";
 import { useMe } from "@/web/session/use-me";
@@ -30,15 +29,17 @@ const t = idBackup;
 
 /** Newest restores shown in "Uji pemulihan" (older ones stay in the audit log). */
 const RESTORES_SHOWN = 10;
+/** Runs per history page (matches the API default). */
+const RUNS_PAGE_SIZE = 20;
 
 /** /panel/backups: status, last good copy per item, restore tests, run history; polls while a run or restore goes. */
 export function BackupsPage() {
   const superAdmin = useMe().role === "super_admin";
-  const [page] = usePageParam();
+  const [page, setPage] = usePageParam();
   const [busyPoll, setBusyPoll] = useState(false);
   const poll = busyPoll ? BACKUP_POLL_MS : undefined;
   const status = useApiQuery<BackupStatus>(backupUrl("/status"), poll);
-  const runs = useApiQuery<Page<BackupRun>>(backupUrl("", { page, pageSize: DEV_PAGE_SIZE }), poll);
+  const runs = useApiQuery<Page<BackupRun>>(backupUrl("", { page, pageSize: RUNS_PAGE_SIZE }), poll);
   const restores = useApiQuery<Page<BackupRestore>>(backupUrl("/restores", { pageSize: RESTORES_SHOWN }), poll);
   // The data key state is super_admin only; an admin request would 403 and navigate to /login.
   const security = useApiQuery<SecurityStatus>(SECURITY_STATUS_URL, undefined, {
@@ -144,7 +145,14 @@ export function BackupsPage() {
                   <BackupRunRow key={run.id} run={run} access={access} />
                 ))}
               </div>
-              <Pager page={d} />
+              <PaginationFooter
+                p={{
+                  page: d.page,
+                  pageCount: Math.max(1, Math.ceil(d.total / Math.max(1, d.pageSize))),
+                  total: d.total,
+                  onPageChange: setPage,
+                }}
+              />
             </div>
           )}
         </QueryView>

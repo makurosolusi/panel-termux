@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { id } from "@/web/i18n/id";
+import { idApp } from "@/web/i18n/id.app";
 
 /** Sign-out handler with pending flag and an Indonesian error message on failure. */
 export function useSignOut() {
@@ -16,7 +16,7 @@ export function useSignOut() {
         return false;
       });
     if (!ok) {
-      setError(id.menu.signOutFailed);
+      setError(idApp.menu.signOutFailed);
       setPending(false);
     }
   };

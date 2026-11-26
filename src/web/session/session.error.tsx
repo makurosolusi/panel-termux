@@ -3,7 +3,8 @@ import { useEffect } from "react";
 import { useRevalidator, useRouteError } from "react-router";
 import { Button } from "@/web/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/web/components/ui/card";
-import { id } from "@/web/i18n/id";
+import { idSession } from "@/web/i18n/id.session";
+import { idShell } from "@/web/i18n/id.shell";
 import { ApiError } from "@/web/shared/api.client";
 import { CHUNK_RELOAD_KEY, isChunkLoadError, reloadOnce } from "@/web/shared/chunk.error";
 
@@ -27,8 +28,8 @@ export function SessionError() {
 
   const chunk = kind === "chunk";
   const Icon = chunk ? TriangleAlertIcon : kind === "network" ? WifiOffIcon : ServerCrashIcon;
-  const title = chunk ? id.shell.chunkError.title : kind === "network" ? id.session.errorTitle : id.session.serverTitle;
-  const body = chunk ? id.shell.chunkError.body : kind === "network" ? id.session.errorBody : id.session.serverBody;
+  const title = chunk ? idShell.chunkError.title : kind === "network" ? idSession.errorTitle : idSession.serverTitle;
+  const body = chunk ? idShell.chunkError.body : kind === "network" ? idSession.errorBody : idSession.serverBody;
   return (
     <main className="mx-auto flex min-h-svh max-w-md flex-col justify-center p-4">
       <Card>
@@ -42,7 +43,7 @@ export function SessionError() {
         <CardContent>
           {chunk ? (
             <Button className="w-full" onClick={() => window.location.reload()}>
-              {id.shell.chunkError.reload}
+              {idShell.chunkError.reload}
             </Button>
           ) : (
             <Button
@@ -50,7 +51,7 @@ export function SessionError() {
               disabled={revalidator.state === "loading"}
               onClick={() => void revalidator.revalidate()}
             >
-              {id.session.retry}
+              {idSession.retry}
             </Button>
           )}
         </CardContent>

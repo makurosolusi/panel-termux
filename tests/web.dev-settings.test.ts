@@ -30,8 +30,6 @@ import { ApiError } from "@/web/shared/api.client";
 // test-only fixture
 const setting = (over: Partial<DevSetting>): DevSetting => ({
   key: "monitor.sample_interval_sec",
-  label: "",
-  description: "",
   secret: false,
   value: "60",
   default: "60",

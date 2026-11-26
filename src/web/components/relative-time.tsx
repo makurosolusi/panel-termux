@@ -4,7 +4,7 @@ import { useNow } from "./now.store";
 /**
  * "3 mnt lalu" that keeps itself current on the shared clock (`useNow`); `absolute` shows the exact local time
  * instead (detail and history pages). Readers get the exact time (sr-only text; `aria-label` is not supported on `<time>`), pointers via `title`. `format`
- * wraps the visible text, e.g. `id.common.updatedAgo` → "Diperbarui 3 mnt lalu".
+ * wraps the visible text, e.g. `idCommon.updatedAgo` → "Diperbarui 3 mnt lalu".
  */
 export function RelativeTime({
   at,

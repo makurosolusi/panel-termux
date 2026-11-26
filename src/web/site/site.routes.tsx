@@ -1,8 +1,10 @@
 import type { RouteObject } from "react-router";
-import { id } from "@/web/i18n/id";
+import { idShell } from "@/web/i18n/id.shell";
 import type { RouteHandle } from "@/web/layout/shell.page";
 
-const n = id.shell.nav;
+// Fallback titles while a page chunk loads (its PageHeader then registers the real one). Shell copy only, so the
+// eager route table does not pull the site/job dictionaries into the initial bundle (B30).
+const n = idShell.nav;
 
 /** Site routes (PLAN/03): list, new-site wizard (task route), detail, change history and job progress. */
 export const siteRoutes: RouteObject[] = [
@@ -13,7 +15,7 @@ export const siteRoutes: RouteObject[] = [
   },
   {
     path: "/panel/sites/new",
-    handle: { title: id.site.wizard.title, task: true } satisfies RouteHandle,
+    handle: { title: n.sites, task: true } satisfies RouteHandle,
     lazy: { Component: () => import("./site-new.page").then((m) => m.SiteNewPage) },
   },
   {
@@ -28,7 +30,7 @@ export const siteRoutes: RouteObject[] = [
   },
   {
     path: "/panel/jobs/:id",
-    handle: { title: id.site.job.title } satisfies RouteHandle,
+    handle: { title: n.jobs } satisfies RouteHandle,
     lazy: { Component: () => import("./job.page").then((m) => m.JobPage) },
   },
 ];

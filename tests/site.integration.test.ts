@@ -108,7 +108,7 @@ describe.skipIf(!node)("integration checks (real node probe)", () => {
     const dir = join(home, "sites", "makuro-solusi");
     writeFileSync(join(dir, "app"), fakeElf({ interp: GLIBC_LINKER }));
     writeFileSync(join(dir, ".env"), "PORT=3005\nAPI_TOKEN=dotenv-secret-456\n");
-    await json(await call("POST", "/sites/adopt", { hostname: "solusi.example.test", app: "makuro-solusi" }), 201);
+    await json(await call("POST", "/sites/adopt", { hostname: "solusi.contoh.test", app: "makuro-solusi" }), 201);
     const res = await call("GET", "/sites/makuro-solusi");
     const text = await res.clone().text();
     expect((await json<SiteDetail>(res)).pm2EnvKeys).toEqual(["NODE_ENV", "API_TOKEN"]);

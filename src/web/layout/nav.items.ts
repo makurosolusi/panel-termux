@@ -17,10 +17,10 @@ import {
   UsersIcon,
 } from "lucide-react";
 import { canAccess, type Role } from "@/shared/roles";
-import { id } from "@/web/i18n/id";
 import { idHistory } from "@/web/i18n/id.history";
+import { idShell } from "@/web/i18n/id.shell";
 
-const n = id.shell.nav;
+const n = idShell.nav;
 
 /** Content width class of a page: tables/dashboards wide, forms and profile narrow. */
 export type PageWidth = "wide" | "narrow";
@@ -29,13 +29,13 @@ export type PageWidth = "wide" | "narrow";
 export type NavItem = { to: string; label: string; icon: LucideIcon; end?: boolean; width?: PageWidth };
 
 /** Titled group of sidebar links. */
-export type NavGroup = { key: keyof typeof id.shell.groups; label: string; items: readonly NavItem[] };
+export type NavGroup = { key: keyof typeof idShell.groups; label: string; items: readonly NavItem[] };
 
 /** Full navigation; access per item comes from `canAccess` (shared with the server's area rules). */
 export const NAV_GROUPS: readonly NavGroup[] = [
   {
     key: "server",
-    label: id.shell.groups.server,
+    label: idShell.groups.server,
     items: [
       { to: "/panel", label: n.overview, icon: LayoutDashboardIcon, end: true },
       { to: "/panel/sites", label: n.sites, icon: LayersIcon },
@@ -48,7 +48,7 @@ export const NAV_GROUPS: readonly NavGroup[] = [
   },
   {
     key: "admin",
-    label: id.shell.groups.admin,
+    label: idShell.groups.admin,
     items: [
       { to: "/dev", label: n.health, icon: HeartPulseIcon, end: true },
       { to: "/dev/users", label: n.users, icon: UsersIcon },
@@ -59,7 +59,7 @@ export const NAV_GROUPS: readonly NavGroup[] = [
   },
   {
     key: "account",
-    label: id.shell.groups.account,
+    label: idShell.groups.account,
     items: [{ to: "/profile", label: n.profile, icon: UserIcon, width: "narrow" }],
   },
 ];

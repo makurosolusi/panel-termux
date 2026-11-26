@@ -154,7 +154,7 @@ describe("verify", () => {
     expect(calls[0]).toEqual({ method: "GET", path: "/user/tokens/verify", auth: `Bearer ${TOKEN}` });
   });
   test("POST /cloudflare/verify route returns the provider result", async () => {
-    const res = await createCloudflareDevRoutes({ dns }).handle(
+    const res = await createCloudflareDevRoutes({ dns, db }).handle(
       new Request("http://localhost/cloudflare/verify", { method: "POST" }),
     );
     expect(res.status).toBe(200);

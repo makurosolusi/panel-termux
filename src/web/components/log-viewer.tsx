@@ -8,10 +8,10 @@ import { LogLines } from "@/web/components/log-lines";
 import { SearchField } from "@/web/components/search-field";
 import { Button } from "@/web/components/ui/button";
 import { Skeleton } from "@/web/components/ui/skeleton";
-import { id } from "@/web/i18n/id";
+import { idShell } from "@/web/i18n/id.shell";
 import { formatNumber } from "@/web/shared/format";
 
-const t = id.shell.log;
+const t = idShell.log;
 /** Scrolling further than this from the bottom unpins the view. */
 const UNPIN_PX = 32;
 const WRAP_KEY = "panel-termux:log-wrap";

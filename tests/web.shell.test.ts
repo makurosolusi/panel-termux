@@ -5,7 +5,6 @@ import { backupRoutes } from "@/web/backup/backup.routes";
 import { typedMatches } from "@/web/components/confirm-action";
 import { ROLE_TONE } from "@/web/components/role-badge";
 import { usageTone } from "@/web/components/stat-tile";
-import { LEGACY_TONE, toneForStatus } from "@/web/components/status.tone";
 import { devRoutes } from "@/web/dev/dev.routes";
 import { documentTitle } from "@/web/layout/document.title";
 import {
@@ -206,23 +205,7 @@ describe("theme preference", () => {
 });
 
 describe("status → tone", () => {
-  test.each([
-    ["run", "success"],
-    ["online", "success"],
-    ["succeeded", "success"],
-    ["running", "info"],
-    ["launching", "warning"],
-    ["partial", "warning"],
-    ["failed", "danger"],
-    ["errored", "danger"],
-    ["rolled_back", "warning"],
-    ["interrupted", "warning"],
-    ["stopped", "neutral"],
-    ["whatever", "neutral"],
-  ] as const)("%s → %s", (status, tone) => expect(toneForStatus(status)).toBe(tone));
-
-  test("legacy panel tones and roles", () => {
-    expect(LEGACY_TONE).toEqual({ ok: "success", warn: "warning", bad: "danger", muted: "neutral" });
+  test("role tones", () => {
     expect(ROLE_TONE.super_admin).toBe("accent"); // privileged, not dangerous: never red
     expect(ROLE_TONE.admin).toBe("info");
   });

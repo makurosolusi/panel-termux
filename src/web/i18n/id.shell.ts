@@ -1,4 +1,4 @@
-/** Indonesian strings of the app shell, shared components and route pages (merged into `id.shell`). */
+/** Indonesian strings of the app shell, shared components and route pages (imported directly, DECISIONS B30). */
 export const idShell = {
   skipToContent: "Lewati ke konten",
   groups: { server: "Server", admin: "Administrasi", account: "Akun" },
@@ -17,9 +17,10 @@ export const idShell = {
     logs: "Log",
     settings: "Pengaturan",
     profile: "Profil",
+    /** Route titles of task/detail pages, here so site.routes.tsx need not pull the large site/job dictionaries (B30). */
+    siteNew: "Buat situs baru",
+    job: "Progres perubahan",
   },
-  /** Labels for trailing path segments in breadcrumbs (others show the raw, decoded segment). */
-  segments: { new: "Baru", log: "Log" } as Record<string, string>,
   sidebar: {
     label: "Navigasi utama",
     collapse: "Ciutkan sidebar",
@@ -38,7 +39,6 @@ export const idShell = {
   },
   staleTitle: "Tidak bisa memperbarui data.",
   staleSince: (rel: string) => `Data terakhir diperbarui ${rel}.`,
-  noResults: { title: "Tidak ada yang cocok", body: "Ubah kata pencarian atau hapus filter.", clear: "Hapus filter" },
   search: { clear: "Hapus pencarian" },
   theme: { label: "Tema", system: "Sistem", light: "Terang", dark: "Gelap" },
   account: "Menu akun",
@@ -80,8 +80,6 @@ export const idShell = {
     title: "Halaman ini gagal dimuat",
     body: "Terjadi kesalahan saat menampilkan halaman. Coba muat ulang; kalau berulang, laporkan ke admin.",
     retry: "Muat ulang",
-    /** Used until RouteErrorPage switches to `home` (W4). */
-    back: "Kembali",
     home: "Ke beranda",
   },
   publicNotFound: {

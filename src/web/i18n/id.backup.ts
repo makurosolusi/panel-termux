@@ -175,6 +175,7 @@ export const idBackup = {
       insufficient_space: "Ruang penyimpanan HP tidak cukup.",
       download_failed: "File cadangan tidak bisa diunduh dari penyimpanan.",
       restore_failed: "pg_restore gagal. Lihat detail di bawah.",
+      interrupted: "Pemulihan terputus karena panel dimulai ulang. Coba lagi.",
     } satisfies Record<NonNullable<BackupRestore["errorCode"]>, string>,
     failed: "Pemulihan gagal.",
   },

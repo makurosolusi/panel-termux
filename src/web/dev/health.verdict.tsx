@@ -3,7 +3,6 @@ import { ArrowRightIcon, InfoIcon } from "lucide-react";
 import { type ReactNode, useEffect, useRef, useState } from "react";
 import { Link } from "react-router";
 import type { DevHealth, HealthStatus } from "@/shared/dev.types";
-import type { Problem } from "@/shared/panel.types";
 import { detail, title } from "@/shared/problem.copy";
 import { useNow } from "@/web/components/now.store";
 import { Section } from "@/web/components/section";
@@ -25,13 +24,6 @@ import {
 import { CodeText } from "./onboarding.card";
 
 const t = idDevHealth;
-
-/** Problem headline from the shared problem copy; 0.2.x problems only carry `message`. */
-export const problemTitle = (p: Problem): string =>
-  p.code && p.params ? title({ code: p.code, target: p.target, params: p.params }) : (p.message ?? p.target);
-
-const problemDetail = (p: Problem): string | null =>
-  p.code && p.params ? detail({ code: p.code, target: p.target, params: p.params }) : null;
 
 const VERDICT_TONE: Record<HealthStatus, string> = {
   ok: TONE_CLASS.success,
@@ -89,7 +81,7 @@ export function VerdictCard({ h }: { h: DevHealth }) {
         <h2 id="verdict-title" className="text-lg font-semibold">
           {t.verdict[verdict]}
         </h2>
-        <p className="min-w-0 flex-1 basis-60 text-sm text-foreground/85">{verdictSentence(h, now, problemTitle)}</p>
+        <p className="min-w-0 flex-1 basis-60 text-sm text-foreground/85">{verdictSentence(h, now, title)}</p>
         <span className="sr-only" role="status">
           {announce}
         </span>
@@ -99,8 +91,8 @@ export function VerdictCard({ h }: { h: DevHealth }) {
           <Row
             key={p.id ?? `${p.kind}:${p.target}`}
             icon={<StatusIcon state={PROBLEM_STATUS_KEY[p.severity === "danger" ? "danger" : "warning"]} />}
-            text={problemTitle(p)}
-            sub={problemDetail(p)}
+            text={title(p)}
+            sub={detail(p)}
             link={p.href ? <RowLink to={p.href} label={t.problemLink} /> : null}
           />
         ))}

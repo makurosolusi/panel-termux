@@ -4,7 +4,7 @@ import { Dialog as DialogPrimitive } from "radix-ui";
 import type * as React from "react";
 
 import { Button } from "@/web/components/ui/button";
-import { id } from "@/web/i18n/id";
+import { idCommon } from "@/web/i18n/id.common";
 
 function Dialog({ ...props }: React.ComponentProps<typeof DialogPrimitive.Root>) {
   return <DialogPrimitive.Root data-slot="dialog" {...props} />;
@@ -61,7 +61,7 @@ function DialogContent({
             className="absolute top-4 right-4 rounded-xs opacity-70 ring-offset-background transition-opacity hover:opacity-100 focus:ring-2 focus:ring-ring focus:ring-offset-2 focus:outline-hidden pointer-coarse:after:absolute pointer-coarse:after:-inset-3 pointer-coarse:after:content-[''] disabled:pointer-events-none data-[state=open]:bg-accent data-[state=open]:text-muted-foreground [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4"
           >
             <XIcon />
-            <span className="sr-only">{id.common.close}</span>
+            <span className="sr-only">{idCommon.close}</span>
           </DialogPrimitive.Close>
         )}
       </DialogPrimitive.Content>
@@ -96,7 +96,7 @@ function DialogFooter({
       {children}
       {showCloseButton && (
         <DialogPrimitive.Close asChild>
-          <Button variant="outline">{id.common.close}</Button>
+          <Button variant="outline">{idCommon.close}</Button>
         </DialogPrimitive.Close>
       )}
     </div>

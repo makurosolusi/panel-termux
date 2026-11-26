@@ -3,7 +3,7 @@ import type { AuditAction } from "@/shared/audit.types";
 import type { DevAuditEntry } from "@/shared/dev.types";
 import { isRole } from "@/shared/roles";
 import type { StatusTone } from "@/web/components/status.tone";
-import { id } from "@/web/i18n/id";
+import { idApp } from "@/web/i18n/id.app";
 import { idDevAudit } from "@/web/i18n/id.dev.audit";
 import { idDevSetup } from "@/web/i18n/id.dev.setup";
 import { idSettings } from "@/web/i18n/id.settings";
@@ -27,7 +27,7 @@ type Ctx = { a: string; target: string; m: Record<string, unknown>; e: DevAuditE
 
 const str = (v: unknown, fallback = ""): string => (typeof v === "string" && v ? v : fallback);
 const num = (v: unknown): number => (typeof v === "number" ? v : 0);
-const role = (v: unknown): string => (typeof v === "string" && isRole(v) ? id.roles[v] : str(v, "?"));
+const role = (v: unknown): string => (typeof v === "string" && isRole(v) ? idApp.roles[v] : str(v, "?"));
 const who = (c: Ctx): string => str(c.m.targetEmail, t.otherUser);
 const settingLabel = (key: string): string =>
   (idSettings.fields as Record<string, { label: string } | undefined>)[key]?.label ?? key;
@@ -75,6 +75,7 @@ const SENTENCES = {
   "backup.run": backupRun,
   "backup.download": (c) => s.backupDownload(c.a, c.target),
   "backup.verify": (c) => s.backupVerify(c.a, c.m.ok ? t.ok : t.failed),
+  "cloudflare.verify": (c) => s.cloudflareVerify(c.a, c.m.ok ? t.ok : t.failed),
   "backup.prune": (c) => s.backupPrune(c.a),
   "backup.restore": (c) => s.backupRestore(c.a, c.target),
   "backup.restore_drop": (c) => s.backupRestoreDrop(c.a, c.target),
@@ -104,7 +105,7 @@ const TONES: Partial<Record<AuditAction, StatusTone>> = {
 
 function tone(e: DevAuditEntry, m: Record<string, unknown>): StatusTone {
   if (e.action === "backup.run" && m.status === "failed") return "danger";
-  if (e.action === "backup.verify" && m.ok === false) return "warning";
+  if ((e.action === "backup.verify" || e.action === "cloudflare.verify") && m.ok === false) return "warning";
   return TONES[e.action as AuditAction] ?? "neutral";
 }
 
