@@ -11,8 +11,10 @@ CALLS="$T/calls"
 : >"$CALLS"
 
 # Stubs record their arguments; curl fails until the panel was (re)started once.
+# sv fails like the real one when SVDIR does not point at the service dir.
 cat >"$T/bin/sv" <<EOF
 #!/bin/sh
+[ "\${SVDIR:-}" = "$PREFIX/var/service" ] || { echo "sv: SVDIR not set to $PREFIX/var/service" >&2; exit 1; }
 echo "sv \$*" >>"$CALLS"
 EOF
 cat >"$T/bin/curl" <<EOF
@@ -22,6 +24,8 @@ grep -q '^sv restart panel' "$CALLS"
 EOF
 chmod 755 "$T/bin/sv" "$T/bin/curl"
 PATH="$T/bin:$PATH"
+# The phone's ssh shell has no SVDIR; the script must set it itself.
+unset SVDIR
 
 fail() { echo "FAIL: $*" >&2; exit 1; }
 mode() { stat -f %Lp "$1" 2>/dev/null || stat -c %a "$1"; }
@@ -59,7 +63,7 @@ run "$T/bin1"
 grep -q unchanged "$T/out" || fail "same binary should be left alone"
 [ ! -f "$HOME/panel/panel.prev" ] || fail "panel.prev created for an unchanged binary"
 [ ! -f "$SVC/down" ] || fail "down file not removed"
-grep -q '^sv restart panel' "$CALLS" || fail "sv restart not called"
+grep -q '^sv restart panel' "$CALLS" || fail "sv restart not called (SVDIR not exported?)"
 grep -q 'curl -fsS http://127.0.0.1:3999/api/health' "$CALLS" || fail "health check not on .env PORT"
 if grep -q "$SECRET" "$T/out"; then fail "secret printed"; fi
 

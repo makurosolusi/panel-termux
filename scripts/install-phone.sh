@@ -7,7 +7,10 @@ set -eu
 
 PREFIX=${PREFIX:-/data/data/com.termux/files/usr}
 INSTALL_DIR="$HOME/panel"
-SERVICE_DIR="$PREFIX/var/service/panel"
+# sv resolves "panel" against SVDIR; a non-interactive ssh shell does not set it, so export it here.
+SVDIR="$PREFIX/var/service"
+export SVDIR
+SERVICE_DIR="$SVDIR/panel"
 SVLOGGER="$PREFIX/share/termux-services/svlogger"
 REQUIRED_VARS="APP_BASE_URL GOOGLE_CLIENT_ID GOOGLE_CLIENT_SECRET SUPER_ADMIN_EMAILS"
 DEFAULT_PORT=3200
