@@ -1,54 +1,63 @@
 import { existsSync, rmSync, statSync } from "node:fs";
 import { join } from "node:path";
-import { count, desc, eq } from "drizzle-orm";
-import type { Deploy, DeployKind, DeployStatus, UploadStarted } from "../../shared/deploy.types";
-import { DEPLOY_CHUNK_SIZE } from "../../shared/deploy.types";
+import { eq } from "drizzle-orm";
+import type { ChunkReceived, Deploy, DeployKind, DeployStatus, UploadState } from "../../shared/deploy.types";
 import type { Page } from "../../shared/dev.types";
 import type { SiteRuntime } from "../../shared/site.types";
 import { recordAudit } from "../audit.service";
-import { deploy, site, user } from "../db/schema";
+import { deploy, site } from "../db/schema";
 import { log } from "../log.service";
+import type { Monitor } from "../monitor/monitor.contract";
 import { ApiError, type Paging } from "../routes/http.error";
 import type { JobRunner, JobSpec, StepDef } from "../sites/job.runner";
+import { errMsg } from "../sites/job.step";
 import { SITE_NAME_RE, type SiteCtx } from "../sites/site.checks";
+import { identityOf, rowFor, siteBinaries } from "./binary.identity";
+import { assertIntegration, assertRuntime, assertSiteSpace, scriptRuntime } from "./deploy.checks";
+import { listDeploys } from "./deploy.history";
+import { type CleanupOf, cleanupSteps } from "./deploy.recovery";
+import { appRestartStep, healthStep, revertApp } from "./deploy.restart";
 import {
-  appsRuntimeStep,
-  assembleStep,
-  binPaths,
+  appName,
+  appsEntryStep,
+  binsOf,
   chmodStep,
   type DeployState,
   detectStep,
-  healthStep,
-  restartStep,
-  revertApp,
-  swapBackStep,
+  newState,
+  rollbackSwapStep,
+  runScriptStep,
+  type SiteRow,
+  stageStep,
   swapStep,
 } from "./deploy.steps";
 import { BinaryError, detectRuntime } from "./elf.runtime";
-import { createUploadStore } from "./upload.store";
+import type { HealthTiming } from "./health.check";
+import { sha256File } from "./swap";
+import { createUploadStore, freeBytes } from "./upload.store";
 
-/** How long a restarted app gets to answer `GET /` before the deploy is undone. */
-export const HEALTH_TIMEOUT_MS = 30_000;
+/**
+ * Deps: site context, the shared job runner (global lock), the panel data dir (uploads/ lives there). Optional:
+ * monitor (restarts the deploy causes are not crashes), failing integration checks for a managed first deploy
+ * (409 `integration_required`), health timing/timeout overrides (tests), free-space reader (tests).
+ */
+export type DeployDeps = SiteCtx & {
+  jobs: JobRunner;
+  dataDir: string;
+  monitor?: Pick<Monitor, "noteIntentionalRestart">;
+  integrationFailing?: () => Promise<string[]>;
+  healthTiming?: HealthTiming;
+  healthTimeoutMs?: number;
+  freeBytes?: (path: string) => number;
+};
 
-/** Deps: site context, the shared job runner (global lock), the panel data dir (uploads/ lives there). */
-export type DeployDeps = SiteCtx & { jobs: JobRunner; dataDir: string; healthTimeoutMs?: number };
-
-type SiteRow = typeof site.$inferSelect;
-
-async function sha256File(path: string): Promise<string> {
-  const h = new Bun.CryptoHasher("sha256");
-  for await (const chunk of Bun.file(path).stream()) h.update(chunk);
-  return h.digest("hex");
-}
-
-/** Binary deploys behind /api/panel: chunked upload → site.deploy job, site.rollback job, deploy history. */
+/** Binary deploys behind /api/panel: resumable upload → site.deploy job, site.rollback job, cleanup, history. */
 export function createDeployService(deps: DeployDeps) {
   const { db, jobs } = deps;
-  const healthTimeoutMs = deps.healthTimeoutMs ?? HEALTH_TIMEOUT_MS;
-  const uploads = createUploadStore(join(deps.dataDir, "uploads"));
-
-  // Rows still "running" were cut off by a panel restart (the job runner marks their jobs failed too).
-  db.update(deploy).set({ status: "failed" }).where(eq(deploy.status, "running")).run();
+  const free = deps.freeBytes ?? freeBytes;
+  const uploads = createUploadStore(join(deps.dataDir, "uploads"), { free });
+  const health = (ctx: SiteCtx, s: SiteRow, st: DeployState) =>
+    healthStep(ctx, s, st, deps.healthTiming, deps.healthTimeoutMs);
 
   const siteRow = (name: string): SiteRow => {
     if (!SITE_NAME_RE.test(name)) throw new ApiError(400, "invalid_name", `invalid site name ${JSON.stringify(name)}`);
@@ -56,17 +65,20 @@ export function createDeployService(deps: DeployDeps) {
     if (!s) throw new ApiError(404, "not_found", `unknown site ${name}`);
     return s;
   };
-  const setStatus = (id: string, status: DeployStatus) =>
-    db.update(deploy).set({ status }).where(eq(deploy.id, id)).run();
+  const finish = (id: string, status: DeployStatus) =>
+    db.update(deploy).set({ status, finishedAt: new Date() }).where(eq(deploy.id, id)).run();
 
-  /** Wraps the step list with the deploy row bookkeeping and the post-rollback restart. */
+  const fromSha = (s: SiteRow) => rowFor(db, s.name, identityOf(binsOf(s).app))?.sha256 ?? null;
+
+  /** Starts the job and inserts its deploy row in the same tick (before any step result is recorded). */
   function runJob(
     actorId: string,
     s: SiteRow,
     kind: DeployKind,
     st: DeployState,
     steps: StepDef[],
-    bin: { sha256: string; sizeBytes: number },
+    bin: { sha256: string; sizeBytes: number; fileName: string | null },
+    input: Record<string, unknown>,
   ): string {
     const id = crypto.randomUUID();
     const spec: JobSpec = {
@@ -74,23 +86,35 @@ export function createDeployService(deps: DeployDeps) {
       target: s.name,
       actorId,
       steps,
+      input,
       onSuccess() {
+        const live = identityOf(binsOf(s).app);
         db.transaction((tx) => {
-          tx.update(deploy).set({ status: "succeeded", runtime: st.runtime }).where(eq(deploy.id, id)).run();
+          tx.update(deploy)
+            .set({
+              status: "succeeded",
+              runtime: st.runtime,
+              finishedAt: new Date(),
+              binIno: live?.ino ?? null,
+              binMtimeMs: live?.mtimeMs ?? null,
+            })
+            .where(eq(deploy.id, id))
+            .run();
           tx.update(site).set({ runtime: st.runtime }).where(eq(site.name, s.name)).run();
         });
-        if (kind === "deploy") rmSync(binPaths(s).drop, { force: true });
+        if (kind === "deploy") rmSync(binsOf(s).drop, { force: true });
       },
       async afterRollback() {
-        rmSync(binPaths(s).next, { force: true });
+        rmSync(binsOf(s).next, { force: true });
         try {
+          if (st.restarted) deps.monitor?.noteIntentionalRestart({ kind: "app", name: appName(s) });
           const done = await revertApp(deps, s, st);
           if (done) log.warn(`[deploy] ${s.name}: ${done} after rollback`);
         } catch (e) {
-          setStatus(id, "failed");
-          throw e;
+          finish(id, "failed");
+          throw new Error(`reverting pm2 app of ${s.name}: ${errMsg(e)}`, { cause: e });
         }
-        setStatus(id, st.swapped && !st.undoFailed ? "rolled_back" : "failed");
+        finish(id, st.swapped && !st.undoFailed ? "rolled_back" : "failed");
       },
     };
     const jobId = jobs.start(spec);
@@ -110,115 +134,155 @@ export function createDeployService(deps: DeployDeps) {
     return jobId;
   }
 
-  const newState = (runtime: SiteRuntime): DeployState => ({
-    runtime,
-    swapped: false,
-    appsChanged: false,
-    restarted: false,
-    undoFailed: false,
-  });
-
   return {
     uploads,
 
-    startUpload(name: string, body: unknown): UploadStarted {
-      const u = uploads.start(siteRow(name).name, body);
-      return { uploadId: u.id, chunkSize: DEPLOY_CHUNK_SIZE };
+    /** POST /sites/:name/uploads → 201 UploadState. */
+    async startUpload(name: string, body: unknown): Promise<UploadState> {
+      const s = siteRow(name);
+      if (!existsSync(s.dir)) throw new ApiError(409, "no_folder", `site folder ${s.dir} does not exist`);
+      await assertIntegration(s, deps.integrationFailing);
+      return uploads.start(s.name, body);
     },
 
-    putChunk: async (uploadId: string, index: string, body: ArrayBuffer) => ({
-      received: await uploads.putChunk(uploadId, index, body),
-    }),
+    /** GET /sites/:name/uploads/active. */
+    activeUpload: (name: string): UploadState | null => uploads.activeFor(siteRow(name).name),
 
-    abort: (uploadId: string) => uploads.abort(uploadId),
+    /** GET /uploads/:id. */
+    getUpload: (id: string): UploadState => uploads.view(uploads.get(id)),
 
-    complete(actorId: string, uploadId: string): { jobId: string } {
+    /** PUT /uploads/:id/chunks/:index; chunk 0 of an adopted site must match what its pm2 entry runs. */
+    putChunk: (id: string, index: string, body: Uint8Array, sha: string | null): Promise<ChunkReceived> =>
+      uploads.putChunk(id, index, body, sha, async (name, runtime) => {
+        const s = siteRow(name);
+        if (s.managed) return;
+        try {
+          assertRuntime(await scriptRuntime(deps.system, s), runtime);
+        } catch (e) {
+          if (e instanceof ApiError && e.code === "pm2_not_running") return; // checked again at complete
+          throw e;
+        }
+      }),
+
+    /** DELETE /uploads/:id. */
+    abort: (id: string) => uploads.abort(id),
+
+    /** Site delete (`validate`): its unfinished upload goes too. */
+    dropUploadsFor: (name: string) => uploads.dropFor(name),
+
+    /** SiteDetail.binary of a site. */
+    binaries: (s: { name: string; dir: string }) => siteBinaries(db, s),
+
+    /** POST /uploads/:id/complete: checks, sha256 of upload.bin (C1), then the site.deploy job. */
+    async complete(actorId: string, uploadId: string): Promise<{ jobId: string }> {
       const u = uploads.get(uploadId);
       const missing = uploads.missing(u);
-      if (missing.length) throw new ApiError(400, "incomplete", `missing chunks: ${missing.join(", ")}`);
+      if (missing.length) {
+        throw new ApiError(400, "incomplete", `missing chunks: ${missing.join(", ")}`, { missing });
+      }
       const s = siteRow(u.site);
       jobs.assertIdle();
-      let runtime: SiteRuntime;
+      const expected = await scriptRuntime(deps.system, s);
+      const runtime = u.runtime;
+      if (!runtime) throw new ApiError(400, "incomplete", "chunk 0 was not received", { missing: [0] });
+      assertRuntime(expected, runtime);
+      const firstDeploy = !existsSync(binsOf(s).app);
+      await assertIntegration(s, deps.integrationFailing);
+      assertSiteSpace(s, uploads.binOf(u), u.sizeBytes, free);
+      const sha256 = await uploads.verify(u);
       try {
-        runtime = detectRuntime(join(u.dir, "0.part")); // ELF + program headers sit in the first chunk
+        jobs.assertIdle(); // another job may have started while hashing
       } catch (e) {
-        if (e instanceof BinaryError) throw new ApiError(400, "invalid_binary", e.message);
+        uploads.reopen(u);
         throw e;
       }
       const st = newState(runtime);
       const steps = [
-        assembleStep(s, u),
-        detectStep(s, st),
+        stageStep(s, { path: uploads.binOf(u), sizeBytes: u.sizeBytes }, () => uploads.removeDir(u.id)),
+        detectStep(s, st, expected === "native" || expected === "grun" ? expected : null),
         chmodStep(s),
-        swapStep(s, st),
-        appsRuntimeStep(deps, s, st),
-        restartStep(deps, s, st),
-        healthStep(deps, s, healthTimeoutMs),
+        swapStep(deps, s, st),
+        runScriptStep(s, st),
+        appsEntryStep(deps, s, st),
+        appRestartStep(deps, s, st),
+        health(deps, s, st),
       ];
-      const jobId = runJob(actorId, s, "deploy", st, steps, { sha256: u.sha256, sizeBytes: u.sizeBytes });
+      const bin = { sha256, sizeBytes: u.sizeBytes, fileName: u.fileName };
+      const input = {
+        site: s.name,
+        sha256,
+        fromSha256: fromSha(s),
+        sizeBytes: u.sizeBytes,
+        fileName: u.fileName,
+        runtime,
+        firstDeploy,
+      };
       uploads.detach(u);
+      const jobId = runJob(actorId, s, "deploy", st, steps, bin, input);
       recordAudit(db, {
         actorId,
         action: "site.deploy",
         target: s.name,
-        meta: { jobId, sha256: u.sha256, sizeBytes: u.sizeBytes, runtime },
+        meta: { jobId, sha256, sizeBytes: u.sizeBytes, runtime },
       });
       log.info(`[deploy] ${s.name} ${u.sizeBytes} bytes (${runtime}) by ${actorId}, job ${jobId}`);
       return { jobId };
     },
 
+    /** POST /sites/:name/rollback: app ↔ app.prev as a site.rollback job. */
     async rollback(actorId: string, name: string): Promise<{ jobId: string }> {
       const s = siteRow(name);
       jobs.assertIdle();
-      const p = binPaths(s);
+      const p = binsOf(s);
       if (!existsSync(p.prev)) throw new ApiError(409, "no_previous", `${name} has no previous binary (app.prev)`);
       if (!existsSync(p.app)) throw new ApiError(409, "no_current", `${name} has no live binary (app)`);
       let runtime: SiteRuntime;
       try {
         runtime = detectRuntime(p.prev);
       } catch (e) {
-        if (e instanceof BinaryError) throw new ApiError(400, "invalid_binary", `app.prev: ${e.message}`);
+        if (e instanceof BinaryError)
+          throw new ApiError(400, "invalid_binary", `app.prev: ${e.message}`, { reason: e.reason });
         throw e;
       }
-      const bin = { sha256: await sha256File(p.prev), sizeBytes: statSync(p.prev).size };
+      assertRuntime(await scriptRuntime(deps.system, s), runtime);
+      const toSha256 = await sha256File(p.prev);
+      const bin = {
+        sha256: toSha256,
+        sizeBytes: statSync(p.prev).size,
+        fileName: rowFor(db, s.name, identityOf(p.prev))?.fileName ?? null,
+      };
+      jobs.assertIdle();
       const st = newState(runtime);
       const steps = [
-        swapBackStep(s, st),
-        appsRuntimeStep(deps, s, st),
-        restartStep(deps, s, st),
-        healthStep(deps, s, healthTimeoutMs),
+        rollbackSwapStep(deps, s, st),
+        runScriptStep(s, st),
+        appRestartStep(deps, s, st),
+        health(deps, s, st),
       ];
-      const jobId = runJob(actorId, s, "rollback", st, steps, bin);
-      recordAudit(db, { actorId, action: "site.rollback", target: name, meta: { jobId, sha256: bin.sha256, runtime } });
-      log.info(`[deploy] rollback ${name} to ${bin.sha256.slice(0, 12)} by ${actorId}, job ${jobId}`);
+      const jobId = runJob(actorId, s, "rollback", st, steps, bin, { site: s.name, toSha256, fromSha256: fromSha(s) });
+      recordAudit(db, { actorId, action: "site.rollback", target: name, meta: { jobId, sha256: toSha256, runtime } });
+      log.info(`[deploy] rollback ${name} to ${toSha256.slice(0, 12)} by ${actorId}, job ${jobId}`);
       return { jobId };
     },
 
-    list(name: string, paging: Paging): Page<Deploy> {
-      const s = siteRow(name);
-      const rows = db
-        .select({ d: deploy, actorName: user.name })
-        .from(deploy)
-        .leftJoin(user, eq(user.id, deploy.actorId))
-        .where(eq(deploy.siteName, s.name))
-        .orderBy(desc(deploy.at))
-        .limit(paging.pageSize)
-        .offset(paging.offset)
-        .all();
-      const total = db.select({ n: count() }).from(deploy).where(eq(deploy.siteName, s.name)).get()?.n ?? 0;
-      const items = rows.map(({ d, actorName }) => ({
-        id: d.id,
-        at: d.at.toISOString(),
-        actor: d.actorId ? { id: d.actorId, name: actorName ?? "" } : null,
-        sha256: d.sha256,
-        sizeBytes: d.sizeBytes,
-        runtime: d.runtime,
-        status: d.status,
-        jobId: d.jobId,
-        kind: d.kind,
-      }));
-      return { items, total, page: paging.page, pageSize: paging.pageSize };
+    /**
+     * job.cleanup of an interrupted/failed site.deploy or site.rollback (called by POST /jobs/:id/recover);
+     * `resolves` = the original job (and an interrupted earlier cleanup of it).
+     */
+    recover(actorId: string, of: CleanupOf & { jobId: string }, resolves: string[] = [of.jobId]): string {
+      const { steps } = cleanupSteps(deps, of, { timing: deps.healthTiming, healthTimeoutMs: deps.healthTimeoutMs });
+      return jobs.start({
+        kind: "job.cleanup",
+        target: of.target,
+        actorId,
+        steps,
+        input: { jobId: of.jobId },
+        resolves,
+      });
     },
+
+    /** GET /sites/:name/deploys: newest first; `active` = the row whose file is the live `app` now. */
+    list: (name: string, paging: Paging): Page<Deploy> => listDeploys(db, siteRow(name), paging),
   };
 }
 
