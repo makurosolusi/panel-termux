@@ -46,6 +46,7 @@ export const idDeploy = {
       succeeded: "Berhasil",
       failed: "Gagal",
       rolled_back: "Dikembalikan",
+      interrupted: "Terputus",
     } satisfies Record<DeployStatus, string>,
   },
 } as const;

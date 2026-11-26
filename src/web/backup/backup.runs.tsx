@@ -39,7 +39,7 @@ function ItemRow({ run, item, index }: { run: BackupRun; item: BackupItem; index
         )}
       </div>
       {item.error && <span className="break-words text-destructive">{item.error}</span>}
-      {item.ok && (
+      {item.ok && item.restoreHint && (
         <div className="flex items-start gap-2">
           <code className="min-w-0 flex-1 rounded bg-muted px-2 py-1 text-xs break-all">{item.restoreHint}</code>
           <Button variant="ghost" size="icon-sm" aria-label={t.copy} onClick={() => void copy(item.restoreHint)}>

@@ -181,7 +181,7 @@ describe("deploy + rollback jobs", () => {
     healthy.delete(port);
     const job = await deploy("shop", bin(3));
     expect(job.status).toBe("rolled_back");
-    expect(job.error).toMatch(/^Wait until healthy: not healthy on port/);
+    expect(job.error?.detail).toMatch(/^Wait until healthy: not healthy on port/);
     expect(stepStatus(job)).toMatchObject({ swap: "rolled_back", apps: "rolled_back", health: "failed" });
     expect(app()).toEqual(before.app);
     expect(prev()).toEqual(before.prev);
@@ -194,7 +194,7 @@ describe("deploy + rollback jobs", () => {
   test("sha256 mismatch fails before touching the site", async () => {
     const before = app();
     const job = await deploy("shop", bin(4), "c".repeat(64));
-    expect(job.error).toMatch(/sha256 mismatch/);
+    expect(job.error?.detail).toMatch(/sha256 mismatch/);
     expect(app()).toEqual(before);
     expect((await deploys("shop")).items[0]).toMatchObject({ status: "failed" });
   });

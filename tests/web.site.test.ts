@@ -3,7 +3,7 @@ import type { Integration, Job, JobStep } from "@/shared/site.types";
 import { id } from "@/web/i18n/id";
 import { apiErrorMessage, errorFromResponse } from "@/web/shared/api.client";
 import { type EnvRow, envRecord, envRowErrors, envUpdateBody, envUpdateEmpty } from "@/web/site/env.rows";
-import { isJobFinished, jobProgress, jobResultLink, jobTone, stepTone } from "@/web/site/job.state";
+import { isJobFinished, jobErrorMessage, jobProgress, jobResultLink, jobTone, stepTone } from "@/web/site/job.state";
 import { adoptBody, adoptPrefill, integrationHints } from "@/web/site/site.adopt";
 import { SITE_ERROR_CODES, siteUrl } from "@/web/site/site.api";
 import {
@@ -144,13 +144,31 @@ describe("job state", () => {
     ["succeeded", true],
     ["failed", true],
     ["rolled_back", true],
+    ["interrupted", true],
   ] as const)("status %s finished=%p", (status, done) => expect(isJobFinished(job({ status }))).toBe(done));
 
-  test("tones: skipped grey, failed red, rolled-back job red", () => {
+  test("tones: skipped grey, failed red, rolled-back and interrupted job warning (A10, B12)", () => {
     expect(stepTone("skipped")).toBe("muted");
     expect(stepTone("failed")).toBe("bad");
     expect(stepTone("done")).toBe("ok");
-    expect(jobTone(job({ status: "rolled_back" }))).toBe("bad");
+    expect(jobTone(job({ status: "failed" }))).toBe("bad");
+    expect(jobTone(job({ status: "rolled_back" }))).toBe("warn");
+    expect(jobTone(job({ status: "interrupted" }))).toBe("warn");
+  });
+
+  test("status and kind copy: Terputus, Dikembalikan, new kinds named", () => {
+    expect(id.site.job.statuses.interrupted).toBe("Terputus");
+    expect(id.site.job.statuses.rolled_back).toBe("Dikembalikan");
+    expect(id.site.job.kinds["site.restart"]).toBe("Mulai ulang situs");
+    expect(id.site.job.kinds["job.cleanup"]).toBe("Bersihkan perubahan terputus");
+  });
+
+  test("job error: known code gets Indonesian copy, unknown falls back to the code", () => {
+    const msgs = id.site.job.errors;
+    expect(jobErrorMessage({ code: "interrupted", params: {}, detail: null }, msgs)).toBe(
+      "Panel dimulai ulang saat perubahan ini berjalan.",
+    );
+    expect(jobErrorMessage({ code: "dns_api_failed", params: {}, detail: "x" }, msgs)).toBe("dns_api_failed");
   });
 
   test("result link: detail, or list after delete / failed create", () => {

@@ -1,4 +1,4 @@
-import type { Job, JobStepStatus } from "@/shared/site.types";
+import type { Job, JobError, JobStepStatus } from "@/shared/site.types";
 import type { Tone } from "@/web/panel/panel.status";
 
 /** Poll interval of the job progress view. */
@@ -29,9 +29,15 @@ const STEP_TONE: Record<JobStepStatus, Tone> = {
 /** Color family of a step's status icon. */
 export const stepTone = (status: JobStepStatus): Tone => STEP_TONE[status];
 
-const JOB_TONE: Record<Job["status"], Tone> = { running: "warn", succeeded: "ok", failed: "bad", rolled_back: "bad" };
+const JOB_TONE: Record<Job["status"], Tone> = {
+  running: "warn",
+  succeeded: "ok",
+  failed: "bad",
+  rolled_back: "warn",
+  interrupted: "warn",
+};
 
-/** Color family of the job status badge (rolled back is still a failure for the user). */
+/** Color family of the job status badge; `rolled_back` and `interrupted` are warnings (A10, B12). */
 export const jobTone = (job: Job): Tone => JOB_TONE[job.status];
 
 /**
@@ -43,3 +49,7 @@ export function jobResultLink(job: Job): string {
   if (job.kind === "site.create" && job.status !== "succeeded") return "/panel/sites";
   return `/panel/sites/${encodeURIComponent(job.target)}`;
 }
+
+/** Indonesian sentence for a job error code; unknown codes show the raw code. */
+export const jobErrorMessage = (error: JobError, messages: Readonly<Record<string, string>>): string =>
+  messages[error.code] ?? error.code;

@@ -180,7 +180,7 @@ describe("HTTP API", () => {
     const res = await googleCallback("Boss.OAuth@Example.com");
     expect(res.status).toBe(302);
     const me = await get("/api/me", sessionCookie(res));
-    expect(await me.json()).toMatchObject({ role: "super_admin", home: "/dev" });
+    expect(await me.json()).toMatchObject({ role: "super_admin", home: "/panel" });
   });
 });
 

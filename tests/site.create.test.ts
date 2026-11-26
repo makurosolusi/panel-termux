@@ -156,7 +156,7 @@ describe("create job", () => {
     try {
       const j = await startJob("POST", "/sites", { name: "bad6", hostname: "bad6.example.test", database: true });
       expect(j.status).toBe("rolled_back");
-      expect(j.error).toContain("error parsing ingress rules");
+      expect(j.error?.detail).toContain("error parsing ingress rules");
       expect(stepStatus(j)).toEqual({
         validate: "rolled_back",
         folder: "rolled_back",

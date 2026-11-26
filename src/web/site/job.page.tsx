@@ -11,7 +11,7 @@ import { StatusBadge } from "@/web/panel/status.badge";
 import { formatDateTime } from "@/web/shared/format";
 import { QueryView } from "@/web/shared/query.state";
 import { useApiQuery } from "@/web/shared/use-api-query";
-import { isJobFinished, JOB_POLL_MS, jobProgress, jobResultLink, jobTone } from "./job.state";
+import { isJobFinished, JOB_POLL_MS, jobErrorMessage, jobProgress, jobResultLink, jobTone } from "./job.state";
 import { JobSteps } from "./job.steps";
 import { SITE_ERROR_CODES } from "./site.api";
 
@@ -34,15 +34,20 @@ function JobView({ job }: { job: Job }) {
           <span className="text-xs tabular-nums text-muted-foreground">{t.progress(pct)}</span>
         </div>
         <JobSteps steps={job.steps} />
-        {(job.status === "failed" || job.status === "rolled_back") && (
+        {(job.status === "failed" || job.status === "rolled_back" || job.status === "interrupted") && (
           <div
             role="alert"
-            className="flex items-start gap-2 rounded-lg border border-destructive/40 bg-destructive/10 p-3 text-sm text-destructive"
+            className={
+              job.status === "failed"
+                ? "flex items-start gap-2 rounded-lg border border-destructive/40 bg-destructive/10 p-3 text-sm text-destructive"
+                : "flex items-start gap-2 rounded-lg border border-amber-500/40 bg-amber-500/10 p-3 text-sm text-amber-800 dark:text-amber-300"
+            }
           >
             <AlertCircleIcon className="mt-0.5 size-4 shrink-0" aria-hidden />
             <div className="flex flex-col gap-1">
-              <span className="font-medium">{job.status === "rolled_back" ? t.rolledBack : t.failed}</span>
-              {job.error && <span className="break-words">{job.error}</span>}
+              <span className="font-medium">{t.outcome[job.status]}</span>
+              {job.error && <span className="break-words">{jobErrorMessage(job.error, t.errors)}</span>}
+              {job.error?.detail && <code className="text-xs break-words">{job.error.detail}</code>}
             </div>
           </div>
         )}

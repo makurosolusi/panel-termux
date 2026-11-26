@@ -49,7 +49,16 @@ export const idBackup = {
     noSize: "–",
     empty: "Belum ada cadangan. Klik Cadangkan sekarang untuk membuat cadangan pertama.",
     triggers: { schedule: "Terjadwal", manual: "Manual" } satisfies Record<BackupTrigger, string>,
-    kinds: { database: "Database", panel: "Panel" } satisfies Record<BackupItem["kind"], string>,
+    kinds: {
+      database: "Database",
+      globals: "Role Postgres",
+      panel: "Database panel",
+      sites: "File situs",
+      cloudflared: "Konfigurasi tunnel",
+      secrets: "Kunci rahasia",
+      checksums: "Daftar checksum",
+      manifest: "Daftar isi",
+    } satisfies Record<BackupItem["kind"], string>,
     statuses: {
       running: "Berjalan",
       succeeded: "Berhasil",

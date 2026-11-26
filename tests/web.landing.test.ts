@@ -23,7 +23,7 @@ describe("landingCta", () => {
   test.each([
     ["user", "/profile"],
     ["admin", "/panel"],
-    ["super_admin", "/dev"],
+    ["super_admin", "/panel"],
   ] as const)("%s → open panel at %s (from role, not payload)", (role, home) => {
     expect(landingCta(as(role))).toEqual({ kind: "open", label: "Buka panel", to: home });
   });

@@ -113,7 +113,9 @@ describe("deploy history state", () => {
 
   test("tones and short sha", () => {
     expect(deployTone("succeeded")).toBe("ok");
-    expect(deployTone("rolled_back")).toBe("bad");
+    expect(deployTone("failed")).toBe("bad");
+    expect(deployTone("rolled_back")).toBe("warn");
+    expect(deployTone("interrupted")).toBe("warn");
     expect(deployTone("running")).toBe("warn");
     expect(shortSha("0123456789abcdef")).toBe("0123456789ab");
   });

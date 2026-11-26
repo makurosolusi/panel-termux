@@ -2,9 +2,15 @@ import type { Deploy, DeployStatus } from "@/shared/deploy.types";
 import type { Page } from "@/shared/dev.types";
 import type { Tone } from "@/web/panel/panel.status";
 
-const DEPLOY_TONE: Record<DeployStatus, Tone> = { running: "warn", succeeded: "ok", failed: "bad", rolled_back: "bad" };
+const DEPLOY_TONE: Record<DeployStatus, Tone> = {
+  running: "warn",
+  succeeded: "ok",
+  failed: "bad",
+  rolled_back: "warn",
+  interrupted: "warn",
+};
 
-/** Badge tone of a deploy entry (rolled back = the deploy failed and was undone). */
+/** Badge tone of a deploy entry; undone (`rolled_back`) and cut off (`interrupted`) are warnings (A10, B12). */
 export const deployTone = (status: DeployStatus): Tone => DEPLOY_TONE[status];
 
 /**

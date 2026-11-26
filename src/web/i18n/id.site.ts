@@ -152,10 +152,14 @@ export const idSite = {
       succeeded: "Berhasil",
       failed: "Gagal",
       rolled_back: "Dikembalikan",
+      interrupted: "Terputus",
     },
-    failed: "Perubahan gagal. Lihat langkah yang gagal di bawah untuk penyebabnya, lalu coba lagi.",
-    rolledBack:
-      "Perubahan gagal, dan semua langkah sudah dikembalikan seperti semula. Lihat langkah yang gagal untuk penyebabnya.",
+    outcome: {
+      failed: "Perubahan gagal. Lihat langkah yang gagal di bawah untuk penyebabnya, lalu coba lagi.",
+      rolled_back:
+        "Perubahan gagal, dan semua langkah sudah dikembalikan seperti semula. Aman, tidak ada yang perlu dibersihkan.",
+      interrupted: "Perubahan terputus karena panel dimulai ulang. Periksa langkahnya, lalu pulihkan.",
+    },
     openSite: "Buka detail situs",
     allSites: "Ke daftar situs",
     startedAt: (at: string) => `Mulai ${at}`,
@@ -168,7 +172,14 @@ export const idSite = {
       "hostname.remove": "Hapus domain",
       "site.deploy": "Deploy",
       "site.rollback": "Rollback",
+      "site.restart": "Mulai ulang situs",
+      "site.env": "Ubah variabel lingkungan",
+      "job.cleanup": "Bersihkan perubahan terputus",
     } satisfies Record<JobKind, string>,
+    errors: {
+      unexpected: "Terjadi kesalahan tak terduga. Lihat detail teknis di bawah.",
+      interrupted: "Panel dimulai ulang saat perubahan ini berjalan.",
+    } as Readonly<Record<string, string>>,
     stepStatuses: {
       pending: "Menunggu",
       running: "Berjalan",

@@ -27,7 +27,7 @@ describe("resolveRedirect", () => {
     ["super_admin", as("super_admin"), "/dev", null],
     ["user", as("user"), "/login", "/profile"],
     ["admin", as("admin"), "/login", "/panel"],
-    ["super_admin", as("super_admin"), "/login", "/dev"],
+    ["super_admin", as("super_admin"), "/login", "/panel"],
     ["user", as("user"), "/", null],
     ["admin", as("admin"), "/", null],
     ["super_admin", as("super_admin"), "/", null],

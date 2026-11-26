@@ -40,7 +40,8 @@ function toJob(r: typeof job.$inferSelect): Job {
     target: r.target,
     status: r.status,
     steps: r.steps,
-    error: r.error,
+    // 0.2.x rows store free text; the 0.3.0 runner (W1, wkr-sites-runner-01) writes coded errors.
+    error: r.error === null ? null : { code: "unexpected", params: {}, detail: r.error },
     startedAt: r.startedAt.toISOString(),
     finishedAt: r.finishedAt ? r.finishedAt.toISOString() : null,
   };
