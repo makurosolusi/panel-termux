@@ -37,6 +37,16 @@ export class KeyMismatchError extends Error {}
 const defOf = (key: SettingKey): SettingDef => SETTINGS[key];
 
 const rowOf = (db: Db, key: SettingKey) => db.select().from(setting).where(eq(setting.key, key)).get();
+type SettingRow = typeof setting.$inferSelect;
+/** Every stored setting row by key, in one query (the table holds at most SETTING_KEYS rows). */
+const allRows = (db: Db) =>
+  new Map(
+    db
+      .select()
+      .from(setting)
+      .all()
+      .map((r) => [r.key as SettingKey, r]),
+  );
 
 /** Effective value of `key` (decrypted if secret, else default; resolved), or null when unset with no default. */
 export function getSetting({ db, secret }: SettingsDeps, key: SettingKey): string | null {
@@ -54,10 +64,10 @@ export function getSetting({ db, secret }: SettingsDeps, key: SettingKey): strin
 }
 
 /** Secret settings whose stored row does not decrypt with the current data key (empty = key ok). */
-export function unreadableSecretSettings({ db, secret }: SettingsDeps): SettingKey[] {
+export function unreadableSecretSettings({ db, secret }: SettingsDeps, rows = allRows(db)): SettingKey[] {
   return SETTING_KEYS.filter((key) => {
     if (!defOf(key).secret) return false;
-    const row = rowOf(db, key);
+    const row = rows.get(key);
     if (!row) return false;
     try {
       decryptSecret(secret, row.value);
@@ -73,8 +83,11 @@ export function unreadableSecretSettings({ db, secret }: SettingsDeps): SettingK
  * computes it once per request). Labels live only in the web (B8).
  */
 export function describeSetting(db: Db, key: SettingKey, readable = true): DevSetting {
+  return describeRow(key, rowOf(db, key), readable);
+}
+
+function describeRow(key: SettingKey, row: SettingRow | undefined, readable: boolean): DevSetting {
   const def = defOf(key);
-  const row = rowOf(db, key);
   return {
     key,
     secret: def.secret,
@@ -88,8 +101,9 @@ export function describeSetting(db: Db, key: SettingKey, readable = true): DevSe
 
 /** All settings in SETTING_KEYS order, with `readable` from a try-decrypt of every secret row. */
 export function listSettings(deps: SettingsDeps): DevSetting[] {
-  const unreadable = new Set(unreadableSecretSettings(deps));
-  return SETTING_KEYS.map((k) => describeSetting(deps.db, k, !unreadable.has(k)));
+  const rows = allRows(deps.db);
+  const unreadable = new Set(unreadableSecretSettings(deps, rows));
+  return SETTING_KEYS.map((k) => describeRow(k, rows.get(k), !unreadable.has(k)));
 }
 
 /** Value as it would be stored: trimmed, or null for "back to default / delete". */
@@ -100,9 +114,10 @@ const normalize = (v: string | null) => (v === null ? null : v.trim());
  * compared). Callers use it for audit and for the fresh-session check of sensitive keys.
  */
 export function changedSettingKeys(db: Db, values: Partial<Record<SettingKey, string | null>>): SettingKey[] {
+  const rows = allRows(db);
   return (Object.keys(values) as SettingKey[]).filter((key) => {
     if (defOf(key).secret) return true;
-    return (rowOf(db, key)?.value ?? null) !== normalize(values[key] ?? null);
+    return (rows.get(key)?.value ?? null) !== normalize(values[key] ?? null);
   });
 }
 

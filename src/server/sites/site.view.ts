@@ -1,23 +1,49 @@
 // Site rows → API `Site` view (list + detail base), split out of site.service.ts (file health).
-import { desc, eq } from "drizzle-orm";
+import { eq, inArray, sql } from "drizzle-orm";
 import type { Site } from "../../shared/site.types";
 import type { Db } from "../db/client";
 import { deploy, type site, siteHostname, user } from "../db/schema";
 import { appName } from "../deploy/deploy.steps";
 import type { Pm2Proc } from "../system/system.types";
 
+/** Latest deploy (+ actor name) per site in ONE query: row_number() over the (site_name, at) index. */
+function lastDeploys(db: Db, names: string[]) {
+  const ranked = db
+    .select({
+      siteName: deploy.siteName,
+      at: deploy.at,
+      kind: deploy.kind,
+      status: deploy.status,
+      actorId: deploy.actorId,
+      rn: sql<number>`row_number() over (partition by ${deploy.siteName} order by ${deploy.at} desc)`.as("rn"),
+    })
+    .from(deploy)
+    .where(inArray(deploy.siteName, names))
+    .as("ranked");
+  const rows = db
+    .select({
+      siteName: ranked.siteName,
+      at: ranked.at,
+      kind: ranked.kind,
+      status: ranked.status,
+      actorName: user.name,
+    })
+    .from(ranked)
+    .leftJoin(user, eq(user.id, ranked.actorId))
+    .where(eq(ranked.rn, 1))
+    .all();
+  return new Map(rows.map(({ siteName, ...d }) => [siteName, d]));
+}
+
 /** API view of site rows with hostnames, pm2 status (null procs → "unknown") and the last deploy. */
 export function toSites(db: Db, rows: (typeof site.$inferSelect)[], procs: Pm2Proc[] | null): Site[] {
-  const hosts = db.select().from(siteHostname).all();
+  if (rows.length === 0) return [];
+  const names = rows.map((s) => s.name);
+  const hosts = db.select().from(siteHostname).where(inArray(siteHostname.siteName, names)).all();
+  const last = lastDeploys(db, names);
   return rows.map((s) => {
     const p = procs?.find((a) => a.name === appName(s));
-    const d = db
-      .select({ at: deploy.at, kind: deploy.kind, status: deploy.status, actorName: user.name })
-      .from(deploy)
-      .leftJoin(user, eq(user.id, deploy.actorId))
-      .where(eq(deploy.siteName, s.name))
-      .orderBy(desc(deploy.at))
-      .get();
+    const d = last.get(s.name);
     return {
       name: s.name,
       port: s.port,
