@@ -1,10 +1,7 @@
 import { LOG_LEVELS, type LogLevel, type SettingKey } from "../../shared/dev.types";
-import { listAudit } from "../audit.service";
 import type { Auth } from "../auth/auth.service";
 import { assertFresh, roleGuard } from "../auth/role.guard";
 import type { Db } from "../db/client";
-import { getHealth } from "../dev/health.service";
-import { changeRole, deleteUser, listUsers } from "../dev/users.service";
 import { log, readLogs } from "../log.service";
 import {
   changedSettingKeys,
@@ -15,7 +12,7 @@ import {
   MAX_SETTINGS_BATCH,
   setSettings,
 } from "../settings.service";
-import { ApiError, parsePaging } from "./http.error";
+import { ApiError } from "./http.error";
 
 /** What the /dev API needs besides auth. `superAdmins` = env SUPER_ADMIN_EMAILS (lowercase). */
 export type DevDeps = { db: Db; secret: string; superAdmins: readonly string[]; dataDir: string };
@@ -55,9 +52,8 @@ function parseSettingsPatch(body: unknown): Partial<Record<SettingKey, string | 
   return values as Partial<Record<SettingKey, string | null>>;
 }
 
-/** super_admin developer API under /dev (users, audit, logs, settings, health). */
-export function createDevRoutes(auth: Auth, { db, secret, superAdmins, dataDir }: DevDeps) {
-  const ctx = (actorId: string) => ({ db, superAdmins, actorId });
+/** super_admin developer API under /dev: logs and settings (health, setup, users, audit: dev.admin.routes.ts). */
+export function createDevRoutes(auth: Auth, { db, secret }: DevDeps) {
   return roleGuard(auth, "/dev", "super_admin")
     .onError(({ error, code, status }) => {
       if (error instanceof ApiError) return status(error.status, error.body);
@@ -66,21 +62,6 @@ export function createDevRoutes(auth: Auth, { db, secret, superAdmins, dataDir }
       log.error(`[dev] request failed: ${error instanceof Error ? error.message : String(code)}`);
     })
     .get("/ping", () => ({ ok: true }))
-    .get("/health", () => getHealth(db, dataDir))
-    .get("/users", ({ query }) => listUsers(db, superAdmins, parsePaging(query), query.q?.trim() || undefined))
-    .patch("/users/:id", ({ params, body, user }) => {
-      const role = field(body, "role");
-      if (role !== "user" && role !== "admin")
-        throw new ApiError(400, "invalid_role", 'role must be "user" or "admin"');
-      return changeRole(ctx(user.id), params.id, role);
-    })
-    .delete("/users/:id", ({ params, user, status }) => {
-      deleteUser(ctx(user.id), params.id);
-      return status(204);
-    })
-    .get("/audit", ({ query }) =>
-      listAudit(db, parsePaging(query), { action: query.action || undefined, actorId: query.actorId || undefined }),
-    )
     .get("/logs", ({ query }) => {
       const level = query.level || undefined;
       if (level !== undefined && !LOG_LEVELS.includes(level as LogLevel)) {

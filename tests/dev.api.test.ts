@@ -3,13 +3,17 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { eq } from "drizzle-orm";
+import { Elysia } from "elysia";
 import { createAuth } from "@/server/auth/auth.service";
 import { type Db, openDb } from "@/server/db/client";
 import { runMigrations } from "@/server/db/migrate";
 import { account, auditLog, session, user } from "@/server/db/schema";
 import { log } from "@/server/log.service";
-import { createApiRoutes } from "@/server/routes/api.routes";
-import type { DevAuditEntry, DevHealth, DevLogs, DevUser, Page } from "@/shared/dev.types";
+import { createDevAdminRoutes } from "@/server/routes/dev.admin.routes";
+import { createDevRoutes } from "@/server/routes/dev.routes";
+import { createMeRoutes } from "@/server/routes/me.routes";
+import { createFakeSystem } from "@/server/system/system.fake";
+import type { DevAuditEntry, DevLogs, DevSetup, DevUser, Page } from "@/shared/dev.types";
 import type { Role } from "@/shared/roles";
 
 // test-only dummy values
@@ -21,7 +25,7 @@ const env = { APP_BASE_URL: BASE, GOOGLE_CLIENT_ID: "cid", GOOGLE_CLIENT_SECRET:
 const dir = mkdtempSync(join(tmpdir(), "panel-dev-"));
 let db: Db;
 let auth: ReturnType<typeof createAuth>;
-let api: ReturnType<typeof createApiRoutes>;
+let api: { handle(req: Request): Promise<Response> };
 let rootId: string;
 let root: string; // super_admin cookie
 let adminCookie: string;
@@ -75,7 +79,26 @@ beforeAll(async () => {
   db = openDb(dir);
   runMigrations(db);
   auth = createAuth({ db, env, secret: SECRET });
-  api = createApiRoutes(auth, { db, secret: SECRET, superAdmins: SUPER, dataDir: dir });
+  // The /dev and /me groups alone (boot wiring lives in api.routes.ts and has its own tests).
+  api = new Elysia({ prefix: "/api" })
+    .use(createMeRoutes(auth, db))
+    .use(createDevRoutes(auth, { db, secret: SECRET, superAdmins: SUPER, dataDir: dir }))
+    .use(
+      createDevAdminRoutes({
+        auth,
+        db,
+        secret: SECRET,
+        system: createFakeSystem({ home: join(dir, "home") }),
+        monitor: {
+          status: () => ({ sampledAt: null, intervalSec: 60, lastTickMs: null, running: false }),
+          problems: () => ({ problems: [], suppressed: [], unknownKinds: new Set() }),
+        },
+        backup: { status: () => ({ configured: false, nextRunAt: null }) as never },
+        jobs: { active: () => null },
+        appBaseUrl: BASE,
+        createdThisBoot: false,
+      }),
+    );
   rootId = addUser("root@example.com"); // promoted by the session hook
   root = await cookieFor(rootId);
   adminCookie = await cookieFor(addUser("admin@x.io", "admin"));
@@ -94,6 +117,10 @@ describe("access control", () => {
     ["PATCH", "/users/x", { role: "admin" }],
     ["DELETE", "/users/x", null],
     ["GET", "/audit", null],
+    ["GET", "/audit/export.csv", null],
+    ["GET", "/setup", null],
+    ["PUT", "/setup/dismiss", { dismissed: true }],
+    ["POST", "/users/x/sessions/revoke", null],
     ["GET", "/logs", null],
     ["GET", "/settings", null],
     ["PATCH", "/settings", { values: { "sites.dir": "/tmp" } }],
@@ -119,25 +146,9 @@ describe("access control", () => {
 });
 
 describe("GET /health", () => {
-  test("shape and counts", async () => {
-    const h = await json<DevHealth>(await call("GET", "/health", root));
-    expect(h).toEqual({
-      version: expect.any(String),
-      schemaVersion: expect.stringMatching(/^\d{4}_/),
-      startedAt: expect.any(String),
-      uptimeSec: expect.any(Number),
-      memory: { rssMb: expect.any(Number), heapUsedMb: expect.any(Number) },
-      db: { sizeBytes: expect.any(Number) },
-      dataDir: { freeBytes: expect.any(Number), totalBytes: expect.any(Number) },
-      runtime: { bun: Bun.version, node: process.versions.node, platform: process.platform, arch: process.arch },
-      cpuCores: expect.any(Number),
-      requestsPerMinute: expect.any(Number),
-      errorCount5m: expect.any(Number),
-      counts: { users: 3, sessions: 3 },
-    });
-    expect(h.db.sizeBytes).toBeGreaterThan(0);
-    expect(h.dataDir.totalBytes).toBeGreaterThan(h.dataDir.freeBytes);
-    expect(Date.parse(h.startedAt)).toBeLessThanOrEqual(Date.now());
+  test("server verdict and counts", async () => {
+    const h = await json<{ verdict: string; counts: { users: number } }>(await call("GET", "/health", root));
+    expect(h).toMatchObject({ verdict: expect.stringMatching(/^(ok|warn|fail)$/), counts: { users: 3 } });
   });
 });
 
@@ -254,5 +265,122 @@ describe("logs", () => {
     expect((await json<DevLogs>(await call("GET", "/logs?limit=1", root))).items).toHaveLength(1);
     expect(await json(await call("GET", "/logs?level=loud", root), 400)).toMatchObject({ error: "invalid_level" });
     expect(await json(await call("GET", "/logs?limit=0", root), 400)).toMatchObject({ error: "invalid_limit" });
+  });
+});
+
+describe("users 0.3.0", () => {
+  test("role filter, role-then-lastSeen order, sign-in fallback for lastSeenAt, activeSessions", async () => {
+    expect(await json(await call("GET", "/users?role=boss", root), 400)).toMatchObject({ error: "invalid_role" });
+    const admins = await json<Page<DevUser>>(await call("GET", "/users?role=admin", root));
+    expect(admins.items.length).toBeGreaterThan(0);
+    expect(admins.items.every((u) => u.role === "admin")).toBe(true);
+    const ranks = { super_admin: 0, admin: 1, user: 2 };
+    const all = (await json<Page<DevUser>>(await call("GET", "/users?pageSize=100", root))).items;
+    expect(all.map((u) => ranks[u.role])).toEqual(all.map((u) => ranks[u.role]).sort());
+    const plain = all.filter((u) => u.role === "user");
+    const seen = plain.findIndex((u) => u.lastSeenAt === null);
+    expect(plain.slice(seen).every((u) => u.lastSeenAt === null)).toBe(true); // never-seen last
+    const id = addUser("fallback@x.io");
+    await cookieFor(id);
+    await cookieFor(id);
+    const live = (await json<Page<DevUser>>(await call("GET", "/users?q=fallback@", root))).items[0];
+    expect(live).toMatchObject({ activeSessions: 2, lastSeenAt: expect.any(String) });
+    db.delete(session).where(eq(session.userId, id)).run();
+    const gone = (await json<Page<DevUser>>(await call("GET", "/users?q=fallback@", root))).items[0];
+    expect(gone).toMatchObject({ activeSessions: 0, lastSeenAt: expect.any(String) }); // from auth.sign_in
+  });
+
+  test("targetEmail is kept on role_change and delete", async () => {
+    const id = addUser("target@x.io");
+    await call("PATCH", `/users/${id}`, root, { role: "admin" });
+    expect(auditRows("user.role_change").at(-1)?.meta).toMatchObject({ targetEmail: "target@x.io" });
+    await call("DELETE", `/users/${id}`, root);
+    expect(auditRows("user.delete").at(-1)?.meta).toMatchObject({ targetEmail: "target@x.io" });
+  });
+
+  test("revoke sessions: n revoked, env super admin allowed, 409 self only, 404 unknown", async () => {
+    const other = addUser("root2b@example.com", "super_admin");
+    await cookieFor(other);
+    await cookieFor(other);
+    expect(await json(await call("POST", `/users/${other}/sessions/revoke`, root))).toEqual({ revoked: 2 });
+    expect(db.select().from(session).where(eq(session.userId, other)).all()).toHaveLength(0);
+    expect(await json(await call("POST", `/users/${rootId}/sessions/revoke`, root), 409)).toMatchObject({
+      error: "self",
+    });
+    expect((await call("POST", "/users/nope/sessions/revoke", root)).status).toBe(404);
+  });
+});
+
+describe("setup routes", () => {
+  test("manual tick only for access/secret_saved; body validated; dismiss round-trip", async () => {
+    expect(await json(await call("PUT", "/setup/items/backup", root, { done: true }), 404)).toMatchObject({
+      error: "not_found",
+    });
+    expect(await json(await call("PUT", "/setup/items/access", root, { done: "yes" }), 400)).toMatchObject({
+      error: "invalid_body",
+    });
+    // secret_saved, not access: `accessSeen` is process-wide and other test files set it.
+    const s = await json<DevSetup>(await call("PUT", "/setup/items/secret_saved", root, { done: true }));
+    expect(s.items.find((i) => i.key === "secret_saved")).toMatchObject({ done: true, source: "manual" });
+    expect(auditRows("setup.update").at(-1)).toMatchObject({
+      actorId: rootId,
+      meta: { key: "secret_saved", done: true },
+    });
+    const d = await json<DevSetup>(await call("PUT", "/setup/dismiss", root, { dismissed: true }));
+    expect(d.dismissedAt).toEqual(expect.any(String));
+    expect((await json<DevSetup>(await call("GET", "/setup", root))).dismissedAt).toBe(d.dismissedAt ?? "");
+  });
+});
+
+/** Inserts an audit row at local `y-m-d h:00`. */
+const seedAudit = (action: string, y: number, m: number, d: number, h: number) =>
+  db
+    .insert(auditLog)
+    .values({ actorId: rootId, action, at: new Date(y, m - 1, d, h) })
+    .run();
+
+describe("audit filters", () => {
+  test("repeatable action (exact + prefix), from/to by local day, invalid_date", async () => {
+    seedAudit("zz.one", 2026, 1, 10, 12);
+    seedAudit("zz.two", 2026, 1, 11, 23);
+    seedAudit("zy.three", 2026, 1, 12, 0);
+    const actions = async (qs: string) =>
+      (await json<Page<DevAuditEntry>>(await call("GET", `/audit?pageSize=100&${qs}`, root))).items.map(
+        (e) => e.action,
+      );
+    expect(await actions("action=zz.&action=zy.three")).toEqual(["zy.three", "zz.two", "zz.one"]);
+    expect(await actions("action=zz.&action=zy.&from=2026-01-10&to=2026-01-11")).toEqual(["zz.two", "zz.one"]);
+    expect(await actions("action=zz.&action=zy.&from=2026-01-11")).toEqual(["zy.three", "zz.two"]);
+    for (const bad of ["from=2026-02-30", "to=yesterday", "from=2026-1-1"])
+      expect(await json(await call("GET", `/audit?${bad}`, root), 400)).toMatchObject({ error: "invalid_date" });
+  });
+});
+
+describe("DELETE /api/me", () => {
+  const del = (cookie: string, confirm: unknown) =>
+    api.handle(
+      new Request(`${BASE}/api/me`, {
+        method: "DELETE",
+        headers: { cookie, "content-type": "application/json", "x-requested-with": "XMLHttpRequest" },
+        body: JSON.stringify({ confirm }),
+      }),
+    );
+  test("user + own email → 204, sessions/accounts gone, audited; wrong email 400; admin/super_admin 403", async () => {
+    const id = addUser("Self@x.io");
+    const cookie = await cookieFor(id);
+    db.insert(account).values({ id: "acc-self", accountId: "s", providerId: "google", userId: id }).run();
+    expect(await json(await del(cookie, "other@x.io"), 400)).toMatchObject({ error: "confirm_mismatch" });
+    expect(await json(await del(adminCookie, "admin@x.io"), 403)).toMatchObject({ error: "forbidden" });
+    expect(await json(await del(root, "root@example.com"), 403)).toMatchObject({ error: "forbidden" });
+    expect((await del(cookie, "self@x.io")).status).toBe(204);
+    expect(db.select().from(user).where(eq(user.id, id)).all()).toHaveLength(0);
+    expect(db.select().from(session).where(eq(session.userId, id)).all()).toHaveLength(0);
+    expect(db.select().from(account).where(eq(account.userId, id)).all()).toHaveLength(0);
+    expect(auditRows("user.self_delete").at(-1)).toMatchObject({
+      target: id,
+      actorEmail: "Self@x.io",
+      meta: { targetEmail: "Self@x.io" },
+    });
+    expect((await del(cookie, "self@x.io")).status).toBe(401);
   });
 });
