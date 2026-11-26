@@ -1,6 +1,7 @@
 import type { BackupVerifyCode } from "@/shared/backup.types";
 import type { CloudflareVerifyCode, SettingKey } from "@/shared/dev.types";
 import type { AlertErrorCode } from "@/shared/monitor.types";
+import type { SettingGroup } from "@/web/dev/settings.registry";
 
 /** Copy of one setting field. `invalid` = shown when PATCH answers `invalid` for this key. */
 export type SettingFieldCopy = { label: string; help: string; placeholder?: string; invalid: string };
@@ -37,7 +38,7 @@ export const idSettings = {
       title: "Keamanan",
       description: "Layanan yang dilindungi dari penghentian tidak sengaja dan lama log audit disimpan.",
     },
-  } satisfies Record<string, SettingGroupCopy>,
+  } satisfies Record<SettingGroup, SettingGroupCopy>,
   fields: {
     "cloudflare.api_token": {
       label: "Token API Cloudflare",
@@ -145,7 +146,7 @@ export const idSettings = {
     },
     "sites.port_range": {
       label: "Rentang port situs",
-      help: "Port untuk aplikasi situs baru dipilih dari rentang ini.",
+      help: "Port untuk aplikasi situs baru dipilih dari rentang ini. Tulis `awal-akhir`, mis. `3001-3999`.",
       placeholder: "Dari 3001, sampai 3999",
       invalid: "Port awal harus di atas 1024 dan lebih kecil dari port akhir (maks 65535).",
     },
@@ -178,6 +179,7 @@ export const idSettings = {
     on: "Nyala",
     off: "Mati",
     severity: { warning: "Peringatan", danger: "Gawat" },
+    hour: (h: number) => `${String(h).padStart(2, "0")}.00`,
   },
   helpLink: "Cara membuatnya",
   required: "Wajib",
@@ -188,10 +190,9 @@ export const idSettings = {
   saveFailed:
     "Pengaturan tidak tersimpan. Periksa koneksi internet, lalu coba lagi. Perubahanmu masih ada di formulir.",
   leaveWarning: "Ada perubahan yang belum disimpan. Tinggalkan halaman ini?",
-  protectedWarning:
-    "Tanpa centang ini, layanan tersebut bisa dihentikan dengan satu klik dan panel bisa tidak terjangkau.",
   secret: {
     stored: (ago: string) => `Tersimpan · diubah ${ago}`,
+    storedNoDate: "Tersimpan",
     unreadable: "Tidak bisa dibaca",
     unreadableBody: "Kunci data berubah. Isi ulang nilainya.",
     replace: "Ganti",
@@ -218,9 +219,6 @@ export const idSettings = {
     s3Button: "Uji koneksi",
     telegramButton: "Kirim pesan uji",
     findChats: "Cari chat",
-    s3Incomplete: "Lengkapi kolom wajib dulu.",
-    cloudflareSaveFirst: "Simpan token dulu untuk mengujinya.",
-    telegramSaveFirst: "Isi dan simpan token bot dan ID chat dulu.",
     cloudflare: {
       ok: "Token aktif dan bisa mengakses zona Cloudflare.",
       not_set: "Token belum diisi.",
@@ -262,16 +260,42 @@ export const idSettings = {
       string
     >,
     noChats: "Belum ada chat. Kirim pesan baru ke bot dari Telegram, lalu cari lagi.",
+    chatsTitle: "Chat yang terlihat oleh bot",
+    useChat: "Pakai",
+    chatType: { private: "Pribadi", group: "Grup", supergroup: "Supergrup", channel: "Kanal" },
+    chatPicked: "ID chat diisi. Simpan untuk memakainya.",
+    steps: { write: "Tulis", read: "Baca", delete: "Hapus" },
+    stepState: { ok: "berhasil", failed: "gagal", skipped: "dilewati" },
+    detail: "Detail teknis",
+    savedValues: "Menguji nilai yang tersimpan.",
+    draftValues: "Menguji isian formulir yang belum disimpan.",
   },
-  // 0.2.x keys still read by setting.field.tsx / cloudflare.verify.tsx until the W5 redesign.
-  status: { saved: "Tersimpan", notSet: "Belum diisi", custom: "Diubah", default: "Bawaan" },
+  status: {
+    default: "Bawaan",
+    notSet: "Belum diisi",
+    changed: (ago: string) => `Diubah ${ago}`,
+    changedNoDate: "Diubah",
+  },
   save: "Simpan",
+  saving: "Menyimpan…",
   reset: "Kembalikan ke bawaan",
-  clear: "Kosongkan",
-  replacePlaceholder: "Isi untuk mengganti nilai rahasia",
-  updatedAt: (at: string) => `Diubah ${at}`,
-  savedToast: (label: string) => `${label} disimpan.`,
-  resetToast: (label: string) => `${label} dikembalikan ke bawaan.`,
-  verify: "Uji token",
-  verifying: "Menguji token…",
+  incomplete: "Belum lengkap",
+  unknownKey: "Server tidak mengenal pengaturan ini. Muat ulang halaman.",
+  emptyPage: "Belum ada pengaturan yang bisa diubah. Muat ulang halaman, atau periksa versi panel.",
+  toc: "Bagian pengaturan",
+  removed: (label: string) => `${label} dihapus.`,
+  fieldErrors: "Ada nilai yang belum benar. Periksa kolom yang ditandai, lalu simpan lagi.",
+  reauth:
+    "Mengubah tujuan cadangan atau menyalakan pencadangan kunci rahasia perlu masuk ulang (sesi lebih dari 15 menit). Perubahan yang belum disimpan akan hilang, jadi isi lagi setelah masuk.",
+  keyMismatch: {
+    body: "Pengaturan tidak tersimpan karena kunci data panel tidak cocok dengan nilai rahasia yang tersimpan. Perbaiki kunci data dulu, lalu simpan lagi.",
+    link: "Buka Kunci data",
+  },
+  /** PATCH / test errors that are not a field problem. */
+  errorCodes: {
+    invalid_value: "Ada nilai yang belum benar. Periksa kolom yang ditandai, lalu simpan lagi.",
+    invalid_body: "Permintaan ke server tidak lengkap. Muat ulang halaman, lalu coba lagi.",
+    key_mismatch: "Nilai tersimpan tidak bisa dibaca karena kunci data berubah. Isi ulang.",
+    reauth_required: "Untuk perubahan ini kamu perlu masuk ulang (sesi lebih dari 15 menit).",
+  },
 } as const;
