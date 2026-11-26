@@ -3,6 +3,7 @@ import pkg from "../../package.json" with { type: "json" };
 import { syncSuperAdminsOnBoot } from "./auth/access.service";
 import { createAuth } from "./auth/auth.service";
 import { backupServiceFor } from "./backup/backup.service";
+import { checkDataKeyOnBoot } from "./data-key.service";
 import { openDb } from "./db/client";
 import { runMigrations } from "./db/migrate";
 import { loadEnvOrExit } from "./env";
@@ -22,9 +23,10 @@ export const app = new Elysia({ prefix: "/api" }).get("/health", () => ({ ok: tr
  */
 export function start() {
   const env = loadEnvOrExit();
-  const secret = loadOrCreateSecret(env.PANEL_DATA_DIR);
+  const { secret, created } = loadOrCreateSecret(env.PANEL_DATA_DIR);
   const db = openDb(env.PANEL_DATA_DIR);
   const schemaVersion = runMigrations(db);
+  checkDataKeyOnBoot({ db, secret }, created);
   syncSuperAdminsOnBoot(db, env.SUPER_ADMIN_EMAILS);
   // One adapter set shared by the API and the backup scheduler (same backup service instance per DB).
   const system = selectSystem();

@@ -15,20 +15,24 @@ export function ensureDataDir(dataDir: string): void {
   }
 }
 
-/** Returns the instance secret (hex), generating `<dataDir>/secret` (mode 600) on first call. */
-export function loadOrCreateSecret(dataDir: string): string {
+/**
+ * Returns the data key (hex) from `<dataDir>/secret`; `created` = the file was missing and a new key was written
+ * (mode 600). An existing but unusable file is an error, never overwritten: replacing it would silently orphan
+ * every encrypted setting (PLAN/04 K8). A lost file yields a new key and mismatch mode, reported by data-key.service.
+ */
+export function loadOrCreateSecret(dataDir: string): { secret: string; created: boolean } {
   ensureDataDir(dataDir);
   const file = join(dataDir, SECRET_FILE);
   try {
     if (existsSync(file)) {
-      const s = readFileSync(file, "utf8").trim();
-      if (s.length < SECRET_BYTES * 2) throw new Error("existing secret file is too short");
-      return s;
+      const secret = readFileSync(file, "utf8").trim();
+      if (secret.length < SECRET_BYTES * 2) throw new Error("existing secret file is too short");
+      return { secret, created: false };
     }
-    const s = randomBytes(SECRET_BYTES).toString("hex");
+    const secret = randomBytes(SECRET_BYTES).toString("hex");
     // flag "wx" fails if another process created it in between, instead of overwriting it.
-    writeFileSync(file, s, { mode: 0o600, flag: "wx" });
-    return s;
+    writeFileSync(file, secret, { mode: 0o600, flag: "wx" });
+    return { secret, created: true };
   } catch (e) {
     throw new Error(`loadOrCreateSecret ${file} failed: ${(e as Error).message}`, { cause: e });
   }
