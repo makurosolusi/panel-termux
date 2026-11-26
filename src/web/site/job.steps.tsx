@@ -1,52 +1,80 @@
 import { cn } from "cn";
-import { CheckCircle2Icon, CircleIcon, LoaderIcon, MinusCircleIcon, Undo2Icon, XCircleIcon } from "lucide-react";
-import type { JobStep, JobStepStatus } from "@/shared/site.types";
-import { id } from "@/web/i18n/id";
-import type { Tone } from "@/web/panel/panel.status";
-import { stepTone } from "./job.state";
+import { ChevronDownIcon } from "lucide-react";
+import { useId, useState } from "react";
+import type { JobStep } from "@/shared/job.types";
+import { CopyButton } from "@/web/components/copy-button";
+import { StatusIcon } from "@/web/components/status-icon";
+import { Button } from "@/web/components/ui/button";
+import { idJob } from "@/web/i18n/id.job";
+import { durationText, outcomeText, stepDurationMs, stepLabel } from "./job.state";
+import { JOB_STEP_STATUS_KEY } from "./job.status-key";
 
-const ICON: Record<JobStepStatus, typeof CircleIcon> = {
-  pending: CircleIcon,
-  running: LoaderIcon,
-  done: CheckCircle2Icon,
-  failed: XCircleIcon,
-  rolled_back: Undo2Icon,
-  skipped: MinusCircleIcon,
-};
+const t = idJob;
 
-const TONE_TEXT: Record<Tone, string> = {
-  ok: "text-emerald-600 dark:text-emerald-400",
-  warn: "text-amber-600 dark:text-amber-400",
-  bad: "text-destructive",
-  muted: "text-muted-foreground",
-};
+/** Copy text of a step's technical detail and log lines. */
+const detailText = (s: JobStep) => [s.detail, ...(s.log ?? [])].filter(Boolean).join("\n");
 
-/** Ordered job steps with a status icon each and the step message (e.g. why DNS was skipped). */
+function Step({ step, last }: { step: JobStep; last: boolean }) {
+  const [open, setOpen] = useState(false);
+  const panelId = useId();
+  const ms = stepDurationMs(step, Date.now()); // running steps re-render with every 1 s poll
+  const outcome = outcomeText(step.code, step.params);
+  const details = detailText(step);
+  const muted = step.status === "pending" || step.status === "skipped";
+  return (
+    <li className="relative flex gap-3 pb-4 last:pb-0">
+      {!last && <span aria-hidden className="absolute top-6 bottom-0 left-[9px] w-px bg-border" />}
+      <span className="relative mt-0.5 flex size-5 shrink-0 items-center justify-center rounded-full bg-background">
+        <StatusIcon state={JOB_STEP_STATUS_KEY[step.status]} className="size-5" />
+      </span>
+      <div className="flex min-w-0 flex-1 flex-col gap-0.5">
+        <div className="flex flex-col gap-x-3 sm:flex-row sm:items-baseline sm:justify-between">
+          <span className={cn("text-sm font-medium", muted && "font-normal text-muted-foreground")}>
+            {stepLabel(step)}
+          </span>
+          {ms !== null && <span className="text-xs text-muted-foreground tabular-nums">{durationText(ms)}</span>}
+        </div>
+        {outcome && (
+          <p className={cn("text-xs break-words", step.status === "failed" ? "text-danger" : "text-muted-foreground")}>
+            {outcome}
+          </p>
+        )}
+        {details && (
+          <div className="flex flex-col gap-1">
+            <Button
+              variant="ghost"
+              size="sm"
+              className="-ml-2 self-start text-xs text-muted-foreground"
+              aria-expanded={open}
+              aria-controls={panelId}
+              onClick={() => setOpen((o) => !o)}
+            >
+              {t.details}
+              <ChevronDownIcon className={cn("transition-transform", open && "rotate-180")} aria-hidden />
+            </Button>
+            {open && (
+              <div id={panelId} className="flex items-start gap-1 rounded-md bg-muted p-2">
+                <pre className="min-w-0 flex-1 overflow-x-auto font-mono text-xs whitespace-pre-wrap break-all">
+                  {details}
+                </pre>
+                <CopyButton value={details} label={t.copy} />
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+    </li>
+  );
+}
+
+/** Vertical stepper of a job: icon (status for readers), coded label + outcome, duration, expandable detail/log. */
 export function JobSteps({ steps }: { steps: JobStep[] }) {
   return (
-    <ol className="flex flex-col gap-3">
-      {steps.map((s) => {
-        const Icon = ICON[s.status];
-        return (
-          <li key={s.key} className="flex items-start gap-3">
-            <Icon
-              className={cn(
-                "mt-0.5 size-5 shrink-0",
-                TONE_TEXT[stepTone(s.status)],
-                s.status === "running" && "animate-spin",
-              )}
-              aria-hidden
-            />
-            <div className="flex min-w-0 flex-col">
-              <span className={cn("text-sm", s.status === "pending" && "text-muted-foreground")}>
-                {s.label}
-                <span className="sr-only"> — {id.site.job.stepStatuses[s.status]}</span>
-              </span>
-              {s.message && <span className="text-xs break-words text-muted-foreground">{s.message}</span>}
-            </div>
-          </li>
-        );
-      })}
+    <ol className="flex flex-col">
+      {steps.map((s, i) => (
+        // biome-ignore lint/suspicious/noArrayIndexKey: a job's step list never reorders; keys may repeat in cleanup jobs
+        <Step key={`${i}-${s.key}`} step={s} last={i === steps.length - 1} />
+      ))}
     </ol>
   );
 }

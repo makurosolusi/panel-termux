@@ -1,162 +1,147 @@
-import { UploadIcon, XIcon } from "lucide-react";
-import { useEffect, useRef, useState } from "react";
-import { useNavigate } from "react-router";
-import { toast } from "sonner";
-import { DEPLOY_MAX_BYTES } from "@/shared/deploy.types";
+import { AlertCircleIcon, FileUpIcon, PlayIcon, UploadIcon, XIcon } from "lucide-react";
+import { useRef } from "react";
+import type { SiteDetail } from "@/shared/site.types";
+import { ConfirmAction } from "@/web/components/confirm-action";
+import { CopyButton } from "@/web/components/copy-button";
 import { Button } from "@/web/components/ui/button";
-import { Progress } from "@/web/components/ui/progress";
-import { id } from "@/web/i18n/id";
-import { apiErrorMessage } from "@/web/shared/api.client";
-import { formatBytes } from "@/web/shared/format";
-import { jobPath } from "@/web/site/site.api";
-import { cancelUpload, DEPLOY_ERROR_CODES, uploadBinary } from "./deploy.api";
-import { sha256Hex, uploadProgress } from "./deploy.upload";
+import { idDeploy } from "@/web/i18n/id.deploy";
+import { formatBytes, formatDateTime } from "@/web/shared/format";
+import { DEPLOY_ERROR_CODES } from "./deploy.api";
+import { missingChunks } from "./deploy.upload";
+import { useUploader } from "./deploy.uploader";
+import { UploadProgress } from "./upload.progress";
 
-const t = id.deploy;
+const t = idDeploy.upload;
 
-/** Where the card is: no file, hashing, ready to send, sending chunks, or waiting for `complete`. */
-type Phase =
-  | { kind: "idle" }
-  | { kind: "hashing"; file: File }
-  | { kind: "ready"; file: File; sha256: string }
-  | { kind: "uploading"; file: File; sha256: string; sent: number; startedAt: number; now: number }
-  | { kind: "completing"; file: File; sha256: string };
+/** Server code behind each deploy blocker, for the reason text. */
+const BLOCKER_CODE = {
+  integration: "integration_required",
+  no_folder: "no_folder",
+  pm2_not_running: "pm2_not_running",
+};
 
-/** Checks the picked file before hashing; returns an error message or null. */
-function fileProblem(file: File): string | null {
-  if (file.size === 0) return t.empty;
-  if (file.size > DEPLOY_MAX_BYTES) return t.tooLarge(formatBytes(DEPLOY_MAX_BYTES));
-  return null;
-}
-
-function UploadProgress({ phase }: { phase: Extract<Phase, { kind: "uploading" }> }) {
-  const { pct, bytesPerSec } = uploadProgress(phase.sent, phase.file.size, phase.now - phase.startedAt);
+/** Copyable build commands for both supported targets. */
+function BuildHelp() {
   return (
-    <div className="flex flex-col gap-1" aria-live="polite">
-      <Progress value={pct} aria-label={t.uploading} />
-      <span className="text-xs tabular-nums text-muted-foreground">
-        {t.progress(pct, formatBytes(phase.sent), formatBytes(phase.file.size), formatBytes(bytesPerSec))}
-      </span>
+    <div className="flex flex-col gap-2 text-xs">
+      <p className="text-muted-foreground">{t.help}</p>
+      <ul className="flex flex-col gap-2">
+        {t.targets.map((target) => (
+          <li key={target.cmd} className="flex flex-col gap-1">
+            <div className="flex items-start gap-1 rounded-md bg-muted px-2 py-1.5">
+              <code className="min-w-0 flex-1 font-mono break-all">{target.cmd}</code>
+              <CopyButton value={target.cmd} />
+            </div>
+            <span className="text-muted-foreground">{target.note}</span>
+          </li>
+        ))}
+      </ul>
     </div>
   );
 }
 
-/** File picker → SHA-256 → chunked upload with progress and cancel → job page of the deploy. */
-export function DeployCard({ site }: { site: string }) {
-  const navigate = useNavigate();
-  const [phase, setPhase] = useState<Phase>({ kind: "idle" });
-  const ctrl = useRef<AbortController | null>(null);
-  const uploadId = useRef<string | null>(null);
-  const inputRef = useRef<HTMLInputElement>(null);
+/** Upload card of #deploy: pick binary → per-chunk sha → resumable chunked upload → job page. */
+export function DeployCard({ site }: { site: SiteDetail }) {
+  const up = useUploader(site.name);
+  const input = useRef<HTMLInputElement>(null);
+  const { state, active } = up;
+  const blocker = site.deployBlocker ? DEPLOY_ERROR_CODES[BLOCKER_CODE[site.deployBlocker]] : null;
+  const running = state.kind === "running";
+  const pickButton = (label: string, variant: "default" | "outline" = "default") => (
+    <Button variant={variant} disabled={Boolean(blocker)} onClick={() => input.current?.click()}>
+      <FileUpIcon aria-hidden />
+      {label}
+    </Button>
+  );
 
-  useEffect(() => () => ctrl.current?.abort(), []); // leaving the page stops hashing/upload
-
-  const pick = async (file: File | undefined) => {
-    if (!file) return;
-    const problem = fileProblem(file);
-    if (problem) return toast.error(problem);
-    setPhase({ kind: "hashing", file });
-    try {
-      const sha256 = await sha256Hex(file);
-      setPhase((p) => (p.kind === "hashing" && p.file === file ? { kind: "ready", file, sha256 } : p));
-    } catch {
-      toast.error(t.hashFailed); // only cause in practice: crypto.subtle missing outside https/localhost
-      setPhase({ kind: "idle" });
-    }
-  };
-
-  const start = async (file: File, sha256: string) => {
-    const c = new AbortController();
-    ctrl.current = c;
-    uploadId.current = null;
-    const startedAt = Date.now();
-    setPhase({ kind: "uploading", file, sha256, sent: 0, startedAt, now: startedAt });
-    try {
-      const jobId = await uploadBinary(site, file, sha256, c.signal, {
-        onStarted: (u) => {
-          uploadId.current = u;
-        },
-        onProgress: (sent) => {
-          if (sent < file.size) setPhase({ kind: "uploading", file, sha256, sent, startedAt, now: Date.now() });
-          else setPhase({ kind: "completing", file, sha256 });
-        },
-      });
-      navigate(jobPath(jobId));
-    } catch (err) {
-      if (c.signal.aborted) return; // cancel() already reset the card
-      toast.error(`${t.failed} ${apiErrorMessage(err, DEPLOY_ERROR_CODES)}`);
-      setPhase({ kind: "ready", file, sha256 });
-    }
-  };
-
-  const cancel = async () => {
-    ctrl.current?.abort();
-    const u = uploadId.current;
-    uploadId.current = null;
-    if (phase.kind === "uploading") setPhase({ kind: "ready", file: phase.file, sha256: phase.sha256 });
-    if (!u) return;
-    try {
-      await cancelUpload(u);
-      toast.success(t.cancelled);
-    } catch (err) {
-      toast.error(apiErrorMessage(err, DEPLOY_ERROR_CODES)); // server also expires unfinished uploads after 1 h
-    }
-  };
-
-  const busy = phase.kind === "uploading" || phase.kind === "completing";
   return (
-    <div className="flex flex-col gap-3 text-sm">
-      <p className="text-muted-foreground">{t.help}</p>
+    <div className="flex flex-col gap-4 rounded-lg border bg-card p-4 text-sm">
+      <div className="flex flex-col gap-1">
+        <h3 className="font-medium">{t.title}</h3>
+        <p className="text-muted-foreground">{t.restartNote}</p>
+        {blocker && <p className="text-warning">{blocker}</p>}
+      </div>
       <input
-        ref={inputRef}
+        ref={input}
         type="file"
         className="sr-only"
         tabIndex={-1}
         aria-hidden
         onChange={(e) => {
-          void pick(e.target.files?.[0]);
-          e.target.value = ""; // allow re-picking the same file
+          up.pick(e.target.files?.[0]);
+          e.target.value = ""; // allow picking the same file again
         }}
       />
-      {phase.kind !== "idle" && (
-        <div className="flex flex-col gap-1 rounded-lg border p-3">
-          <span className="break-all font-medium">{t.file(phase.file.name, formatBytes(phase.file.size))}</span>
-          {phase.kind === "hashing" ? (
-            <span className="text-muted-foreground" aria-live="polite">
-              {t.hashing}
-            </span>
-          ) : (
-            <span className="break-all font-mono text-xs text-muted-foreground">
-              {t.checksum} {phase.sha256}
-            </span>
-          )}
+
+      {state.kind === "idle" && active && (
+        <div className="flex flex-col gap-2 rounded-md border border-info/25 bg-info-subtle p-3">
+          <p className="font-medium break-words">
+            {t.pending(
+              active.fileName,
+              formatBytes(active.sizeBytes),
+              active.chunks - missingChunks(active).length,
+              active.chunks,
+            )}
+            {" · "}
+            {t.expiresAt(formatDateTime(active.expiresAt))}
+          </p>
+          <p className="text-xs text-muted-foreground">{t.pendingHelp}</p>
+          <div className="flex flex-wrap gap-2">
+            {pickButton(t.pickSame)}
+            <Button variant="outline" onClick={() => void up.cancel()}>
+              <XIcon aria-hidden />
+              {t.cancel}
+            </Button>
+          </div>
         </div>
       )}
-      {phase.kind === "uploading" && <UploadProgress phase={phase} />}
-      {phase.kind === "completing" && (
-        <span className="text-muted-foreground" aria-live="polite">
-          {t.completing}
-        </span>
+
+      {(state.kind === "running" || state.kind === "failed") && (
+        <p className="font-medium break-all">
+          {state.file.name} <span className="font-normal text-muted-foreground">· {formatBytes(state.file.size)}</span>
+        </p>
       )}
+      {state.kind === "running" && (
+        <UploadProgress
+          file={state.file}
+          phase={state.phase}
+          lastSending={state.lastSending}
+          elapsedMs={state.now - state.startedAt}
+        />
+      )}
+      {state.kind === "failed" && (
+        <div role="alert" className="flex items-start gap-2 rounded-md border border-danger/25 bg-danger-subtle p-3">
+          <AlertCircleIcon className="mt-0.5 size-4 shrink-0 text-danger" aria-hidden />
+          <p className="break-words">{state.failure.message}</p>
+        </div>
+      )}
+
       <div className="flex flex-wrap gap-2">
-        {!busy && (
-          <Button variant="outline" disabled={phase.kind === "hashing"} onClick={() => inputRef.current?.click()}>
-            {phase.kind === "idle" ? t.pick : t.change}
+        {state.kind === "idle" && !active && pickButton(t.pick)}
+        {state.kind === "failed" && state.failure.next !== "repick" && (
+          <Button onClick={up.resume}>
+            {state.failure.next === "resume" ? <PlayIcon aria-hidden /> : <UploadIcon aria-hidden />}
+            {state.failure.next === "resume" ? t.resumeButton : t.retry}
           </Button>
         )}
-        {phase.kind === "ready" && (
-          <Button onClick={() => void start(phase.file, phase.sha256)}>
-            <UploadIcon aria-hidden />
-            {t.start}
-          </Button>
-        )}
-        {phase.kind === "uploading" && (
-          <Button variant="outline" onClick={() => void cancel()}>
+        {state.kind === "failed" && pickButton(t.pick, state.failure.next === "repick" ? "default" : "outline")}
+        {(running || (state.kind === "failed" && state.uploadId)) && (
+          <Button variant="outline" onClick={() => void up.cancel()}>
             <XIcon aria-hidden />
             {t.cancel}
           </Button>
         )}
       </div>
+
+      <ConfirmAction
+        open={state.kind === "confirm_different"}
+        onOpenChange={(open) => !open && up.dismiss()}
+        title={t.differentTitle}
+        description={state.kind === "confirm_different" ? t.differentBody(state.active.fileName) : ""}
+        confirmLabel={t.differentConfirm}
+        onConfirm={async () => up.confirmDifferent()}
+      />
+      <BuildHelp />
     </div>
   );
 }

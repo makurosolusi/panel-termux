@@ -1,0 +1,54 @@
+import type { SiteDetail } from "@/shared/site.types";
+import { KeyValue } from "@/web/components/key-value";
+import { RelativeTime } from "@/web/components/relative-time";
+import { Section } from "@/web/components/section";
+import { StatusBadge } from "@/web/components/status-badge";
+import { idDeploy } from "@/web/i18n/id.deploy";
+import { formatBytes } from "@/web/shared/format";
+import { DeployCard } from "./deploy.card";
+import { DeployHistory } from "./deploy.history";
+import { RollbackAction } from "./deploy.rollback";
+import { shortSha } from "./deploy.state";
+
+const t = idDeploy;
+
+/** "Versi berjalan": the live binary, or why it has no deploy record. */
+function LiveVersion({ site }: { site: SiteDetail }) {
+  const live = site.binary?.live;
+  if (!live) return <p className="text-sm text-muted-foreground">{t.live.none}</p>;
+  return (
+    <div className="flex flex-col gap-2">
+      {!live.deployId && (
+        <p className="flex flex-wrap items-center gap-2 text-sm">
+          <StatusBadge state="unknown" label={t.live.untracked} />
+          <span className="text-muted-foreground">{t.live.untrackedHelp}</span>
+        </p>
+      )}
+      <KeyValue
+        items={[
+          ...(live.sha256 ? [{ label: t.live.sha, value: shortSha(live.sha256), mono: true }] : []),
+          ...(live.fileName ? [{ label: t.live.file, value: live.fileName, mono: true }] : []),
+          { label: t.live.size, value: formatBytes(live.sizeBytes) },
+          ...(live.runtime ? [{ label: t.live.runtime, value: t.runtimes[live.runtime] }] : []),
+          { label: t.live.modified, value: <RelativeTime at={live.modifiedAt} /> },
+        ]}
+      />
+    </div>
+  );
+}
+
+/** Content of the site detail `#deploy` anchor: live version, upload card, rollback and deploy history. */
+export function DeploySection({ site }: { site: SiteDetail }) {
+  return (
+    <div className="flex flex-col gap-6">
+      {!site.managed && <p className="text-sm text-muted-foreground">{t.adoptedNote}</p>}
+      <Section title={t.live.title} action={<RollbackAction site={site} />}>
+        <LiveVersion site={site} />
+      </Section>
+      <DeployCard site={site} />
+      <Section title={t.history.title}>
+        <DeployHistory site={site.name} />
+      </Section>
+    </div>
+  );
+}
