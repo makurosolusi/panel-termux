@@ -1,30 +1,35 @@
 import { Elysia } from "elysia";
 import pkg from "../../package.json" with { type: "json" };
 import spa from "../web/index.html";
+import { syncSuperAdminsOnBoot } from "./auth/access.service";
+import { createAuth } from "./auth/auth.service";
 import { openDb } from "./db/client";
 import { runMigrations } from "./db/migrate";
 import { loadEnvOrExit } from "./env";
+import { createApiRoutes } from "./routes/api.routes";
 import { loadOrCreateSecret } from "./secret";
 
 /** Loopback only: the panel is reached through the Cloudflare tunnel, never exposed on the LAN. */
 const LISTEN_HOST = "127.0.0.1";
 
-/** API app; tests call `app.handle(new Request(...))` without starting a server. */
+/** Dependency-free API part (health); tests call `app.handle(new Request(...))` without starting a server. */
 export const app = new Elysia({ prefix: "/api" }).get("/health", () => ({ ok: true, version: pkg.version }));
 
-/** Boots the panel: env → data dir + secret → DB migrations → HTTP server (API + embedded SPA). */
+/** Boots the panel: env → data dir + secret → DB migrations → auth → HTTP server (API + embedded SPA). */
 export function start() {
   const env = loadEnvOrExit();
-  loadOrCreateSecret(env.PANEL_DATA_DIR); // later used as BETTER_AUTH_SECRET
+  const secret = loadOrCreateSecret(env.PANEL_DATA_DIR);
   const db = openDb(env.PANEL_DATA_DIR);
   const schemaVersion = runMigrations(db);
+  syncSuperAdminsOnBoot(db, env.SUPER_ADMIN_EMAILS);
+  const api = new Elysia().use(app).use(createApiRoutes(createAuth({ db, env, secret })));
 
   const server = Bun.serve({
     hostname: LISTEN_HOST,
     port: env.PORT,
     development: process.env.NODE_ENV !== "production",
     routes: {
-      "/api/*": (req) => app.handle(req),
+      "/api/*": (req) => api.handle(req),
       "/*": spa,
     },
   });

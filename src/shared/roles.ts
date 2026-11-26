@@ -9,6 +9,12 @@ const HOME: Record<Role, string> = { user: "/profile", admin: "/panel", super_ad
 /** Minimum role required per protected path prefix. */
 const AREA_MIN_ROLE: Record<string, Role> = { "/profile": "user", "/panel": "admin", "/dev": "super_admin" };
 
+/** Type guard: whether `v` is a known role (e.g. a value read from the DB). */
+export const isRole = (v: unknown): v is Role => ROLES.includes(v as Role);
+
+/** Whether `role` is at least as privileged as `min`. */
+export const hasRole = (role: Role, min: Role): boolean => ROLES.indexOf(role) >= ROLES.indexOf(min);
+
 /** Landing page for a role after login. */
 export const homeFor = (role: Role): string => HOME[role];
 
@@ -16,5 +22,5 @@ export const homeFor = (role: Role): string => HOME[role];
 export function canAccess(role: Role, path: string): boolean {
   const area = Object.keys(AREA_MIN_ROLE).find((p) => path === p || path.startsWith(`${p}/`));
   if (!area) return true;
-  return ROLES.indexOf(role) >= ROLES.indexOf(AREA_MIN_ROLE[area] as Role);
+  return hasRole(role, AREA_MIN_ROLE[area] as Role);
 }
