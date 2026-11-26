@@ -1,6 +1,11 @@
-import type { LogLevel } from "@/shared/dev.types";
+import { idDevAudit } from "./id.dev.audit";
+import { idDevHealth } from "./id.dev.health";
+import { idDevLogs } from "./id.dev.logs";
+import { idDevSetup } from "./id.dev.setup";
+import { idDevUsers } from "./id.dev.users";
+import { idSettings } from "./id.settings";
 
-/** Indonesian strings of the /dev system console (merged into `id.dev`). The menu label is "Administrasi". */
+/** Indonesian strings of the /dev admin area (merged into `id.dev`). The menu label is "Administrasi". */
 export const idDev = {
   title: "Administrasi",
   subtitle: "Kesehatan Panel Termux, pengguna, audit, log, dan pengaturan.",
@@ -26,68 +31,14 @@ export const idDev = {
   },
   errorCodes: {
     protected: "Akun ini dilindungi dan tidak bisa diubah atau dihapus dari panel.",
+    self: "Untuk sesimu sendiri, pakai halaman Profil.",
     not_found: "Data ini sudah tidak ada, mungkin baru dihapus. Muat ulang halaman untuk melihat daftar terbaru.",
   },
-  health: {
-    // lama: dipakai halaman sebelum redesign
-    refreshing: "Diperbarui otomatis tiap 15 detik",
-    version: "Versi",
-    schema: (v: string) => `Skema database ${v}`,
-    uptime: "Waktu aktif",
-    since: (at: string) => `Sejak ${at}`,
-    memory: "Memori",
-    heap: (mb: number) => `Memori JS (heap) ${mb} MB`,
-    db: "Ukuran database panel",
-    disk: "Penyimpanan data",
-    diskFree: (free: string, total: string) => `${free} bebas dari ${total}`,
-    counts: "Pengguna terdaftar",
-    users: "pengguna",
-    sessions: "sesi aktif",
-    /** Subline of the users card: "3 pengguna · 5 sesi aktif". */
-    countsDetail: (users: number, sessions: number) => `${users} pengguna · ${sessions} sesi aktif`,
-    runtime: "Runtime",
-  },
-  users: {
-    searchPlaceholder: "Cari nama atau email…",
-    name: "Nama",
-    role: "Peran",
-    lastSeen: "Terakhir aktif",
-    joined: "Bergabung",
-    actions: "Aksi",
-    locked: "Dilindungi",
-    you: "Kamu",
-    envSuperAdmin: "Super Admin dari SUPER_ADMIN_EMAILS, tidak bisa diubah di sini",
-    roleChanged: "Peran diperbarui.",
-    deleted: "Pengguna dihapus.",
-    deleteTitle: "Hapus pengguna?",
-    newAccounts: "Akun baru masuk sebagai Pengguna. Ubah perannya ke Admin di sini agar bisa membuka Panel.",
-    deleteBody: (who: string) =>
-      `${who} akan keluar dari semua perangkat dan akunnya dihapus. Tindakan ini tidak bisa dibatalkan. Bila login lagi, ia masuk sebagai Pengguna baru.`,
-    empty: "Belum ada pengguna lain. Pengguna muncul di sini setelah masuk dengan Google untuk pertama kali.",
-  },
-  audit: {
-    actionFilter: "Filter aksi",
-    actionPlaceholder: "mis. user.role",
-    target: "Target",
-    empty: "Belum ada aksi yang tercatat. Aksi penting seperti mengubah peran atau pengaturan akan muncul di sini.",
-  },
-  logs: {
-    level: "Level",
-    levels: { debug: "Debug", info: "Info", warn: "Peringatan", error: "Kesalahan" } satisfies Record<LogLevel, string>,
-    searchPlaceholder: "Cari teks di log…",
-    autoRefresh: "Perbarui otomatis",
-    empty: "Belum ada log untuk filter ini. Ubah level atau kata kunci pencarian.",
-  },
-  settings: {
-    status: { saved: "Tersimpan", notSet: "Belum diisi", custom: "Diubah", default: "Bawaan" },
-    save: "Simpan",
-    reset: "Kembalikan ke bawaan",
-    clear: "Kosongkan",
-    replacePlaceholder: "Isi untuk mengganti nilai rahasia",
-    updatedAt: (at: string) => `Diubah ${at}`,
-    savedToast: (label: string) => `${label} disimpan.`,
-    resetToast: (label: string) => `${label} dikembalikan ke bawaan.`,
-    verify: "Uji token",
-    verifying: "Menguji token…",
-  },
+  health: idDevHealth,
+  setup: idDevSetup,
+  users: idDevUsers,
+  audit: idDevAudit,
+  logs: idDevLogs,
+  /** Same object as `id.settings` once id.ts exposes it; kept here so /dev pages keep `id.dev.settings`. */
+  settings: idSettings,
 } as const;

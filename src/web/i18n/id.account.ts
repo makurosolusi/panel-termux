@@ -1,0 +1,97 @@
+/**
+ * Message per Better Auth 1.7.28 OAuth callback `?error=` code (PLAN/05 F10). Codes not listed fall back to
+ * `signIn.errors.generic`; `error_description` is never rendered because a third party controls it.
+ */
+const SIGN_IN_ERROR_BY_CODE = {
+  access_denied: "cancelled",
+  state_mismatch: "state",
+  state_not_found: "state",
+  email_not_found: "email",
+  email_not_verified: "email",
+} as const;
+
+/** Indonesian strings of /login, /profile and the public 404 (`id.account`, PLAN/05 §5.6–5.7, F8, F10). */
+export const idAccount = {
+  signIn: {
+    title: "Masuk ke Panel Termux",
+    subtitle: "Gunakan akun Google kamu. Akun baru masuk sebagai Pengguna sampai Super Admin mengubah perannya.",
+    google: "Masuk dengan Google",
+    redirecting: "Mengalihkan ke Google…",
+    back: "Kembali ke beranda",
+    own: "Panel ini milik pemiliknya. Ingin punya sendiri?",
+    ownLink: "Pasang Panel Termux",
+    errors: {
+      generic:
+        "Masuk dengan Google tidak berhasil. Coba lagi; bila terus gagal, pastikan kamu memakai akun Google yang benar.",
+      start: "Tidak bisa membuka halaman masuk Google. Periksa koneksi internet, lalu coba lagi.",
+      cancelled: "Masuk dibatalkan. Pilih akun Google untuk melanjutkan.",
+      state: "Sesi masuk kedaluwarsa atau cookie diblokir. Buka halaman ini lagi lalu coba sekali lagi.",
+      email: "Google tidak memberikan email yang terverifikasi untuk akun ini. Pakai akun Google lain, lalu coba lagi.",
+    },
+  },
+  profile: {
+    title: "Profil",
+    account: "Akun",
+    role: "Peran",
+    email: "Email",
+    signOut: "Keluar",
+  },
+  sessions: {
+    title: "Sesi aktif",
+    current: "Perangkat ini",
+    unknownDevice: "Perangkat tidak dikenal",
+    activeToday: "Aktif hari ini",
+    activeYesterday: "Aktif kemarin",
+    activeOn: (date: string) => `Aktif ${date}`,
+    revoke: "Keluarkan",
+    revokeTitle: (device: string) => `Keluarkan ${device}?`,
+    revokeBody: "Perangkat itu harus masuk lagi dengan Google.",
+    revoked: "Perangkat dikeluarkan.",
+    revokeOthers: "Keluar dari semua perangkat lain",
+    revokeOthersTitle: "Keluar dari semua perangkat lain?",
+    revokeOthersBody: "Semua perangkat selain yang ini harus masuk lagi dengan Google.",
+    revokedOthers: (n: number) => `${n} sesi lain dikeluarkan.`,
+    gone: "Sesi itu sudah berakhir. Daftar dimuat ulang.",
+    empty: "Hanya perangkat ini yang sedang masuk.",
+  },
+  noAccess: {
+    title: "Akun kamu belum punya akses ke panel ini",
+    body: "Panel Termux ini milik pemiliknya. Bila kamu anggota tim, kirim alamat email akunmu ke pemilik dan minta peran Admin. Setelah perannya diubah, muat ulang halaman ini.",
+    steps: [
+      "Salin alamat email di bawah.",
+      "Kirim ke pemilik panel dan minta peran Admin.",
+      "Setelah pemilik mengubah peranmu, tekan Muat ulang.",
+    ],
+    emailLabel: "Email akunmu",
+    reload: "Muat ulang",
+    ownServer: "Ingin server sendiri? Pasang Panel Termux di HP-mu",
+  },
+  theme: {
+    title: "Tema",
+    light: "Terang",
+    dark: "Gelap",
+    system: "Sistem",
+  },
+  deleteAccount: {
+    title: "Hapus akun saya",
+    body: "Email dan namamu dihapus dari panel ini. Kamu bisa masuk lagi kapan saja sebagai Pengguna baru.",
+    dialogTitle: "Hapus akun saya?",
+    confirm: (email: string) => `Ketik ${email} untuk konfirmasi`,
+    button: "Hapus akun saya",
+    failed: "Akun tidak bisa dihapus. Periksa koneksi internet, lalu coba lagi.",
+  },
+  publicNotFound: {
+    title: "Halaman tidak ditemukan",
+    body: "Alamat ini tidak ada di Panel Termux.",
+    home: "Ke beranda",
+    signIn: "Masuk",
+    documentTitle: "Halaman tidak ditemukan · Panel Termux",
+  },
+} as const;
+
+/** Sign-in error message for an OAuth `?error=` code; null when there is none. */
+export function signInErrorMessage(code: string | null): string | null {
+  if (!code) return null;
+  const known = Object.hasOwn(SIGN_IN_ERROR_BY_CODE, code);
+  return idAccount.signIn.errors[known ? SIGN_IN_ERROR_BY_CODE[code as keyof typeof SIGN_IN_ERROR_BY_CODE] : "generic"];
+}
