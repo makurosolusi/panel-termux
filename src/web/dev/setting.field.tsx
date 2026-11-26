@@ -1,85 +1,171 @@
-import { RotateCcwIcon, SaveIcon } from "lucide-react";
-import { useState } from "react";
-import type { DevSetting, DevSettingPut } from "@/shared/dev.types";
-import { Badge } from "@/web/components/ui/badge";
+import { ExternalLinkIcon } from "lucide-react";
+import type { ReactNode } from "react";
+import type { DevSetting, SettingKey } from "@/shared/dev.types";
+import { CodeText } from "@/web/components/code-text";
+import { useNow } from "@/web/components/now.store";
+import { StatusBadge } from "@/web/components/status-badge";
 import { Button } from "@/web/components/ui/button";
 import { Input } from "@/web/components/ui/input";
-import { Label } from "@/web/components/ui/label";
-import { id } from "@/web/i18n/id";
-import { formatDateTime } from "@/web/shared/format";
-import { CLOUDFLARE_TOKEN_KEY, CloudflareVerifyButton } from "./cloudflare.verify";
-import { devFetch, devUrl, runDevAction } from "./dev.api";
-import { canReset, initialDraft, RESET_BODY, saveBody, settingStatus } from "./settings.state";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/web/components/ui/select";
+import { Switch } from "@/web/components/ui/switch";
+import { idSettings, type SettingFieldCopy } from "@/web/i18n/id.settings";
+import { SecretField } from "./secret.field";
+import { fieldDef, OFF, ON } from "./settings.registry";
+import { choiceLabel, fieldStatus, shownValue, statusLabel } from "./settings.state";
 
-const t = id.dev.settings;
+const t = idSettings;
 
-/** One setting row: input, save, and reset (plain) / clear (secret, write-only — the value is never shown). */
-export function SettingField({ setting, onSaved }: { setting: DevSetting; onSaved: () => void }) {
-  const [draft, setDraft] = useState(() => initialDraft(setting));
-  const [pending, setPending] = useState(false);
-  const body = saveBody(setting, draft);
-  const status = settingStatus(setting);
-  const inputId = `setting-${setting.key}`;
+/** Props shared by the field controls. */
+export type FieldProps = {
+  setting: DevSetting;
+  draft: string;
+  onDraft: (v: string) => void;
+  /** Inline error text under the control (from PATCH `fields`). */
+  error?: string;
+  disabled?: boolean;
+  /** "Hapus" of a stored secret (PATCH `{ key: null }`). */
+  onRemove: () => Promise<unknown>;
+};
 
-  const put = async (payload: DevSettingPut, success: string) => {
-    setPending(true);
-    let next: DevSetting | undefined;
-    const ok = await runDevAction(async () => {
-      next = await devFetch<DevSetting>("PUT", devUrl(`/settings/${encodeURIComponent(setting.key)}`), payload);
-    }, success);
-    setPending(false);
-    if (ok && next) {
-      setDraft(initialDraft(next));
-      onSaved();
-    }
-  };
+/** One setting: label (+ `*`), technical key, status, control, help + "Cara membuatnya", inline error. */
+export function SettingField(props: FieldProps) {
+  const { setting, error } = props;
+  const key = setting.key as SettingKey;
+  const def = fieldDef(key);
+  const copy: SettingFieldCopy = t.fields[key];
+  const now = useNow();
+  const status = fieldStatus(setting);
+  const inputId = `setting-${key}`;
+  const helpId = `${inputId}-help`;
+  const errorId = `${inputId}-error`;
+  const described = [helpId, error ? errorId : null].filter(Boolean).join(" ");
 
   return (
-    <form
-      className="flex flex-col gap-2 py-4"
-      onSubmit={(e) => {
-        e.preventDefault();
-        if (body) void put(body, t.savedToast(setting.label));
-      }}
-    >
-      <div className="flex flex-wrap items-center gap-2">
-        <Label htmlFor={inputId}>{setting.label}</Label>
-        <Badge variant={status === "notSet" || status === "default" ? "outline" : "secondary"}>
-          {t.status[status]}
-        </Badge>
-        <code className="text-xs text-muted-foreground">{setting.key}</code>
+    <div className="flex flex-col gap-1.5 py-4 first:pt-0 last:pb-0">
+      <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+        <label htmlFor={inputId} className="text-sm font-medium">
+          {copy.label}
+          {def.required && (
+            <>
+              <span className="text-danger" aria-hidden>
+                {" *"}
+              </span>
+              <span className="sr-only">{` (${t.required})`}</span>
+            </>
+          )}
+        </label>
+        <StatusBadge tone={status.tone} label={statusLabel(status, now)} />
+        <code className="font-mono text-[11px] text-muted-foreground">{key}</code>
       </div>
-      <p className="text-sm text-muted-foreground">{setting.description}</p>
-      <div className="flex gap-2">
+      {def.control === "secret" ? (
+        <SecretField {...props} inputId={inputId} describedBy={described} />
+      ) : (
+        <PlainControl {...props} inputId={inputId} describedBy={described} />
+      )}
+      <p id={helpId} className="text-xs text-muted-foreground">
+        {status.kind === "unreadable" ? `${t.secret.unreadableBody} ` : null}
+        <CodeText>{copy.help}</CodeText>
+        {def.helpUrl && (
+          <>
+            {" "}
+            <a
+              href={def.helpUrl}
+              target="_blank"
+              rel="noreferrer"
+              className="relative inline-flex items-center gap-0.5 font-medium text-brand-text underline-offset-4 hover:underline pointer-coarse:after:absolute pointer-coarse:after:inset-x-0 pointer-coarse:after:-inset-y-3.5 pointer-coarse:after:content-['']"
+            >
+              {t.helpLink}
+              <ExternalLinkIcon className="size-3" aria-hidden />
+            </a>
+          </>
+        )}
+      </p>
+      {error && (
+        <p id={errorId} className="text-xs font-medium text-danger">
+          <CodeText>{error}</CodeText>
+        </p>
+      )}
+    </div>
+  );
+}
+
+/** Non-secret control: text/number input, switch, select, or number with an on/off switch. */
+function PlainControl({
+  setting,
+  draft,
+  onDraft,
+  error,
+  disabled,
+  inputId,
+  describedBy,
+}: FieldProps & { inputId: string; describedBy: string }) {
+  const key = setting.key as SettingKey;
+  const def = fieldDef(key);
+  const shown = shownValue(setting, draft);
+  const aria = { id: inputId, "aria-describedby": describedBy, "aria-invalid": error ? true : undefined };
+  const reset = setting.isSet && setting.default != null && (
+    <Button type="button" variant="link" size="sm" className="h-auto px-0 text-xs" onClick={() => onDraft("")}>
+      {t.reset}
+    </Button>
+  );
+  let control: ReactNode;
+  if (def.control === "switch")
+    control = (
+      <Switch {...aria} checked={shown === ON} disabled={disabled} onCheckedChange={(on) => onDraft(on ? ON : OFF)} />
+    );
+  else if (def.control === "select")
+    control = (
+      <Select value={shown} onValueChange={onDraft} disabled={disabled}>
+        <SelectTrigger {...aria} className="w-full sm:w-56">
+          <SelectValue />
+        </SelectTrigger>
+        <SelectContent>
+          {def.choices?.map((c) => (
+            <SelectItem key={c} value={c}>
+              {choiceLabel(key, c)}
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
+    );
+  else {
+    const off = def.control === "numberOrOff" && shown === OFF;
+    const numeric = def.control === "number" || def.control === "numberOrOff";
+    control = (
+      <div className="flex items-center gap-3">
         <Input
-          id={inputId}
-          type={setting.secret ? "password" : "text"}
-          autoComplete={setting.secret ? "new-password" : "off"}
-          value={draft}
-          placeholder={setting.secret ? t.replacePlaceholder : undefined}
-          onChange={(e) => setDraft(e.target.value)}
+          {...aria}
+          value={off ? "" : draft}
+          disabled={disabled || off}
+          onChange={(e) => onDraft(e.target.value)}
+          placeholder={
+            setting.default && setting.default !== OFF
+              ? t.defaultIs(setting.default)
+              : (t.fields[key] as SettingFieldCopy).placeholder
+          }
+          inputMode={numeric ? "numeric" : undefined}
+          autoComplete="off"
+          spellCheck={false}
+          className={numeric ? "w-full sm:w-40" : "w-full font-mono text-sm"}
         />
-        <Button type="submit" disabled={pending || !body} aria-label={`${t.save} ${setting.label}`}>
-          <SaveIcon aria-hidden />
-          <span className="sr-only sm:not-sr-only">{t.save}</span>
-        </Button>
-        {canReset(setting) && (
-          <Button
-            type="button"
-            variant="outline"
-            disabled={pending}
-            aria-label={`${setting.secret ? t.clear : t.reset}: ${setting.label}`}
-            title={setting.secret ? t.clear : t.reset}
-            onClick={() => void put(RESET_BODY, t.resetToast(setting.label))}
-          >
-            <RotateCcwIcon aria-hidden />
-          </Button>
+        {def.control === "numberOrOff" && (
+          <span className="flex shrink-0 items-center gap-2 text-sm">
+            <Switch
+              checked={!off}
+              disabled={disabled}
+              aria-label={t.fields[key].label}
+              onCheckedChange={(on) => onDraft(on ? "" : OFF)}
+            />
+            {off ? t.options.off : t.options.on}
+          </span>
         )}
       </div>
-      {setting.key === CLOUDFLARE_TOKEN_KEY && <CloudflareVerifyButton />}
-      {setting.updatedAt && (
-        <p className="text-xs text-muted-foreground">{t.updatedAt(formatDateTime(setting.updatedAt))}</p>
-      )}
-    </form>
+    );
+  }
+  return (
+    <div className="flex flex-col items-start gap-1">
+      {control}
+      {reset}
+    </div>
   );
 }

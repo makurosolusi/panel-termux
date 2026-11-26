@@ -1,91 +1,148 @@
-import { HistoryIcon, PlusIcon } from "lucide-react";
-import { useState } from "react";
+import { cn } from "cn";
+import { GlobeIcon, HistoryIcon, LoaderCircleIcon, PlusIcon, UnplugIcon } from "lucide-react";
 import { Link } from "react-router";
-import type { DiscoveredIngress, Site } from "@/shared/site.types";
+import type { Page } from "@/shared/dev.types";
+import type { ActiveJob, Discovered, Integration, Job, Site } from "@/shared/site.types";
+import { DataTable } from "@/web/components/data-table";
+import { EmptyState } from "@/web/components/empty-state";
+import { PageHeader } from "@/web/components/page-header";
+import { QueryView, StaleNotice } from "@/web/components/query-view";
 import { Button } from "@/web/components/ui/button";
-import { Card, CardContent } from "@/web/components/ui/card";
-import { id } from "@/web/i18n/id";
+import { idSite } from "@/web/i18n/id.site";
 import { PANEL_REFRESH_MS, panelUrl } from "@/web/panel/panel.api";
-import { QueryView } from "@/web/shared/query.state";
 import { useApiQuery } from "@/web/shared/use-api-query";
-import { AdoptDialog } from "./adopt.dialog";
-import { IntegrationBanner } from "./integration.banner";
-import { SITE_ERROR_CODES } from "./site.api";
-import { SiteCard } from "./site.card";
+import { discoveredRows, integrationReady } from "./site.adopt";
+import { jobPath, SITE_ERROR_CODES } from "./site.api";
+import { SITE_COLUMNS, SiteRowActions, siteRowTone } from "./site.card";
+import { SiteDiscovered } from "./site.discovered";
+import { SiteSetup } from "./site.setup";
 
-const t = id.site;
+const t = idSite.list;
 
-/** "Belum dikelola": ingress entries without a site, each with an Adopt button. Hidden when there are none. */
-function Discovered({ onAdopted }: { onAdopted: () => void }) {
-  const query = useApiQuery<DiscoveredIngress[]>(panelUrl("/sites/discovered"));
-  const [adopting, setAdopting] = useState<DiscoveredIngress | null>(null);
-  if (!query.data || query.data.length === 0) return null;
+/** Running change (info) or an interrupted one still to recover (warning), with a link to its job page. */
+function JobBanner({ job, interrupted }: { job: Pick<Job, "id" | "kind" | "target">; interrupted?: boolean }) {
+  const Icon = interrupted ? UnplugIcon : LoaderCircleIcon;
+  const text = (interrupted ? t.interrupted : t.running)(idSite.job.kinds[job.kind], job.target);
   return (
-    <section className="flex flex-col gap-2">
-      <h2 className="font-medium">{t.discovered.title}</h2>
-      <p className="text-sm text-muted-foreground">{t.discovered.description}</p>
-      <Card className="py-0">
-        <CardContent className="divide-y px-4">
-          {query.data.map((d) => (
-            <div key={d.hostname} className="flex items-center gap-2 py-3">
-              <div className="flex min-w-0 flex-1 flex-col">
-                <span className="truncate text-sm font-medium">{d.hostname}</span>
-                <span className="truncate font-mono text-xs text-muted-foreground">
-                  {[d.port === null ? t.discovered.noPort : t.list.port(d.port), d.app && t.discovered.app(d.app)]
-                    .filter(Boolean)
-                    .join(" · ")}
-                </span>
-              </div>
-              <Button size="sm" variant="outline" onClick={() => setAdopting(d)}>
-                {t.discovered.adopt}
-              </Button>
-            </div>
-          ))}
-        </CardContent>
-      </Card>
-      <AdoptDialog
-        entry={adopting}
-        onClose={() => setAdopting(null)}
-        onAdopted={() => {
-          setAdopting(null);
-          query.reload();
-          onAdopted();
-        }}
+    <div
+      role="status"
+      className={cn(
+        "flex flex-wrap items-center gap-2 rounded-md border px-3 py-2 text-sm",
+        interrupted ? "border-warning/25 bg-warning-subtle" : "border-info/25 bg-info-subtle",
+      )}
+    >
+      <Icon
+        className={cn("size-4 shrink-0", interrupted ? "text-warning" : "text-info motion-safe:animate-spin")}
+        aria-hidden
       />
-    </section>
+      <span className="min-w-0 flex-1">{text}</span>
+      <Button asChild size="sm" variant="outline">
+        <Link to={jobPath(job.id)}>{t.viewJob}</Link>
+      </Button>
+    </div>
   );
 }
 
-/** /panel/sites: integration banner, managed/adopted sites, and unmanaged ingress entries to adopt. */
-export function SitesPage() {
-  const query = useApiQuery<Site[]>(panelUrl("/sites"), PANEL_REFRESH_MS);
+/** Buat situs: disabled with the reason while pm2 is not ready for panel-built sites. */
+function CreateButton({ ready }: { ready: boolean }) {
+  if (ready) {
+    return (
+      <Button asChild>
+        <Link to="/panel/sites/new">
+          <PlusIcon aria-hidden />
+          {t.create}
+        </Link>
+      </Button>
+    );
+  }
   return (
-    <div className="flex flex-col gap-4">
-      <IntegrationBanner />
-      <div className="flex flex-wrap gap-2">
-        <Button asChild>
-          <Link to="/panel/sites/new">
-            <PlusIcon aria-hidden />
-            {t.list.create}
-          </Link>
-        </Button>
-        <Button asChild variant="outline">
-          <Link to="/panel/jobs">
-            <HistoryIcon aria-hidden />
-            {t.list.jobs}
-          </Link>
-        </Button>
-      </div>
-      <QueryView query={query} codes={SITE_ERROR_CODES} isEmpty={(d) => d.length === 0}>
-        {(sites) => (
-          <div className="grid gap-3 md:grid-cols-2">
-            {sites.map((s) => (
-              <SiteCard key={s.name} site={s} />
-            ))}
-          </div>
+    <span className="flex flex-col items-start gap-1 sm:items-end">
+      <Button disabled aria-describedby="create-blocked">
+        <PlusIcon aria-hidden />
+        {t.create}
+      </Button>
+      <span id="create-blocked" className="text-xs text-muted-foreground">
+        {t.createBlocked}
+      </span>
+    </span>
+  );
+}
+
+/** /panel/sites: Persiapan first, then the site list (problems first) and domains not managed yet. */
+export function SitesPage() {
+  const sites = useApiQuery<Site[]>(panelUrl("/sites"), PANEL_REFRESH_MS);
+  const integration = useApiQuery<Integration>(panelUrl("/integration"));
+  const discovered = useApiQuery<Discovered>(panelUrl("/sites/discovered"));
+  const active = useApiQuery<{ job: ActiveJob | null }>(panelUrl("/jobs/active"), PANEL_REFRESH_MS);
+  const interrupted = useApiQuery<Page<Job>>(panelUrl("/jobs", { status: "interrupted", pageSize: 5 }));
+  const unresolved = interrupted.data?.items.find((j) => j.recoverMode && !j.resolvedBy);
+  const ready = integration.data ? integrationReady(integration.data) : true;
+  const adoptable = discovered.data ? discoveredRows(discovered.data).filter((r) => r.adoptable).length : 0;
+  // stale notice goes above the (long) Persiapan card, not below it; QueryView then renders the list without one
+  const stale = Boolean(sites.error && sites.data);
+  const refresh = () => {
+    sites.reload();
+    integration.reload();
+    discovered.reload();
+    active.reload();
+    interrupted.reload();
+  };
+
+  return (
+    <div className="flex flex-col gap-6">
+      <PageHeader
+        title={t.title}
+        description={t.description}
+        meta={{
+          updatedAt: sites.updatedAt,
+          onRefresh: refresh,
+          refreshing: sites.loading,
+          live: true,
+          stale: Boolean(sites.error),
+        }}
+        actions={
+          <>
+            <Button asChild variant="outline" className="self-start">
+              <Link to="/panel/jobs">
+                <HistoryIcon aria-hidden />
+                {t.jobs}
+              </Link>
+            </Button>
+            <CreateButton ready={ready} />
+          </>
+        }
+      />
+      {stale && <StaleNotice updatedAt={sites.updatedAt} onRetry={sites.reload} retrying={sites.loading} />}
+      {active.data?.job && <JobBanner job={active.data.job} />}
+      {unresolved && <JobBanner job={unresolved} interrupted />}
+      {integration.data && (
+        <SiteSetup integration={integration.data} adoptable={adoptable} onVerified={integration.reload} />
+      )}
+      <QueryView
+        query={stale ? { ...sites, error: undefined } : sites}
+        codes={SITE_ERROR_CODES}
+        empty={
+          <EmptyState
+            icon={GlobeIcon}
+            title={t.empty}
+            description={t.emptyBody}
+            action={ready ? <CreateButton ready /> : undefined}
+          />
+        }
+      >
+        {(rows) => (
+          <DataTable
+            label={t.label}
+            columns={SITE_COLUMNS}
+            rows={rows}
+            rowKey={(s) => s.name}
+            rowHref={(s) => `/panel/sites/${encodeURIComponent(s.name)}`}
+            rowTone={siteRowTone}
+            actions={(s) => <SiteRowActions site={s} />}
+          />
         )}
       </QueryView>
-      <Discovered onAdopted={query.reload} />
+      <SiteDiscovered query={discovered} />
     </div>
   );
 }

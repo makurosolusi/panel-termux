@@ -1,16 +1,24 @@
 import { afterEach, describe, expect, test } from "bun:test";
-import type { DevSetting, DevUser } from "@/shared/dev.types";
+import type { AuditAction } from "@/shared/audit.types";
+import type { DevAuditEntry, DevLogEntry, DevUser } from "@/shared/dev.types";
+import {
+  auditActor,
+  auditExportUrl,
+  auditListUrl,
+  describeAudit,
+  invalidDateRange,
+  isAuditFiltered,
+} from "@/web/dev/audit.describe";
 import { devErrorMessage, devFetch, devUrl } from "@/web/dev/dev.api";
-import { pageCount, parsePageParam, withFilter, withPage } from "@/web/dev/dev.pagination";
-import { canReset, initialDraft, RESET_BODY, saveBody, settingStatus } from "@/web/dev/settings.state";
-import { isLockedUser } from "@/web/dev/users.list";
+import { levelParam, toViewerLines } from "@/web/dev/logs.page";
+import { lastSeenText, userActions } from "@/web/dev/users.list";
 import { ApiError as DevApiError, errorFromResponse, redirectFor } from "@/web/shared/api.client";
 import { formatBytes, formatDateTime, formatUptime, usedPercent } from "@/web/shared/format";
 
 describe("errorFromResponse / redirectFor / devErrorMessage", () => {
   test.each([
     [401, "unauthorized", "/login"],
-    [403, "forbidden", "/"],
+    [403, "forbidden", "/login"], // B20
     [400, "client", null],
     [409, "client", null],
     [500, "server", null],
@@ -44,7 +52,10 @@ describe("errorFromResponse / redirectFor / devErrorMessage", () => {
     expect(devErrorMessage(new DevApiError("network", null, null, null))).toContain("terhubung");
     expect(devErrorMessage(errorFromResponse(500, { error: "boom", message: "stack" }))).toContain("gangguan");
   });
-  test("non-DevApiError → generic", () => expect(devErrorMessage(new Error("x"))).toBe("Permintaan gagal."));
+  test("non-DevApiError → generic", () =>
+    expect(devErrorMessage(new Error("x"))).toBe(
+      "Permintaan tidak berhasil. Coba lagi; bila terus gagal, muat ulang halaman.",
+    ));
 });
 
 describe("devUrl", () => {
@@ -94,48 +105,25 @@ describe("devFetch", () => {
   });
 });
 
-describe("pagination", () => {
-  test.each([
-    [0, 20, 1],
-    [20, 20, 1],
-    [21, 20, 2],
-    [100, 0, 100],
-  ] as const)("pageCount(%d, %d) = %d", (total, size, pages) => expect(pageCount(total, size)).toBe(pages));
-  test.each([
-    [null, 1],
-    ["3", 3],
-    ["0", 1],
-    ["-2", 1],
-    ["1.5", 1],
-    ["abc", 1],
-  ] as const)("parsePageParam(%p) = %d", (raw, n) => expect(parsePageParam(raw)).toBe(n));
-  test("withFilter sets the filter and resets page", () => {
-    const next = withFilter(new URLSearchParams("q=old&page=4"), "q", "new");
-    expect(next.toString()).toBe("q=new");
-    expect(withFilter(next, "q", "").toString()).toBe("");
-  });
-  test("withPage keeps filters; page 1 drops the param", () => {
-    expect(withPage(new URLSearchParams("q=x"), 3).toString()).toBe("q=x&page=3");
-    expect(withPage(new URLSearchParams("q=x&page=3"), 1).toString()).toBe("q=x");
-  });
-});
-
 describe("formatters", () => {
   test.each([
     [0, "0 B"],
     [1023, "1.023 B"],
     [1536, "1,5 KB"],
-    [5 * 1024 ** 3, "5 GB"],
+    [5 * 1024 ** 3, "5,0 GB"], // D16: GB/TB always one decimal
     [150 * 1024 ** 2, "150 MB"],
     [-1, "–"],
   ] as const)("formatBytes(%d) = %s", (n, s) => expect(formatBytes(n)).toBe(s));
   test.each([
-    [0, "0d"],
-    [42, "42d"],
-    [3725, "1j 2m"],
-    [3600, "1j"],
-    [90061, "1h 1j"],
-    [86400 * 3 + 59, "3h"],
+    [0, "0 dtk"],
+    [42, "42 dtk"],
+    [437, "7 mnt 17 dtk"],
+    [3725, "1 jam 2 mnt"],
+    [3600, "1 jam"],
+    [90061, "1 hari 1 jam"],
+    [119_340, "1 hari 9 jam"],
+    [86400 * 3 + 59, "3 hari"],
+    [-1, "–"],
   ] as const)("formatUptime(%d) = %s", (n, s) => expect(formatUptime(n)).toBe(s));
   test("usedPercent", () => {
     expect(usedPercent(25, 100)).toBe(75);
@@ -150,63 +138,251 @@ describe("formatters", () => {
 });
 
 // test-only fixtures
-const setting = (over: Partial<DevSetting>): DevSetting => ({
-  key: "k",
-  label: "K",
-  description: "",
-  secret: false,
-  value: "default",
-  isSet: false,
-  updatedAt: null,
+const user = (over: Partial<DevUser>): DevUser => ({
+  id: "u2",
+  email: "u@x.co",
+  name: "U",
+  image: null,
+  role: "user",
+  createdAt: "2026-01-01T00:00:00Z",
+  lastSeenAt: null,
+  activeSessions: 1,
+  isEnvSuperAdmin: false,
   ...over,
 });
 
-describe("settings form state", () => {
-  test("plain: draft starts at the effective value; unchanged → nothing to save", () => {
-    const s = setting({ value: "abc" });
-    expect(initialDraft(s)).toBe("abc");
-    expect(saveBody(s, "abc")).toBeNull();
-    expect(saveBody(s, "abd")).toEqual({ value: "abd" });
-    expect(saveBody(s, "")).toEqual({ value: "" });
+describe("user actions", () => {
+  test("yourself: locked, nothing offered (server answers 409 protected/self)", () =>
+    expect(userActions(user({ id: "me" }), "me")).toEqual({
+      locked: "self",
+      role: false,
+      revoke: false,
+      delete: false,
+    }));
+  test("env super admin: only sign-out from all devices (K21)", () =>
+    expect(userActions(user({ isEnvSuperAdmin: true, role: "super_admin" }), "me")).toEqual({
+      locked: "env",
+      role: false,
+      revoke: true,
+      delete: false,
+    }));
+  test("env super admin who is yourself stays locked as self", () =>
+    expect(userActions(user({ id: "me", isEnvSuperAdmin: true }), "me").locked).toBe("self"));
+  test("other user / admin: everything", () => {
+    expect(userActions(user({}), "me")).toEqual({ locked: null, role: true, revoke: true, delete: true });
+    expect(userActions(user({ role: "admin" }), "me").delete).toBe(true);
   });
-  test("secret: write-only — draft starts empty, empty input saves nothing", () => {
-    const s = setting({ secret: true, value: null, isSet: true });
-    expect(initialDraft(s)).toBe("");
-    expect(saveBody(s, "")).toBeNull();
-    expect(saveBody(s, "new-secret")).toEqual({ value: "new-secret" });
-  });
-  test("secret draft ignores a value even if the server sent one", () =>
-    expect(initialDraft(setting({ secret: true, value: "leak" }))).toBe(""));
-  test("reset only when a value is stored; body is null", () => {
-    expect(canReset(setting({ isSet: false }))).toBe(false);
-    expect(canReset(setting({ isSet: true }))).toBe(true);
-    expect(RESET_BODY).toEqual({ value: null });
-  });
-  test.each([
-    [true, true, "saved"],
-    [true, false, "notSet"],
-    [false, true, "custom"],
-    [false, false, "default"],
-  ] as const)("status secret=%p isSet=%p → %s", (secret, isSet, status) =>
-    expect(settingStatus(setting({ secret, isSet }))).toBe(status),
-  );
 });
 
-describe("user lock", () => {
-  const user = (over: Partial<DevUser>): DevUser => ({
-    id: "u2",
-    email: "u@x.co",
-    name: "U",
-    image: null,
-    role: "user",
-    createdAt: "2026-01-01T00:00:00Z",
-    lastSeenAt: null,
-    isEnvSuperAdmin: false,
-    ...over,
+describe("lastSeenText (day resolution, local days)", () => {
+  const now = new Date(2026, 10, 27, 9, 0);
+  test.each([
+    [null, "Belum pernah aktif"],
+    ["nope", "Belum pernah aktif"],
+    [new Date(2026, 10, 27, 0, 5).toISOString(), "Aktif hari ini"],
+    [new Date(2026, 10, 26, 23, 59).toISOString(), "Aktif kemarin"],
+    [new Date(2026, 10, 20, 12).toISOString(), "Aktif 7 hari lalu"],
+  ] as const)("%p → %s", (iso, text) => expect(lastSeenText(iso, now)).toBe(text));
+});
+
+// test-only fixture
+const entry = (over: Partial<DevAuditEntry>): DevAuditEntry => ({
+  id: 1,
+  at: "2026-11-26T07:00:00Z",
+  actor: { id: "u1", name: "Citra" },
+  actorKind: "user",
+  actorLabel: "Citra",
+  actorEmail: "citra@x.co",
+  actorDeleted: false,
+  action: "auth.sign_in",
+  target: null,
+  meta: null,
+  ipMasked: "203.0.113.x",
+  userAgent: "Firefox",
+  requestId: "r1",
+  ...over,
+});
+
+describe("auditActor", () => {
+  test("live user → name", () => expect(auditActor(entry({}))).toBe("Citra"));
+  test("deleted user → label survives with (terhapus)", () =>
+    expect(auditActor(entry({ actor: null, actorDeleted: true }))).toBe("Citra (terhapus)"));
+  test("system → Sistem", () => expect(auditActor(entry({ actor: null, actorKind: "system" }))).toBe("Sistem"));
+  test("unknown → Tidak diketahui", () =>
+    expect(auditActor(entry({ actor: null, actorKind: "unknown", actorLabel: null }))).toBe("Tidak diketahui"));
+  test("0.2.x row without actorKind: user when actor present, else unknown", () => {
+    expect(auditActor(entry({ actorKind: undefined }))).toBe("Citra");
+    expect(auditActor(entry({ actor: null, actorKind: undefined }))).toBe("Tidak diketahui");
   });
-  test("env super admins and yourself are locked, others not", () => {
-    expect(isLockedUser(user({ isEnvSuperAdmin: true }), "me")).toBe(true);
-    expect(isLockedUser(user({ id: "me" }), "me")).toBe(true);
-    expect(isLockedUser(user({}), "me")).toBe(false);
+});
+
+describe("describeAudit", () => {
+  // one sample per AuditAction: the Record type makes a missing action a type error
+  const META: Record<AuditAction, Partial<DevAuditEntry>> = {
+    "auth.sign_in": {},
+    "auth.sign_out": {},
+    "auth.account_created": {},
+    "user.role_change": { meta: { from: "user", to: "admin", targetEmail: "budi@x.co" } },
+    "user.role_sync": { meta: { from: "admin", to: "super_admin" } },
+    "user.delete": { meta: { targetEmail: "budi@x.co" } },
+    "user.self_delete": { meta: { targetEmail: "budi@x.co" } },
+    "settings.update": { target: "backup.hour", meta: { reset: false } },
+    "dns.create": { target: "blog.x.co" },
+    "dns.delete": { target: "blog.x.co" },
+    "service.start": { target: "sshd" },
+    "service.stop": { target: "sshd" },
+    "service.restart": { target: "sshd" },
+    "app.start": { target: "web" },
+    "app.stop": { target: "web" },
+    "app.restart": { target: "web" },
+    "site.create": { target: "blog" },
+    "site.delete": { target: "blog" },
+    "site.adopt": { target: "blog" },
+    "site.env_update": { target: "blog" },
+    "site.deploy": { target: "blog" },
+    "site.rollback": { target: "blog" },
+    "site.restart": { target: "blog" },
+    "site.settings_update": { target: "blog" },
+    "hostname.add": { target: "blog", meta: { hostnames: ["a.x.co", "b.x.co"] } },
+    "hostname.remove": { target: "blog", meta: { hostname: "a.x.co" } },
+    "backup.run": { meta: { trigger: "manual", status: "succeeded" } },
+    "backup.download": { target: "db.sqlite.gz" },
+    "backup.verify": { meta: { ok: true } },
+    "cloudflare.verify": { meta: { ok: false, code: "cf_unauthorized" } },
+    "backup.prune": { actor: null, actorKind: "system" },
+    "backup.restore": { target: "blog_restore" },
+    "backup.restore_drop": { target: "blog_restore" },
+    "session.revoke": { meta: { scope: "user", revoked: 2 } },
+    "session.revoke_all": { meta: { count: 5 } },
+    "secret.mismatch": { actor: null, actorKind: "system", meta: { unreadable: 3 } },
+    "secret.export": {},
+    "secret.reset": {},
+    "panel.start": { actor: null, actorKind: "system", meta: { version: "0.3.0" } },
+    "audit.prune": { actor: null, actorKind: "system", meta: { deleted: 12 } },
+    "audit.export": {},
+    "log.download": { target: "web" },
+    "job.recover": { target: "blog" },
+    "setup.update": { target: "access", meta: { key: "access", done: true } },
+  };
+  test.each(Object.entries(META))("%s has its own sentence (no fallback, no raw action)", (action, over) => {
+    const { text } = describeAudit(entry({ action, ...over }));
+    expect(text).not.toContain(action);
+    expect(text.length).toBeGreaterThan(5);
+  });
+
+  test.each([
+    [
+      { action: "user.role_change", meta: { from: "user", to: "admin", targetEmail: "budi@x.co" } },
+      "Citra mengubah peran budi@x.co: Pengguna → Admin",
+    ],
+    [{ action: "user.delete", meta: null }, "Citra menghapus akun pengguna lain"],
+    [
+      { action: "settings.update", target: "backup.hour", meta: { reset: true } },
+      "Citra mengembalikan Jam cadangan harian ke bawaan",
+    ],
+    [
+      {
+        action: "backup.run",
+        actor: null,
+        actorKind: "system" as const,
+        meta: { trigger: "schedule", status: "succeeded" },
+      },
+      "Sistem menjalankan cadangan terjadwal",
+    ],
+    [{ action: "service.stop", target: "sshd" }, "Citra menghentikan layanan sshd"],
+    [{ action: "session.revoke", meta: { scope: "others", count: 2 } }, "Citra keluar dari perangkat lain (2 sesi)"],
+    [
+      { action: "session.revoke", meta: { scope: "user", revoked: 2, targetEmail: "rina@contoh.test" } },
+      "Citra mengeluarkan rina@contoh.test dari 2 sesi",
+    ],
+    [{ action: "session.revoke", meta: { scope: "user" } }, "Citra mengeluarkan pengguna lain dari semua sesinya"],
+    [{ action: "log.download", target: "app:kasir-lama:err" }, "Citra mengunduh log error aplikasi kasir-lama"],
+    [{ action: "log.download", target: "app:blog:out" }, "Citra mengunduh log aplikasi blog"],
+    [{ action: "log.download", target: "service:sshd" }, "Citra mengunduh log layanan sshd"],
+    [{ action: "log.download", target: "web" }, "Citra mengunduh log web"],
+    [
+      { action: "hostname.add", target: "blog", meta: { hostnames: ["a.x.co"] } },
+      "Citra menambah domain a.x.co ke situs blog",
+    ],
+    [{ action: "auth.sign_in", actor: null, actorDeleted: true }, "Citra (terhapus) masuk"],
+  ] as const)("%o → %s", (over, text) => expect(describeAudit(entry(over as Partial<DevAuditEntry>)).text).toBe(text));
+
+  test("unknown/retired action → fallback with the raw action", () =>
+    expect(describeAudit(entry({ action: "invite.create" })).text).toBe("Citra menjalankan invite.create"));
+  test("unknown setting key falls back to the key itself", () =>
+    expect(describeAudit(entry({ action: "settings.update", target: "x.y", meta: {} })).text).toBe(
+      "Citra mengubah x.y",
+    ));
+  test("tones: destructive danger, failed backup danger, ordinary neutral", () => {
+    expect(describeAudit(entry({ action: "user.delete" })).tone).toBe("danger");
+    expect(describeAudit(entry({ action: "backup.run", meta: { status: "failed" } }))).toEqual({
+      text: "Citra menjalankan cadangan, tetapi gagal",
+      tone: "danger",
+    });
+    expect(describeAudit(entry({})).tone).toBe("neutral");
+    expect(describeAudit(entry({ action: "cloudflare.verify", meta: { ok: false, code: "cf_unauthorized" } }))).toEqual(
+      {
+        text: "Citra menguji token Cloudflare: gagal",
+        tone: "warning",
+      },
+    );
+    expect(describeAudit(entry({ action: "cloudflare.verify", meta: { ok: true } })).tone).toBe("neutral");
+  });
+});
+
+describe("audit filters → query", () => {
+  const p = (s: string) => new URLSearchParams(s);
+  test("list URL keeps filters (action repeatable, prefix '.'), drops unrelated params, sets page", () =>
+    expect(
+      auditListUrl(p("action=user.&action=auth.sign_in&actorId=u1&from=2026-11-01&to=2026-11-26&x=1&page=9"), 2, 20),
+    ).toBe(
+      "/api/dev/audit?action=user.&action=auth.sign_in&actorId=u1&from=2026-11-01&to=2026-11-26&page=2&pageSize=20",
+    ));
+  test("empty values are dropped", () =>
+    expect(auditListUrl(p("action=&from="), 1, 20)).toBe("/api/dev/audit?page=1&pageSize=20"));
+  test("CSV export carries the same filters, no paging", () => {
+    expect(auditExportUrl(p("action=backup.&from=2026-11-01&page=3"))).toBe(
+      "/api/dev/audit/export.csv?action=backup.&from=2026-11-01",
+    );
+    expect(auditExportUrl(p(""))).toBe("/api/dev/audit/export.csv");
+  });
+  test("isAuditFiltered ignores page", () => {
+    expect(isAuditFiltered(p("page=2"))).toBe(false);
+    expect(isAuditFiltered(p("actorId=u1"))).toBe(true);
+  });
+  test("date range: from after to is invalid; open ends are fine", () => {
+    expect(invalidDateRange("2026-11-27", "2026-11-26")).toBe(true);
+    expect(invalidDateRange("2026-11-26", "2026-11-26")).toBe(false);
+    expect(invalidDateRange("2026-11-26", null)).toBe(false);
+  });
+});
+
+describe("panel log page", () => {
+  test.each([
+    [null, "info"],
+    ["error", "error"],
+    ["warn", "warn"],
+    ["loud", "info"],
+  ] as const)("?level=%p → %s", (raw, level) => expect(levelParam(raw)).toBe(level));
+
+  const e = (msg: string, at = "2026-11-26T07:00:00Z"): DevLogEntry => ({ at, level: "info", msg });
+  test("newest-first API entries become oldest-first lines", () =>
+    expect(toViewerLines([], [e("b"), e("a")]).map((l) => [l.text, l.seq])).toEqual([
+      ["a", 0],
+      ["b", 1],
+    ]));
+  test("next poll keeps seq of lines already shown; new lines continue the count", () => {
+    const first = toViewerLines([], [e("b"), e("a")]);
+    const next = toViewerLines(first, [e("d"), e("c"), e("b"), e("a")]);
+    expect(next.map((l) => [l.text, l.seq])).toEqual([
+      ["a", 0],
+      ["b", 1],
+      ["c", 2],
+      ["d", 3],
+    ]);
+  });
+  test("ring rolled past the last line: seq still grows", () => {
+    const first = toViewerLines([], [e("a")]);
+    expect(toViewerLines(first, [e("z")])[0]?.seq).toBe(1);
   });
 });

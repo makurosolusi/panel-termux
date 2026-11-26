@@ -1,5 +1,6 @@
 import { eq } from "drizzle-orm";
 import { isRole, type Role } from "../../shared/roles";
+import { recordAudit } from "../audit.service";
 import type { Db } from "../db/client";
 import { user } from "../db/schema";
 import { log } from "../log.service";
@@ -14,13 +15,19 @@ export function decideRole(email: string, currentRole: Role, superAdminEmails: r
   return currentRole === "super_admin" ? "user" : currentRole;
 }
 
-/** Applies the role policy to stored user `userId`, persists a change and returns the resulting role. */
+/** Applies the role policy to stored user `userId`, persists and audits a change, returns the resulting role. */
 export function syncUserRole(db: Db, userId: string, superAdminEmails: readonly string[]): Role {
   const row = db.select({ email: user.email, role: user.role }).from(user).where(eq(user.id, userId)).get();
   if (!row) throw new Error(`syncUserRole: user ${userId} not found`);
   const role = decideRole(row.email, isRole(row.role) ? row.role : "user", superAdminEmails);
   if (role !== row.role) {
     db.update(user).set({ role }).where(eq(user.id, userId)).run();
+    recordAudit(db, {
+      actorId: null,
+      action: "user.role_sync",
+      target: userId,
+      meta: { from: row.role, to: role, reason: "super_admin_emails" },
+    });
     log.info(`[auth] user ${userId} role ${row.role} -> ${role}`);
   }
   return role;

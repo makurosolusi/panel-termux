@@ -1,17 +1,22 @@
+import { ArrowLeftIcon } from "lucide-react";
 import { useState } from "react";
 import { useSearchParams } from "react-router";
 import { signInWithGoogle } from "@/web/auth/auth.client";
 import { Button } from "@/web/components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/web/components/ui/card";
-import { id } from "@/web/i18n/id";
+import { idAccount } from "@/web/i18n/id.account";
+import { LogoMark } from "@/web/layout/brand.logo";
+import { useDocumentTitle } from "@/web/layout/document.title";
 import { loginErrorMessage } from "./login.error";
 
-/** /login: Google sign-in card. */
+const t = idAccount.signIn;
+
+/** /login: branded Google sign-in card (PLAN/05 §5.7, F10). */
 export function LoginPage() {
   const [params] = useSearchParams();
   const [pending, setPending] = useState(false);
   const [startError, setStartError] = useState<string | null>(null);
-  const message = startError ?? loginErrorMessage(params.get("error"));
+  const message = startError ?? loginErrorMessage(params);
+  useDocumentTitle(t.title, { raw: true });
 
   const start = async () => {
     setPending(true);
@@ -19,34 +24,55 @@ export function LoginPage() {
     const { error } = await signInWithGoogle().catch((cause: unknown) => ({ error: cause }));
     if (error) {
       console.error("signIn.social failed", error);
-      setStartError(id.login.errors.start);
+      setStartError(t.errors.start);
       setPending(false);
     }
     // success: better-auth navigates the browser to Google, keep the button disabled
   };
 
   return (
-    <main className="mx-auto flex min-h-svh max-w-sm flex-col justify-center p-4">
-      <Card>
-        <CardHeader className="text-center">
-          <CardTitle className="text-xl">{id.login.title}</CardTitle>
-          <CardDescription>{id.login.subtitle}</CardDescription>
-        </CardHeader>
-        <CardContent className="flex flex-col gap-4">
-          {message && (
-            <p
-              role="alert"
-              className="rounded-md border border-destructive/40 bg-destructive/10 p-3 text-sm text-destructive"
-            >
-              {message}
-            </p>
-          )}
-          <Button size="lg" className="w-full" disabled={pending} onClick={() => void start()}>
-            <GoogleIcon />
-            {pending ? id.login.redirecting : id.login.google}
-          </Button>
-        </CardContent>
-      </Card>
+    <main className="mx-auto flex min-h-svh w-full max-w-sm flex-col justify-center gap-6 px-4 py-10">
+      <div className="flex flex-col gap-6 rounded-xl border bg-card p-6 shadow-xs">
+        <div className="flex flex-col items-center gap-3 text-center">
+          <LogoMark className="size-10 text-base" />
+          <h1 className="text-xl font-semibold tracking-tight text-balance">{t.title}</h1>
+          <p className="font-mono text-xs text-muted-foreground">
+            <span className="sr-only">{t.hostLabel}: </span>
+            {window.location.host}
+          </p>
+          <p className="text-sm text-muted-foreground text-pretty">{t.subtitle}</p>
+        </div>
+        {message && (
+          <p role="alert" className="rounded-md border border-danger/25 bg-danger-subtle px-3 py-2 text-sm">
+            {message}
+          </p>
+        )}
+        <Button
+          size="lg"
+          className="h-11 w-full"
+          disabled={pending}
+          aria-busy={pending || undefined}
+          onClick={() => void start()}
+        >
+          <GoogleIcon />
+          {pending ? t.redirecting : t.google}
+        </Button>
+      </div>
+      <div className="flex flex-col items-center gap-3 text-center text-sm text-muted-foreground">
+        <a href="/" className="inline-flex min-h-11 items-center gap-1.5 hover:text-foreground">
+          <ArrowLeftIcon className="size-4" aria-hidden />
+          {t.back}
+        </a>
+        <p>
+          {t.own}{" "}
+          <a
+            href={idAccount.noAccess.ownServerHref}
+            className="font-medium text-foreground underline underline-offset-4 relative pointer-coarse:after:absolute pointer-coarse:after:inset-x-0 pointer-coarse:after:-inset-y-3 pointer-coarse:after:content-['']"
+          >
+            {t.ownLink}
+          </a>
+        </p>
+      </div>
     </main>
   );
 }

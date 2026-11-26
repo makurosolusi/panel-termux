@@ -44,9 +44,18 @@ function assertIdent(name: string): void {
 export const createSql = (name: string, password: string) =>
   `\\set ON_ERROR_STOP on\n\\set name '${name}'\n\\set pw '${password}'\n` +
   `CREATE ROLE :"name" LOGIN PASSWORD :'pw';\nCREATE DATABASE :"name" OWNER :"name";\n`;
+export const dropDatabaseSql = (name: string) =>
+  `\\set ON_ERROR_STOP on\n\\set name '${name}'\nDROP DATABASE IF EXISTS :"name" WITH (FORCE);\n`;
 export const dropSql = (name: string) =>
   `\\set ON_ERROR_STOP on\n\\set name '${name}'\n` +
   `DROP DATABASE IF EXISTS :"name" WITH (FORCE);\nDROP ROLE IF EXISTS :"name";\n`;
+
+/** Database psql connects to for admin scripts; never dropped. */
+const MAINTENANCE_DB = "postgres";
+
+/** Tables of the restored database, outside the system schemas. */
+const TABLE_COUNT_SQL =
+  "SELECT count(*) FROM information_schema.tables WHERE table_schema NOT IN ('pg_catalog', 'information_schema')";
 
 /** Real PostgreSQL adapter via `psql`. */
 export function createTermuxPostgres(): PostgresAdapter {
@@ -58,6 +67,11 @@ export function createTermuxPostgres(): PostgresAdapter {
     // An error context line ("LINE 1: CREATE ROLE ...") could quote the password literal; mask it first.
     const err = redact ? r.stderr.replaceAll(redact, "***") : r.stderr;
     throw new SystemError(`psql ${op} exited ${r.code}: ${err.trim().slice(0, 200)}`);
+  }
+  async function run(tool: string, op: string, args: string[]): Promise<string> {
+    const r = await runTermux(tool, args, { env: env(), timeoutMs: DUMP_TIMEOUT_MS });
+    if (r.code !== 0) throw new SystemError(`${tool} ${op} exited ${r.code}: ${r.stderr.trim().slice(0, 200)}`);
+    return r.stdout;
   }
   return {
     async listDatabases() {
@@ -78,11 +92,45 @@ export function createTermuxPostgres(): PostgresAdapter {
     },
     async dump(name, file) {
       assertIdent(name);
-      const r = await runTermux("pg_dump", ["-Fc", "-w", "-f", file, "-d", name], {
-        env: env(),
-        timeoutMs: DUMP_TIMEOUT_MS,
-      });
-      if (r.code !== 0) throw new SystemError(`pg_dump ${name} exited ${r.code}: ${r.stderr.trim().slice(0, 200)}`);
+      await run("pg_dump", name, ["-Fc", "-w", "-f", file, "-d", name]);
+    },
+    async dumpGlobals(file) {
+      await run("pg_dumpall", "globals", ["--globals-only", "-w", "-f", file]);
+    },
+    async verifyDump(file) {
+      await run("pg_restore", "verify", ["--list", file]);
+    },
+    async serverVersion() {
+      const v = (
+        await run("psql", "version", ["-X", "-w", "-At", "-d", "postgres", "-c", "show server_version"])
+      ).trim();
+      if (!v) throw new SystemError("psql version: empty output");
+      return v;
+    },
+    async restoreInto(file, target, owner) {
+      assertIdent(target);
+      assertIdent(owner);
+      // A failed pg_restore leaves `target` behind; the caller drops it (dropDatabase).
+      await run("createdb", `restore ${target}`, ["-w", "-O", owner, target]);
+      await run("pg_restore", `restore ${target}`, [
+        "--no-owner",
+        `--role=${owner}`,
+        "--exit-on-error",
+        "-w",
+        "-d",
+        target,
+        file,
+      ]);
+      const n = Number(
+        (await run("psql", `count ${target}`, ["-X", "-w", "-At", "-d", target, "-c", TABLE_COUNT_SQL])).trim(),
+      );
+      if (!Number.isInteger(n)) throw new SystemError(`psql count ${target}: unexpected output`);
+      return { tableCount: n };
+    },
+    async dropDatabase(name) {
+      assertIdent(name);
+      if (name === MAINTENANCE_DB) throw new SystemError("postgres: refusing to drop the maintenance database");
+      await script(`drop database ${name}`, dropDatabaseSql(name));
     },
   };
 }

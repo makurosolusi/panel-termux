@@ -16,6 +16,8 @@ const result = await Bun.build({
     autoloadBunfig: false,
   },
   minify: true,
+  // PLAN/01 §3.11: the SPA splits into entry (landing + session), `login` and `app` chunks
+  splitting: true,
   plugins: [tailwind],
   loader: { ".sql": "text" },
   define: { "process.env.NODE_ENV": JSON.stringify("production") },

@@ -1,8 +1,8 @@
 import { ActivityIcon, ArchiveIcon, LayersIcon, RocketIcon, ServerCogIcon, ShieldCheckIcon } from "lucide-react";
-import { id } from "@/web/i18n/id";
+import { idLanding } from "@/web/i18n/id.landing";
 import { SectionHead } from "./section.head";
 
-const t = id.landing.features;
+const t = idLanding.features;
 const ICONS = [LayersIcon, RocketIcon, ActivityIcon, ServerCogIcon, ArchiveIcon, ShieldCheckIcon];
 const [wizard, ...rest] = t.items;
 

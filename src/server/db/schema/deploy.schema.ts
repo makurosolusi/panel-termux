@@ -22,6 +22,12 @@ export const deploy = sqliteTable(
       .references(() => job.id, { onDelete: "cascade" }),
     actorId: text("actor_id").references(() => user.id, { onDelete: "set null" }),
     at: integer("at", { mode: "timestamp_ms" }).notNull(),
+    // Original upload file name, sanitized, ≤ 255 chars (0007).
+    fileName: text("file_name"),
+    finishedAt: integer("finished_at", { mode: "timestamp_ms" }),
+    // Identity of the file this deploy put in place: "Aktif" = stat(app) matches; null on rows before 0007.
+    binIno: integer("bin_ino"),
+    binMtimeMs: integer("bin_mtime_ms"),
   },
   (t) => [index("deploy_site_at_idx").on(t.siteName, t.at)],
 );

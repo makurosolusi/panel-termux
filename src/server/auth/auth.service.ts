@@ -34,6 +34,14 @@ export function createAuth({ db, env, secret }: AuthDeps) {
       },
     },
     databaseHooks: {
+      user: {
+        create: {
+          after: async (created) => {
+            recordAudit(db, { actorId: created.id, action: "auth.account_created", target: created.id });
+            log.info(`[auth] user ${created.id} created`);
+          },
+        },
+      },
       session: {
         create: {
           // Every session creation: sync role with SUPER_ADMIN_EMAILS before the session is issued.
@@ -47,6 +55,9 @@ export function createAuth({ db, env, secret }: AuthDeps) {
         },
       },
     },
+    // cloudflared sets CF-Connecting-IP to the visitor (and the panel only listens on loopback), so session
+    // IPs and Better Auth's own rate limit see the real client instead of 127.0.0.1.
+    advanced: { ipAddress: { ipAddressHeaders: ["cf-connecting-ip", "x-forwarded-for"] } },
     // OAuth callback errors land on the SPA login page as /login?error=<code>.
     onAPIError: { errorURL: `${env.APP_BASE_URL}/login` },
   });

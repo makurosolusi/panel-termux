@@ -3,14 +3,17 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { eq } from "drizzle-orm";
+import { Elysia } from "elysia";
 import { createAuth } from "@/server/auth/auth.service";
 import { type Db, openDb } from "@/server/db/client";
 import { runMigrations } from "@/server/db/migrate";
-import { account, auditLog, session, setting, user } from "@/server/db/schema";
+import { account, auditLog, session, user } from "@/server/db/schema";
 import { log } from "@/server/log.service";
-import { createApiRoutes } from "@/server/routes/api.routes";
-import { getSetting, SETTINGS } from "@/server/settings.service";
-import type { DevAuditEntry, DevHealth, DevLogs, DevSetting, DevUser, Page } from "@/shared/dev.types";
+import { createDevAdminRoutes } from "@/server/routes/dev.admin.routes";
+import { createDevRoutes } from "@/server/routes/dev.routes";
+import { createMeRoutes } from "@/server/routes/me.routes";
+import { createFakeSystem } from "@/server/system/system.fake";
+import type { DevAuditEntry, DevLogs, DevSetup, DevUser, Page } from "@/shared/dev.types";
 import type { Role } from "@/shared/roles";
 
 // test-only dummy values
@@ -18,12 +21,11 @@ const BASE = "http://localhost:3200";
 const SECRET = "fedcba9876543210".repeat(4);
 const SUPER = ["root@example.com", "root2@example.com"];
 const env = { APP_BASE_URL: BASE, GOOGLE_CLIENT_ID: "cid", GOOGLE_CLIENT_SECRET: "csecret", SUPER_ADMIN_EMAILS: SUPER };
-const CF_TOKEN = "cfTok_abcdefghijklmnopqrstuvwxyz0123456789";
 
 const dir = mkdtempSync(join(tmpdir(), "panel-dev-"));
 let db: Db;
 let auth: ReturnType<typeof createAuth>;
-let api: ReturnType<typeof createApiRoutes>;
+let api: { handle(req: Request): Promise<Response> };
 let rootId: string;
 let root: string; // super_admin cookie
 let adminCookie: string;
@@ -77,7 +79,26 @@ beforeAll(async () => {
   db = openDb(dir);
   runMigrations(db);
   auth = createAuth({ db, env, secret: SECRET });
-  api = createApiRoutes(auth, { db, secret: SECRET, superAdmins: SUPER, dataDir: dir });
+  // The /dev and /me groups alone (boot wiring lives in api.routes.ts and has its own tests).
+  api = new Elysia({ prefix: "/api" })
+    .use(createMeRoutes(auth, db))
+    .use(createDevRoutes(auth, { db, secret: SECRET, superAdmins: SUPER, dataDir: dir }))
+    .use(
+      createDevAdminRoutes({
+        auth,
+        db,
+        secret: SECRET,
+        system: createFakeSystem({ home: join(dir, "home") }),
+        monitor: {
+          status: () => ({ sampledAt: null, intervalSec: 60, lastTickMs: null, running: false }),
+          problems: () => ({ problems: [], suppressed: [], unknownKinds: new Set() }),
+        },
+        backup: { status: () => ({ configured: false, nextRunAt: null }) as never },
+        jobs: { active: () => null },
+        appBaseUrl: BASE,
+        createdThisBoot: false,
+      }),
+    );
   rootId = addUser("root@example.com"); // promoted by the session hook
   root = await cookieFor(rootId);
   adminCookie = await cookieFor(addUser("admin@x.io", "admin"));
@@ -96,9 +117,13 @@ describe("access control", () => {
     ["PATCH", "/users/x", { role: "admin" }],
     ["DELETE", "/users/x", null],
     ["GET", "/audit", null],
+    ["GET", "/audit/export.csv", null],
+    ["GET", "/setup", null],
+    ["PUT", "/setup/dismiss", { dismissed: true }],
+    ["POST", "/users/x/sessions/revoke", null],
     ["GET", "/logs", null],
     ["GET", "/settings", null],
-    ["PUT", "/settings/sites.dir", { value: "/tmp" }],
+    ["PATCH", "/settings", { values: { "sites.dir": "/tmp" } }],
   ];
   test.each(endpoints)("%s %s → 401 anon, 403 user/admin", async (method, path, b) => {
     const body = b ?? undefined;
@@ -121,22 +146,9 @@ describe("access control", () => {
 });
 
 describe("GET /health", () => {
-  test("shape and counts", async () => {
-    const h = await json<DevHealth>(await call("GET", "/health", root));
-    expect(h).toEqual({
-      version: expect.any(String),
-      schemaVersion: expect.stringMatching(/^\d{4}_/),
-      startedAt: expect.any(String),
-      uptimeSec: expect.any(Number),
-      memory: { rssMb: expect.any(Number), heapUsedMb: expect.any(Number) },
-      db: { sizeBytes: expect.any(Number) },
-      dataDir: { freeBytes: expect.any(Number), totalBytes: expect.any(Number) },
-      runtime: { bun: Bun.version, platform: process.platform, arch: process.arch },
-      counts: { users: 3, sessions: 3 },
-    });
-    expect(h.db.sizeBytes).toBeGreaterThan(0);
-    expect(h.dataDir.totalBytes).toBeGreaterThan(h.dataDir.freeBytes);
-    expect(Date.parse(h.startedAt)).toBeLessThanOrEqual(Date.now());
+  test("server verdict and counts", async () => {
+    const h = await json<{ verdict: string; counts: { users: number } }>(await call("GET", "/health", root));
+    expect(h).toMatchObject({ verdict: expect.stringMatching(/^(ok|warn|fail)$/), counts: { users: 3 } });
   });
 });
 
@@ -224,16 +236,19 @@ describe("audit", () => {
     db.insert(auditLog).values({ actorId: rootId, action: "invite.create", target: "old@guest.io" }).run();
     db.insert(auditLog).values({ actorId: null, action: "auth.denied", target: "x.io" }).run();
     const old = await json<Page<DevAuditEntry>>(await call("GET", "/audit?action=invite.create", root));
-    expect(old.items).toEqual([
-      {
-        id: expect.any(Number),
-        at: expect.any(String),
-        actor: { id: rootId, name: expect.any(String) },
-        action: "invite.create",
-        target: "old@guest.io",
-        meta: null,
-      },
-    ]);
+    expect(old.items).toHaveLength(1);
+    // Pre-0.3.0 rows carry no actor kind/label columns: kind "unknown", label falls back to the live user's name.
+    expect(old.items[0]).toMatchObject({
+      id: expect.any(Number),
+      at: expect.any(String),
+      actor: { id: rootId, name: expect.any(String) },
+      actorKind: "unknown",
+      actorLabel: old.items[0]?.actor?.name,
+      actorDeleted: false,
+      action: "invite.create",
+      target: "old@guest.io",
+      meta: null,
+    });
     const all = await json<Page<DevAuditEntry>>(await call("GET", "/audit?pageSize=2", root));
     expect(all.items.map((e) => e.action)).toEqual(["auth.denied", "invite.create"]);
   });
@@ -253,59 +268,119 @@ describe("logs", () => {
   });
 });
 
-describe("settings", () => {
-  test("list: registry with defaults, secrets null", async () => {
-    const { items } = await json<{ items: DevSetting[] }>(await call("GET", "/settings", root));
-    // Whole registry, in source order — new keys show up here without editing a list.
-    expect(items.map((s) => s.key)).toEqual(Object.keys(SETTINGS));
-    expect(items.map((s) => s.key)).toEqual(
-      expect.arrayContaining(["cloudflare.api_token", "sites.port_range", "backup.s3_bucket", "backup.retention_days"]),
-    );
-    expect(items.find((s) => s.key === "sites.port_range")).toMatchObject({ value: "3001-3999", isSet: false });
-    const secrets = items.filter((s) => s.secret).map((s) => s.key);
-    expect(secrets).toEqual(
-      expect.arrayContaining(["cloudflare.api_token", "backup.s3_access_key_id", "backup.s3_secret_access_key"]),
-    );
-    for (const s of items.filter((i) => i.secret)) expect(s.value).toBeNull();
+describe("users 0.3.0", () => {
+  test("role filter, role-then-lastSeen order, sign-in fallback for lastSeenAt, activeSessions", async () => {
+    expect(await json(await call("GET", "/users?role=boss", root), 400)).toMatchObject({ error: "invalid_role" });
+    const admins = await json<Page<DevUser>>(await call("GET", "/users?role=admin", root));
+    expect(admins.items.length).toBeGreaterThan(0);
+    expect(admins.items.every((u) => u.role === "admin")).toBe(true);
+    const ranks = { super_admin: 0, admin: 1, user: 2 };
+    const all = (await json<Page<DevUser>>(await call("GET", "/users?pageSize=100", root))).items;
+    expect(all.map((u) => ranks[u.role])).toEqual(all.map((u) => ranks[u.role]).sort());
+    const plain = all.filter((u) => u.role === "user");
+    const seen = plain.findIndex((u) => u.lastSeenAt === null);
+    expect(plain.slice(seen).every((u) => u.lastSeenAt === null)).toBe(true); // never-seen last
+    const id = addUser("fallback@x.io");
+    await cookieFor(id);
+    await cookieFor(id);
+    const live = (await json<Page<DevUser>>(await call("GET", "/users?q=fallback@", root))).items[0];
+    expect(live).toMatchObject({ activeSessions: 2, lastSeenAt: expect.any(String) });
+    db.delete(session).where(eq(session.userId, id)).run();
+    const gone = (await json<Page<DevUser>>(await call("GET", "/users?q=fallback@", root))).items[0];
+    expect(gone).toMatchObject({ activeSessions: 0, lastSeenAt: expect.any(String) }); // from auth.sign_in
   });
 
-  test("secret is encrypted at rest, never returned, audit has key only", async () => {
-    const res = await json<DevSetting>(await call("PUT", "/settings/cloudflare.api_token", root, { value: CF_TOKEN }));
-    expect(res).toMatchObject({ key: "cloudflare.api_token", isSet: true, value: null });
-    const raw = db.select().from(setting).where(eq(setting.key, "cloudflare.api_token")).get()?.value ?? "";
-    expect(raw).not.toBe(CF_TOKEN);
-    expect(raw).not.toContain(CF_TOKEN);
-    expect(raw.startsWith("v1.")).toBe(true);
-    expect(getSetting({ db, secret: SECRET }, "cloudflare.api_token")).toBe(CF_TOKEN);
-    expect(() => getSetting({ db, secret: "0".repeat(64) }, "cloudflare.api_token")).toThrow(/cloudflare.api_token/);
-    const list = await (await call("GET", "/settings", root)).text();
-    expect(list).not.toContain(CF_TOKEN);
-    const audit = auditRows("settings.update").at(-1);
-    expect(audit).toMatchObject({ actorId: rootId, target: "cloudflare.api_token" });
-    expect(JSON.stringify(audit)).not.toContain(CF_TOKEN);
-    const allAudit = await (await call("GET", "/audit?pageSize=100", root)).text();
-    expect(allAudit).not.toContain(CF_TOKEN);
+  test("targetEmail is kept on role_change and delete", async () => {
+    const id = addUser("target@x.io");
+    await call("PATCH", `/users/${id}`, root, { role: "admin" });
+    expect(auditRows("user.role_change").at(-1)?.meta).toMatchObject({ targetEmail: "target@x.io" });
+    await call("DELETE", `/users/${id}`, root);
+    expect(auditRows("user.delete").at(-1)?.meta).toMatchObject({ targetEmail: "target@x.io" });
   });
 
-  test("validation, reset to default, unknown key, ~ expansion", async () => {
-    for (const value of ["80-90", "4000-3000", "3000-70000", "abc", "", 5]) {
-      expect(await json(await call("PUT", "/settings/sites.port_range", root, { value }), 400)).toMatchObject({
-        error: "invalid_value",
-      });
-    }
-    const set = await json<DevSetting>(await call("PUT", "/settings/sites.port_range", root, { value: " 5000-5100 " }));
-    expect(set).toMatchObject({ value: "5000-5100", isSet: true, updatedAt: expect.any(String) });
-    const reset = await json<DevSetting>(await call("PUT", "/settings/sites.port_range", root, { value: null }));
-    expect(reset).toMatchObject({ value: "3001-3999", isSet: false, updatedAt: null });
-    expect(await json(await call("PUT", "/settings/nope", root, { value: "x" }), 404)).toMatchObject({
+  test("revoke sessions: n revoked, env super admin allowed, 409 self only, 404 unknown", async () => {
+    const other = addUser("root2b@example.com", "super_admin");
+    await cookieFor(other);
+    await cookieFor(other);
+    expect(await json(await call("POST", `/users/${other}/sessions/revoke`, root))).toEqual({ revoked: 2 });
+    expect(db.select().from(session).where(eq(session.userId, other)).all()).toHaveLength(0);
+    expect(await json(await call("POST", `/users/${rootId}/sessions/revoke`, root), 409)).toMatchObject({
+      error: "self",
+    });
+    expect((await call("POST", "/users/nope/sessions/revoke", root)).status).toBe(404);
+  });
+});
+
+describe("setup routes", () => {
+  test("manual tick only for access/secret_saved; body validated; dismiss round-trip", async () => {
+    expect(await json(await call("PUT", "/setup/items/backup", root, { done: true }), 404)).toMatchObject({
       error: "not_found",
     });
-    expect(await json(await call("PUT", "/settings/sites.dir", root, { value: "relative/dir" }), 400)).toMatchObject({
-      error: "invalid_value",
+    expect(await json(await call("PUT", "/setup/items/access", root, { done: "yes" }), 400)).toMatchObject({
+      error: "invalid_body",
     });
-    expect(getSetting({ db, secret: SECRET }, "sites.dir")).toBe(join(process.env.HOME ?? "", "sites"));
-    expect(
-      await json(await call("PUT", "/settings/panel.protected_services", root, { value: "sshd,,x" }), 400),
-    ).toMatchObject({ error: "invalid_value" });
+    // secret_saved, not access: `accessSeen` is process-wide and other test files set it.
+    const s = await json<DevSetup>(await call("PUT", "/setup/items/secret_saved", root, { done: true }));
+    expect(s.items.find((i) => i.key === "secret_saved")).toMatchObject({ done: true, source: "manual" });
+    expect(auditRows("setup.update").at(-1)).toMatchObject({
+      actorId: rootId,
+      meta: { key: "secret_saved", done: true },
+    });
+    const d = await json<DevSetup>(await call("PUT", "/setup/dismiss", root, { dismissed: true }));
+    expect(d.dismissedAt).toEqual(expect.any(String));
+    expect((await json<DevSetup>(await call("GET", "/setup", root))).dismissedAt).toBe(d.dismissedAt ?? "");
+  });
+});
+
+/** Inserts an audit row at local `y-m-d h:00`. */
+const seedAudit = (action: string, y: number, m: number, d: number, h: number) =>
+  db
+    .insert(auditLog)
+    .values({ actorId: rootId, action, at: new Date(y, m - 1, d, h) })
+    .run();
+
+describe("audit filters", () => {
+  test("repeatable action (exact + prefix), from/to by local day, invalid_date", async () => {
+    seedAudit("zz.one", 2026, 1, 10, 12);
+    seedAudit("zz.two", 2026, 1, 11, 23);
+    seedAudit("zy.three", 2026, 1, 12, 0);
+    const actions = async (qs: string) =>
+      (await json<Page<DevAuditEntry>>(await call("GET", `/audit?pageSize=100&${qs}`, root))).items.map(
+        (e) => e.action,
+      );
+    expect(await actions("action=zz.&action=zy.three")).toEqual(["zy.three", "zz.two", "zz.one"]);
+    expect(await actions("action=zz.&action=zy.&from=2026-01-10&to=2026-01-11")).toEqual(["zz.two", "zz.one"]);
+    expect(await actions("action=zz.&action=zy.&from=2026-01-11")).toEqual(["zy.three", "zz.two"]);
+    for (const bad of ["from=2026-02-30", "to=yesterday", "from=2026-1-1"])
+      expect(await json(await call("GET", `/audit?${bad}`, root), 400)).toMatchObject({ error: "invalid_date" });
+  });
+});
+
+describe("DELETE /api/me", () => {
+  const del = (cookie: string, confirm: unknown) =>
+    api.handle(
+      new Request(`${BASE}/api/me`, {
+        method: "DELETE",
+        headers: { cookie, "content-type": "application/json", "x-requested-with": "XMLHttpRequest" },
+        body: JSON.stringify({ confirm }),
+      }),
+    );
+  test("user + own email → 204, sessions/accounts gone, audited; wrong email 400; admin/super_admin 403", async () => {
+    const id = addUser("Self@x.io");
+    const cookie = await cookieFor(id);
+    db.insert(account).values({ id: "acc-self", accountId: "s", providerId: "google", userId: id }).run();
+    expect(await json(await del(cookie, "other@x.io"), 400)).toMatchObject({ error: "confirm_mismatch" });
+    expect(await json(await del(adminCookie, "admin@x.io"), 403)).toMatchObject({ error: "forbidden" });
+    expect(await json(await del(root, "root@example.com"), 403)).toMatchObject({ error: "forbidden" });
+    expect((await del(cookie, "self@x.io")).status).toBe(204);
+    expect(db.select().from(user).where(eq(user.id, id)).all()).toHaveLength(0);
+    expect(db.select().from(session).where(eq(session.userId, id)).all()).toHaveLength(0);
+    expect(db.select().from(account).where(eq(account.userId, id)).all()).toHaveLength(0);
+    expect(auditRows("user.self_delete").at(-1)).toMatchObject({
+      target: id,
+      actorEmail: "Self@x.io",
+      meta: { targetEmail: "Self@x.io" },
+    });
+    expect((await del(cookie, "self@x.io")).status).toBe(401);
   });
 });

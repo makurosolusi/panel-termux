@@ -1,29 +1,73 @@
-import { ArrowLeftIcon } from "lucide-react";
-import { useEffect, useState } from "react";
-import { Link, useNavigate } from "react-router";
+import { cn } from "cn";
+import { useEffect, useRef, useState } from "react";
+import { useNavigate } from "react-router";
+import type { Integration, Site } from "@/shared/site.types";
+import { ActionBar } from "@/web/components/action-bar";
+import { PageHeader } from "@/web/components/page-header";
 import { Button } from "@/web/components/ui/button";
-import { Card, CardContent } from "@/web/components/ui/card";
-import { id } from "@/web/i18n/id";
+import { idSite } from "@/web/i18n/id.site";
 import { panelUrl } from "@/web/panel/panel.api";
 import { useApiQuery } from "@/web/shared/use-api-query";
+import { IntegrationBanner } from "./integration.banner";
+import { integrationReady } from "./site.adopt";
 import { jobPath, startJob, useSiteCheck } from "./site.api";
-import { checkRequest, createBody, optionsReady, type SiteForm, targetReady } from "./site.check";
+import {
+  blipHosts,
+  checkRequest,
+  createBody,
+  EMPTY_SITE_FORM,
+  optionsReady,
+  type SiteForm,
+  targetReady,
+} from "./site.check";
 import { WizardOptions } from "./wizard.options";
 import { WizardSummary } from "./wizard.summary";
 import { WizardTarget } from "./wizard.target";
 
-const t = id.site.wizard;
-const EMPTY: SiteForm = { name: "", hostname: "", port: "", database: false, env: [] };
+const t = idSite.wizard;
+const LAST_STEP = t.steps.length - 1;
 
-/** /panel/sites/new: 3-step create wizard (address → options → summary), then hands off to the job view. */
+/** Step list; the current one carries `aria-current="step"`. */
+function Stepper({ step }: { step: number }) {
+  return (
+    <ol aria-label={t.stepsLabel} className="mb-6 flex gap-2 text-sm">
+      {t.steps.map((label, i) => (
+        <li
+          key={label}
+          aria-current={i === step ? "step" : undefined}
+          className={cn(
+            "flex flex-1 flex-col gap-1.5 border-t-2 pt-2",
+            i <= step ? "border-brand text-foreground" : "border-border text-muted-foreground",
+          )}
+        >
+          <span className="text-xs tabular-nums text-muted-foreground">{i + 1}</span>
+          <span className={cn(i === step && "font-medium")}>{label}</span>
+        </li>
+      ))}
+    </ol>
+  );
+}
+
+/** /panel/sites/new: 3-step create wizard (Alamat → Opsi → Ringkasan), then hands off to the job page. */
 export function SiteNewPage() {
   const navigate = useNavigate();
   const [step, setStep] = useState(0);
-  const [form, setForm] = useState<SiteForm>(EMPTY);
+  const [form, setForm] = useState<SiteForm>(EMPTY_SITE_FORM);
   const [portTouched, setPortTouched] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const suggested = useApiQuery<{ port: number }>(panelUrl("/sites/suggest-port"));
+  const integration = useApiQuery<Integration>(panelUrl("/integration"));
+  const sites = useApiQuery<Site[]>(panelUrl("/sites"));
   const check = useSiteCheck(checkRequest(form));
+
+  // Move focus to the step heading when the step changes (not on first render), so screen readers hear the new step.
+  const stepHeading = useRef<HTMLHeadingElement>(null);
+  const shownStep = useRef(step);
+  useEffect(() => {
+    if (shownStep.current === step) return;
+    shownStep.current = step;
+    stepHeading.current?.focus();
+  }, [step]);
 
   const suggestedPort = suggested.data?.port;
   useEffect(() => {
@@ -34,50 +78,56 @@ export function SiteNewPage() {
     if ("port" in p) setPortTouched(true);
     setForm((f) => ({ ...f, ...p }));
   };
-  const ready = [targetReady(form, check.result, check.checking), optionsReady(form), !submitting];
+  const ready = integration.data ? integrationReady(integration.data) : false;
+  const tokenSet = integration.data?.checks?.find((c) => c.key === "cloudflare_token")?.state === "ok";
+  const body = createBody(form);
+  const hosts = blipHosts(
+    (sites.data ?? []).flatMap((s) => s.hostnames),
+    globalThis.location?.hostname ?? "",
+    [body.hostname, ...(body.extraHostnames ?? [])],
+  );
+  const canGo = [targetReady(form, check.result, check.checking), optionsReady(form), ready && !submitting];
 
   const submit = async () => {
     setSubmitting(true);
-    const jobId = await startJob("POST", panelUrl("/sites"), createBody(form));
+    const jobId = await startJob("POST", panelUrl("/sites"), body);
     setSubmitting(false);
     if (jobId) navigate(jobPath(jobId));
   };
 
   return (
-    <div className="flex max-w-2xl flex-col gap-4">
-      <Link to="/panel/sites" className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:underline">
-        <ArrowLeftIcon className="size-4" aria-hidden />
-        {id.site.detail.back}
-      </Link>
-      <h1 className="text-lg font-semibold">{t.title}</h1>
-      <p className="text-sm text-muted-foreground" aria-live="polite">
+    <div className="flex max-w-2xl flex-col">
+      <PageHeader title={t.title} description={t.description} back={{ to: "/panel/sites", label: idSite.list.title }} />
+      <Stepper step={step} />
+      <h2 ref={stepHeading} tabIndex={-1} className="sr-only">
         {t.stepOf(step + 1, t.steps.length, t.steps[step] ?? "")}
-      </p>
-      <Card className="py-4">
-        <CardContent className="px-4">
-          <form
-            className="flex flex-col gap-6"
-            onSubmit={(e) => {
-              e.preventDefault();
-              if (!ready[step]) return;
-              if (step < 2) setStep(step + 1);
-              else void submit();
-            }}
+      </h2>
+      {integration.data && !ready && <IntegrationBanner />}
+      <form
+        className="mt-4 flex flex-col gap-6"
+        onSubmit={(e) => {
+          e.preventDefault();
+          if (!canGo[step]) return;
+          if (step < LAST_STEP) setStep(step + 1);
+          else void submit();
+        }}
+      >
+        {step === 0 && <WizardTarget form={form} onChange={patch} check={check} />}
+        {step === 1 && <WizardOptions form={form} onChange={patch} />}
+        {step === 2 && <WizardSummary body={body} tokenSet={tokenSet} blipHosts={hosts} />}
+        <ActionBar>
+          <Button
+            type="button"
+            variant="outline"
+            onClick={() => (step === 0 ? navigate("/panel/sites") : setStep(step - 1))}
           >
-            {step === 0 && <WizardTarget form={form} onChange={patch} check={check} />}
-            {step === 1 && <WizardOptions form={form} onChange={patch} />}
-            {step === 2 && <WizardSummary body={createBody(form)} />}
-            <div className="flex justify-between gap-2">
-              <Button type="button" variant="outline" disabled={step === 0} onClick={() => setStep(step - 1)}>
-                {t.back}
-              </Button>
-              <Button type="submit" disabled={!ready[step]}>
-                {step < 2 ? t.next : t.create}
-              </Button>
-            </div>
-          </form>
-        </CardContent>
-      </Card>
+            {step === 0 ? t.cancel : t.back}
+          </Button>
+          <Button type="submit" disabled={!canGo[step]}>
+            {step < LAST_STEP ? t.next : t.create}
+          </Button>
+        </ActionBar>
+      </form>
     </div>
   );
 }

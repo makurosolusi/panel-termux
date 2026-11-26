@@ -4,8 +4,13 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { eq } from "drizzle-orm";
 import { createCloudflareDevRoutes } from "@/server/cloudflare/cloudflare.routes";
-import { createDnsProvider, createFakeDnsProvider, MANAGED_COMMENT } from "@/server/cloudflare/dns.provider";
-import { DnsConflictError, DnsNotConfiguredError, type DnsProvider } from "@/server/cloudflare/dns.types";
+import {
+  createDnsProvider,
+  createFakeDnsProvider,
+  DnsZoneNotFoundError,
+  MANAGED_COMMENT,
+} from "@/server/cloudflare/dns.provider";
+import { DnsConflictError, DnsNotConfiguredError } from "@/server/cloudflare/dns.types";
 import { type Db, openDb } from "@/server/db/client";
 import { runMigrations } from "@/server/db/migrate";
 import { auditLog, dnsRecord, user } from "@/server/db/schema";
@@ -91,7 +96,7 @@ const server = Bun.serve({
 
 const dir = mkdtempSync(join(tmpdir(), "panel-cf-"));
 let db: Db;
-let dns: DnsProvider;
+let dns: ReturnType<typeof createDnsProvider>;
 const errors: string[] = [];
 const caught = async (p: Promise<unknown>): Promise<Error> => {
   try {
@@ -149,7 +154,7 @@ describe("verify", () => {
     expect(calls[0]).toEqual({ method: "GET", path: "/user/tokens/verify", auth: `Bearer ${TOKEN}` });
   });
   test("POST /cloudflare/verify route returns the provider result", async () => {
-    const res = await createCloudflareDevRoutes({ dns }).handle(
+    const res = await createCloudflareDevRoutes({ dns, db }).handle(
       new Request("http://localhost/cloudflare/verify", { method: "POST" }),
     );
     expect(res.status).toBe(200);
@@ -182,6 +187,7 @@ describe("ensureTunnelCname", () => {
     expect(await dns.ensureTunnelCname("app.example.com", TUNNEL)).toEqual({
       recordId: first.recordId,
       created: false,
+      owned: true,
     });
     expect(calls.filter((c) => c.method !== "GET")).toHaveLength(0);
     expect(calls.some((c) => c.path === "/zones")).toBe(false); // zones served from cache
@@ -189,7 +195,7 @@ describe("ensureTunnelCname", () => {
 
   test("managed record pointing at an old tunnel is repointed", async () => {
     const { recordId } = await dns.ensureTunnelCname("move.example.com", "old-tunnel");
-    expect(await dns.ensureTunnelCname("move.example.com", TUNNEL)).toEqual({ recordId, created: false });
+    expect(await dns.ensureTunnelCname("move.example.com", TUNNEL)).toEqual({ recordId, created: false, owned: true });
     expect(records.get(recordId)?.content).toBe(TARGET);
   });
 
@@ -203,6 +209,50 @@ describe("ensureTunnelCname", () => {
     }
     expect([...records.values()].filter((r) => r.name === "www.example.com")).toHaveLength(1);
     expect(db.select().from(dnsRecord).where(eq(dnsRecord.hostname, "www.example.com")).get()).toBeUndefined();
+  });
+
+  test("hand-made CNAME to this same tunnel is used, never owned (§4.13)", async () => {
+    const id = `foreign${++recSeq}`;
+    records.set(id, {
+      id,
+      type: "CNAME",
+      name: "manual.example.com",
+      content: TARGET,
+      proxied: true,
+      zone: "z-example",
+    });
+    expect(await dns.ensureTunnelCname("manual.example.com", TUNNEL, "u1")).toEqual({
+      recordId: id,
+      created: false,
+      owned: false,
+    });
+    expect(db.select().from(dnsRecord).where(eq(dnsRecord.hostname, "manual.example.com")).get()).toBeUndefined();
+    calls.length = 0;
+    await dns.deleteManaged("manual.example.com", "u1");
+    expect(calls).toHaveLength(0);
+    expect(records.has(id)).toBe(true);
+    // A CNAME elsewhere is still a conflict.
+    expect(await caught(dns.ensureTunnelCname("manual.example.com", "other-tunnel"))).toBeInstanceOf(DnsConflictError);
+  });
+
+  test("inspect: absent / owned / same_tunnel / conflict / zone missing", async () => {
+    await dns.ensureTunnelCname("mine.example.com", TUNNEL);
+    expect(await dns.inspect("nothing.example.com", TUNNEL)).toBe("absent");
+    expect(await dns.inspect("mine.example.com", TUNNEL)).toBe("owned");
+    expect(await dns.inspect("manual.example.com", TUNNEL)).toBe("same_tunnel");
+    expect(await dns.inspect("www.example.com", TUNNEL)).toBe("conflict");
+    expect(await caught(dns.inspect("x.nozone.org", TUNNEL))).toBeInstanceOf(DnsZoneNotFoundError);
+    expect(calls.filter((c) => c.method !== "GET")).toHaveLength(1); // only the create above
+  });
+
+  test("actorId is recorded on dns.create / dns.delete audit rows", async () => {
+    await dns.ensureTunnelCname("actor.example.com", TUNNEL, "u1");
+    await dns.deleteManaged("actor.example.com", "u1");
+    const rows = db.select().from(auditLog).where(eq(auditLog.target, "actor.example.com")).all();
+    expect(rows.map((r) => [r.action, r.actorId])).toEqual([
+      ["dns.create", "u1"],
+      ["dns.delete", "u1"],
+    ]);
   });
 
   test("retries once on 429", async () => {
@@ -225,7 +275,7 @@ describe("deleteManaged", () => {
     await dns.deleteManaged("gone.example.com");
     expect(records.has(recordId)).toBe(false);
     expect(db.select().from(dnsRecord).where(eq(dnsRecord.hostname, "gone.example.com")).get()).toBeUndefined();
-    expect(db.select().from(auditLog).where(eq(auditLog.action, "dns.delete")).all()).toHaveLength(1);
+    expect(db.select().from(auditLog).where(eq(auditLog.target, "gone.example.com")).all()).toHaveLength(2);
   });
   test("ignores foreign records", async () => {
     calls.length = 0;

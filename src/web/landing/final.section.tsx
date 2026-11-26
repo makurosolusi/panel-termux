@@ -1,9 +1,14 @@
-import { id } from "@/web/i18n/id";
-import { CtaLink } from "./cta.link";
+import { idLanding } from "@/web/i18n/id.landing";
+import { InstallCta } from "./cta.link";
 
-const t = id.landing;
+const t = idLanding;
+const FOOTER_LINKS = [
+  { href: t.links.license, label: t.footer.license },
+  { href: t.links.changelog, label: t.footer.changelog },
+  { href: t.links.releases, label: t.footer.releases },
+] as const;
 
-/** Closing CTA band in signal orange. */
+/** Closing CTA band in signal orange; body text stays full-opacity ink (4.5:1 on --lp-signal, QA M5). */
 export function FinalSection() {
   return (
     <section aria-labelledby="final-title" className="px-4 pb-16 sm:px-6">
@@ -20,31 +25,36 @@ export function FinalSection() {
         >
           {t.final.title}
         </h2>
-        <p className="relative mt-4 max-w-xl text-lg opacity-85">{t.final.body}</p>
+        <p className="relative mt-4 max-w-xl text-lg">{t.final.body}</p>
         <div className="relative mt-8">
-          <CtaLink inverted />
+          <InstallCta inverted />
         </div>
       </div>
     </section>
   );
 }
 
-/** Page footer: tagline and GitHub source link. */
+/** Page footer: tagline, GitHub, MIT license, changelog and releases. */
 export function LandingFooter() {
+  const link =
+    "inline-flex min-h-11 min-w-11 items-center justify-center gap-2 rounded hover:text-lp-ink focus-visible:outline-2 focus-visible:outline-lp-signal";
   return (
     <footer className="border-t border-lp-line">
-      <div className="mx-auto flex max-w-6xl flex-col gap-3 px-4 py-8 font-lp-mono text-xs text-lp-dim sm:flex-row sm:items-center sm:justify-between sm:px-6">
+      <div className="mx-auto flex max-w-6xl flex-col gap-3 px-4 py-8 font-lp-mono text-xs text-lp-dim md:flex-row md:items-center md:justify-between sm:px-6">
         <p>
-          <span className="font-bold text-lp-ink">panel-termux</span> — {t.footer.tagline}
+          <span className="font-bold text-lp-ink">Panel Termux</span> — {t.footer.tagline}
         </p>
-        <a
-          href={t.githubUrl}
-          rel="noreferrer"
-          className="inline-flex items-center gap-2 rounded hover:text-lp-ink focus-visible:outline-2 focus-visible:outline-lp-signal"
-        >
-          <GithubMark />
-          {t.footer.source}
-        </a>
+        <nav aria-label={t.footer.label} className="flex flex-wrap items-center gap-x-5">
+          <a href={t.links.github} rel="noreferrer" className={link}>
+            <GithubMark />
+            {t.footer.github}
+          </a>
+          {FOOTER_LINKS.map((l) => (
+            <a key={l.href} href={l.href} rel="noreferrer" className={link}>
+              {l.label}
+            </a>
+          ))}
+        </nav>
       </div>
     </footer>
   );

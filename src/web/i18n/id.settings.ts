@@ -1,0 +1,301 @@
+import type { BackupVerifyCode } from "@/shared/backup.types";
+import type { CloudflareVerifyCode, SettingKey } from "@/shared/dev.types";
+import type { AlertErrorCode } from "@/shared/monitor.types";
+import type { SettingGroup } from "@/web/dev/settings.registry";
+
+/** Copy of one setting field. `invalid` = shown when PATCH answers `invalid` for this key. */
+export type SettingFieldCopy = { label: string; help: string; placeholder?: string; invalid: string };
+
+/** Copy of one settings card on /dev/settings. */
+export type SettingGroupCopy = { title: string; description: string };
+
+/** Indonesian strings of /dev/settings (`id.settings`, PLAN/05 §5.2 + §5.5). Every SettingKey must have a field. */
+export const idSettings = {
+  title: "Pengaturan",
+  subtitle: "Nilai rahasia disimpan terenkripsi dan tidak pernah ditampilkan lagi.",
+  groups: {
+    cloudflare: {
+      title: "Cloudflare",
+      description: "Token untuk membuat record DNS otomatis saat domain situs baru ditambahkan.",
+    },
+    backup: {
+      title: "Cadangan",
+      description: "Penyimpanan R2 atau S3 tujuan cadangan harian, jadwal, dan berapa lama cadangan disimpan.",
+    },
+    alerts: {
+      title: "Notifikasi Telegram",
+      description: "Kirim pesan ke Telegram saat layanan, aplikasi, situs, atau HP bermasalah.",
+    },
+    sites: {
+      title: "Situs",
+      description: "Folder dan rentang port yang dipakai saat membuat situs baru.",
+    },
+    monitor: {
+      title: "Pemantauan",
+      description: "Seberapa sering panel memeriksa HP dan kapan baterai dianggap perlu perhatian.",
+    },
+    security: {
+      title: "Keamanan",
+      description: "Layanan yang dilindungi dari penghentian tidak sengaja dan lama log audit disimpan.",
+    },
+  } satisfies Record<SettingGroup, SettingGroupCopy>,
+  fields: {
+    "cloudflare.api_token": {
+      label: "Token API Cloudflare",
+      help: "Token dengan izin Zone:Read dan DNS:Edit untuk zona domain situsmu.",
+      placeholder: "Tempel token baru",
+      invalid: "Token berisi 20–200 karakter huruf, angka, `_` atau `-`.",
+    },
+    "cloudflare.account_id": {
+      label: "ID akun Cloudflare",
+      help: "Ada di dashboard Cloudflare, kolom kanan halaman ringkasan akun.",
+      placeholder: "mis. 0123456789abcdef0123456789abcdef",
+      invalid: "ID akun berisi 32 karakter heksadesimal.",
+    },
+    "backup.s3_endpoint": {
+      label: "Endpoint S3",
+      help: "Alamat layanan penyimpanan. Untuk R2: https://<ID akun>.r2.cloudflarestorage.com.",
+      placeholder: "mis. https://<akun>.r2.cloudflarestorage.com",
+      invalid: "Isi URL http(s) tanpa path, query, atau nama pengguna.",
+    },
+    "backup.s3_bucket": {
+      label: "Nama bucket",
+      help: "Bucket tujuan cadangan. Buat dulu di dashboard penyedia penyimpanan.",
+      placeholder: "mis. panel-cadangan",
+      invalid: "Nama bucket berisi 3–63 karakter huruf kecil, angka, titik, atau `-`.",
+    },
+    "backup.s3_access_key_id": {
+      label: "Access key ID",
+      help: "Bagian pertama kunci API penyimpanan. Disimpan terenkripsi.",
+      placeholder: "Tempel access key ID",
+      invalid: "Kunci berisi 8–256 karakter huruf, angka, `+ / = _ -`.",
+    },
+    "backup.s3_secret_access_key": {
+      label: "Secret access key",
+      help: "Bagian rahasia kunci API penyimpanan. Disimpan terenkripsi dan tidak pernah ditampilkan lagi.",
+      placeholder: "Tempel secret access key",
+      invalid: "Kunci berisi 8–256 karakter huruf, angka, `+ / = _ -`.",
+    },
+    "backup.s3_region": {
+      label: "Region",
+      help: "Untuk R2 biarkan `auto`. Penyedia S3 lain biasanya menyebut region di dashboard-nya.",
+      placeholder: "auto",
+      invalid: "Region berisi 1–32 karakter huruf kecil, angka, atau `-`.",
+    },
+    "backup.prefix": {
+      label: "Awalan folder",
+      help: "Folder di dalam bucket tempat cadangan disimpan. Pakai awalan berbeda bila satu bucket dipakai beberapa HP.",
+      placeholder: "panel-termux/",
+      invalid: "Isi awalan relatif dari huruf, angka, `. _ - /`, diakhiri `/`, tanpa `//` atau `..`.",
+    },
+    "backup.hour": {
+      label: "Jam cadangan harian",
+      help: "Jam (waktu HP) cadangan otomatis dijalankan. Pilih Mati untuk hanya mencadangkan manual.",
+      invalid: "Pilih jam 00.00–23.00 atau Mati.",
+    },
+    "backup.retention_days": {
+      label: "Simpan cadangan (hari)",
+      help: "Cadangan lebih tua dari ini dihapus setelah pencadangan yang tidak gagal. Tiga cadangan berhasil terakhir dan cadangan valid terakhir tiap item selalu disimpan.",
+      placeholder: "14",
+      invalid: "Isi angka 1–365.",
+    },
+    "backup.keep_min_runs": {
+      label: "Cadangan berhasil minimal",
+      help: "Jumlah cadangan berhasil terbaru yang tidak pernah dihapus retensi, berapa pun umurnya.",
+      placeholder: "3",
+      invalid: "Isi angka 1–50.",
+    },
+    "backup.max_item_mb": {
+      label: "Batas per file (MB)",
+      help: "File cadangan yang lebih besar dari ini tidak diunggah dan ditandai di riwayat cadangan.",
+      placeholder: "2048",
+      invalid: "Isi angka 1–65536.",
+    },
+    "backup.include_secrets": {
+      label: "Ikut cadangkan kunci rahasia",
+      help: "Kunci data, `.env` panel, dan kredensial tunnel ikut disimpan di bucket. Siapa pun yang bisa membaca bucket bisa mengambil alih panel ini.",
+      invalid: "Pilih nyala atau mati.",
+    },
+    "alerts.enabled": {
+      label: "Notifikasi Telegram",
+      help: "Matikan sementara tanpa menghapus token.",
+      invalid: "Pilih nyala atau mati.",
+    },
+    "alerts.telegram_bot_token": {
+      label: "Token bot Telegram",
+      help: "Token dari @BotFather. Disimpan terenkripsi dan tidak pernah ditampilkan lagi.",
+      placeholder: "Tempel token dari @BotFather",
+      invalid: "Token berbentuk `123456:ABC…` dari @BotFather.",
+    },
+    "alerts.telegram_chat_id": {
+      label: "ID chat Telegram",
+      help: 'Chat, grup, atau kanal tujuan. Pakai "Cari chat" setelah mengirim pesan baru ke bot.',
+      placeholder: "mis. -1001234567890",
+      invalid: "Isi ID angka (mis. `-1001234567890`) atau `@namakanal`.",
+    },
+    "alerts.min_severity": {
+      label: "Kirim mulai dari",
+      help: "Peringatan = semua masalah (peringatan dikirim senyap). Gawat = hanya yang gawat.",
+      invalid: "Pilih Peringatan atau Gawat.",
+    },
+    "sites.dir": {
+      label: "Folder situs",
+      help: "Folder tempat file situs baru dibuat. Situs yang sudah ada tidak dipindahkan bila folder ini diubah.",
+      placeholder: "~/sites",
+      invalid: "Isi path absolut atau path yang diawali `~/`.",
+    },
+    "sites.port_range": {
+      label: "Rentang port situs",
+      help: "Port untuk aplikasi situs baru dipilih dari rentang ini. Tulis `awal-akhir`, mis. `3001-3999`.",
+      placeholder: "Dari 3001, sampai 3999",
+      invalid: "Port awal harus di atas 1024 dan lebih kecil dari port akhir (maks 65535).",
+    },
+    "monitor.sample_interval_sec": {
+      label: "Interval pemantauan (detik)",
+      help: "Seberapa sering panel memeriksa HP. Lebih kecil = lebih cepat tahu, lebih boros baterai.",
+      placeholder: "60",
+      invalid: "Isi angka 30–600.",
+    },
+    "monitor.battery_warn_percent": {
+      label: "Peringatan baterai di bawah (%)",
+      help: "Beri peringatan bila HP tidak sedang mengisi dan baterai di bawah angka ini. Di bawah 15% selalu gawat. Mencabut charger sendiri bukan masalah.",
+      placeholder: "25",
+      invalid: "Isi angka 16–100 atau Mati.",
+    },
+    "panel.protected_services": {
+      label: "Layanan inti",
+      help: "Layanan yang hanya bisa dihentikan dengan mengetik namanya. `panel` dan `cloudflared` tidak pernah bisa dihentikan dari panel, walau dilepas dari daftar ini.",
+      invalid: "Isi nama layanan dipisah koma, hanya huruf, angka, `. _ -`.",
+    },
+    "audit.retention_days": {
+      label: "Simpan log audit (hari)",
+      help: "Entri audit lebih tua dari ini dihapus otomatis.",
+      placeholder: "365",
+      invalid: "Isi angka 90–3650.",
+    },
+  } satisfies Record<SettingKey, SettingFieldCopy>,
+  /** Labels of choice/switch controls. */
+  options: {
+    on: "Nyala",
+    off: "Mati",
+    severity: { warning: "Peringatan", danger: "Gawat" },
+    hour: (h: number) => `${String(h).padStart(2, "0")}.00`,
+  },
+  helpLink: "Cara membuatnya",
+  required: "Wajib",
+  empty: "Wajib diisi.",
+  defaultIs: (v: string) => `Bawaan: ${v}`,
+  dirty: "Ada perubahan",
+  saved: (group: string) => `Pengaturan ${group} disimpan.`,
+  saveFailed:
+    "Pengaturan tidak tersimpan. Periksa koneksi internet, lalu coba lagi. Perubahanmu masih ada di formulir.",
+  leaveWarning: "Ada perubahan yang belum disimpan. Tinggalkan halaman ini?",
+  secret: {
+    stored: (ago: string) => `Tersimpan · diubah ${ago}`,
+    storedNoDate: "Tersimpan",
+    unreadable: "Tidak bisa dibaca",
+    unreadableBody: "Kunci data berubah. Isi ulang nilainya.",
+    replace: "Ganti",
+    remove: "Hapus",
+    cancel: "Batal",
+    show: "Tampilkan",
+    removeTitle: (label: string) => `Hapus ${label}?`,
+    removeCloudflare: "Domain situs baru tidak akan mendapat record DNS otomatis.",
+    removeGeneric: "Fitur yang memakai nilai ini berhenti sampai kamu mengisinya lagi.",
+    removeConfirm: "Hapus nilai",
+  },
+  confirm: {
+    includeSecretsTitle: "Ikut cadangkan kunci rahasia?",
+    includeSecretsBody:
+      "Kunci data, `.env` panel, dan kredensial tunnel akan ikut tersimpan di bucket. Siapa pun yang bisa membaca bucket bisa mengambil alih panel ini. Batasi akses bucket sebelum menyalakan ini.",
+    includeSecretsButton: "Nyalakan",
+    sitesDirTitle: "Ubah folder situs?",
+    sitesDirBody: "Situs yang sudah ada tetap di folder lama dan tidak dipindahkan.",
+    sitesDirButton: "Ubah folder",
+  },
+  test: {
+    running: "Menguji…",
+    cloudflareButton: "Uji token",
+    s3Button: "Uji koneksi",
+    telegramButton: "Kirim pesan uji",
+    findChats: "Cari chat",
+    cloudflare: {
+      ok: "Token aktif dan bisa mengakses zona Cloudflare.",
+      not_set: "Token belum diisi.",
+      inactive: "Token tidak aktif. Buat token baru di dashboard Cloudflare.",
+      no_zones: "Token aktif, tapi tidak bisa melihat zona apa pun. Tambahkan izin Zone:Read.",
+      api_error: "Cloudflare menolak permintaan. Periksa token dan ID akun.",
+      key_mismatch: "Nilai tersimpan tidak bisa dibaca karena kunci data berubah. Isi ulang.",
+    } satisfies Record<CloudflareVerifyCode, string>,
+    cloudflareZones: (n: number) => `Token aktif dan bisa mengakses ${n} zona.`,
+    s3: {
+      ok: "Koneksi berhasil: bisa menulis, membaca, dan menghapus di bucket.",
+      not_configured: "Lengkapi kolom wajib Cadangan dulu.",
+      unreadable: "Nilai tersimpan tidak bisa dibaca karena kunci data berubah. Isi ulang.",
+      unreachable: "Endpoint tidak bisa dihubungi. Periksa alamat endpoint dan koneksi internet HP.",
+      bucket_not_found: "Bucket tidak ditemukan. Periksa nama bucket.",
+      write_denied: "Kunci tidak punya izin menulis ke bucket.",
+      read_failed: "Objek uji tertulis tapi tidak bisa dibaca kembali.",
+      delete_denied: "Bisa menulis, tapi tidak bisa menghapus: retensi cadangan tidak akan jalan.",
+      timeout: "Bucket tidak menjawab dalam 15 detik. Periksa endpoint, lalu coba lagi.",
+      s3_error: "S3 menolak permintaan. Lihat detail di bawah.",
+    } satisfies Record<BackupVerifyCode, string>,
+    s3Ms: (ms: number) => `${ms} md`,
+    telegramSent: "Pesan uji terkirim ke Telegram.",
+    telegram: {
+      alerts_not_configured: "Isi dan simpan token bot dan ID chat dulu.",
+      alerts_token_missing: "Isi dan simpan token bot dulu.",
+      too_soon: "Tunggu beberapa detik, lalu coba lagi.",
+      telegram_token_invalid: "Token bot ditolak Telegram. Periksa token, lalu simpan lagi.",
+      telegram_chat_not_found: 'Chat tidak ditemukan. Kirim pesan ke bot dulu, lalu pakai "Cari chat".',
+      telegram_chat_migrated: "Grup ini pindah ke supergrup. ID chat baru sudah disimpan; kirim pesan uji lagi.",
+      telegram_forbidden: "Bot diblokir atau belum masuk grup. Buka blokir atau tambahkan bot ke grup.",
+      telegram_conflict: "Bot ini memakai webhook, jadi daftar chat tidak bisa diambil. Isi ID chat manual.",
+      telegram_rate_limited: "Telegram membatasi pengiriman. Coba lagi nanti.",
+      telegram_bad_request: "Telegram menolak pesan. Periksa ID chat.",
+      telegram_unreachable: "Telegram tidak bisa dihubungi dari HP. Periksa koneksi internet HP.",
+      telegram_webhook_set: "Bot ini memakai webhook, jadi daftar chat tidak bisa diambil. Isi ID chat manual.",
+    } satisfies Record<
+      AlertErrorCode | "alerts_not_configured" | "alerts_token_missing" | "too_soon" | "telegram_webhook_set",
+      string
+    >,
+    noChats: "Belum ada chat. Kirim pesan baru ke bot dari Telegram, lalu cari lagi.",
+    chatsTitle: "Chat yang terlihat oleh bot",
+    useChat: "Pakai",
+    chatType: { private: "Pribadi", group: "Grup", supergroup: "Supergrup", channel: "Kanal" },
+    chatPicked: "ID chat diisi. Simpan untuk memakainya.",
+    steps: { write: "Tulis", read: "Baca", delete: "Hapus" },
+    stepState: { ok: "berhasil", failed: "gagal", skipped: "dilewati" },
+    detail: "Detail teknis",
+    savedValues: "Menguji nilai yang tersimpan.",
+    draftValues: "Menguji isian formulir yang belum disimpan.",
+  },
+  status: {
+    default: "Bawaan",
+    notSet: "Belum diisi",
+    changed: (ago: string) => `Diubah ${ago}`,
+    changedNoDate: "Diubah",
+  },
+  save: "Simpan",
+  saving: "Menyimpan…",
+  reset: "Kembalikan ke bawaan",
+  incomplete: "Belum lengkap",
+  unknownKey: "Server tidak mengenal pengaturan ini. Muat ulang halaman.",
+  emptyPage: "Belum ada pengaturan yang bisa diubah. Muat ulang halaman, atau periksa versi panel.",
+  toc: "Bagian pengaturan",
+  removed: (label: string) => `${label} dihapus.`,
+  fieldErrors: "Ada nilai yang belum benar. Periksa kolom yang ditandai, lalu simpan lagi.",
+  reauth:
+    "Mengubah tujuan cadangan atau menyalakan pencadangan kunci rahasia perlu masuk ulang (sesi lebih dari 15 menit). Perubahan yang belum disimpan akan hilang, jadi isi lagi setelah masuk.",
+  keyMismatch: {
+    body: "Pengaturan tidak tersimpan karena kunci data panel tidak cocok dengan nilai rahasia yang tersimpan. Perbaiki kunci data dulu, lalu simpan lagi.",
+    link: "Buka Kunci data",
+  },
+  /** PATCH / test errors that are not a field problem. */
+  errorCodes: {
+    invalid_value: "Ada nilai yang belum benar. Periksa kolom yang ditandai, lalu simpan lagi.",
+    invalid_body: "Permintaan ke server tidak lengkap. Muat ulang halaman, lalu coba lagi.",
+    key_mismatch: "Nilai tersimpan tidak bisa dibaca karena kunci data berubah. Isi ulang.",
+    reauth_required: "Untuk perubahan ini kamu perlu masuk ulang (sesi lebih dari 15 menit).",
+  },
+} as const;

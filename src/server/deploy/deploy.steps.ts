@@ -1,45 +1,55 @@
-// Job steps shared by site.deploy and site.rollback: binary swap, apps.json runtime, pm2 restart, health wait.
-import { createHash } from "node:crypto";
-import { chmodSync, closeSync, existsSync, openSync, readFileSync, renameSync, rmSync, writeSync } from "node:fs";
-import { join } from "node:path";
+// Coded file steps of site.deploy / site.rollback (PLAN/03 §3.4): stage → detect → chmod → swap → run_script →
+// apps_entry (app_restart and health live in deploy.restart.ts). Every failure is a StepError with a PLAN code.
+import { chmodSync, copyFileSync, existsSync, renameSync, rmSync } from "node:fs";
 import type { SiteRuntime } from "../../shared/site.types";
 import type { site } from "../db/schema";
-import { termuxPrefix } from "../exec/termux.exec";
-import { parseApps } from "../sites/apps.file";
-import type { StepDef } from "../sites/job.runner";
+import { errMsg, type StepDef, StepError } from "../sites/job.step";
 import { type SiteCtx, sitePaths } from "../sites/site.checks";
 import { readTextOrNull, restoreText, writeAtomic } from "../sites/site.files";
-import { detectRuntime } from "./elf.runtime";
-import { chunkPath, type Upload } from "./upload.store";
+import { identityOf, rowFor, setIdentity } from "./binary.identity";
+import { BinaryError, detectRuntime } from "./elf.runtime";
+import type { HealthBaseline } from "./health.check";
+import { ensureAppsEntry, restoreRunScript, writeRunScript } from "./run.script";
+import {
+  type BinPaths,
+  binPaths,
+  type DeploySwap,
+  deploySwap,
+  rollbackSwap,
+  type SwapHook,
+  undoDeploySwap,
+} from "./swap";
 
-type SiteRow = typeof site.$inferSelect;
+/** Site table row. */
+export type SiteRow = typeof site.$inferSelect;
 
-/** Mutable state of one deploy/rollback job, shared by its steps and the final status hooks. */
+/** Mutable state of one deploy/rollback/cleanup job, shared by its steps and the final status hooks. */
 export type DeployState = {
   runtime: SiteRuntime;
   swapped: boolean;
-  appsChanged: boolean;
+  /** apps_entry outcome when it wrote apps.json (registered/migrated need `pm2 start` instead of restart). */
+  appsWrite: "apps_registered" | "apps_migrated" | null;
   restarted: boolean;
   undoFailed: boolean;
+  baseline: HealthBaseline | null;
 };
 
-const POLL_MS = 500;
-const BIN_MODE = 0o755;
-const HTTP_SERVER_ERROR = 500;
-const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
-
-/** Binary paths of a site: live `app`, the one previous `app.prev`, the staged `app.new`. */
-export const binPaths = (s: SiteRow) => ({
-  app: join(s.dir, "app"),
-  prev: join(s.dir, "app.prev"),
-  next: join(s.dir, "app.new"),
-  /** Old app.prev kept aside during a deploy, deleted once it succeeded. */
-  drop: join(s.dir, ".app.prev.drop"),
-  tmp: join(s.dir, ".app.swap"),
+/** Fresh job state. */
+export const newState = (runtime: SiteRuntime): DeployState => ({
+  runtime,
+  swapped: false,
+  appsWrite: null,
+  restarted: false,
+  undoFailed: false,
+  baseline: null,
 });
+
+const BIN_MODE = 0o755;
 
 /** pm2 process name of a site. */
 export const appName = (s: SiteRow) => s.app ?? s.name;
+/** Binary paths of a site row. */
+export const binsOf = (s: SiteRow): BinPaths => binPaths(s.dir);
 
 /** Wraps an undo so the job knows whether the files really went back. */
 const tracked = (st: DeployState, fn: () => Promise<void>) => async () => {
@@ -51,32 +61,30 @@ const tracked = (st: DeployState, fn: () => Promise<void>) => async () => {
   }
 };
 
-/** Concatenates the chunks into app.new, checks size + sha256, and always deletes the staged upload. */
-export function assembleStep(s: SiteRow, u: Upload): StepDef {
-  const { next } = binPaths(s);
+/** stage: upload.bin → app.new (rename; copy when the data dir is on another filesystem). Undo removes app.new. */
+export function stageStep(s: SiteRow, upload: { path: string; sizeBytes: number }, done: () => void): StepDef {
+  const { next } = binsOf(s);
   return {
-    key: "assemble",
-    label: "Assemble upload",
+    key: "stage",
     async run() {
-      if (!existsSync(s.dir)) throw new Error(`site folder ${s.dir} does not exist`);
-      const hash = createHash("sha256");
-      const fd = openSync(next, "w", 0o600);
-      let size = 0;
       try {
-        for (let i = 0; i < u.chunks; i++) {
-          const b = readFileSync(chunkPath(u, i));
-          hash.update(b);
-          writeSync(fd, b);
-          size += b.length;
+        if (!existsSync(s.dir)) throw new StepError("folder_missing", { path: s.dir });
+        if (!existsSync(upload.path)) throw new StepError("upload_missing", {}, `${upload.path} is gone`);
+        try {
+          renameSync(upload.path, next);
+        } catch (e) {
+          if ((e as NodeJS.ErrnoException).code !== "EXDEV") throw e;
+          copyFileSync(upload.path, next);
         }
+        const size = identityOf(next)?.size ?? -1;
+        if (size !== upload.sizeBytes) throw new StepError("size_mismatch", { got: size, expected: upload.sizeBytes });
+        return { code: "staged", params: { sizeBytes: size } };
+      } catch (e) {
+        if ((e as NodeJS.ErrnoException).code === "ENOSPC") throw new StepError("disk_full", {}, errMsg(e));
+        throw e;
       } finally {
-        closeSync(fd);
-        rmSync(u.dir, { recursive: true, force: true });
+        done();
       }
-      const sha = hash.digest("hex");
-      if (size !== u.sizeBytes) throw new Error(`assembled ${size} bytes, expected ${u.sizeBytes}`);
-      if (sha !== u.sha256) throw new Error(`sha256 mismatch: got ${sha}, expected ${u.sha256}`);
-      return `${size} bytes, sha256 ok`;
     },
     async undo() {
       rmSync(next, { force: true });
@@ -84,164 +92,142 @@ export function assembleStep(s: SiteRow, u: Upload): StepDef {
   };
 }
 
-/** Reads the runtime of app.new from its ELF header (rejects non-aarch64/non-ELF files). */
-export const detectStep = (s: SiteRow, st: DeployState): StepDef => ({
+/** Runtime of a binary file as a coded failure (`invalid_binary {reason}`). */
+export function runtimeOf(path: string): SiteRuntime {
+  try {
+    return detectRuntime(path);
+  } catch (e) {
+    if (e instanceof BinaryError) throw new StepError("invalid_binary", { reason: e.reason }, e.message);
+    throw e;
+  }
+}
+
+/** detect: runtime of app.new; an adopted site must keep what its hand-written entry runs (`expected`). */
+export const detectStep = (s: SiteRow, st: DeployState, expected: SiteRuntime | null): StepDef => ({
   key: "detect",
-  label: "Detect runtime",
   async run() {
-    st.runtime = detectRuntime(binPaths(s).next);
-    return st.runtime === "native" ? "native (Android linker)" : "grun (glibc linker)";
+    st.runtime = runtimeOf(binsOf(s).next);
+    if (expected && expected !== st.runtime) {
+      throw new StepError("runtime_mismatch", { expected, got: st.runtime });
+    }
+    return { code: st.runtime === "native" ? "runtime_native" : "runtime_grun" };
   },
 });
 
 /** chmod 755 app.new. */
 export const chmodStep = (s: SiteRow): StepDef => ({
   key: "chmod",
-  label: "Make executable",
   async run() {
-    chmodSync(binPaths(s).next, BIN_MODE);
-    return "mode 755";
+    try {
+      chmodSync(binsOf(s).next, BIN_MODE);
+    } catch (e) {
+      throw new StepError("chmod_failed", {}, errMsg(e));
+    }
+    return { code: "chmod_done" };
   },
 });
 
-/** app → app.prev, app.new → app. The old app.prev is set aside until the job succeeded; undo restores all three. */
-export function swapStep(s: SiteRow, st: DeployState): StepDef {
-  const p = binPaths(s);
-  let hadApp = false;
-  let hadPrev = false;
+/** Points deploy row `rowId` at the file now at `to` (the swap moved or copied its binary; a copy has a new inode). */
+function repoint(ctx: SiteCtx, rowId: string | undefined, to: string): void {
+  if (rowId) setIdentity(ctx.db, rowId, identityOf(to));
+}
+
+/** swap (deploy, D23). Undo puts the replaced binary back; `app` exists throughout. */
+export function swapStep(ctx: SiteCtx, s: SiteRow, st: DeployState, hook?: SwapHook): StepDef {
+  const p = binsOf(s);
+  let done: DeploySwap | null = null;
   return {
     key: "swap",
-    label: "Swap binary",
     async run() {
-      hadApp = existsSync(p.app);
-      hadPrev = existsSync(p.prev);
-      if (hadPrev) renameSync(p.prev, p.drop);
-      if (hadApp) renameSync(p.app, p.prev);
-      renameSync(p.next, p.app);
+      const liveRow = rowFor(ctx.db, s.name, identityOf(p.app))?.id;
+      try {
+        done = deploySwap(p, hook);
+      } catch (e) {
+        throw new StepError("swap_failed", {}, errMsg(e));
+      }
       st.swapped = true;
-      return hadApp ? "previous binary kept as app.prev" : "first deploy, no previous binary";
+      if (done.linked === null) return { code: "swap_first" };
+      repoint(ctx, liveRow, p.prev);
+      return { code: "swap_kept_previous", params: { linked: done.linked } };
     },
     undo: tracked(st, async () => {
-      if (hadApp) renameSync(p.prev, p.app);
-      else rmSync(p.app, { force: true });
-      if (hadPrev) renameSync(p.drop, p.prev);
+      if (done) undoDeploySwap(p, done);
     }),
   };
 }
 
-/** Rollback swap: app ↔ app.prev. Undo swaps back. */
-export function swapBackStep(s: SiteRow, st: DeployState): StepDef {
-  const p = binPaths(s);
-  const swap = () => {
-    renameSync(p.app, p.tmp);
-    renameSync(p.prev, p.app);
-    renameSync(p.tmp, p.prev);
+/** swap (rollback): app ↔ app.prev, D23 order. Its undo is the same exchange. */
+export function rollbackSwapStep(ctx: SiteCtx, s: SiteRow, st: DeployState, hook?: SwapHook): StepDef {
+  const p = binsOf(s);
+  const exchange = () => {
+    const liveRow = rowFor(ctx.db, s.name, identityOf(p.app))?.id;
+    const r = rollbackSwap(p, hook);
+    repoint(ctx, liveRow, p.prev);
+    return r;
   };
   return {
     key: "swap",
-    label: "Swap app and app.prev",
     async run() {
-      swap();
+      let linked: boolean;
+      try {
+        linked = exchange().linked;
+      } catch (e) {
+        throw new StepError("swap_failed", {}, errMsg(e));
+      }
       st.swapped = true;
-      return "app.prev is live, the replaced binary is now app.prev";
+      return { code: "swap_back", params: { linked } };
     },
-    undo: tracked(st, async () => swap()),
+    undo: tracked(st, async () => {
+      exchange();
+    }),
   };
 }
 
-/** pm2 script/args for a runtime. */
-export function runCommand(runtime: SiteRuntime): { script: string; args?: string[] } {
-  return runtime === "native" ? { script: "./app" } : { script: `${termuxPrefix()}/bin/grun`, args: ["./app"] };
+/** run_script (managed): `run` rewritten from the ELF header of the live `app`. Adopted sites: skipped. */
+export function runScriptStep(s: SiteRow, st: DeployState): StepDef {
+  let previous: string | null = null;
+  let changed = false;
+  return {
+    key: "run_script",
+    async run() {
+      if (!s.managed) return { code: "run_unchanged", skipped: true };
+      if (!existsSync(binsOf(s).app)) return { code: "run_unchanged", skipped: true };
+      st.runtime = runtimeOf(binsOf(s).app);
+      try {
+        ({ changed, previous } = writeRunScript(s.dir, st.runtime));
+      } catch (e) {
+        throw new StepError("run_failed", {}, errMsg(e));
+      }
+      return changed ? { code: "run_written", params: { runtime: st.runtime } } : { code: "run_unchanged" };
+    },
+    undo: tracked(st, async () => {
+      if (changed) restoreRunScript(s.dir, previous);
+    }),
+  };
 }
 
-/** apps.json text with app `name` set to run `runtime` (other fields kept); throws if the entry is missing. */
-export function setAppRuntime(text: string | null, name: string, runtime: SiteRuntime): string {
-  const apps = parseApps(text);
-  const entry = apps.find((a) => a.name === name);
-  if (!entry) throw new Error(`apps.json has no app named ${name}`);
-  delete entry.args;
-  Object.assign(entry, runCommand(runtime));
-  return `${JSON.stringify(apps, null, 2)}\n`;
-}
-
-/** Managed sites: point the apps.json entry at the runtime (atomic, .bak). Adopted: skipped. Undo restores bytes. */
-export function appsRuntimeStep(ctx: SiteCtx, s: SiteRow, st: DeployState): StepDef {
+/** apps_entry (managed): the fixed `./run` entry in apps.json (atomic, .bak). Undo restores the old bytes. */
+export function appsEntryStep(ctx: SiteCtx, s: SiteRow, st: DeployState): StepDef {
   const { appsJson } = sitePaths(ctx);
   let prev: string | null = null;
   return {
-    key: "apps",
-    label: "Update pm2 entry",
+    key: "apps_entry",
     async run() {
-      if (!s.managed) {
-        return { skipped: `adopted site: hand-written pm2 entry untouched (it must run a ${st.runtime} binary)` };
-      }
+      if (!s.managed) return { code: "apps_adopted_skip", skipped: true };
       prev = readTextOrNull(appsJson);
-      const next = setAppRuntime(prev, appName(s), st.runtime);
-      if (next === prev) return { skipped: `apps.json already runs ${st.runtime}` };
-      writeAtomic(appsJson, next, { backup: true });
-      st.appsChanged = true;
-      return `apps.json: ${st.runtime}`;
+      let r: ReturnType<typeof ensureAppsEntry>;
+      try {
+        r = ensureAppsEntry(prev, appName(s), s.dir);
+      } catch (e) {
+        throw new StepError("apps_json_invalid", {}, errMsg(e));
+      }
+      if (r.text === null) return { code: r.code };
+      writeAtomic(appsJson, r.text, { backup: true });
+      st.appsWrite = r.code === "apps_unchanged" ? null : r.code;
+      return { code: r.code };
     },
-    undo: tracked(st, async () => restoreText(appsJson, prev)),
+    undo: tracked(st, async () => {
+      if (st.appsWrite) restoreText(appsJson, prev);
+    }),
   };
 }
-
-/**
- * Restarts the site's pm2 app. A managed app whose apps.json entry changed, or that pm2 never started (first
- * deploy), is (re)loaded from ecosystem.config.js, since `pm2 restart` keeps the old script.
- * ponytail: delete+start leaves a short gap; pm2-runtime exits if that was its only app (POCO has others).
- */
-export async function restartApp(ctx: SiteCtx, s: SiteRow, reload: boolean): Promise<string> {
-  const name = appName(s);
-  const known = (await ctx.system.pm2.list()).some((a) => a.name === name);
-  if (s.managed && (reload || !known)) {
-    if (known) await ctx.system.pm2.remove(name);
-    const a = await ctx.system.pm2.startFromEcosystem(sitePaths(ctx).ecosystem, name);
-    if (!a) throw new Error(`pm2 did not load ${name} from ecosystem.config.js (does it include apps.json?)`);
-    return `pm2 started ${name} from ecosystem.config.js`;
-  }
-  const a = await ctx.system.pm2.control(name, "restart");
-  if (!a) throw new Error(`pm2 has no app named ${name}`);
-  return `pm2 restarted ${name}`;
-}
-
-/**
- * Rollback hook: brings pm2 back in line with the restored files. Without any binary left (a first deploy was
- * undone) a managed app is removed again (back to "not deployed") and an adopted one stopped.
- */
-export async function revertApp(ctx: SiteCtx, s: SiteRow, st: DeployState): Promise<string | null> {
-  if (!st.restarted) return null;
-  if (existsSync(binPaths(s).app)) return restartApp(ctx, s, st.appsChanged);
-  if (s.managed) return (await ctx.system.pm2.remove(appName(s))) ? `pm2 removed ${appName(s)}` : null;
-  return (await ctx.system.pm2.control(appName(s), "stop")) ? `pm2 stopped ${appName(s)}` : null;
-}
-
-/** Restart as a step; the job's rollback hook restarts again with the restored files. */
-export const restartStep = (ctx: SiteCtx, s: SiteRow, st: DeployState): StepDef => ({
-  key: "restart",
-  label: "Restart app",
-  async run() {
-    st.restarted = true;
-    return restartApp(ctx, s, st.appsChanged);
-  },
-});
-
-/** Polls TCP connect then `GET /` on 127.0.0.1:<port> until a status < 500 or `timeoutMs` passed. */
-export const healthStep = (ctx: SiteCtx, s: SiteRow, timeoutMs: number): StepDef => ({
-  key: "health",
-  label: "Wait until healthy",
-  async run() {
-    const t0 = Date.now();
-    let last = "port not accepting connections";
-    for (;;) {
-      if (await ctx.system.net.isListening(s.port)) {
-        const code = await ctx.system.net.httpStatus(s.port);
-        if (code !== null && code < HTTP_SERVER_ERROR) return `HTTP ${code} after ${Date.now() - t0} ms`;
-        last = code === null ? "GET / got no answer" : `GET / returned ${code}`;
-      }
-      if (Date.now() - t0 > timeoutMs)
-        throw new Error(`not healthy on port ${s.port} after ${timeoutMs / 1000}s (${last})`);
-      await sleep(POLL_MS);
-    }
-  },
-});

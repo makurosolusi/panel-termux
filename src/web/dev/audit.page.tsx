@@ -1,73 +1,189 @@
+import { DownloadIcon, InfoIcon } from "lucide-react";
 import { useSearchParams } from "react-router";
 import type { DevAuditEntry, Page } from "@/shared/dev.types";
-import { Badge } from "@/web/components/ui/badge";
-import { id } from "@/web/i18n/id";
-import { formatDateTime } from "@/web/shared/format";
-import { QueryView } from "@/web/shared/query.state";
+import { type DataColumn, DataTable } from "@/web/components/data-table";
+import { EmptyState } from "@/web/components/empty-state";
+import { KeyValue } from "@/web/components/key-value";
+import { PageHeader } from "@/web/components/page-header";
+import { QueryView } from "@/web/components/query-view";
+import { RelativeTime } from "@/web/components/relative-time";
+import { Button } from "@/web/components/ui/button";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/web/components/ui/dialog";
+import { usePageParam } from "@/web/components/use-page-param";
+import { idDevAudit } from "@/web/i18n/id.dev.audit";
 import { useApiQuery } from "@/web/shared/use-api-query";
-import { devUrl } from "./dev.api";
-import { DEV_PAGE_SIZE, parsePageParam, withFilter } from "./dev.pagination";
-import { Pager } from "./pager";
-import { SearchBox } from "./search.box";
+import {
+  auditActor,
+  auditExportUrl,
+  auditListUrl,
+  describeAudit,
+  invalidDateRange,
+  isAuditFiltered,
+} from "./audit.describe";
+import { AuditFilters } from "./audit.filters";
 
-const t = id.dev.audit;
+const t = idDevAudit;
+const PAGE_SIZE = 20;
 
-/** Actions the server records today; offered as suggestions only, any value can be typed. */
-const KNOWN_ACTIONS = ["auth.sign_in", "user.role_change", "user.delete", "settings.update"] as const;
-
-function AuditRow({ e }: { e: DevAuditEntry }) {
+/** Raw detail of one row (meta as key/value, never a JSON blob). */
+function AuditDetail({ e, text }: { e: DevAuditEntry; text: string }) {
+  const L = t.detailLabels;
+  const opt = (label: string, value: string | null | undefined, mono = true) => (value ? [{ label, value, mono }] : []);
+  const meta = Object.entries(e.meta ?? {}).map(([k, v]) => ({
+    label: k,
+    value: typeof v === "string" ? v : JSON.stringify(v),
+    mono: true,
+  }));
+  const items = [
+    ...opt(L.action, e.action),
+    ...opt(L.target, e.target),
+    ...meta,
+    ...opt(L.ip, e.ipMasked),
+    ...opt(L.ua, e.userAgent, false),
+    ...opt(L.requestId, e.requestId),
+  ];
   return (
-    <li className="flex flex-col gap-1 py-3 text-sm">
-      <div className="flex flex-wrap items-center gap-2">
-        <Badge variant="secondary" className="font-mono">
-          {e.action}
-        </Badge>
-        {e.target && <span className="truncate font-medium">{e.target}</span>}
-      </div>
-      <p className="text-xs text-muted-foreground">
-        {formatDateTime(e.at)} · {e.actor?.name ?? id.dev.common.system}
-      </p>
-      {e.meta && (
-        <code className="block overflow-x-auto rounded bg-muted px-2 py-1 text-xs whitespace-pre">
-          {JSON.stringify(e.meta)}
-        </code>
-      )}
-    </li>
+    <Dialog>
+      <DialogTrigger asChild>
+        <Button variant="ghost" size="icon-sm" aria-label={t.detailsOf(text)} title={t.details}>
+          <InfoIcon aria-hidden />
+        </Button>
+      </DialogTrigger>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>{text}</DialogTitle>
+        </DialogHeader>
+        <KeyValue items={items} />
+      </DialogContent>
+    </Dialog>
   );
 }
 
-/** /dev/audit: paginated audit trail, newest first, filterable by action. */
+/** /dev/audit?action&actorId&from&to&page: audit trail as sentences, filterable, exportable as CSV. */
 export function AuditPage() {
   const [params, setParams] = useSearchParams();
-  const action = params.get("action") ?? "";
-  const page = parsePageParam(params.get("page"));
-  const query = useApiQuery<Page<DevAuditEntry>>(devUrl("/audit", { page, pageSize: DEV_PAGE_SIZE, action }));
+  const [page, setPage] = usePageParam();
+  const actorId = params.get("actorId");
+  const badRange = invalidDateRange(params.get("from"), params.get("to"));
+  const filtered = isAuditFiltered(params);
+  const query = useApiQuery<Page<DevAuditEntry>>(auditListUrl(params, page, PAGE_SIZE), undefined, {
+    enabled: !badRange,
+    initial: !badRange,
+  });
+
+  const setFilter = (key: string, value: string | null) =>
+    setParams((prev) => {
+      const out = new URLSearchParams(prev);
+      out.delete("page");
+      if (value) out.set(key, value);
+      else out.delete(key);
+      return out;
+    });
+
+  const columns: DataColumn<DevAuditEntry>[] = [
+    {
+      key: "text",
+      header: t.action,
+      mobile: "title",
+      // the sentence is the row's content: wrap it instead of the card title's ellipsis (QA m7)
+      cell: (e) => <span className="whitespace-normal">{describeAudit(e).text}</span>,
+    },
+    {
+      key: "actor",
+      header: t.actor,
+      cell: (e) =>
+        e.actor && e.actor.id !== actorId ? (
+          <button
+            type="button"
+            className="underline-offset-2 hover:underline focus-visible:underline inline-flex items-center pointer-coarse:min-h-11"
+            title={t.filterActor(auditActor(e))}
+            onClick={() => setFilter("actorId", e.actor?.id ?? null)}
+          >
+            {auditActor(e)}
+          </button>
+        ) : (
+          auditActor(e)
+        ),
+    },
+    { key: "time", header: t.time, cell: (e) => <RelativeTime at={e.at} className="whitespace-nowrap" /> },
+    {
+      key: "device",
+      header: t.device,
+      mobile: "hidden",
+      className: "max-w-56",
+      cell: (e) => (
+        <span className="block truncate text-muted-foreground" title={e.userAgent ?? undefined}>
+          {[e.ipMasked, e.userAgent].filter(Boolean).join(" · ") || "–"}
+        </span>
+      ),
+    },
+    {
+      // a column, not `actions`: on a phone the ⓘ sits beside the sentence instead of a footer of its own (QA N7)
+      key: "detail",
+      header: <span className="sr-only">{t.details}</span>,
+      mobile: "badge",
+      className: "w-12 py-1 text-right",
+      cell: (e) => <AuditDetail e={e} text={describeAudit(e).text} />,
+    },
+  ];
+
+  const actorName = query.data?.items.find((e) => e.actor?.id === actorId)?.actor?.name ?? null;
+
   return (
-    <section className="flex flex-col gap-4">
-      <SearchBox
-        initial={action}
-        label={t.actionFilter}
-        placeholder={t.actionPlaceholder}
-        list="audit-actions"
-        onSearch={(next) => setParams(withFilter(params, "action", next))}
+    <div className="flex flex-col">
+      <PageHeader
+        title={t.title}
+        description={t.description}
+        meta={{ updatedAt: query.updatedAt, onRefresh: query.reload, refreshing: query.loading }}
+        actions={
+          <Button variant="outline" size="sm" asChild>
+            <a href={auditExportUrl(params)} download title={t.exportHint}>
+              <DownloadIcon aria-hidden />
+              {t.exportCsv}
+            </a>
+          </Button>
+        }
       />
-      <datalist id="audit-actions">
-        {KNOWN_ACTIONS.map((a) => (
-          <option key={a} value={a} />
-        ))}
-      </datalist>
-      <QueryView query={query} codes={id.dev.errorCodes} isEmpty={(d) => d.items.length === 0}>
-        {(d) => (
-          <>
-            <ul className="divide-y">
-              {d.items.map((e) => (
-                <AuditRow key={e.id} e={e} />
-              ))}
-            </ul>
-            <Pager page={d} />
-          </>
-        )}
-      </QueryView>
-    </section>
+      <p className="-mt-3 mb-4 text-xs text-muted-foreground max-md:-mt-1">{t.exportHint}</p>
+      <AuditFilters
+        params={params}
+        setFilter={setFilter}
+        onClear={() => setParams(new URLSearchParams())}
+        actorName={actorName}
+        badRange={badRange}
+      />
+      {badRange ? (
+        <p role="alert" className="rounded-md border border-danger/25 bg-danger-subtle px-3 py-2 text-sm">
+          {t.invalidDate}
+        </p>
+      ) : (
+        <QueryView
+          query={query}
+          codes={t.errorCodes}
+          isEmpty={(d) => d.items.length === 0 && !filtered}
+          empty={<EmptyState title={t.empty} />}
+        >
+          {(d) => (
+            <DataTable
+              label={t.label}
+              columns={columns}
+              rows={d.items}
+              rowKey={(e) => String(e.id)}
+              rowTone={(e) => {
+                const tone = describeAudit(e).tone;
+                return tone === "neutral" ? undefined : tone;
+              }}
+              empty={<EmptyState title={t.emptyFiltered} />}
+              pagination={{
+                page: d.page,
+                pageCount: Math.max(1, Math.ceil(d.total / d.pageSize)),
+                total: d.total,
+                onPageChange: setPage,
+              }}
+            />
+          )}
+        </QueryView>
+      )}
+    </div>
   );
 }

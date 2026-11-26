@@ -1,81 +1,152 @@
-import type { ReactNode } from "react";
 import { Link } from "react-router";
 import type { BackupStatus } from "@/shared/backup.types";
-import { Card, CardContent, CardHeader, CardTitle } from "@/web/components/ui/card";
-import { id } from "@/web/i18n/id";
-import { StatusBadge } from "@/web/panel/status.badge";
-import { useMe } from "@/web/session/use-me";
-import { formatDateTime } from "@/web/shared/format";
-import { backupSummary, runTone } from "./backup.state";
+import { KeyValue, type KeyValueItem } from "@/web/components/key-value";
+import { RelativeTime } from "@/web/components/relative-time";
+import { Section } from "@/web/components/section";
+import { StatusBadge } from "@/web/components/status-badge";
+import { Button } from "@/web/components/ui/button";
+import { idBackup } from "@/web/i18n/id.backup";
+import { Notice } from "@/web/security/security.notice";
+import { formatBytes, formatDateTime } from "@/web/shared/format";
+import { type BackupBanner, contentKinds } from "./backup.state";
+import { runStatusKey } from "./backup.status-key";
 
-const t = id.backup.status;
+const t = idBackup.status;
+const b = idBackup.banner;
 
-function MissingSettings({ keys }: { keys: string[] }) {
-  const me = useMe();
+/** Where the fixes live (Administrasi, super_admin only). */
+const SETTINGS_PATH = "/dev/settings";
+const DATA_KEY_PATH = "/dev/health#kunci-data";
+const MB = 1024 * 1024;
+
+function LinkButton({ to, children }: { to: string; children: string }) {
   return (
-    <div className="flex flex-col gap-2 rounded-lg border border-destructive/40 bg-destructive/10 p-3 text-sm">
-      <span>{t.missing}</span>
-      <ul className="flex flex-wrap gap-1">
-        {keys.map((k) => (
-          <li key={k}>
-            <code className="rounded bg-background px-1.5 py-0.5 text-xs">{k}</code>
-          </li>
-        ))}
-      </ul>
-      {me.role === "super_admin" ? (
-        <Link to="/dev/settings" className="self-start font-medium underline">
-          {t.settingsLink}
-        </Link>
-      ) : (
-        <span className="text-muted-foreground">{t.askSuperAdmin}</span>
-      )}
+    <Button asChild size="sm" variant="outline">
+      <Link to={to}>{children}</Link>
+    </Button>
+  );
+}
+
+/** Notices above the status, most urgent first; admins get "ask the Super Admin" instead of links. */
+export function BackupBanners({
+  banners,
+  status,
+  superAdmin,
+}: {
+  banners: readonly BackupBanner[];
+  status: BackupStatus;
+  superAdmin: boolean;
+}) {
+  if (banners.length === 0) return null;
+  return (
+    <div className="flex flex-col gap-2">
+      {banners.map((banner) => {
+        switch (banner) {
+          case "key_mismatch":
+            return (
+              <Notice
+                key={banner}
+                tone="danger"
+                actions={superAdmin && <LinkButton to={DATA_KEY_PATH}>{b.keyLink}</LinkButton>}
+              >
+                <p>{t.keyMismatch}</p>
+                {!superAdmin && <p className="text-muted-foreground">{b.keyMismatchAdmin}</p>}
+              </Notice>
+            );
+          case "not_configured":
+            return (
+              <Notice
+                key={banner}
+                tone="info"
+                actions={superAdmin && <LinkButton to={SETTINGS_PATH}>{b.settingsLink}</LinkButton>}
+              >
+                <p>{b.notConfigured}</p>
+                <ul className="flex flex-wrap gap-1">
+                  {status.missing.map((k) => (
+                    <li key={k}>
+                      <code className="rounded bg-background px-1.5 py-0.5 font-mono text-xs">{k}</code>
+                    </li>
+                  ))}
+                </ul>
+                {!superAdmin && <p className="text-muted-foreground">{b.askSuperAdmin}</p>}
+              </Notice>
+            );
+          case "secrets_included":
+            return (
+              <Notice key={banner} tone="warning">
+                <p>{t.secretsIncluded}</p>
+              </Notice>
+            );
+          default:
+            return (
+              <Notice key={banner} tone="info" actions={<LinkButton to={DATA_KEY_PATH}>{b.keyLink}</LinkButton>}>
+                <p>{t.noKeyCopy}</p>
+              </Notice>
+            );
+        }
+      })}
     </div>
   );
 }
 
-/** Status card: summary badge, missing settings, schedule, retention and last run. */
-export function BackupStatusCard({ status, action }: { status: BackupStatus; action: ReactNode }) {
-  const { summary, tone } = backupSummary(status);
+/** "Status": schedule, next run, retention, size limit, contents, what is never backed up, last run and test. */
+export function BackupStatusSection({ status }: { status: BackupStatus }) {
   const last = status.lastRun;
-  const rows: [string, ReactNode][] = [
-    [t.schedule, status.hourLocal === null ? t.scheduleOff : t.scheduleAt(status.hourLocal)],
-    [t.nextRun, formatDateTime(status.nextRunAt)],
-    [t.retention, t.retentionDays(status.retentionDays)],
-    [
-      t.lastRun,
-      last ? (
-        <span key="last" className="inline-flex flex-wrap items-center gap-2">
-          {formatDateTime(last.startedAt)}
-          <StatusBadge tone={runTone(last.status)} label={id.backup.runs.statuses[last.status]} />
-        </span>
-      ) : (
-        t.never
-      ),
-    ],
+  const kinds = contentKinds(last);
+  const excluded = status.excluded ?? [];
+  const items: KeyValueItem[] = [
+    { label: t.schedule, value: status.hourLocal === null ? t.scheduleOff : t.scheduleAt(status.hourLocal) },
+    { label: t.nextRun, value: status.nextRunAt ? formatDateTime(status.nextRunAt) : t.none },
+    {
+      label: t.retention,
+      value:
+        status.keepMinRuns === undefined
+          ? t.retentionDays(status.retentionDays)
+          : t.retentionValue(status.retentionDays, status.keepMinRuns),
+    },
   ];
-  return (
-    <Card className="gap-3 py-4">
-      <CardHeader className="flex flex-wrap items-center gap-2 px-4">
-        <CardTitle className="mr-auto text-base">{t.title}</CardTitle>
-        <StatusBadge tone={tone} label={t.summaries[summary]} />
-      </CardHeader>
-      <CardContent className="flex flex-col gap-4 px-4">
-        {!status.configured && <MissingSettings keys={status.missing} />}
-        {status.running && (
-          <p className="text-sm text-muted-foreground" aria-live="polite">
-            {t.running}
-          </p>
-        )}
-        <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-2 text-sm">
-          {rows.map(([label, value]) => (
-            <div key={label} className="contents">
-              <dt className="text-muted-foreground">{label}</dt>
-              <dd className="min-w-0 break-words">{value}</dd>
-            </div>
+  if (status.maxItemMb !== undefined) items.push({ label: t.maxItem, value: formatBytes(status.maxItemMb * MB) });
+  items.push({
+    label: t.contents,
+    value: kinds.length ? kinds.map((k) => idBackup.kinds[k]).join(", ") : t.none,
+  });
+  if (excluded.length)
+    items.push({
+      label: t.notBackedUp,
+      value: (
+        <ul className="flex list-disc flex-col gap-1 pl-4">
+          {excluded.map((x) => (
+            <li key={x}>{idBackup.excluded[x]}</li>
           ))}
-        </dl>
-        {action}
-      </CardContent>
-    </Card>
+        </ul>
+      ),
+    });
+  items.push({
+    label: t.lastRun,
+    value: last ? (
+      <span className="inline-flex flex-wrap items-center gap-2">
+        <RelativeTime at={last.startedAt} />
+        <StatusBadge state={runStatusKey(last)} />
+      </span>
+    ) : (
+      t.never
+    ),
+  });
+  items.push({
+    label: idBackup.restores.lastTest,
+    value: status.lastRestoreTest ? (
+      <span>
+        <RelativeTime at={status.lastRestoreTest.at} /> · {status.lastRestoreTest.sourceName}
+      </span>
+    ) : (
+      t.never
+    ),
+  });
+  return (
+    <Section title={t.title}>
+      <div className="rounded-lg border bg-card p-4">
+        <KeyValue items={items} />
+      </div>
+    </Section>
   );
 }

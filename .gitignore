@@ -8,3 +8,13 @@ spike/
 *.db-*
 .DS_Store
 .claude/
+
+# Credential material (keys, cloud creds) never belongs in git
+.aws/
+.gcp/
+*.pem
+*.key
+*.p12
+*.pfx
+credentials.json
+service-account*.json

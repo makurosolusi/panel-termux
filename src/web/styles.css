@@ -1,29 +1,91 @@
 @import "tailwindcss";
 @import "tw-animate-css";
 
-/* Dark mode follows the OS setting; no manual toggle yet. */
-@custom-variant dark (@media (prefers-color-scheme: dark));
+/*
+ * Theme = `data-theme="light|dark"` on <html>, set before first paint by the inline script in index.html
+ * (preference system/light/dark from localStorage, see web/theme/theme.preference.ts). One selector, no
+ * media-query duplicate: the SPA cannot render without JS anyway.
+ */
+@custom-variant dark (&:where([data-theme="dark"], [data-theme="dark"] *));
 
+/*
+ * App design tokens — "Panel Termux" brand shared with the landing: warm neutrals (hue ~60–85, low chroma),
+ * one signal-orange accent, semantic tones with subtle backgrounds. Every text/background pair below is
+ * ≥ 4.5:1 (WCAG AA); ratios are listed in the comments.
+ */
 :root {
-  --radius: 0.625rem;
-  --background: oklch(1 0 0);
-  --foreground: oklch(0.145 0 0);
+  color-scheme: light;
+  --radius: 0.5rem;
+  --background: oklch(0.99 0.003 85);
+  --foreground: oklch(0.2 0.012 60); /* 17.6:1 on background */
   --card: oklch(1 0 0);
-  --card-foreground: oklch(0.145 0 0);
+  --card-foreground: var(--foreground);
   --popover: oklch(1 0 0);
-  --popover-foreground: oklch(0.145 0 0);
-  --primary: oklch(0.205 0 0);
-  --primary-foreground: oklch(0.985 0 0);
-  --secondary: oklch(0.97 0 0);
-  --secondary-foreground: oklch(0.205 0 0);
-  --muted: oklch(0.97 0 0);
-  --muted-foreground: oklch(0.556 0 0);
-  --accent: oklch(0.97 0 0);
-  --accent-foreground: oklch(0.205 0 0);
-  --destructive: oklch(0.577 0.245 27.325);
-  --border: oklch(0.922 0 0);
-  --input: oklch(0.922 0 0);
-  --ring: oklch(0.708 0 0);
+  --popover-foreground: var(--foreground);
+  --muted: oklch(0.96 0.005 80);
+  --muted-foreground: oklch(0.5 0.012 60); /* 5.9:1 bg, 5.4:1 muted, 5.6:1 sidebar */
+  --secondary: var(--muted);
+  --secondary-foreground: var(--foreground);
+  --accent: oklch(0.95 0.006 80); /* neutral hover/selected surface (shadcn naming) */
+  --accent-foreground: var(--foreground);
+  --border: oklch(0.91 0.006 80);
+  --input: oklch(0.88 0.008 80);
+  --ring: oklch(0.55 0.18 40);
+  --sidebar: oklch(0.975 0.005 85);
+  --sidebar-border: var(--border);
+
+  /* Brand accent (= landing --lp-signal). */
+  --brand: oklch(0.55 0.18 40); /* fill */
+  --brand-foreground: oklch(0.99 0.01 85); /* text on brand fill: 5.1:1 */
+  --brand-text: oklch(0.52 0.17 40); /* orange text: 5.8:1 on background, 5.1:1 on brand-subtle */
+  --brand-subtle: oklch(0.95 0.03 50);
+  --primary: var(--brand);
+  --primary-foreground: var(--brand-foreground);
+
+  /* Semantic tones: text colour (≥ 5:1 on its subtle background) + subtle background + border. */
+  --success: oklch(0.5 0.13 150);
+  --success-subtle: oklch(0.96 0.04 150);
+  --warning: oklch(0.52 0.12 70);
+  --warning-subtle: oklch(0.96 0.05 85);
+  --danger: oklch(0.53 0.2 27); /* 5.7:1 on background; white on danger fill 5.9:1 */
+  --danger-subtle: oklch(0.96 0.03 25);
+  --info: oklch(0.5 0.14 250);
+  --info-subtle: oklch(0.96 0.03 250);
+  --destructive: var(--danger);
+
+  --shadow-color: oklch(0.2 0.012 60 / 8%);
+}
+
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --background: oklch(0.155 0.008 60);
+  --foreground: oklch(0.95 0.01 85); /* 16.9:1 */
+  --card: oklch(0.185 0.008 60);
+  --popover: oklch(0.2 0.008 60);
+  --muted: oklch(0.23 0.008 60);
+  --muted-foreground: oklch(0.72 0.015 70); /* 7.9:1 bg, 7.5:1 card, 6.8:1 muted */
+  --accent: oklch(0.25 0.008 60);
+  --border: oklch(0.95 0.01 85 / 10%);
+  --input: oklch(0.95 0.01 85 / 16%);
+  --ring: oklch(0.72 0.17 50);
+  --sidebar: oklch(0.135 0.008 60);
+
+  --brand: oklch(0.72 0.17 50);
+  --brand-foreground: oklch(0.16 0.01 60); /* 7.4:1 */
+  --brand-text: oklch(0.75 0.16 52); /* 8.4:1 bg, 8.0:1 card, 6.9:1 brand-subtle */
+  --brand-subtle: oklch(0.25 0.05 50);
+
+  --success: oklch(0.78 0.16 150); /* 8.4:1 on subtle */
+  --success-subtle: oklch(0.25 0.04 150);
+  --warning: oklch(0.82 0.14 80); /* 8.8:1 */
+  --warning-subtle: oklch(0.26 0.04 80);
+  --danger: oklch(0.72 0.17 25); /* 5.9:1 */
+  /* destructive button fill = danger/60: white on danger/60 over dark background: 6.0:1 */
+  --danger-subtle: oklch(0.26 0.05 25);
+  --info: oklch(0.76 0.12 250); /* 7.5:1 */
+  --info-subtle: oklch(0.25 0.04 250);
+
+  --shadow-color: oklch(0 0 0 / 40%);
 }
 
 /* Landing page ("field manual" look): warm paper + ink, one signal-orange accent, LED green for status. */
@@ -39,39 +101,14 @@
   --lp-screen: oklch(0.17 0.012 60);
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --lp-paper: oklch(0.16 0.01 60);
-    --lp-ink: oklch(0.94 0.015 85);
-    --lp-dim: oklch(0.72 0.02 70);
-    --lp-line: oklch(0.94 0.015 85 / 12%);
-    --lp-signal: oklch(0.72 0.18 50);
-    --lp-signal-ink: oklch(0.16 0.01 60);
-    --lp-screen: oklch(0.11 0.008 60);
-  }
-}
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: oklch(0.145 0 0);
-    --foreground: oklch(0.985 0 0);
-    --card: oklch(0.205 0 0);
-    --card-foreground: oklch(0.985 0 0);
-    --popover: oklch(0.205 0 0);
-    --popover-foreground: oklch(0.985 0 0);
-    --primary: oklch(0.922 0 0);
-    --primary-foreground: oklch(0.205 0 0);
-    --secondary: oklch(0.269 0 0);
-    --secondary-foreground: oklch(0.985 0 0);
-    --muted: oklch(0.269 0 0);
-    --muted-foreground: oklch(0.708 0 0);
-    --accent: oklch(0.269 0 0);
-    --accent-foreground: oklch(0.985 0 0);
-    --destructive: oklch(0.704 0.191 22.216);
-    --border: oklch(1 0 0 / 10%);
-    --input: oklch(1 0 0 / 15%);
-    --ring: oklch(0.556 0 0);
-  }
+:root[data-theme="dark"] {
+  --lp-paper: oklch(0.16 0.01 60);
+  --lp-ink: oklch(0.94 0.015 85);
+  --lp-dim: oklch(0.72 0.02 70);
+  --lp-line: oklch(0.94 0.015 85 / 12%);
+  --lp-signal: oklch(0.72 0.18 50);
+  --lp-signal-ink: oklch(0.16 0.01 60);
+  --lp-screen: oklch(0.11 0.008 60);
 }
 
 @theme inline {
@@ -97,6 +134,29 @@
   --color-border: var(--border);
   --color-input: var(--input);
   --color-ring: var(--ring);
+  --color-sidebar: var(--sidebar);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-brand: var(--brand);
+  --color-brand-foreground: var(--brand-foreground);
+  --color-brand-text: var(--brand-text);
+  --color-brand-subtle: var(--brand-subtle);
+  --color-success: var(--success);
+  --color-success-subtle: var(--success-subtle);
+  --color-warning: var(--warning);
+  --color-warning-subtle: var(--warning-subtle);
+  --color-danger: var(--danger);
+  --color-danger-subtle: var(--danger-subtle);
+  --color-info: var(--info);
+  --color-info-subtle: var(--info-subtle);
+  /* App type: system sans for UI, mono for identifiers/logs (offline, no font host). */
+  --font-sans:
+    ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Noto Sans", "Helvetica Neue", Arial, sans-serif;
+  --font-mono: ui-monospace, "SF Mono", "JetBrains Mono", "Cascadia Mono", Menlo, Consolas, "Roboto Mono", monospace;
+  /* Elevation scale: hairline borders do most of the work; shadows stay faint. */
+  --shadow-xs: 0 1px 2px var(--shadow-color);
+  --shadow-sm: 0 1px 3px var(--shadow-color), 0 1px 2px var(--shadow-color);
+  --shadow-md: 0 4px 12px var(--shadow-color), 0 1px 3px var(--shadow-color);
+  --shadow-lg: 0 12px 32px var(--shadow-color), 0 2px 6px var(--shadow-color);
   --color-lp-paper: var(--lp-paper);
   --color-lp-ink: var(--lp-ink);
   --color-lp-dim: var(--lp-dim);
@@ -118,16 +178,6 @@
     transform: translateY(14px);
   }
 }
-@keyframes lp-blink {
-  50% {
-    opacity: 0;
-  }
-}
-@keyframes lp-pulse {
-  50% {
-    opacity: 0.35;
-  }
-}
 @keyframes lp-flow {
   to {
     stroke-dashoffset: -24;
@@ -137,12 +187,6 @@
   .lp-rise {
     animation: lp-rise 0.7s cubic-bezier(0.2, 0.7, 0.2, 1) both;
     animation-delay: calc(var(--lp-i, 0) * 90ms);
-  }
-  .lp-blink {
-    animation: lp-blink 1.1s steps(1) infinite;
-  }
-  .lp-pulse {
-    animation: lp-pulse 2.4s ease-in-out infinite;
   }
   .lp-flow {
     animation: lp-flow 1.2s linear infinite;
@@ -155,14 +199,39 @@
   background-size: 32px 32px;
 }
 
+/*
+ * Fixed phone chrome heights, set only while the element is in the DOM: the bottom nav (shell) and the sticky
+ * ActionBar. Toasts (ui/sonner.tsx) and ActionBar offset themselves by these so nothing overlaps.
+ */
+:root:has([data-bottom-nav]) {
+  --bottom-nav-h: 3.5rem;
+}
+:root:has([data-action-bar]) {
+  --action-bar-h: 4rem;
+}
+
 @layer base {
   * {
     @apply border-border outline-ring/50;
   }
-  :root {
-    color-scheme: light dark;
-  }
   body {
-    @apply bg-background text-foreground;
+    @apply bg-background font-sans text-foreground antialiased;
+  }
+  /* Keyboard focus: one visible ring everywhere (components may add their own). */
+  :focus-visible {
+    outline: 2px solid var(--ring);
+    outline-offset: 2px;
+  }
+}
+
+/* Unlayered, so it beats Tailwind/tw-animate utilities (which live in @layer) without !important. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms;
+    animation-iteration-count: 1;
+    transition-duration: 0.01ms;
+    scroll-behavior: auto;
   }
 }

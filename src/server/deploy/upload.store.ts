@@ -1,125 +1,279 @@
-// Chunked binary uploads, staged under <panel data dir>/uploads/<uploadId>/<index>.part (never in a site dir).
-import { existsSync, mkdirSync, readdirSync, renameSync, rmSync } from "node:fs";
+// Resumable chunked uploads (PLAN/03 D13): <panel data dir>/uploads/<id>/{upload.bin, meta.json}. Chunks are written
+// in place at their offset and fsynced before meta.json (tmp + rename) records their sha256, so a panel restart keeps
+// every acknowledged chunk. Never inside a site folder.
+import {
+  closeSync,
+  existsSync,
+  fsyncSync,
+  mkdirSync,
+  openSync,
+  readdirSync,
+  readFileSync,
+  renameSync,
+  rmSync,
+  writeFileSync,
+  writeSync,
+} from "node:fs";
+import { open } from "node:fs/promises";
 import { join } from "node:path";
-import { DEPLOY_CHUNK_SIZE, DEPLOY_MAX_BYTES } from "../../shared/deploy.types";
+import type { UploadState } from "../../shared/deploy.types";
+import { DEPLOY_CHUNK_SIZE } from "../../shared/deploy.types";
 import { log } from "../log.service";
 import { ApiError } from "../routes/http.error";
+import { BinaryError, detectRuntimeBuffer } from "./elf.runtime";
+import {
+  bad,
+  chunkBytes,
+  expired,
+  freeBytes,
+  parseStart,
+  type RuntimeCheck,
+  UPLOAD_SPACE_MARGIN,
+  UPLOAD_TTL_MS,
+  type UploadMeta,
+} from "./upload.meta";
 
-/** Unfinished uploads older than this (since their last chunk) are deleted. */
-export const UPLOAD_TTL_MS = 60 * 60 * 1000;
+export { freeBytes, UPLOAD_SPACE_MARGIN, UPLOAD_TTL_MS, type UploadMeta } from "./upload.meta";
+
 const SWEEP_INTERVAL_MS = 10 * 60 * 1000;
-const SHA256_RE = /^[0-9a-f]{64}$/;
 const INDEX_RE = /^\d+$/;
+const META = "meta.json";
+const BIN = "upload.bin";
 
-/** One staged upload. `chunks` = number of chunks the file is split into. */
-export type Upload = {
-  id: string;
-  site: string;
-  sizeBytes: number;
-  sha256: string;
-  dir: string;
-  chunks: number;
-  received: Set<number>;
-  touchedAt: number;
-};
-
-const bad = (code: string, message: string) => new ApiError(400, code, message);
-
-/** Size the chunk `index` of `u` must have. */
-const chunkBytes = (u: Upload, index: number) =>
-  index < u.chunks - 1 ? DEPLOY_CHUNK_SIZE : u.sizeBytes - DEPLOY_CHUNK_SIZE * (u.chunks - 1);
-
-/** Path of chunk `index`. */
-export const chunkPath = (u: Upload, index: number) => join(u.dir, `${index}.part`);
+const sha256 = (data: Uint8Array) => new Bun.CryptoHasher("sha256").update(data).digest("hex");
 
 /**
- * In-memory upload registry. Metadata is not persisted, so everything under `root` is wiped on creation
- * (panel restart = uploads lost, the client starts over). ponytail: memory-only, persist if restarts mid-upload hurt.
+ * Upload registry under `root`. On creation it drops dirs without readable meta, expired ones, `assembling` ones
+ * (their job was cut off) and stray temp files; the rest resume after a panel restart.
  */
-export function createUploadStore(root: string, now = () => Date.now()) {
-  const uploads = new Map<string, Upload>();
-  rmSync(root, { recursive: true, force: true });
+export function createUploadStore(root: string, opts: { now?: () => number; free?: (p: string) => number } = {}) {
+  const now = opts.now ?? Date.now;
+  const free = opts.free ?? freeBytes;
+  const uploads = new Map<string, UploadMeta>();
   mkdirSync(root, { recursive: true, mode: 0o700 });
 
-  const get = (id: string) => {
-    const u = uploads.get(id);
-    if (!u) throw new ApiError(404, "not_found", `unknown upload ${id}`);
-    return u;
+  const dirOf = (id: string) => join(root, id);
+  const binOf = (id: string) => join(root, id, BIN);
+  const persist = (u: UploadMeta) => {
+    const tmp = join(dirOf(u.id), `${META}.tmp`);
+    writeFileSync(tmp, JSON.stringify(u), { mode: 0o600 });
+    renameSync(tmp, join(dirOf(u.id), META));
   };
-  const drop = (u: Upload) => {
+  const drop = (u: UploadMeta, why: string) => {
     uploads.delete(u.id);
-    rmSync(u.dir, { recursive: true, force: true });
+    rmSync(dirOf(u.id), { recursive: true, force: true });
+    log.info(`[deploy] upload ${u.id} for ${u.site} removed (${why})`);
   };
-  const sweep = () => {
-    for (const u of uploads.values()) {
-      if (now() - u.touchedAt > UPLOAD_TTL_MS) {
-        log.info(`[deploy] upload ${u.id} for ${u.site} expired`);
-        drop(u);
-      }
+  const isExpired = (u: UploadMeta) => now() - u.touchedAt > UPLOAD_TTL_MS;
+
+  for (const id of readdirSync(root)) {
+    let u: UploadMeta | null = null;
+    try {
+      u = JSON.parse(readFileSync(join(root, id, META), "utf8")) as UploadMeta;
+    } catch (e) {
+      log.warn(`[deploy] dropping upload dir ${id}: no readable meta.json (${(e as Error).message})`);
     }
+    if (u?.v !== 1 || u.id !== id || u.state !== "receiving" || isExpired(u) || !existsSync(binOf(id))) {
+      rmSync(join(root, id), { recursive: true, force: true });
+      continue;
+    }
+    rmSync(join(root, id, `${META}.tmp`), { force: true });
+    uploads.set(id, u);
+  }
+  if (uploads.size) log.info(`[deploy] ${uploads.size} unfinished upload(s) kept for resume`);
+
+  const sweep = () => {
+    for (const u of uploads.values()) if (isExpired(u)) drop(u, "expired");
   };
   setInterval(sweep, SWEEP_INTERVAL_MS).unref();
+
+  const get = (id: string): UploadMeta => {
+    const u = uploads.get(id);
+    if (!u) throw expired(id);
+    if (isExpired(u)) {
+      drop(u, "expired");
+      throw expired(id);
+    }
+    return u;
+  };
+
+  const view = (u: UploadMeta): UploadState => ({
+    uploadId: u.id,
+    site: u.site,
+    fileName: u.fileName,
+    sizeBytes: u.sizeBytes,
+    chunkSize: DEPLOY_CHUNK_SIZE,
+    chunks: u.chunks,
+    received: Object.entries(u.chunkSha)
+      .map(([i, sha]) => ({ index: Number(i), sha256: sha }))
+      .sort((a, b) => a.index - b.index),
+    runtime: u.runtime,
+    expiresAt: new Date(u.touchedAt + UPLOAD_TTL_MS).toISOString(),
+  });
+  const receivedOf = (u: UploadMeta) => view(u).received.map((r) => r.index);
 
   return {
     sweep,
     get,
+    view,
+    /** Path of the upload's data file. */
+    binOf: (u: UploadMeta) => binOf(u.id),
 
-    /** Validates `{ sizeBytes, sha256 }` and registers a new upload for `site`, replacing its previous one. */
-    start(site: string, body: unknown): Upload {
-      const b = (typeof body === "object" && body !== null ? body : {}) as Record<string, unknown>;
-      const { sizeBytes, sha256 } = b;
-      if (typeof sizeBytes !== "number" || !Number.isInteger(sizeBytes) || sizeBytes < 1)
-        throw bad("invalid_size", "sizeBytes must be a positive integer");
-      if (sizeBytes > DEPLOY_MAX_BYTES) throw bad("too_large", `binary larger than ${DEPLOY_MAX_BYTES} bytes`);
-      if (typeof sha256 !== "string" || !SHA256_RE.test(sha256))
-        throw bad("invalid_sha256", "sha256 must be 64 lowercase hex chars");
-      for (const u of uploads.values()) if (u.site === site) drop(u);
-      const id = crypto.randomUUID();
-      const u: Upload = {
-        id,
-        site,
-        sizeBytes,
-        sha256,
-        dir: join(root, id),
-        chunks: Math.ceil(sizeBytes / DEPLOY_CHUNK_SIZE),
-        received: new Set(),
-        touchedAt: now(),
-      };
-      mkdirSync(u.dir, { mode: 0o700 });
-      uploads.set(id, u);
-      return u;
+    /** The site's unfinished upload, or null. */
+    activeFor(site: string): UploadState | null {
+      for (const u of uploads.values()) if (u.site === site && !isExpired(u)) return view(u);
+      return null;
     },
 
-    /** Stores chunk `rawIndex` (replacing an earlier copy); returns the sorted received indexes. */
-    async putChunk(id: string, rawIndex: string, body: ArrayBuffer): Promise<number[]> {
+    /** Validates `{ sizeBytes, fileName }`, replaces the site's previous upload, checks free space (507). */
+    start(site: string, body: unknown): UploadState {
+      const { sizeBytes, fileName, sha256: whole } = parseStart(body);
+      for (const u of uploads.values()) if (u.site === site) drop(u, "replaced by a new upload");
+      const pending = [...uploads.values()].reduce((n, u) => n + u.sizeBytes, 0);
+      const needBytes = pending + sizeBytes + UPLOAD_SPACE_MARGIN;
+      const freeNow = free(root);
+      if (freeNow < needBytes) {
+        throw new ApiError(507, "no_space", `need ${needBytes} free bytes in the panel data dir, have ${freeNow}`, {
+          needBytes,
+          freeBytes: freeNow,
+        });
+      }
+      const t = now();
+      const u: UploadMeta = {
+        v: 1,
+        id: crypto.randomUUID(),
+        site,
+        fileName,
+        sizeBytes,
+        chunks: Math.ceil(sizeBytes / DEPLOY_CHUNK_SIZE),
+        chunkSha: {},
+        runtime: null,
+        state: "receiving",
+        createdAt: t,
+        touchedAt: t,
+        ...(whole ? { sha256: whole } : {}),
+      };
+      mkdirSync(dirOf(u.id), { mode: 0o700 });
+      closeSync(openSync(binOf(u.id), "w", 0o600)); // empty: no ftruncate, so no blocks are allocated up front
+      persist(u);
+      uploads.set(u.id, u);
+      return view(u);
+    },
+
+    /**
+     * Stores chunk `rawIndex` at its offset after checking size and sha256 (header `sha`). Chunk 0 is parsed as
+     * ELF first: invalid → upload removed + 400 `invalid_binary`; `check` may refuse its runtime (upload removed).
+     */
+    async putChunk(id: string, rawIndex: string, body: Uint8Array, sha: string | null, check?: RuntimeCheck) {
       const u = get(id);
+      if (u.state !== "receiving") throw new ApiError(409, "busy", `upload ${id} is being completed`);
       const index = INDEX_RE.test(rawIndex) ? Number(rawIndex) : -1;
       if (index < 0 || index >= u.chunks) throw bad("invalid_index", `chunk index must be 0-${u.chunks - 1}`);
       const want = chunkBytes(u, index);
       if (body.byteLength !== want)
         throw bad("invalid_chunk_size", `chunk ${index} must be ${want} bytes, got ${body.byteLength}`);
-      const tmp = join(u.dir, `.${index}.${crypto.randomUUID()}.tmp`);
-      await Bun.write(tmp, body);
-      if (!uploads.has(id)) {
-        rmSync(tmp, { force: true }); // aborted while writing
-        throw new ApiError(404, "not_found", `upload ${id} was aborted`);
+      const got = sha256(body);
+      // 0.2.x clients send no per-chunk hash (whole-file sha256 at start instead); goes away in W7.
+      if (sha === null && !u.sha256) throw bad("missing_chunk_sha", "header X-Chunk-Sha256 is required");
+      if (sha !== null && sha.toLowerCase() !== got)
+        throw bad("chunk_sha_mismatch", `chunk ${index} sha256 does not match its body`, { index });
+      if (index === 0) {
+        try {
+          u.runtime = detectRuntimeBuffer(body);
+        } catch (e) {
+          if (!(e instanceof BinaryError)) throw e;
+          drop(u, `invalid binary: ${e.message}`);
+          throw bad("invalid_binary", e.message, { reason: e.reason });
+        }
+        try {
+          await check?.(u.site, u.runtime);
+        } catch (e) {
+          drop(u, `refused at chunk 0: ${(e as Error).message}`);
+          throw e;
+        }
+        if (!uploads.has(id)) throw expired(id); // replaced while the check ran
       }
-      renameSync(tmp, chunkPath(u, index));
-      u.received.add(index);
+      const fd = openSync(binOf(id), "r+");
+      try {
+        writeSync(fd, body, 0, body.byteLength, index * DEPLOY_CHUNK_SIZE);
+        fsyncSync(fd);
+      } catch (e) {
+        if ((e as NodeJS.ErrnoException).code === "ENOSPC") {
+          throw new ApiError(507, "no_space", `no space left writing chunk ${index}`, {
+            needBytes: body.byteLength,
+            freeBytes: free(root),
+          });
+        }
+        throw new Error(`write chunk ${index} of upload ${id}: ${(e as Error).message}`, { cause: e });
+      } finally {
+        closeSync(fd);
+      }
+      u.chunkSha[String(index)] = got;
       u.touchedAt = now();
-      return [...u.received].sort((a, b) => a - b);
+      persist(u);
+      return { received: receivedOf(u), runtime: u.runtime };
     },
 
     /** Chunk indexes of `u` not received yet. */
-    missing: (u: Upload) => Array.from({ length: u.chunks }, (_, i) => i).filter((i) => !u.received.has(i)),
+    missing: (u: UploadMeta) => Array.from({ length: u.chunks }, (_, i) => i).filter((i) => !(String(i) in u.chunkSha)),
 
-    /** Hands the upload to a job: forgets it without deleting its files (the job removes the dir). */
-    detach: (u: Upload) => uploads.delete(u.id),
+    /**
+     * Re-reads upload.bin: every chunk's sha256 must still match meta (else that chunk is forgotten, state back to
+     * receiving, 400 `chunk_corrupt {index}`). Returns the whole-file sha256; state stays `assembling`.
+     */
+    async verify(u: UploadMeta): Promise<string> {
+      u.state = "assembling";
+      persist(u);
+      const whole = new Bun.CryptoHasher("sha256");
+      const fh = await open(binOf(u.id), "r");
+      try {
+        const buf = Buffer.alloc(DEPLOY_CHUNK_SIZE);
+        for (let i = 0; i < u.chunks; i++) {
+          const len = chunkBytes(u, i);
+          const { bytesRead } = await fh.read(buf, 0, len, i * DEPLOY_CHUNK_SIZE);
+          const part = buf.subarray(0, bytesRead);
+          if (bytesRead !== len || sha256(part) !== u.chunkSha[String(i)]) {
+            delete u.chunkSha[String(i)];
+            u.state = "receiving";
+            persist(u);
+            throw bad("chunk_corrupt", `chunk ${i} changed on disk; send it again`, { index: i });
+          }
+          whole.update(part);
+        }
+      } finally {
+        await fh.close();
+      }
+      const sha = whole.digest("hex");
+      if (u.sha256 && u.sha256 !== sha) {
+        u.state = "receiving";
+        persist(u);
+        throw bad("sha_mismatch", `file sha256 ${sha} does not match the announced ${u.sha256}`);
+      }
+      return sha;
+    },
 
-    /** Aborts upload `id` and deletes its chunks. */
-    abort: (id: string) => drop(get(id)),
+    /** Back to receiving (complete refused after verify, e.g. busy). */
+    reopen(u: UploadMeta) {
+      u.state = "receiving";
+      u.touchedAt = now();
+      persist(u);
+    },
 
-    /** Ids of the staged upload dirs on disk (tests). */
+    /** Hands the upload to its job: forgotten here, files stay until the `stage` step takes upload.bin. */
+    detach: (u: UploadMeta) => uploads.delete(u.id),
+
+    /** Aborts upload `id` and deletes its files. */
+    abort: (id: string) => drop(get(id), "aborted"),
+
+    /** Removes the site's unfinished upload, if any (site delete). */
+    dropFor(site: string) {
+      for (const u of uploads.values()) if (u.site === site) drop(u, "site removed");
+    },
+
+    /** Removes an upload dir by id (the job's stage step finished with it). */
+    removeDir: (id: string) => rmSync(dirOf(id), { recursive: true, force: true }),
+
+    /** Upload dirs on disk (tests). */
     onDisk: () => (existsSync(root) ? readdirSync(root) : []),
   };
 }

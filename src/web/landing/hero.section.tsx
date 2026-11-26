@@ -1,12 +1,14 @@
 import type { CSSProperties } from "react";
-import { id } from "@/web/i18n/id";
-import { CtaLink } from "./cta.link";
-import { PhoneMock } from "./phone.mock";
+import { idLanding } from "@/web/i18n/id.landing";
+import { InstallCta } from "./cta.link";
+import { PhoneFrame } from "./device.frame";
+import { SHOTS } from "./landing.shots";
+import { Screenshot } from "./screenshot";
 
-const t = id.landing;
+const t = idLanding;
 const stagger = (i: number) => ({ "--lp-i": i }) as CSSProperties;
 
-/** Hero: headline, lead, CTAs, the phone mock and the spec strip. */
+/** Hero: headline, lead, install + GitHub CTAs, the phone screenshot and the spec strip. */
 export function HeroSection() {
   return (
     <section id="top" aria-labelledby="hero-title" className="mx-auto max-w-6xl px-4 pt-12 pb-16 sm:px-6 md:pt-20">
@@ -48,18 +50,24 @@ export function HeroSection() {
             {t.hero.lead}
           </p>
           <div className="lp-rise mt-8 flex flex-wrap items-center gap-x-6 gap-y-4" style={stagger(3)}>
-            <CtaLink />
+            <InstallCta />
             <a
-              href="#cara-kerja"
-              className="rounded font-lp-mono text-sm font-semibold underline decoration-lp-signal decoration-2 underline-offset-[6px] hover:text-lp-signal focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-lp-signal"
+              href={t.links.github}
+              rel="noreferrer"
+              className="inline-flex h-11 items-center rounded font-lp-mono text-sm font-semibold underline decoration-lp-signal decoration-2 underline-offset-[6px] hover:text-lp-signal focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-lp-signal"
             >
-              {t.cta.secondary}
+              {t.cta.github}
             </a>
           </div>
         </div>
-        <div className="lp-rise relative mx-auto w-full max-w-[19rem]" style={stagger(4)}>
-          <PhoneMock />
-        </div>
+        <figure className="lp-rise relative mx-auto w-full max-w-[17rem]" style={stagger(4)}>
+          <PhoneFrame className="md:rotate-[2deg]">
+            <Screenshot shot={SHOTS.overview} priority />
+          </PhoneFrame>
+          <figcaption className="mt-4 text-center font-lp-mono text-[11px] text-lp-dim">
+            {t.hero.shotCaption}
+          </figcaption>
+        </figure>
       </div>
       <SpecStrip />
     </section>

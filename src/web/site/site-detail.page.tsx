@@ -1,89 +1,146 @@
-import { ArrowLeftIcon } from "lucide-react";
-import type { ReactNode } from "react";
+import { useState } from "react";
 import { Link, useParams } from "react-router";
-import type { SiteDetail } from "@/shared/site.types";
-import { Card, CardContent, CardHeader, CardTitle } from "@/web/components/ui/card";
-import { DeployCard } from "@/web/deploy/deploy.card";
-import { DeployHistory } from "@/web/deploy/deploy.history";
-import { id } from "@/web/i18n/id";
-import { formatDateTime } from "@/web/shared/format";
-import { QueryView } from "@/web/shared/query.state";
+import type { Page } from "@/shared/dev.types";
+import type { Job, SiteDetail } from "@/shared/site.types";
+import { ErrorState } from "@/web/components/error-state";
+import { KeyValue } from "@/web/components/key-value";
+import { PageHeader } from "@/web/components/page-header";
+import { QueryView } from "@/web/components/query-view";
+import { RelativeTime } from "@/web/components/relative-time";
+import { Button } from "@/web/components/ui/button";
+import { DeploySection } from "@/web/deploy/deploy.section";
+import { type Uploader, useUploader } from "@/web/deploy/deploy.uploader";
+import { idSiteDetail } from "@/web/i18n/id.site-detail";
+import { panelUrl } from "@/web/panel/panel.api";
+import type { ErrorCodes } from "@/web/shared/api.client";
 import { useApiQuery } from "@/web/shared/use-api-query";
+import { AnchorSection, SiteAnchors } from "./site.anchors";
 import { SITE_ERROR_CODES, siteUrl } from "./site.api";
-import { SiteAppBadge } from "./site.card";
 import { SiteDelete } from "./site.delete";
 import { SiteEnvEditor } from "./site.env-editor";
+import { SiteBanners, SiteHeader } from "./site.header";
 import { SiteHostnames } from "./site.hostnames";
+import { SiteSettings } from "./site.settings";
+import { siteBusy } from "./site-detail.state";
 
-const t = id.site.detail;
+const t = idSiteDetail;
+/** Detail refresh while nothing runs; status and the busy banner follow the active job. */
+const DETAIL_REFRESH_MS = 30_000;
+const CODES: ErrorCodes = { ...SITE_ERROR_CODES, ...t.errorCodes };
 
-function Section({ title, children }: { title: string; children: ReactNode }) {
+function Summary({ site }: { site: SiteDetail }) {
   return (
-    <Card className="gap-3 py-4">
-      <CardHeader className="px-4">
-        <CardTitle className="text-base">{title}</CardTitle>
-      </CardHeader>
-      <CardContent className="px-4">{children}</CardContent>
-    </Card>
+    <KeyValue
+      items={[
+        { label: t.info.app, value: site.app ?? site.name, mono: true },
+        { label: t.info.port, value: site.port, mono: true },
+        { label: t.info.runtime, value: t.info.runtimes[site.runtime] },
+        { label: t.info.database, value: site.database ?? t.info.noDatabase, mono: site.database !== null },
+        { label: t.info.dir, value: site.dir, mono: true },
+        { label: t.info.managed, value: site.managed ? t.info.managedYes : t.info.managedNo },
+        { label: t.info.createdAt, value: <RelativeTime at={site.createdAt} absolute /> },
+      ]}
+    />
   );
 }
 
-function SiteInfo({ site }: { site: SiteDetail }) {
-  const rows: [string, ReactNode][] = [
-    [t.app, <SiteAppBadge key="app" status={site.appStatus} />],
-    [t.dir, <code key="dir">{site.dir}</code>],
-    [t.port, site.port],
-    [t.database, site.database ?? id.site.list.noDb],
-    [t.runtime, site.runtime],
-    [t.managed, site.managed ? t.managedYes : t.managedNo],
-    [t.createdAt, formatDateTime(site.createdAt)],
-  ];
+type SectionsProps = {
+  site: SiteDetail;
+  reload: () => void;
+  deleting: boolean;
+  setDeleting: (open: boolean) => void;
+  uploader: Uploader;
+};
+
+function SiteSections({ site, reload, deleting, setDeleting, uploader }: SectionsProps) {
+  const busy = siteBusy(site);
+  const jobs = useApiQuery<Page<Job>>(
+    panelUrl("/jobs", { target: site.name, status: "interrupted", page: 1, pageSize: 1 }),
+    undefined,
+    { enabled: false },
+  );
+  const interrupted = jobs.data?.items[0] ?? null;
   return (
-    <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-2 text-sm">
-      {rows.map(([label, value]) => (
-        <div key={label} className="contents">
-          <dt className="text-muted-foreground">{label}</dt>
-          <dd className="min-w-0 break-words">{value}</dd>
+    <div className="flex flex-col gap-8">
+      <SiteBanners site={site} interrupted={interrupted} codes={CODES} />
+      <AnchorSection id="ringkasan" title={t.anchors.summary}>
+        <Summary site={site} />
+      </AnchorSection>
+      <AnchorSection id="deploy" title={t.anchors.deploy}>
+        <DeploySection site={site} uploader={uploader} />
+      </AnchorSection>
+      <AnchorSection id="domains" title={t.anchors.domains} description={t.domains.description}>
+        <SiteHostnames site={site} busy={busy} codes={CODES} />
+      </AnchorSection>
+      <AnchorSection id="env" title={t.anchors.env}>
+        <SiteEnvEditor site={site} busy={busy} codes={CODES} onSaved={reload} />
+      </AnchorSection>
+      <AnchorSection id="settings" title={t.anchors.settings}>
+        <div className="flex flex-col gap-6">
+          <div className="flex flex-col gap-3">
+            <div>
+              <h3 className="text-sm font-medium">{t.settings.title}</h3>
+              <p className="text-sm text-muted-foreground">{t.settings.description}</p>
+            </div>
+            <SiteSettings site={site} busy={busy} codes={CODES} onSaved={reload} />
+          </div>
+          <SiteDelete site={site} busy={busy} codes={CODES} open={deleting} onOpenChange={setDeleting} />
         </div>
-      ))}
-    </dl>
+      </AnchorSection>
+    </div>
   );
 }
 
-/** /panel/sites/:name: info, hostnames, deploy + history (managed and adopted), write-only env editor and delete. */
+/** /panel/sites/:name: header with actions, section anchors, deploy, domains, env editor, settings and delete. */
 export function SiteDetailPage() {
   const { name = "" } = useParams();
-  const query = useApiQuery<SiteDetail>(siteUrl(name));
+  const query = useApiQuery<SiteDetail>(siteUrl(name), DETAIL_REFRESH_MS);
+  const uploader = useUploader(name); // above QueryView: survives the stale/error remount of the sections
+  const [deleting, setDeleting] = useState(false); // header menu and danger zone open the same dialog
+  const back = { to: "/panel/sites", label: t.back };
+  const site = query.data;
+  const meta = {
+    updatedAt: query.updatedAt,
+    onRefresh: query.reload,
+    refreshing: query.loading,
+    live: true,
+    stale: Boolean(query.error),
+  };
+
+  if (query.error?.status === 404 && !site)
+    return (
+      <>
+        <PageHeader title={name} back={back} />
+        <ErrorState
+          title={t.notFound}
+          action={
+            <Button size="sm" variant="outline" asChild>
+              <Link to="/panel/sites">{t.toList}</Link>
+            </Button>
+          }
+        />
+      </>
+    );
+
   return (
-    <div className="flex max-w-3xl flex-col gap-4">
-      <Link to="/panel/sites" className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:underline">
-        <ArrowLeftIcon className="size-4" aria-hidden />
-        {t.back}
-      </Link>
-      <h1 className="text-lg font-semibold">{name}</h1>
-      <QueryView query={query} codes={SITE_ERROR_CODES}>
-        {(site) => (
-          <>
-            <Section title={t.info}>
-              <SiteInfo site={site} />
-            </Section>
-            <Section title={t.hostnames}>
-              <SiteHostnames site={site} />
-            </Section>
-            <Section title={id.deploy.title}>
-              {!site.managed && <p className="text-sm text-muted-foreground">{id.deploy.adoptedNote}</p>}
-              <DeployCard site={site.name} />
-            </Section>
-            <Section title={id.deploy.history.title}>
-              <DeployHistory site={site.name} />
-            </Section>
-            <Section title={id.site.envEditor.title}>
-              <SiteEnvEditor site={site} onSaved={query.reload} />
-            </Section>
-            <SiteDelete site={site} />
-          </>
+    <>
+      {site ? (
+        <SiteHeader site={site} meta={meta} codes={CODES} onDelete={() => setDeleting(true)} />
+      ) : (
+        <PageHeader title={name} back={back} />
+      )}
+      {site && <SiteAnchors />}
+      <QueryView query={query} codes={CODES} empty={null} isEmpty={() => false}>
+        {(s) => (
+          <SiteSections
+            site={s}
+            reload={query.reload}
+            deleting={deleting}
+            setDeleting={setDeleting}
+            uploader={uploader}
+          />
         )}
       </QueryView>
-    </div>
+    </>
   );
 }

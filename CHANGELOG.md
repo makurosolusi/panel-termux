@@ -1,5 +1,72 @@
 # Changelog
 
+## [0.3.0] - 2026-11-27
+
+### Added
+
+- Pasang dan upgrade dari rilis GitHub dengan satu perintah di Termux (`curl -fsSLo install.sh …/releases/latest/download/install.sh && sh install.sh`). Installer memeriksa HP, ruang kosong, dan SHA-256 unduhan sebelum memasang; rilis disertai attestation asal build. Di HP yang belum punya pm2, template pm2 ikut dipasang.
+- Ringkasan yang menampilkan masalah lebih dulu (atau "Semua sehat"), dengan aktivitas terbaru sebagai kalimat, grafik baterai dan memori 24 jam/7 hari, 30 cek terakhir per domain, halaman Riwayat masalah, dan penanda jumlah masalah di menu.
+- Pemantauan di latar belakang: panel memeriksa HP, layanan, aplikasi, domain, dan cadangan secara berkala, dan memberi tahu saat HP baru menyala ulang atau panel sempat berhenti tak terduga.
+- Notifikasi Telegram: pesan saat masalah muncul, makin gawat, masih terbuka setelah 24 jam, dan pulih, dengan jeda agar tidak berulang. Tombol "Cari chat" dan "Kirim pesan uji" di Pengaturan.
+- Situs: halaman Persiapan yang memeriksa integrasi pm2, adopsi aplikasi pm2 yang sudah berjalan, wizard dengan beberapa domain sekaligus dan pemeriksaan langsung, editor variabel lingkungan dengan tempel `.env`, "Simpan dan mulai ulang" yang mengembalikan nilai lama bila aplikasi gagal, tombol mulai ulang, dan pengaturan cek kesehatan per situs.
+- Deploy yang bisa dilanjutkan: upload terputus atau halaman yang dimuat ulang bisa diteruskan dengan "Lanjutkan unggahan" selama 1 jam. File yang bukan binary yang didukung ditolak sebelum diunggah penuh.
+- Dialog rollback yang menyebut versi asal dan tujuan serta apa yang tidak ikut dikembalikan; riwayat deploy per situs.
+- Riwayat perubahan menampilkan tiap langkah dengan durasi dan log. Perubahan yang terputus karena panel di-restart tampil "Terputus" dan bisa dipulihkan.
+- Cadangan lengkap: role Postgres, setiap database, folder situs (tanpa binary), konfigurasi tunnel, `panel.db`, dan opsional kunci rahasia, beserta `SHA256SUMS` dan `manifest.json`. Halaman Cadangan menampilkan cadangan valid terakhir tiap item, riwayat, dan perintah pulih per item.
+- "Pulihkan ke database baru" untuk menguji cadangan tanpa menyentuh database asli, dan panduan "Pulihkan ke HP baru" di README.
+- Kunci data: status cocok/tidak cocok, unduh salinan kunci, dan "Hapus pengaturan rahasia lama" bila kunci hilang. Panel tidak pernah menghapus pengaturan rahasia sendiri.
+- Snapshot `panel.db` otomatis sebelum migrasi database saat upgrade (3 terakhir disimpan di `data/snapshots/`), dan petunjuk rollback di installer.
+- Kesehatan sistem dengan vonis keseluruhan, status proses latar belakang, galat terakhir, dan panduan penyiapan 7 langkah untuk super admin.
+- Pengguna: cari, filter peran, terakhir aktif, cabut sesi pengguna lain, dan "Keluarkan semua pengguna". Audit sebagai kalimat yang bisa dibaca, dengan filter aksi/pelaku/tanggal dan ekspor CSV.
+- Profil: daftar sesi aktif yang bisa dicabut, pilihan tema, dan hapus akun sendiri untuk peran `user`.
+- Navigasi HP: bar atas dengan judul halaman dan bar bawah dengan menu Lainnya. Semua tombol dan kontrol minimal 44 px di layar sentuh.
+- Halaman perkenalan dengan panduan pasang lengkap, keterbatasan, FAQ, tangkapan layar asli panel (terang dan gelap), gambar pratinjau tautan (OG) dan ikon layar utama iOS; `robots.txt` dan `sitemap.xml`.
+- Variabel env opsional `PANEL_CONNECTIVITY_URL` (alamat cek internet) dan `PANEL_SKIP_SNAPSHOT` (migrasi tanpa snapshot bila penyimpanan penuh).
+- Lisensi MIT.
+
+### Changed
+
+- Super admin kini mendarat di `/panel`; Administrasi ada di menu samping.
+- Pengaturan dibagi enam grup (Cloudflare, Cadangan, Notifikasi Telegram, Situs, Pemantauan, Keamanan), disimpan per grup, dengan uji koneksi Cloudflare, S3, dan Telegram. Token Cloudflare bisa diuji sebelum disimpan.
+- Snippet `ecosystem.config.js` baru (`panelApps`) yang aman bila `apps.json` hilang atau rusak dan melewati entri yang binary-nya belum ada. Snippet lama `...require("./apps.json")` ditandai error di Persiapan; ganti dengan yang baru (README "Integrasi pm2"). `apps.json` dibuat panel saat start.
+- Deploy dianggap sehat hanya bila port menjawab dan pm2 menunjukkan proses yang sama tanpa restart baru; batas waktu cek kesehatan bisa diatur per situs (10-300 detik, default 60).
+- Retensi cadangan selalu menyimpan run berhasil terbaru (`backup.keep_min_runs`) dan cadangan valid terakhir tiap item. Token penyimpanan tanpa izin hapus didukung; retensi lalu diserahkan ke lifecycle rule bucket.
+- Aksi sensitif (unduh atau reset kunci data, unduh item rahasia, mengubah tujuan cadangan) meminta "Masuk ulang" bila login lebih dari 15 menit. Sesi berlaku paling lama 30 hari.
+- Audit mencatat pelaku, IP yang disamarkan, dan perangkat untuk setiap perubahan, termasuk akun baru, keluar, dan pencabutan sesi (dengan nama targetnya). Entri lebih tua dari `audit.retention_days` (default 365 hari) dihapus otomatis.
+- Layanan `panel` dan `cloudflared` tidak bisa dihentikan dari panel; layanan inti lain hanya dengan mengetik namanya. Restart panel ditolak selama perubahan situs atau cadangan berjalan.
+- `sv restart panel` menunggu perubahan situs yang sedang berjalan sampai 2 menit sebelum panel berhenti.
+- Waktu relatif tanpa detik ("3 mnt lalu", "dalam 5 mnt"), label perangkat dalam bahasa Indonesia, dan halaman log yang menyamarkan nilai rahasia yang dikenal.
+- Resep Cloudflare Access tidak lagi melindungi `/profile`.
+- Aplikasi penjaga `pm2-guard` disembunyikan dari daftar Aplikasi. Jangan hapus dari `ecosystem.config.js` (README "Integrasi pm2").
+- Mode fake menjadi HP demo yang sehat dan sepenuhnya offline, dengan file demo di `<PANEL_DATA_DIR>/fake-home`; `scripts/demo-seed.ts` mengisi data dir demo untuk QA dan screenshot.
+
+### Fixed
+
+- Kartu Domain di Ringkasan ikut menghitung domain yang tertahan oleh masalah lain.
+- Situs panel kini terhubung ke domain dan port-nya di daftar Aplikasi, juga setelah "Cek ulang".
+- Fokus kembali ke tombol pemicu setelah dialog konfirmasi, adopsi, dan tempel `.env` ditutup.
+- Pilihan di menu dan dropdown setinggi minimal 44 px di layar sentuh.
+- Dialog tambah domain merapikan alamat yang ditempel lengkap dengan `https://` atau path.
+- "Deploy terakhir" di daftar dan detail situs menandai deploy yang tidak berhasil, dan alasan gagal di halaman perubahan tidak lagi tampil dua kali.
+- Halaman tetap menampilkan data terakhir tanpa dimuat ulang dari awal bila penyegaran gagal.
+- Halaman yang gagal memuat bagiannya saat server tidak terjangkau kini menampilkan "Server panel tidak terjangkau" di dalam aplikasi, bukan halaman kosong.
+- Suhu baterai yang tidak terbaca tampil "tidak ada data", bukan 0 °C.
+- Menghapus situs yang punya database ditolak selama cadangan berjalan, dan upload deploy yang belum selesai ikut dihapus bersama situsnya.
+- Cadangan dan pemulihan yang terputus karena panel di-restart ditandai terputus, bukan berjalan selamanya.
+- Situs yang tercatat di panel tetapi tidak ada di pm2 ditandai "Tidak berjalan di pm2".
+- Panel tidak lagi menyalakan daemon pm2 kedua saat layanan pm2 mati; halaman menampilkan "pm2 tidak berjalan".
+- Uji pemulihan selesai tanpa perlu memuat ulang halaman, dan tabel domain muat di layar desktop.
+- Hapus akun menjelaskan bahwa catatan audit tetap disimpan, lalu kembali ke halaman awal dengan pemberitahuan.
+- Daftar situs dan pengaturan tidak lagi menjalankan satu query database per item.
+
+### Breaking (API admin)
+
+Hanya berpengaruh pada skrip yang memanggil API panel langsung:
+
+- `PUT /api/dev/settings/:key` dihapus; pakai `PATCH /api/dev/settings` per grup.
+- Log layanan/aplikasi dikembalikan sebagai `LogChunk` (`{ lines: [{ at, text, stream? }], cursor, reset, truncated, redacted }`), menggantikan `LogLines`.
+- `Problem.message` dihapus; teks masalah dibentuk dari `code` dan `params`.
+
 ## [0.2.2] - 2026-11-26
 
 ### Security

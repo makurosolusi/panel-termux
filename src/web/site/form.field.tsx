@@ -21,7 +21,7 @@ export function FormField({
       {children}
       {hint && <p className="text-xs text-muted-foreground">{hint}</p>}
       {errors && errors.length > 0 && (
-        <ul id={`${id}-errors`} className="text-xs text-destructive" aria-live="polite">
+        <ul id={`${id}-errors`} className="text-xs text-danger" aria-live="polite">
           {errors.map((e) => (
             <li key={e}>{e}</li>
           ))}

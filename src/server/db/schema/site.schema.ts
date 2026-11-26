@@ -1,6 +1,6 @@
 import { sql } from "drizzle-orm";
 import { index, integer, sqliteTable, text } from "drizzle-orm/sqlite-core";
-import type { JobKind, JobStatus, JobStep, SiteRuntime } from "../../../shared/site.types";
+import type { HealthExpect, JobKind, JobStatus, JobStep, SiteRuntime } from "../../../shared/site.types";
 import { user } from "./auth.schema";
 
 const createdAt = () => integer("created_at", { mode: "timestamp_ms" }).notNull().default(sql`(unixepoch() * 1000)`);
@@ -15,6 +15,10 @@ export const site = sqliteTable("site", {
   managed: integer("managed", { mode: "boolean" }).notNull(),
   dir: text("dir").notNull(),
   createdAt: createdAt(),
+  // Health check (0007). Defaults keep the pre-0007 rule ("any status < 500" at /) for existing rows.
+  healthPath: text("health_path").notNull().default("/"),
+  healthExpect: text("health_expect").$type<HealthExpect>().notNull().default("lt500"),
+  healthTimeoutSec: integer("health_timeout_sec").notNull().default(60),
 });
 
 /**
@@ -48,6 +52,10 @@ export const job = sqliteTable(
     actorId: text("actor_id").references(() => user.id, { onDelete: "set null" }),
     startedAt: integer("started_at", { mode: "timestamp_ms" }).notNull(),
     finishedAt: integer("finished_at", { mode: "timestamp_ms" }),
+    // Recovery journal (0007): non-secret request input (names, hostnames, port, sha256, flags; env keys only).
+    input: text("input", { mode: "json" }).$type<Record<string, unknown>>(),
+    // Id of the cleanup/retry job that resolved this one; null = still needs attention when interrupted/failed.
+    resolvedBy: text("resolved_by"),
   },
-  (t) => [index("job_started_at_idx").on(t.startedAt)],
+  (t) => [index("job_started_at_idx").on(t.startedAt), index("job_target_started_idx").on(t.target, t.startedAt)],
 );

@@ -1,76 +1,90 @@
-import { AlertTriangleIcon, GlobeIcon, PackageIcon, ServerIcon } from "lucide-react";
-import { Link } from "react-router";
-import type { PanelOverview } from "@/shared/panel.types";
-import { Skeleton } from "@/web/components/ui/skeleton";
-import { id } from "@/web/i18n/id";
-import { QueryView } from "@/web/shared/query.state";
-import { StatCard } from "@/web/shared/stat.card";
+import { lazy, Suspense } from "react";
+import type { Problem } from "@/shared/monitor.types";
+import type { DeviceInfo, PanelOverview } from "@/shared/panel.types";
+import { PageHeader } from "@/web/components/page-header";
+import { QueryView } from "@/web/components/query-view";
+import { StatTilesSkeleton } from "@/web/components/skeletons";
+import { StatusBadge } from "@/web/components/status-badge";
+import { OnboardingBanner } from "@/web/dev/onboarding.banner";
+import { idOverview } from "@/web/i18n/id.overview";
+import { idPanel } from "@/web/i18n/id.panel";
+import { useMe } from "@/web/session/use-me";
 import { useApiQuery } from "@/web/shared/use-api-query";
-import { DeviceCards } from "./device.cards";
+import { DeviceTiles } from "./device.tiles";
+import { ProblemStrip } from "./overview.problems";
+import { AlertsLine, BackupSection, CountCards } from "./overview.sections";
 import { PANEL_REFRESH_MS, panelUrl } from "./panel.api";
-import { countProblems } from "./panel.status";
-import { StatusBadge } from "./status.badge";
 
-const t = id.panel;
-const GRID = "grid gap-3 sm:grid-cols-2 lg:grid-cols-3";
+const t = idOverview;
 
-function OverviewSkeleton() {
-  return (
-    <div className={GRID} aria-busy="true">
-      {["a", "b", "c", "d", "e", "f", "g", "h"].map((k) => (
-        <Skeleton key={k} className="h-28 w-full" />
-      ))}
-    </div>
-  );
-}
+// History blocks load in their own chunks after the first render, keeping /panel within its gzip budget (PLAN/01 §3.11).
+const MetricTrends = lazy(() => import("./sparkline").then((m) => ({ default: m.MetricTrends })));
+const ActivityList = lazy(() => import("./overview.activity").then((m) => ({ default: m.ActivityList })));
+const RecentProblems = lazy(() => import("./problems.page").then((m) => ({ default: m.RecentProblems })));
 
 function Overview({ o }: { o: PanelOverview }) {
-  const problems = countProblems(o);
-  const counts = [
-    {
-      to: "/panel/services",
-      icon: ServerIcon,
-      label: t.counts.services,
-      total: o.services.length,
-      bad: problems.services,
-    },
-    { to: "/panel/apps", icon: PackageIcon, label: t.counts.apps, total: o.apps.length, bad: problems.apps },
-    { to: "/panel/domains", icon: GlobeIcon, label: t.counts.domains, total: o.domains.length, bad: problems.domains },
-  ];
+  const { role } = useMe();
+  // Transitional shared types (W7 tightens them): the server already sends full Problems and null for failed parts.
+  const problems = o.problems as Problem[];
+  const device = o.device as DeviceInfo | null;
+  const backup = o.backup as PanelOverview["backup"] | null;
   return (
-    <div className="flex flex-col gap-4">
-      {o.mode === "fake" && (
-        <p
-          role="status"
-          className="flex items-center gap-2 rounded-lg border border-amber-500/40 bg-amber-500/10 p-3 text-sm text-amber-800 dark:text-amber-300"
-        >
-          <AlertTriangleIcon className="size-4 shrink-0" aria-hidden />
-          {t.fakeMode}
-        </p>
-      )}
-      <div className={GRID}>
-        {counts.map((c) => (
-          <Link key={c.to} to={c.to} className="rounded-xl focus-visible:ring-2 focus-visible:ring-ring">
-            <StatCard icon={c.icon} label={c.label} value={String(c.total)}>
-              <StatusBadge tone={c.bad > 0 ? "bad" : "ok"} label={t.counts.problems(c.bad)} />
-            </StatCard>
-          </Link>
-        ))}
-        <DeviceCards d={o.device} />
+    <div className="flex flex-col gap-6">
+      <ProblemStrip
+        problems={problems}
+        sampledAt={o.sampledAt ?? null}
+        unavailable={o.unavailable ?? []}
+        dataAt={o.dataAt ?? null}
+      />
+      <DeviceTiles device={device} baseline={o.loadBaseline} problems={problems} />
+      {/* Phone: after the tiles so they stay above the bottom bar (PLAN/02 §6, QA N4); wider screens: first.
+          empty:hidden drops the slot (and its gap) when the banner renders nothing. */}
+      <div className="empty:hidden sm:order-first">
+        <OnboardingBanner />
+      </div>
+      <Suspense fallback={null}>
+        <MetricTrends />
+      </Suspense>
+      <CountCards o={o} problems={problems} />
+      <div className="grid gap-6 lg:grid-cols-2">
+        <div className="flex flex-col gap-4">
+          <BackupSection backup={backup} />
+          <AlertsLine alerts={o.alerts} role={role} />
+        </div>
+        <div className="flex flex-col gap-6">
+          <Suspense fallback={null}>
+            <ActivityList entries={o.recentActivity} role={role} />
+          </Suspense>
+          <Suspense fallback={null}>
+            <RecentProblems />
+          </Suspense>
+        </div>
       </div>
     </div>
   );
 }
 
-/** /panel (index): device metrics, service/app/domain counts with problems highlighted; refreshed every 10 s. */
+/** /panel (index): problem-first Ringkasan — problems, device tiles, counts, backup, notifications, activity. */
 export function OverviewPage() {
   const query = useApiQuery<PanelOverview>(panelUrl("/overview"), PANEL_REFRESH_MS);
+  const fake = query.data?.mode === "fake";
   return (
-    <section className="flex flex-col gap-3">
-      <p className="text-xs text-muted-foreground">{t.refreshing}</p>
-      <QueryView query={query} codes={t.errorCodes} skeleton={<OverviewSkeleton />}>
+    <>
+      <PageHeader
+        title={t.title}
+        status={fake && <StatusBadge tone="warning" label={idPanel.fakeMode} />}
+        description={fake ? idPanel.fakeModeHelp : undefined}
+        meta={{
+          updatedAt: query.data?.dataAt ?? query.updatedAt,
+          onRefresh: query.reload,
+          refreshing: query.loading,
+          live: true,
+          stale: !!query.error,
+        }}
+      />
+      <QueryView query={query} empty={null} isEmpty={() => false} skeleton={<StatTilesSkeleton />}>
         {(o) => <Overview o={o} />}
       </QueryView>
-    </section>
+    </>
   );
 }

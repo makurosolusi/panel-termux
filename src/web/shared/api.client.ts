@@ -1,6 +1,7 @@
 import type { ApiErrorBody } from "@/shared/dev.types";
-import { id } from "@/web/i18n/id";
+import { idCommon } from "@/web/i18n/id.common";
 import { LOGIN_PATH } from "@/web/session/session.redirect";
+import { reloadOnce } from "./chunk.error";
 
 /** How an API call failed: no response, expired session, Cloudflare Access challenge, wrong role, other 4xx, or 5xx. */
 export type ApiErrorKind = "network" | "unauthorized" | "access" | "forbidden" | "client" | "server";
@@ -53,43 +54,30 @@ export function errorFromResponse(status: number, body: unknown): ApiError {
   return new ApiError(kind, status, code, msg);
 }
 
-/** Where the browser must go after this error (401 → login, 403 → "/" which SessionGate sends home), or null. */
-export function redirectFor(err: ApiError): string | null {
-  if (err.kind === "unauthorized") return LOGIN_PATH;
-  if (err.kind === "forbidden") return "/";
-  return null;
-}
-
-const ACCESS_RELOAD_KEY = "panel.accessReloadAt";
-/** A second Access 401 within this window after our reload means reloading does not help (loop guard). */
-export const ACCESS_RELOAD_WINDOW_MS = 30_000;
-
-/** Whether to reload for an Access 401, given when we last did (ms epoch, or null if never). */
-export const shouldReloadForAccess = (lastReloadAt: number | null, now: number): boolean =>
-  lastReloadAt === null || !(now - lastReloadAt < ACCESS_RELOAD_WINDOW_MS);
+/**
+ * Server code of a 403 on sensitive actions when the session is older than 15 minutes: the user still has the role
+ * and must sign in again, so the page shows "Masuk ulang" instead of being sent to `/login`.
+ */
+export const REAUTH_REQUIRED = "reauth_required";
 
 /**
- * Reloads the current URL so the full page load lets Access show its login. Returns false (caller shows the
- * error state) when we already reloaded recently or sessionStorage is unavailable, since then a reload could loop.
+ * Where the browser must go after this error, or null. 401 and 403 both go to `/login`, which sends a signed-in
+ * user on to `homeFor(role)` with the current role (DECISIONS B20); `/` is the public landing and would strand them.
+ * A 403 `reauth_required` stays on the page (see REAUTH_REQUIRED).
  */
-function reloadForAccess(): boolean {
-  try {
-    const raw = sessionStorage.getItem(ACCESS_RELOAD_KEY);
-    const now = Date.now();
-    if (!shouldReloadForAccess(raw === null ? null : Number(raw), now)) return false;
-    sessionStorage.setItem(ACCESS_RELOAD_KEY, String(now));
-  } catch (cause) {
-    console.warn("access reload guard: sessionStorage unavailable, not reloading", cause);
-    return false;
-  }
-  window.location.reload();
-  return true;
+export function redirectFor(err: ApiError): string | null {
+  if (err.code === REAUTH_REQUIRED) return null;
+  return err.kind === "unauthorized" || err.kind === "forbidden" ? LOGIN_PATH : null;
 }
 
-/** Turns a failed response into an ApiError and performs its navigation (Access reload, login, home). */
+/** sessionStorage key of the last Access-401 reload (loop guard shared with chunk reloads, see `reloadOnce`). */
+const ACCESS_RELOAD_KEY = "panel.accessReloadAt";
+
+/** Turns a failed response into an ApiError and performs its navigation (Access reload, or login). */
 export function failedResponse(status: number, body: unknown): ApiError {
   const err = errorFromResponse(status, body);
-  if (err.kind === "access") reloadForAccess();
+  // Full page load so Access can show its login; refused (error state shown) when we just reloaded.
+  if (err.kind === "access") reloadOnce(ACCESS_RELOAD_KEY);
   const to = redirectFor(err);
   if (to) window.location.assign(to);
   return err;
@@ -97,11 +85,18 @@ export function failedResponse(status: number, body: unknown): ApiError {
 
 /** User-facing Indonesian message: known error code first, then server message for 4xx, then per kind. */
 export function apiErrorMessage(err: unknown, codes: ErrorCodes = {}): string {
-  if (!(err instanceof ApiError)) return id.common.errors.generic;
+  if (!(err instanceof ApiError)) return idCommon.errors.generic;
   const known = err.code ? codes[err.code] : undefined;
   if (known) return known;
-  if (err.kind === "client") return err.serverMessage ?? id.common.errors.generic;
-  return id.common.errors[err.kind];
+  if (err.kind === "client") return err.serverMessage ?? idCommon.errors.generic;
+  return idCommon.errors[err.kind];
+}
+
+/** Like apiErrorMessage, but for under an `errorTitles` heading: the per-kind text is only the next step, not a repeat. */
+export function apiErrorDetail(err: unknown, codes: ErrorCodes = {}): string {
+  const msg = apiErrorMessage(err, codes);
+  const kind = err instanceof ApiError ? err.kind : null;
+  return kind && kind !== "client" && msg === idCommon.errors[kind] ? idCommon.errorSteps[kind] : msg;
 }
 
 /** Query value; empty strings, null and undefined are dropped. */
@@ -117,8 +112,8 @@ export function apiUrl(base: string, path: string, query: Record<string, QueryVa
 
 /**
  * Calls the API and returns the parsed JSON (undefined for 204). Throws ApiError; an aborted request
- * rethrows the AbortError untouched. 401/403 also navigate away (full reload so the session is re-checked);
- * an Access 401 reloads the current URL (see `failedResponse`).
+ * rethrows the AbortError untouched. 401/403 (except 403 `reauth_required`) also navigate to `/login` (full load
+ * so the session and role are re-checked); an Access 401 reloads the current URL (see `failedResponse`).
  */
 export async function apiFetch<T>(
   method: "GET" | "POST" | "PATCH" | "PUT" | "DELETE",

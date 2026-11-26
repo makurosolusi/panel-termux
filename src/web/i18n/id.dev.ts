@@ -1,84 +1,22 @@
-import type { LogLevel } from "@/shared/dev.types";
+import { idDevAudit } from "./id.dev.audit";
+import { idDevHealth } from "./id.dev.health";
+import { idDevLogs } from "./id.dev.logs";
+import { idDevSetup } from "./id.dev.setup";
+import { idDevUsers } from "./id.dev.users";
+import { idSettings } from "./id.settings";
 
-/** Indonesian strings of the /dev developer console (merged into `id.dev`). */
+/** Indonesian strings of the /dev admin area (merged into `id.dev`). The menu label is "Administrasi". */
 export const idDev = {
-  title: "Dev",
-  subtitle: "Alat pengembang dan pengaturan sistem.",
-  sections: {
-    label: "Bagian dev",
-    health: "Kesehatan",
-    users: "Pengguna",
-    audit: "Audit",
-    logs: "Log",
-    settings: "Pengaturan",
-  },
-  common: {
-    delete: "Hapus",
-    search: "Cari",
-    prev: "Sebelumnya",
-    next: "Berikutnya",
-    pageOf: (page: number, pages: number, total: number) => `Halaman ${page} dari ${pages} · ${total} data`,
-    never: "Belum pernah",
-    system: "Sistem",
-    deletedUser: "Pengguna terhapus",
-  },
   errorCodes: {
-    protected: "Akun ini dilindungi dan tidak bisa diubah.",
-    not_found: "Data tidak ditemukan (mungkin sudah dihapus).",
+    protected: "Akun ini dilindungi dan tidak bisa diubah atau dihapus dari panel.",
+    self: "Untuk sesimu sendiri, pakai halaman Profil.",
+    not_found: "Data ini sudah tidak ada, mungkin baru dihapus. Muat ulang halaman untuk melihat daftar terbaru.",
   },
-  health: {
-    refreshing: "Diperbarui otomatis tiap 15 detik",
-    version: "Versi",
-    schema: (v: string) => `Skema ${v}`,
-    uptime: "Uptime",
-    since: (at: string) => `Sejak ${at}`,
-    memory: "Memori",
-    heap: (mb: number) => `Heap ${mb} MB`,
-    db: "Ukuran database",
-    disk: "Penyimpanan data",
-    diskFree: (free: string, total: string) => `${free} bebas dari ${total}`,
-    counts: "Jumlah",
-    users: "pengguna",
-    sessions: "sesi",
-    runtime: "Runtime",
-  },
-  users: {
-    searchPlaceholder: "Cari nama atau email…",
-    name: "Nama",
-    role: "Peran",
-    lastSeen: "Terakhir aktif",
-    joined: "Bergabung",
-    actions: "Aksi",
-    locked: "Dilindungi",
-    you: "Kamu",
-    envSuperAdmin: "Super admin dari env",
-    roleChanged: "Peran diperbarui.",
-    deleted: "Pengguna dihapus.",
-    deleteTitle: "Hapus pengguna?",
-    newAccounts: "Akun baru masuk sebagai Pengguna (user). Ubah perannya ke Admin di sini.",
-    deleteBody: (who: string) => `${who} akan dihapus beserta semua sesinya. Tindakan ini tidak bisa dibatalkan.`,
-  },
-  audit: {
-    actionFilter: "Filter aksi",
-    actionPlaceholder: "mis. user.role",
-    target: "Target",
-  },
-  logs: {
-    level: "Level",
-    levels: { debug: "Debug", info: "Info", warn: "Peringatan", error: "Error" } satisfies Record<LogLevel, string>,
-    searchPlaceholder: "Cari teks log…",
-    autoRefresh: "Perbarui otomatis (5 dtk)",
-  },
-  settings: {
-    status: { saved: "Tersimpan", notSet: "Belum diisi", custom: "Diubah", default: "Bawaan" },
-    save: "Simpan",
-    reset: "Kembalikan ke bawaan",
-    clear: "Hapus nilai",
-    replacePlaceholder: "Isi untuk mengganti nilai rahasia",
-    updatedAt: (at: string) => `Diubah ${at}`,
-    savedToast: (label: string) => `${label} disimpan.`,
-    resetToast: (label: string) => `${label} dikembalikan.`,
-    verify: "Tes token",
-    verifying: "Mengetes…",
-  },
+  health: idDevHealth,
+  setup: idDevSetup,
+  users: idDevUsers,
+  audit: idDevAudit,
+  logs: idDevLogs,
+  /** Same object as `id.settings` once id.ts exposes it; kept here so /dev pages keep `id.dev.settings`. */
+  settings: idSettings,
 } as const;

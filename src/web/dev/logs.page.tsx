@@ -1,72 +1,114 @@
-import { cn } from "cn";
-import { useState } from "react";
-import { type DevLogs, LOG_LEVELS, type LogLevel } from "@/shared/dev.types";
-import { Label } from "@/web/components/ui/label";
+import { useRef, useState } from "react";
+import { useSearchParams } from "react-router";
+import { type DevLogEntry, type DevLogs, LOG_LEVELS, type LogLevel } from "@/shared/dev.types";
+import { ErrorState } from "@/web/components/error-state";
+import { InlineCode } from "@/web/components/inline-code";
+import type { BufferedLogLine } from "@/web/components/log.buffer";
+import { LogViewer } from "@/web/components/log-viewer";
+import { PageHeader } from "@/web/components/page-header";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/web/components/ui/select";
-import { Switch } from "@/web/components/ui/switch";
-import { id } from "@/web/i18n/id";
-import { formatDateTime } from "@/web/shared/format";
-import { QueryView } from "@/web/shared/query.state";
+import { idCommon } from "@/web/i18n/id.common";
+import { idDevLogs } from "@/web/i18n/id.dev.logs";
+import { apiErrorDetail } from "@/web/shared/api.client";
 import { useApiQuery } from "@/web/shared/use-api-query";
-import { devUrl } from "./dev.api";
-import { SearchBox } from "./search.box";
 
+const t = idDevLogs;
 const LOGS_REFRESH_MS = 5_000;
-const t = id.dev.logs;
+/** Server maximum per request; the ring holds 2.000, the viewer shows the newest 1.000. */
+const LOGS_LIMIT = 1_000;
+const DEFAULT_LEVEL: LogLevel = "info";
 
-const LEVEL_CLASS: Record<LogLevel, string> = {
-  debug: "text-muted-foreground",
-  info: "text-sky-600 dark:text-sky-400",
-  warn: "text-amber-600 dark:text-amber-400",
-  error: "text-destructive",
-};
+/** `?level=` as a known level (health page links `?level=error`), else the default. */
+export const levelParam = (raw: string | null): LogLevel => LOG_LEVELS.find((l) => l === raw) ?? DEFAULT_LEVEL;
 
-/** /dev/logs: in-memory server log, newest first, with level filter, text search and optional 5 s refresh. */
+const sameEntry = (a: BufferedLogLine, b: DevLogEntry) => a.at === b.at && a.level === b.level && a.text === b.msg;
+
+/**
+ * API entries (newest first, the whole ring each poll) → viewer lines (oldest first) whose `seq` continues the
+ * previous poll's numbering, so lines already shown keep their seq and "N baris baru" counts only new ones.
+ */
+export function toViewerLines(prev: readonly BufferedLogLine[], items: readonly DevLogEntry[]): BufferedLogLine[] {
+  const oldestFirst = [...items].reverse();
+  const last = prev.at(-1);
+  let anchor = -1; // index in oldestFirst of prev's last line
+  if (last)
+    for (let i = oldestFirst.length - 1; i >= 0 && anchor < 0; i--)
+      if (sameEntry(last, oldestFirst[i] as DevLogEntry)) anchor = i;
+  const base = last && anchor >= 0 ? last.seq - anchor : (last?.seq ?? -1) + 1;
+  return oldestFirst.map((e, i) => ({ at: e.at, text: e.msg, level: e.level, seq: base + i }));
+}
+
+/** /dev/logs?level=: the panel's own in-memory log, polled every 5 s while following. */
 export function LogsPage() {
-  const [level, setLevel] = useState<LogLevel>("info");
-  const [q, setQ] = useState("");
-  const [auto, setAuto] = useState(true);
-  const query = useApiQuery<DevLogs>(devUrl("/logs", { level, q }), auto ? LOGS_REFRESH_MS : undefined);
+  const [params, setParams] = useSearchParams();
+  const level = levelParam(params.get("level"));
+  const [live, setLive] = useState(true);
+  const query = useApiQuery<DevLogs>(`/api/dev/logs?level=${level}&limit=${LOGS_LIMIT}`, LOGS_REFRESH_MS, {
+    enabled: live,
+  });
+  const lines = useRef<{ data: DevLogs | undefined; lines: BufferedLogLine[] }>({ data: undefined, lines: [] });
+  if (query.data !== lines.current.data)
+    lines.current = { data: query.data, lines: toViewerLines(lines.current.lines, query.data?.items ?? []) };
+
+  const setLevel = (next: string) =>
+    setParams((prev) => {
+      const out = new URLSearchParams(prev);
+      if (next === DEFAULT_LEVEL) out.delete("level");
+      else out.set("level", next);
+      return out;
+    });
 
   return (
-    <section className="flex flex-col gap-4">
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
-        <Select value={level} onValueChange={(v) => setLevel(v as LogLevel)}>
-          <SelectTrigger className="w-full sm:w-40" aria-label={t.level}>
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            {LOG_LEVELS.map((l) => (
-              <SelectItem key={l} value={l}>
-                {t.levels[l]}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-        <SearchBox initial="" placeholder={t.searchPlaceholder} label={t.searchPlaceholder} onSearch={setQ} />
-        <div className="flex items-center gap-2">
-          <Switch id="logs-auto" checked={auto} onCheckedChange={setAuto} />
-          <Label htmlFor="logs-auto" className="whitespace-nowrap">
-            {t.autoRefresh}
-          </Label>
-        </div>
-      </div>
-      <QueryView query={query} codes={id.dev.errorCodes} isEmpty={(d) => d.items.length === 0}>
-        {(d) => (
-          <ol className="max-h-[70svh] overflow-auto rounded-lg border bg-muted/40 p-2 font-mono text-xs">
-            {d.items.map((e, i) => (
-              // biome-ignore lint/suspicious/noArrayIndexKey: log lines have no id; the list is replaced wholesale
-              <li key={i} className="flex gap-2 py-0.5 whitespace-pre-wrap break-all">
-                <time className="shrink-0 text-muted-foreground" dateTime={e.at}>
-                  {formatDateTime(e.at, true)}
-                </time>
-                <span className={cn("w-12 shrink-0 uppercase", LEVEL_CLASS[e.level])}>{e.level}</span>
-                <span className="min-w-0">{e.msg}</span>
-              </li>
-            ))}
-          </ol>
-        )}
-      </QueryView>
-    </section>
+    <div className="flex flex-col">
+      <PageHeader
+        title={t.title}
+        description={t.description}
+        meta={{
+          updatedAt: query.updatedAt,
+          onRefresh: query.reload,
+          refreshing: query.loading,
+          live,
+          stale: !!query.error,
+        }}
+        actions={
+          <Select value={level} onValueChange={setLevel}>
+            <SelectTrigger size="sm" className="w-40" aria-label={t.level}>
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {LOG_LEVELS.map((l) => (
+                <SelectItem key={l} value={l}>
+                  {t.levels[l]}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        }
+      />
+      <LogViewer
+        label={t.label}
+        lines={lines.current.lines}
+        loading={query.data === undefined && query.loading}
+        error={
+          query.error && (
+            <ErrorState
+              compact
+              title={idCommon.errorTitles[query.error.kind]}
+              description={apiErrorDetail(query.error, t.errorCodes)}
+              onRetry={query.reload}
+              retrying={query.loading}
+            />
+          )
+        }
+        empty={t.empty}
+        live={{ on: live, onChange: setLive }}
+        showLevel
+        notice={
+          <p className="flex flex-wrap items-center gap-1 text-xs text-muted-foreground">
+            {t.memoryNote} <InlineCode copy>{t.logPath}</InlineCode>
+          </p>
+        }
+      />
+    </div>
   );
 }

@@ -31,10 +31,13 @@ export function embeddedMigrations(): MigrationMeta[] {
   });
 }
 
+/** Tag of the newest embedded migration (what app_meta.schema_version reads once migrations ran). */
+export const latestSchemaVersion = (): string => bundle.journal.entries.at(-1)?.tag ?? "none";
+
 /** Applies pending embedded migrations, then records the schema version (last migration tag) in app_meta. */
 export function runMigrations(db: Db): string {
   const migrations = embeddedMigrations();
-  const version = bundle.journal.entries.at(-1)?.tag ?? "none";
+  const version = latestSchemaVersion();
   try {
     const internals = db as unknown as MigratorInternals;
     internals.dialect.migrate(migrations, internals.session, {});

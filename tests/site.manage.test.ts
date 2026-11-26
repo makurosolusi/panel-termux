@@ -1,18 +1,29 @@
-import { beforeAll, describe, expect, test } from "bun:test";
-import { existsSync, mkdirSync } from "node:fs";
+import { afterAll, beforeAll, describe, expect, test } from "bun:test";
+import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { eq } from "drizzle-orm";
-import { auditLog } from "@/server/db/schema";
-import { FAKE_TUNNEL_ID } from "@/server/system/system.fake";
+import { auditLog, job } from "@/server/db/schema";
+import { HEALTH_TIMING } from "@/server/deploy/health.check";
 import type { Page } from "@/shared/dev.types";
-import type { App } from "@/shared/panel.types";
-import type { Integration, Job, Site } from "@/shared/site.types";
+import type { Job, Site, SiteDetail, SiteEnvSaved } from "@/shared/site.types";
+import { fakeElf, GLIBC_LINKER } from "./deploy.fixture";
 import { SECRET_VALUE, siteHarness } from "./site.harness";
 
 const h = siteHarness();
-const { home, fakeDns, cfg, appsJson, read, call, json, startJob, stepStatus, dbs } = h;
+const { home, system, fakeDns, cfg, appsJson, read, call, json, startJob, stepStatus, dbs } = h;
+const codes = (j: Job) => j.steps.map((s) => `${s.key}:${s.code}`);
+const solusiDir = join(home, "sites", "makuro-solusi");
+const savedTiming = { ...HEALTH_TIMING };
+const realNet = { ...system.net };
+const realProcs = system.pm2.procs;
+/** Port 3005 (solusi) answers `status`; everything else as the fake does. */
+const serve3005 = (status: number | null) => {
+  system.net.isListening = async (p) => p === 3005 || realNet.isListening(p);
+  system.net.httpStatus = async (p, ...rest) => (p === 3005 ? status : realNet.httpStatus(p, ...rest));
+};
 
 beforeAll(async () => {
+  Object.assign(HEALTH_TIMING, { pollMs: 5, pm2EveryMs: 40, settleMs: 10, probeTimeoutMs: 50 });
   const j = await startJob("POST", "/sites", {
     name: "shop",
     hostname: "shop.example.test",
@@ -20,141 +31,267 @@ beforeAll(async () => {
     env: { API_SECRET: SECRET_VALUE },
   });
   expect(j.status).toBe("succeeded");
+  writeFileSync(join(solusiDir, "app"), fakeElf({ interp: GLIBC_LINKER }));
+  writeFileSync(join(solusiDir, ".env"), "PORT=3005\nOLD_SECRET=keepme123\n");
+  await json(
+    await call("POST", "/sites/adopt", { hostname: "solusi.contoh.test", app: "makuro-solusi", name: "solusi" }),
+    201,
+  );
 });
+afterAll(() => Object.assign(HEALTH_TIMING, savedTiming));
 
-describe("adopt, env, hostnames", () => {
-  test("adopt records an existing site without system changes", async () => {
-    const [cfgBefore, appsBefore] = [read(cfg), read(appsJson)];
-    const disc = await json<{ hostname: string; port: number | null; app: string | null }[]>(
-      await call("GET", "/sites/discovered"),
-    );
-    expect(disc).toContainEqual({ hostname: "solusi.example.test", port: 3005, app: "makuro-solusi" });
-    const s = await json<Site>(
-      await call("POST", "/sites/adopt", {
-        name: "solusi",
-        hostname: "solusi.example.test",
-        port: 3005,
-        app: "makuro-solusi",
-      }),
-      201,
-    );
-    expect(s).toMatchObject({
-      name: "solusi",
-      managed: false,
-      runtime: "grun",
-      appStatus: "online",
-      hostnames: ["solusi.example.test"],
-    });
-    expect(
-      (await json<{ hostname: string }[]>(await call("GET", "/sites/discovered"))).map((d) => d.hostname),
-    ).not.toContain("solusi.example.test");
-    expect(
-      await json(await call("POST", "/sites/adopt", { name: "solusi", hostname: "x.example.test", port: 3005 }), 409),
-    ).toMatchObject({ error: "exists" });
-    expect([read(cfg), read(appsJson)]).toEqual([cfgBefore, appsBefore]);
-    expect(h.db.select().from(auditLog).where(eq(auditLog.action, "site.adopt")).all()).toHaveLength(1);
-  });
-
-  test("env update returns keys only and restarts a deployed app", async () => {
+describe("env", () => {
+  test("Simpan writes .env only: keys back, values never, audit keys only", async () => {
     const res = await call("PUT", "/sites/shop/env", { set: { NEW_TOKEN: SECRET_VALUE }, unset: ["API_SECRET"] });
     const text = await res.clone().text();
-    expect(await json(res)).toEqual({ envKeys: ["PORT", "DATABASE_URL", "NEW_TOKEN"] });
+    expect(await json<SiteEnvSaved>(res)).toEqual({
+      envKeys: ["PORT", "DATABASE_URL", "NEW_TOKEN"],
+      restartPending: false,
+    });
     expect(text).not.toContain("s3cr3t");
     expect(read(join(home, "sites", "shop", ".env"))).toContain("NEW_TOKEN='s3cr3t \\$value with spaces'");
-    const meta = h.db.select().from(auditLog).where(eq(auditLog.action, "site.env_update")).get()?.meta;
-    expect(meta).toEqual({ set: ["NEW_TOKEN"], unset: ["API_SECRET"] });
-    expect(await json(await call("PUT", "/sites/shop/env", { set: { BAD: "it's" } }), 400)).toMatchObject({
-      error: "invalid_env",
-    });
-
-    // Adopted site with a deployed pm2 app: restart happens.
-    mkdirSync(join(home, "sites", "solusi"));
-    const restarts = async () =>
-      (await json<App[]>(await call("GET", "/apps"))).find((a) => a.name === "makuro-solusi")?.restarts;
-    const r0 = await restarts();
-    await json(await call("PUT", "/sites/solusi/env", { set: { A: "1" }, unset: [] }));
-    expect(await restarts()).toBe((r0 as number) + 1);
+    const audit = h.db.select().from(auditLog).where(eq(auditLog.action, "site.env_update")).all();
+    expect(audit.at(-1)?.meta).toEqual({ set: ["NEW_TOKEN"], unset: ["API_SECRET"], restart: false });
+    expect(JSON.stringify(audit)).not.toContain("s3cr3t");
   });
 
-  test("hostname add/remove; last hostname refused; hand-written refused", async () => {
-    const add = await startJob("POST", "/sites/shop/hostnames", { hostname: "www.shop.example.test" });
-    expect(add).toMatchObject({ kind: "hostname.add", target: "shop", status: "succeeded" });
-    expect(read(cfg)).toContain("www.shop.example.test\n    service: http://localhost:3002");
-    const rm = await startJob("DELETE", "/sites/shop/hostnames/www.shop.example.test");
-    expect(rm).toMatchObject({ kind: "hostname.remove", status: "succeeded" });
-    expect(read(cfg)).not.toContain("www.shop.example.test");
-    expect(fakeDns.records.has("www.shop.example.test")).toBe(false);
-    expect(await json(await call("DELETE", "/sites/shop/hostnames/shop.example.test"), 400)).toMatchObject({
-      error: "last_hostname",
+  test("locked keys and unrepresentable values refused", async () => {
+    expect(await json(await call("PUT", "/sites/shop/env", { set: { PORT: "1" } }), 400)).toMatchObject({
+      error: "env_locked",
+      keys: ["PORT"],
     });
-    await startJob("POST", "/sites/solusi/hostnames", { hostname: "alt.solusi.example.test" });
-    expect(await json(await call("DELETE", "/sites/solusi/hostnames/solusi.example.test"), 409)).toMatchObject({
+    expect(await json(await call("PUT", "/sites/shop/env", { set: {}, unset: ["DATABASE_URL"] }), 400)).toMatchObject({
+      error: "env_locked",
+      keys: ["DATABASE_URL"],
+    });
+    expect(await json(await call("PUT", "/sites/shop/env", { set: { A: "x\ny" } }), 400)).toMatchObject({
+      error: "invalid_env",
+      key: "A",
+      reason: "multiline",
+    });
+    expect(await json(await call("PUT", "/sites/shop/env", { set: {}, unset: ["1x"] }), 400)).toMatchObject({
+      reason: "key",
+    });
+  });
+
+  test("adopted site: PORT editable, restartPending once .env is newer than the app start", async () => {
+    const r = await json<SiteEnvSaved>(await call("PUT", "/sites/solusi/env", { set: { FEATURE: "on" } }));
+    expect(r).toEqual({ envKeys: ["PORT", "OLD_SECRET", "FEATURE"], restartPending: true });
+    const d = await json<SiteDetail>(await call("GET", "/sites/solusi"));
+    expect(d).toMatchObject({ lockedEnvKeys: [], restartPending: true, managed: false, scriptRuntime: "grun" });
+  });
+
+  test("Simpan dan mulai ulang: env_write → app_restart → health, prev copy removed", async () => {
+    serve3005(200);
+    try {
+      const j = await startJob("PUT", "/sites/solusi/env", { set: { FEATURE: "off" }, unset: [], restart: true });
+      expect(j).toMatchObject({ kind: "site.env", status: "succeeded" });
+      // Journal holds key names only.
+      expect(h.db.select().from(job).where(eq(job.id, j.id)).get()?.input).toEqual({
+        site: "solusi",
+        set: ["FEATURE"],
+        unset: [],
+      });
+      expect(codes(j)).toEqual(["env_write:env_updated", "app_restart:app_restarted", "health:healthy"]);
+    } finally {
+      Object.assign(system.net, realNet);
+    }
+    expect(read(join(solusiDir, ".env"))).toContain("FEATURE=off");
+    expect(existsSync(join(solusiDir, ".env.panel-prev"))).toBe(false);
+    expect((await json<SiteDetail>(await call("GET", "/sites/solusi"))).restartPending).toBe(false);
+  });
+
+  test("health fails → old .env bytes back, app restarted on them, rolled_back", async () => {
+    const before = readFileSync(join(solusiDir, ".env"));
+    serve3005(200);
+    system.pm2.procs = async () =>
+      (await realProcs()).map((p) => (p.name === "makuro-solusi" ? { ...p, status: "errored" as const } : p));
+    try {
+      const j = await startJob("PUT", "/sites/solusi/env", { set: { FEATURE: "broken" }, unset: [], restart: true });
+      expect(j).toMatchObject({ status: "rolled_back", error: { code: "app_errored" }, appLogApp: "makuro-solusi" });
+      expect(stepStatus(j)).toEqual({ env_write: "rolled_back", app_restart: "rolled_back", health: "failed" });
+    } finally {
+      Object.assign(system.net, realNet);
+      system.pm2.procs = realProcs;
+    }
+    expect(readFileSync(join(solusiDir, ".env")).equals(before)).toBe(true);
+    expect(existsSync(join(solusiDir, ".env.panel-prev"))).toBe(false);
+  });
+});
+
+describe("restart, settings, health", () => {
+  test("restart job + audit; pm2 down → 409 pm2_not_running and statuses unknown", async () => {
+    serve3005(200);
+    try {
+      const j = await startJob("POST", "/sites/solusi/restart");
+      expect(j).toMatchObject({ kind: "site.restart", status: "succeeded" });
+      expect(codes(j)).toEqual(["app_restart:app_restarted", "health:healthy"]);
+    } finally {
+      Object.assign(system.net, realNet);
+    }
+    expect(h.db.select().from(auditLog).where(eq(auditLog.action, "site.restart")).all()).toHaveLength(1);
+    await system.runit.control("pm2", "stop");
+    try {
+      expect(await json(await call("POST", "/sites/solusi/restart"), 409)).toMatchObject({ error: "pm2_not_running" });
+      const sites = await json<Site[]>(await call("GET", "/sites"));
+      expect(sites.map((s) => [s.name, s.appStatus, s.restarts])).toEqual([
+        ["shop", "unknown", null],
+        ["solusi", "unknown", null],
+      ]);
+      expect((await json<SiteDetail>(await call("GET", "/sites/solusi"))).deployBlocker).toBe("pm2_not_running");
+    } finally {
+      await system.runit.control("pm2", "start");
+    }
+  });
+
+  test("PATCH settings validates bounds; GET health probes path with Host = first domain", async () => {
+    const d = await json<SiteDetail>(
+      await call("PATCH", "/sites/solusi/settings", {
+        health: { path: "/api/health", expect: "2xx3xx", timeoutSec: 30 },
+      }),
+    );
+    expect(d.health).toEqual({ path: "/api/health", expect: "2xx3xx", timeoutSec: 30 });
+    for (const [health, field] of [
+      [{ path: "nope" }, "path"],
+      [{ expect: "any" }, "expect"],
+      [{ timeoutSec: 5 }, "timeoutSec"],
+      [{ timeoutSec: 301 }, "timeoutSec"],
+    ] as const)
+      expect(await json(await call("PATCH", "/sites/solusi/settings", { health }), 400)).toMatchObject({
+        error: "invalid_settings",
+        field,
+      });
+    const seen: unknown[] = [];
+    system.net.isListening = async () => true;
+    system.net.httpStatus = async (...args) => {
+      seen.push(args);
+      return 404;
+    };
+    try {
+      expect(await json(await call("GET", "/sites/solusi/health"))).toMatchObject({
+        ok: false, // 404 is not 2xx/3xx
+        status: 404,
+        path: "/api/health",
+      });
+    } finally {
+      Object.assign(system.net, realNet);
+    }
+    expect(seen).toEqual([[3005, "/api/health", 5000, "solusi.contoh.test"]]);
+  });
+});
+
+describe("hostnames", () => {
+  test("three domains in one job → one cloudflared restart; legacy {hostname} still accepted", async () => {
+    const names = ["a.shop.example.test", "b.shop.example.test", "c.shop.example.test"];
+    const j = await startJob("POST", "/sites/shop/hostnames", { hostnames: names });
+    expect(j.status).toBe("succeeded");
+    expect(codes(j)).toEqual([
+      "validate:validated",
+      "ingress:ingress_added",
+      "dns:dns_created",
+      "tunnel_restart:tunnel_restarted",
+      "domain_probe:domain_reachable",
+    ]);
+    for (const n of names) expect(read(cfg)).toContain(`hostname: ${n}`);
+    const legacy = await startJob("POST", "/sites/solusi/hostnames", { hostname: "two.example.test" });
+    expect(legacy.status).toBe("succeeded");
+    expect(await json(await call("POST", "/sites/shop/hostnames", { hostnames: [] }), 400)).toMatchObject({
+      error: "invalid_hostname",
+    });
+  });
+
+  test("remove: ingress → restart → dns; last refused; hand-written refused", async () => {
+    const j = await startJob("DELETE", "/sites/shop/hostnames/c.shop.example.test");
+    expect(codes(j)).toEqual(["ingress:ingress_removed", "tunnel_restart:tunnel_restarted", "dns:dns_deleted"]);
+    expect(read(cfg)).not.toContain("c.shop.example.test");
+    expect(fakeDns.records.has("c.shop.example.test")).toBe(false);
+    expect(await json(await call("DELETE", "/sites/solusi/hostnames/solusi.contoh.test"), 409)).toMatchObject({
       error: "hand_written",
+    });
+    expect((await startJob("DELETE", "/sites/solusi/hostnames/two.example.test")).status).toBe("succeeded");
+    expect(await json(await call("DELETE", "/sites/solusi/hostnames/solusi.contoh.test"), 400)).toMatchObject({
+      error: "last_hostname",
     });
   });
 });
 
 describe("delete", () => {
-  test("managed site with keepData: folder kept, db dropped, config entries gone", async () => {
-    const j = await startJob("DELETE", "/sites/shop?keepData=true&keepDatabase=false");
-    expect(j).toMatchObject({ kind: "site.delete", status: "succeeded" });
-    expect(stepStatus(j)).toMatchObject({
-      ingress: "done",
-      restart: "done",
-      dns: "done",
-      apps: "done",
-      pm2: "skipped",
-      database: "done",
-      folder: "skipped",
-    });
-    expect(existsSync(join(home, "sites", "shop", ".env"))).toBe(true);
+  test("dropping a site database while a backup runs → 409 busy_backup; keeping it is allowed through", async () => {
+    const backup = h.api.decorator.backup;
+    const realBusy = backup.busy;
+    backup.busy = () => true;
+    try {
+      expect(await json(await call("DELETE", "/sites/shop?confirm=shop"), 409)).toMatchObject({ error: "busy_backup" });
+      expect(h.db.select().from(job).where(eq(job.kind, "site.delete")).all()).toEqual([]);
+    } finally {
+      backup.busy = realBusy;
+    }
+  });
+
+  test("managed: typed confirm; apps.json entry first; DNS failure non-fatal → dns_left", async () => {
+    expect(await json(await call("DELETE", "/sites/shop"), 400)).toMatchObject({ error: "confirm_mismatch" });
+    writeFileSync(appsJson, JSON.stringify([{ name: "keep" }, { name: "shop", script: "./run" }]));
+    const realDelete = fakeDns.deleteManaged;
+    fakeDns.deleteManaged = async () => {
+      throw new Error("cloudflare delete record: HTTP 502");
+    };
+    const sites = h.api.decorator.sites;
+    const realIntegration = sites.getIntegration;
+    sites.getIntegration = async () => ({ ...(await realIntegration()), checks: [] }); // let the upload start
+    const upload = await json<{ uploadId: string }>(
+      await call("POST", "/sites/shop/uploads", { sizeBytes: 10, fileName: "app" }),
+      201,
+    );
+    sites.getIntegration = realIntegration;
+    let j: Job;
+    try {
+      j = await startJob("DELETE", "/sites/shop?keepData=1&confirm=shop");
+    } finally {
+      fakeDns.deleteManaged = realDelete;
+    }
+    expect(j.status).toBe("succeeded");
+    expect(j.steps.map((s) => s.key)).toEqual([
+      "validate",
+      "apps_remove",
+      "ingress",
+      "tunnel_restart",
+      "dns",
+      "app_remove",
+      "database_drop",
+      "folder_remove",
+    ]);
+    expect(j.steps.find((s) => s.key === "dns")).toMatchObject({ status: "done", code: "dns_left" });
+    expect(codes(j).filter((c) => c.startsWith("tunnel_restart"))).toEqual(["tunnel_restart:tunnel_restarted"]);
+    expect(JSON.parse(read(appsJson) as string)).toEqual([{ name: "keep" }]);
+    expect(existsSync(join(home, "sites", "shop"))).toBe(true); // keepData
     expect(await dbs()).not.toContain("shop");
     expect(read(cfg)).not.toContain("shop.example.test");
-    expect((JSON.parse(read(appsJson) as string) as { name: string }[]).map((a) => a.name)).not.toContain("shop");
-    expect(fakeDns.records.has("shop.example.test")).toBe(false);
-    expect(await json(await call("GET", "/sites/shop"), 404)).toMatchObject({ error: "not_found" });
-  });
-
-  test("keepDatabase keeps the db and removes the folder", async () => {
-    const created = await startJob("POST", "/sites", {
-      name: "keepdb",
-      hostname: "keepdb.example.test",
-      database: true,
+    // onSiteDeleted: the site's pending upload went with it.
+    expect(await json(await call("GET", `/uploads/${upload.uploadId}`), 404)).toMatchObject({
+      error: "upload_expired",
     });
-    expect(created.status).toBe("succeeded");
-    expect((await startJob("DELETE", "/sites/keepdb?keepDatabase=true")).status).toBe("succeeded");
-    expect(await dbs()).toContain("keepdb");
-    expect(existsSync(join(home, "sites", "keepdb"))).toBe(false);
   });
 
-  test("adopted site: only panel-added ingress removed, hand-written rule and pm2 untouched", async () => {
+  test("adopted: no typed confirm; hand-written rule, pm2 app and folder untouched", async () => {
     const j = await startJob("DELETE", "/sites/solusi");
     expect(j.status).toBe("succeeded");
-    expect(stepStatus(j)).toMatchObject({ apps: "skipped", pm2: "skipped", database: "skipped", folder: "skipped" });
-    const text = read(cfg) as string;
-    expect(text).toContain("solusi.example.test\n    service: http://localhost:3005");
-    expect(text).not.toContain("alt.solusi.example.test");
-    expect((await json<App[]>(await call("GET", "/apps"))).map((a) => a.name)).toContain("makuro-solusi");
+    expect(stepStatus(j)).toMatchObject({ apps_remove: "skipped", app_remove: "skipped", folder_remove: "skipped" });
+    expect(read(cfg)).toContain("solusi.contoh.test");
+    expect(existsSync(join(solusiDir, "app"))).toBe(true);
+    expect((await system.pm2.list()).some((a) => a.name === "makuro-solusi")).toBe(true);
   });
 });
 
-describe("jobs + integration", () => {
-  test("jobs paged newest first; unknown → 404", async () => {
-    const p = await json<Page<Job>>(await call("GET", "/jobs?pageSize=2"));
-    expect(p).toMatchObject({ page: 1, pageSize: 2 });
-    expect(p.items).toHaveLength(2);
-    expect(p.total).toBeGreaterThan(5);
-    expect(p.items[0]?.kind).toBe("site.delete");
+describe("jobs", () => {
+  test("filters by target/kind/status; bad filter → 400; unknown → 404", async () => {
+    const page = await json<Page<Job>>(await call("GET", "/jobs?target=shop&kind=site.create"));
+    expect(page.items.map((j) => [j.kind, j.target])).toEqual([["site.create", "shop"]]);
+    const all = await json<Page<Job>>(await call("GET", "/jobs?pageSize=2"));
+    expect(all.items).toHaveLength(2);
+    expect(all.total).toBeGreaterThan(5);
+    const rolled = await json<Page<Job>>(await call("GET", "/jobs?status=rolled_back"));
+    expect(rolled.items.map((j) => j.kind)).toEqual(["site.env"]);
+    expect(await json(await call("GET", "/jobs?kind=nope"), 400)).toMatchObject({ error: "invalid_filter" });
     expect(await json(await call("GET", "/jobs/nope"), 404)).toMatchObject({ error: "not_found" });
-  });
-
-  test("integration status", async () => {
-    expect(await json<Integration>(await call("GET", "/integration"))).toEqual({
-      ecosystemIncludesAppsJson: true,
-      appsJsonExists: true,
-      tunnelId: FAKE_TUNNEL_ID,
-      cloudflareTokenSet: false,
-      issues: ["Cloudflare API token not set (/dev settings): DNS records will be skipped"],
-    });
   });
 });

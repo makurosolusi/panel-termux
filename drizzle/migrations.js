@@ -5,6 +5,9 @@ import m0002 from './0002_dev.sql';
 import m0003 from './0003_sites.sql';
 import m0004 from './0004_deploy.sql';
 import m0005 from './0005_drop_invites.sql';
+import m0006 from './0006_data_safety.sql';
+import m0007 from './0007_sites_lifecycle.sql';
+import m0008 from './0008_monitor.sql';
 
   export default {
     journal,
@@ -14,7 +17,10 @@ m0001,
 m0002,
 m0003,
 m0004,
-m0005
+m0005,
+m0006,
+m0007,
+m0008
     }
   }
   

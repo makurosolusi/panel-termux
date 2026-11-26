@@ -1,17 +1,17 @@
 import { type DevLogEntry, LOG_LEVELS, type LogLevel } from "../shared/dev.types";
 
-/** Lines kept in memory for GET /api/dev/logs; older lines only survive in runit's stdout log. */
+/** Lines kept in memory for GET /api/dev/logs; older lines only survive in runit's stdout log. Production keeps no debug (K16). */
 export const LOG_RING_SIZE = 2000;
 
 const ring: DevLogEntry[] = [];
 const rank = (l: LogLevel) => LOG_LEVELS.indexOf(l);
-const writeStdout = process.env.NODE_ENV !== "production";
+const keepDebug = process.env.NODE_ENV !== "production";
 
 function write(level: LogLevel, msg: string): void {
+  if (level === "debug" && !keepDebug) return;
   const entry: DevLogEntry = { at: new Date().toISOString(), level, msg };
   ring.push(entry);
   if (ring.length > LOG_RING_SIZE) ring.shift();
-  if (level === "debug" && !writeStdout) return;
   const line = `${entry.at} ${level.toUpperCase()} ${msg}`;
   if (level === "error" || level === "warn") console.error(line);
   else console.log(line);

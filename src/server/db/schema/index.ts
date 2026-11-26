@@ -4,5 +4,6 @@ export * from "./auth.schema";
 export * from "./backup.schema";
 export * from "./deploy.schema";
 export * from "./dns-record.schema";
+export * from "./monitor.schema";
 export * from "./setting.schema";
 export * from "./site.schema";

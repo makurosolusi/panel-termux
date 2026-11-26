@@ -1,6 +1,5 @@
 import { useState } from "react";
-import { id } from "@/web/i18n/id";
-import { signOut } from "./auth.client";
+import { idApp } from "@/web/i18n/id.app";
 
 /** Sign-out handler with pending flag and an Indonesian error message on failure. */
 export function useSignOut() {
@@ -9,12 +8,15 @@ export function useSignOut() {
   const run = async () => {
     setPending(true);
     setError(null);
-    const ok = await signOut().catch((cause: unknown) => {
-      console.error("signOut: request failed", cause);
-      return false;
-    });
+    // Lazy: keeps better-auth out of the shell's initial bundle; only the login page and sign-out need it.
+    const ok = await import("./auth.client")
+      .then((m) => m.signOut())
+      .catch((cause: unknown) => {
+        console.error("signOut: request failed", cause);
+        return false;
+      });
     if (!ok) {
-      setError(id.menu.signOutFailed);
+      setError(idApp.menu.signOutFailed);
       setPending(false);
     }
   };

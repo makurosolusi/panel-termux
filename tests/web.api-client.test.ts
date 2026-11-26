@@ -1,13 +1,15 @@
-import { describe, expect, test } from "bun:test";
-import { id } from "@/web/i18n/id";
+import { afterEach, describe, expect, mock, test } from "bun:test";
+import { idCommon } from "@/web/i18n/id.common";
 import {
-  ACCESS_RELOAD_WINDOW_MS,
   AJAX_HEADERS,
+  ApiError,
+  type ApiErrorKind,
+  apiErrorDetail,
   apiErrorMessage,
+  apiFetch,
   errorFromResponse,
   isAccessChallenge,
   redirectFor,
-  shouldReloadForAccess,
 } from "@/web/shared/api.client";
 
 describe("Cloudflare Access 401 vs panel 401", () => {
@@ -30,11 +32,25 @@ describe("Cloudflare Access 401 vs panel 401", () => {
     const access = errorFromResponse(401, null);
     expect(access.kind).toBe("access");
     expect(redirectFor(access)).toBeNull();
-    expect(apiErrorMessage(access)).toBe(id.common.errors.access);
+    expect(apiErrorMessage(access)).toBe(idCommon.errors.access);
 
-    expect(errorFromResponse(403, null).kind).toBe("forbidden");
+    const forbidden = errorFromResponse(403, { error: "forbidden" });
+    expect(forbidden.kind).toBe("forbidden");
+    expect(redirectFor(forbidden)).toBe("/login"); // B20: not the public landing "/"
     expect(errorFromResponse(502, null).kind).toBe("server");
     expect(errorFromResponse(404, null).kind).toBe("client");
+    expect(redirectFor(errorFromResponse(500, null))).toBeNull();
+    expect(redirectFor(errorFromResponse(409, { error: "conflict" }))).toBeNull();
+  });
+
+  test("detail under an error title is the next step only, never a repeat of the title", () => {
+    const network = new ApiError("network", null, null, null);
+    expect(apiErrorDetail(network)).toBe(idCommon.errorSteps.network);
+    expect(apiErrorDetail(network)).not.toContain(idCommon.errorTitles.network);
+    expect(apiErrorMessage(network)).toBe(idCommon.errors.network); // toasts keep the full sentence
+    expect(apiErrorDetail(errorFromResponse(503, null))).toBe(idCommon.errorSteps.server);
+    expect(apiErrorDetail(errorFromResponse(409, { error: "busy" }), { busy: "Sedang sibuk." })).toBe("Sedang sibuk.");
+    expect(apiErrorDetail(new Error("x"))).toBe(idCommon.errors.generic);
   });
 
   test("AJAX header asks Access for a 401 instead of a redirect", () => {
@@ -42,16 +58,50 @@ describe("Cloudflare Access 401 vs panel 401", () => {
   });
 });
 
-describe("shouldReloadForAccess (loop guard)", () => {
-  const now = 1_000_000; // test-only
-  test.each([
-    ["never reloaded", null, true],
-    ["just reloaded", now - 1, false],
-    ["reloaded inside window", now - ACCESS_RELOAD_WINDOW_MS + 1, false],
-    ["reloaded exactly window ago", now - ACCESS_RELOAD_WINDOW_MS, true],
-    ["reloaded long ago", now - 24 * 3600 * 1000, true],
-    ["garbage marker", Number.NaN, true],
-  ] as const)("%s → %p", (_label, last, expected) => {
-    expect(shouldReloadForAccess(last, now)).toBe(expected);
+describe("error copy", () => {
+  test("every error kind has a title", () => {
+    const kinds: ApiErrorKind[] = ["network", "unauthorized", "access", "forbidden", "client", "server"];
+    expect(Object.keys(idCommon.errorTitles).sort()).toEqual([...kinds].sort());
+    for (const kind of kinds) expect(idCommon.errorTitles[kind]).toBeTruthy();
+  });
+
+  test("known code first, then 4xx server message, then per kind", () => {
+    const conflict = errorFromResponse(409, { error: "name_taken", message: "Name taken" });
+    expect(apiErrorMessage(conflict, { name_taken: "Nama sudah dipakai." })).toBe("Nama sudah dipakai.");
+    expect(apiErrorMessage(conflict)).toBe("Name taken");
+    expect(apiErrorMessage(errorFromResponse(503, null))).toBe(idCommon.errors.server);
+    expect(apiErrorMessage(new Error("x"))).toBe(idCommon.errors.generic);
+  });
+});
+
+describe("403 reauth_required stays on the page", () => {
+  const realFetch = globalThis.fetch;
+  const g = globalThis as { window?: unknown };
+  afterEach(() => {
+    globalThis.fetch = realFetch;
+    delete g.window;
+  });
+
+  /** apiFetch against a stubbed fetch answering `status` + JSON `body`; returns the error and the navigations. */
+  async function call(status: number, body: unknown) {
+    const assign = mock((_to: string) => {});
+    g.window = { location: { assign } };
+    globalThis.fetch = (async () => Response.json(body, { status })) as unknown as typeof fetch;
+    const err = await apiFetch("PATCH", "/api/dev/settings", { include_secrets: true }).catch((e: unknown) => e);
+    return { err, to: assign.mock.calls.map((c) => c[0]) };
+  }
+
+  test("reauth_required: ApiError with the code, no redirect", async () => {
+    const { err, to } = await call(403, { error: "reauth_required", message: "sign in again" });
+    expect(err).toBeInstanceOf(ApiError);
+    expect((err as ApiError).kind).toBe("forbidden");
+    expect((err as ApiError).code).toBe("reauth_required");
+    expect(to).toEqual([]);
+    expect(redirectFor(errorFromResponse(403, { error: "reauth_required" }))).toBeNull();
+  });
+
+  test("other 403 and panel 401 still navigate to /login", async () => {
+    expect((await call(403, { error: "forbidden" })).to).toEqual(["/login"]);
+    expect((await call(401, { error: "unauthorized" })).to).toEqual(["/login"]);
   });
 });

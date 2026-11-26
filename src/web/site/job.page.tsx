@@ -1,89 +1,153 @@
-import { AlertCircleIcon, ArrowRightIcon } from "lucide-react";
+import { ArrowRightIcon, WifiOffIcon } from "lucide-react";
 import { useEffect, useState } from "react";
 import { Link, useParams } from "react-router";
-import type { Job } from "@/shared/site.types";
+import type { Job, JobNextAction } from "@/shared/site.types";
+import { ErrorState } from "@/web/components/error-state";
+import { PageHeader } from "@/web/components/page-header";
+import { QueryView } from "@/web/components/query-view";
+import { RelativeTime } from "@/web/components/relative-time";
+import { StatusBadge } from "@/web/components/status-badge";
 import { Button } from "@/web/components/ui/button";
-import { Card, CardContent } from "@/web/components/ui/card";
 import { Progress } from "@/web/components/ui/progress";
-import { id } from "@/web/i18n/id";
+import { INFO_PROGRESS } from "@/web/deploy/upload.progress";
+import { idJob } from "@/web/i18n/id.job";
 import { panelUrl } from "@/web/panel/panel.api";
-import { StatusBadge } from "@/web/panel/status.badge";
-import { formatDateTime } from "@/web/shared/format";
-import { QueryView } from "@/web/shared/query.state";
 import { useApiQuery } from "@/web/shared/use-api-query";
-import { isJobFinished, JOB_POLL_MS, jobProgress, jobResultLink, jobTone } from "./job.state";
+import { JobFinal, RecoverButton, RollbackFromJob } from "./job.failure";
+import {
+  isJobFinished,
+  JOB_POLL_MS,
+  jobProgress,
+  jobResultLink,
+  liveAnnouncement,
+  nextActions,
+  pollErrorView,
+} from "./job.state";
+import { JOB_STATUS_KEY } from "./job.status-key";
 import { JobSteps } from "./job.steps";
 import { SITE_ERROR_CODES } from "./site.api";
 
-const t = id.site.job;
+const t = idJob;
+const sitePath = (job: Job, hash = "") => `/panel/sites/${encodeURIComponent(job.target)}${hash}`;
+
+/** Button of one follow-up action (PLAN/03 §4.9). */
+function NextAction({ job, action }: { job: Job; action: JobNextAction }) {
+  const link = (to: string) => (
+    <Button asChild variant="outline">
+      <Link to={to}>{t.next[action]}</Link>
+    </Button>
+  );
+  switch (action) {
+    case "recover":
+      return <RecoverButton job={job} />;
+    case "rollback":
+      return <RollbackFromJob site={job.target} />;
+    case "app_log":
+      return job.appLogApp ? link(`/panel/apps/${encodeURIComponent(job.appLogApp)}/log?stream=err`) : null;
+    case "open_site":
+      return link(sitePath(job));
+    default: // redeploy, first_deploy
+      return link(sitePath(job, "#deploy"));
+  }
+}
 
 function JobView({ job }: { job: Job }) {
-  const finished = isJobFinished(job);
   const pct = jobProgress(job);
+  const done = jobResultLink(job);
   return (
-    <Card className="py-4">
-      <CardContent className="flex flex-col gap-4 px-4">
-        <div className="flex flex-wrap items-center gap-2">
-          <span className="mr-auto font-mono text-sm">
-            {t.kinds[job.kind] ?? job.kind} · {job.target}
-          </span>
-          <StatusBadge tone={jobTone(job)} label={t.statuses[job.status]} />
-        </div>
+    <div className="flex flex-col gap-6">
+      {!isJobFinished(job) && (
         <div className="flex items-center gap-3">
-          <Progress value={pct} aria-label={t.title} className="flex-1" />
-          <span className="text-xs tabular-nums text-muted-foreground">{t.progress(pct)}</span>
+          <Progress value={pct} aria-label={t.title} className={`flex-1 ${INFO_PROGRESS}`} />
+          <span className="text-xs text-muted-foreground tabular-nums">{t.progress(pct)}</span>
         </div>
-        <JobSteps steps={job.steps} />
-        {(job.status === "failed" || job.status === "rolled_back") && (
-          <div
-            role="alert"
-            className="flex items-start gap-2 rounded-lg border border-destructive/40 bg-destructive/10 p-3 text-sm text-destructive"
-          >
-            <AlertCircleIcon className="mt-0.5 size-4 shrink-0" aria-hidden />
-            <div className="flex flex-col gap-1">
-              <span className="font-medium">{job.status === "rolled_back" ? t.rolledBack : t.failed}</span>
-              {job.error && <span className="break-words">{job.error}</span>}
-            </div>
-          </div>
-        )}
-        <p className="text-xs text-muted-foreground">
-          {t.startedAt(formatDateTime(job.startedAt, true))}
-          {job.finishedAt && ` · ${t.finishedAt(formatDateTime(job.finishedAt, true))}`}
+      )}
+      <p className="sr-only" aria-live="polite">
+        {liveAnnouncement(job)}
+      </p>
+      {job.cleans && (
+        <p className="text-sm text-muted-foreground">
+          {t.recover.cleans}{" "}
+          <Link className="underline underline-offset-2" to={`/panel/jobs/${encodeURIComponent(job.cleans)}`}>
+            {t.recover.cleansLink}
+          </Link>
         </p>
-        {finished && (
-          <Button asChild className="self-start">
-            <Link to={jobResultLink(job)}>
-              {jobResultLink(job) === "/panel/sites" ? t.allSites : t.openSite}
+      )}
+      <div className="rounded-lg border bg-card p-4">
+        <JobSteps job={job} />
+      </div>
+      <JobFinal job={job} />
+      {isJobFinished(job) && (
+        <div className="flex flex-wrap gap-2">
+          {nextActions(job).map((a) => (
+            <NextAction key={a} job={job} action={a} />
+          ))}
+          <Button asChild variant="ghost">
+            <Link to={done}>
+              {done === "/panel/sites" ? t.allSites : t.next.open_site}
               <ArrowRightIcon aria-hidden />
             </Link>
           </Button>
-        )}
-      </CardContent>
-    </Card>
+        </div>
+      )}
+    </div>
   );
 }
 
-/** /panel/jobs/:id: live progress of one site change, polled every second until it finishes. */
+/** /panel/jobs/:id: live progress of one change (1 s poll while running), tolerant of the cloudflared blip. */
 export function JobPage() {
   const { id: jobId = "" } = useParams();
-  const [live, setLive] = useState(true);
-  const query = useApiQuery<Job>(panelUrl(`/jobs/${encodeURIComponent(jobId)}`), live ? JOB_POLL_MS : undefined);
-  const finished = query.data ? isJobFinished(query.data) : false;
+  const url = panelUrl(`/jobs/${encodeURIComponent(jobId)}`);
+  // polling stops once this job id was seen finished (a hook cannot depend on its own later result directly)
+  const [finishedId, setFinishedId] = useState<string | null>(null);
+  const running = finishedId !== jobId;
+  const query = useApiQuery<Job>(url, running ? JOB_POLL_MS : undefined);
+  const ended = query.data?.id === jobId && isJobFinished(query.data);
   useEffect(() => {
-    if (finished) setLive(false);
-  }, [finished]);
+    if (ended) setFinishedId(jobId);
+  }, [ended, jobId]);
+  const view = pollErrorView(query.data, Boolean(query.error), query.updatedAt?.getTime() ?? null, Date.now());
+  const shown = view === "blip" ? { ...query, error: undefined } : query;
+  const title = query.data ? `${t.kinds[query.data.kind]} · ${query.data.target}` : t.title;
 
   return (
-    <div className="flex max-w-2xl flex-col gap-4">
-      <h1 className="text-lg font-semibold">{t.title}</h1>
-      {live && !finished && (
-        <p className="text-sm text-muted-foreground" aria-live="polite">
-          {t.running}
+    <div className="flex max-w-3xl flex-col">
+      <PageHeader
+        title={title}
+        back={{ to: "/panel/jobs", label: t.listTitle }}
+        status={query.data && <StatusBadge state={JOB_STATUS_KEY[query.data.status]} />}
+        description={
+          query.data && (
+            <>
+              {t.meta.started} <RelativeTime at={query.data.startedAt} absolute />
+              {query.data.actor?.name && ` · ${t.meta.by(query.data.actor.name)}`}
+            </>
+          )
+        }
+        meta={{
+          updatedAt: query.updatedAt,
+          live: running,
+          stale: view === "stale",
+          onRefresh: query.reload,
+          refreshing: query.loading,
+        }}
+      />
+      {view === "blip" && (
+        <p
+          role="status"
+          className="mb-4 flex items-center gap-2 rounded-md border border-info/25 bg-info-subtle px-3 py-2 text-sm"
+        >
+          <WifiOffIcon className="size-4 shrink-0 text-info" aria-hidden />
+          {t.blip}
         </p>
       )}
-      <QueryView query={query} codes={SITE_ERROR_CODES}>
-        {(job) => <JobView job={job} />}
-      </QueryView>
+      {view === "lost" ? (
+        <ErrorState title={t.lostTitle} description={t.lostBody} onRetry={query.reload} retrying={query.loading} />
+      ) : (
+        <QueryView query={shown} codes={SITE_ERROR_CODES} empty={null}>
+          {(j) => <JobView job={j} />}
+        </QueryView>
+      )}
     </div>
   );
 }
