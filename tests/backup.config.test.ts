@@ -1,6 +1,15 @@
-import { describe, expect, test } from "bun:test";
-import { isDue, nextRunAt, runKeyStem } from "@/server/backup/backup.config";
-import { InvalidSettingError, SETTINGS } from "@/server/settings.service";
+import { afterAll, describe, expect, test } from "bun:test";
+import { mkdtempSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { isDue, nextRunAt, readBackupConfig, runKeyStem } from "@/server/backup/backup.config";
+import { backupScheduler, backupServiceFor } from "@/server/backup/backup.service";
+import { openDb } from "@/server/db/client";
+import { runMigrations } from "@/server/db/migrate";
+import { auditLog, backupRun, user } from "@/server/db/schema";
+import { InvalidSettingError, SETTINGS, type SettingKey, setSetting } from "@/server/settings.service";
+import { createFakeSystem } from "@/server/system/system.fake";
+import { startMockS3 } from "./backup.s3mock";
 
 // Local-time constructors keep these independent of the machine's time zone.
 const at = (d: number, h: number, m = 0, s = 0) => new Date(2026, 10, d, h, m, s);
@@ -57,5 +66,62 @@ describe("backup setting validators", () => {
     expect(SETTINGS["backup.s3_access_key_id"].secret).toBe(true);
     expect(SETTINGS["backup.s3_secret_access_key"].secret).toBe(true);
     expect(InvalidSettingError).toBeDefined();
+  });
+});
+
+describe("daily scheduler tick", () => {
+  // test-only dummy values
+  const SECRET = "0123456789abcdef".repeat(4);
+  const dir = mkdtempSync(join(tmpdir(), "panel-sched-"));
+  const db = openDb(dir);
+  runMigrations(db);
+  const s3 = startMockS3("bkt");
+  const deps = { db, secret: SECRET };
+  afterAll(() => {
+    s3.stop();
+    db.$client.close();
+    rmSync(dir, { recursive: true, force: true });
+  });
+
+  test("reads keep_min_runs / max_item_mb / include_secrets settings with defaults", () => {
+    expect(readBackupConfig(deps)).toMatchObject({
+      keepMinRuns: 3,
+      maxItemBytes: 2048 * 1024 * 1024,
+      includeSecrets: false,
+    });
+  });
+
+  test("runs at the hour, records lastTickAt, prunes the audit log when the local date changes", async () => {
+    db.insert(user).values({ id: "u1", email: "a@x.io", name: "a", role: "admin" }).run();
+    const set = (k: SettingKey, v: string) => setSetting(deps, k, v, "u1");
+    set("backup.s3_endpoint", s3.endpoint);
+    set("backup.s3_bucket", "bkt");
+    set("backup.s3_access_key_id", "AKIDTEST0001");
+    set("backup.s3_secret_access_key", "SchedTestOnlySecret0123");
+    set("backup.hour", "3");
+    db.insert(auditLog)
+      .values({ action: "auth.sign_in", at: new Date(2020, 0, 1) })
+      .run();
+    const backup = backupServiceFor({ ...deps, dataDir: dir, system: createFakeSystem({ home: join(dir, "home") }) });
+    const times = [at(26, 2, 59), at(26, 3), at(27, 0, 1)];
+    let i = 0;
+    const stop = backup.startScheduler(5, () => times[Math.min(i++, times.length - 1)] as Date);
+    try {
+      await Bun.sleep(40);
+      await backup.idle();
+    } finally {
+      stop();
+    }
+    const rows = db.select().from(backupRun).all();
+    expect(rows).toHaveLength(1);
+    expect(rows[0]).toMatchObject({ trigger: "schedule", actorId: null });
+    expect(backupScheduler.lastTickAt()).toEqual(at(27, 0, 1));
+    expect(
+      db
+        .select()
+        .from(auditLog)
+        .all()
+        .some((r) => r.at.getFullYear() === 2020),
+    ).toBe(false);
   });
 });

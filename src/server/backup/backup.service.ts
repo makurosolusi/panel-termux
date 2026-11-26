@@ -1,55 +1,77 @@
-import { mkdirSync, rmSync } from "node:fs";
+import { rmSync } from "node:fs";
 import { join } from "node:path";
 import { S3Client } from "bun";
-import { count, desc, eq } from "drizzle-orm";
-import type { BackupRun, BackupStatus, BackupTrigger } from "../../shared/backup.types";
+import { count, desc, eq, isNull, sql } from "drizzle-orm";
+import pkg from "../../../package.json" with { type: "json" };
+import type {
+  BackupExcluded,
+  BackupLastGood,
+  BackupRun,
+  BackupStatus,
+  BackupTrigger,
+  BackupVerifyInput,
+} from "../../shared/backup.types";
 import type { Page } from "../../shared/dev.types";
-import { recordAudit } from "../audit.service";
+import { hasRole, type Role } from "../../shared/roles";
+import { pruneAudit, recordAudit } from "../audit.service";
+import { assertFresh } from "../auth/role.guard";
 import type { Db } from "../db/client";
-import { type BackupItemRow, backupRun } from "../db/schema";
+import { backupRun } from "../db/schema";
 import { log } from "../log.service";
 import { ApiError, type Paging } from "../routes/http.error";
-import type { SettingsDeps } from "../settings.service";
-import type { SystemAdapters } from "../system/system.types";
-import { type BackupConfig, isDue, nextRunAt, readBackupConfig, runKeyStem, type S3Config } from "./backup.config";
+import { getSetting } from "../settings.service";
+import { type BackupConfig, describeS3Error, isDue, localDay, nextRunAt, readBackupConfig } from "./backup.config";
+import { freeBytesIn } from "./backup.items";
+import { restoreHint } from "./backup.manifest";
+import { createRestoreService } from "./backup.restore";
+import { backupPaths, executeRun, type RunDeps } from "./backup.run";
+import { verifyBackupTarget } from "./backup.verify";
 
-/** What the backup service needs. `dataDir` holds panel.db and the temp folder for dumps. */
-export type BackupDeps = SettingsDeps & { dataDir: string; system: SystemAdapters };
+/** What the backup service needs. `dataDir` holds panel.db and the temp folder; `freeBytes` defaults to statfs. */
+export type BackupDeps = Omit<RunDeps, "freeBytes"> & { freeBytes?: RunDeps["freeBytes"] };
 
 const PRESIGN_TTL_SEC = 15 * 60;
 const SCHEDULER_TICK_MS = 60_000;
-const MS_PER_DAY = 86_400_000;
-const PANEL_DB = "panel.db";
 
 const errMsg = (e: unknown) => (e instanceof Error ? e.message : String(e));
+type RunRow = typeof backupRun.$inferSelect;
 
-/** S3 failures carry Bun's S3 error code (e.g. AccessDenied); credentials are masked defensively. */
-function describe(e: unknown, s3: S3Config): string {
-  const code = (e as { code?: unknown })?.code;
-  const msg = `${typeof code === "string" ? `${code}: ` : ""}${errMsg(e)}`;
-  return msg.replaceAll(s3.secretAccessKey, "***").replaceAll(s3.accessKeyId, "***").slice(0, 300);
+/** Runs that may still hold good items (fully pruned runs cannot), newest insert first. */
+const liveRunsNewestFirst = (db: Db): RunRow[] =>
+  db.select().from(backupRun).where(isNull(backupRun.prunedAt)).orderBy(desc(sql`rowid`)).all();
+
+/** Newest ok, non-pruned item per (kind, name), newest = insert order; checksums/manifest excluded. */
+function lastGoodAll(db: Db): BackupLastGood[] {
+  const out = new Map<string, BackupLastGood>();
+  for (const r of liveRunsNewestFirst(db))
+    r.items.forEach((i, itemIndex) => {
+      const id = `${i.kind}\0${i.name}`;
+      if (!i.ok || i.pruned || i.kind === "checksums" || i.kind === "manifest" || out.has(id)) return;
+      out.set(id, {
+        kind: i.kind,
+        name: i.name,
+        runId: r.id,
+        itemIndex,
+        at: r.startedAt.toISOString(),
+        sizeBytes: i.sizeBytes,
+        checked: i.checked ?? null,
+      });
+    });
+  return [...out.values()];
 }
 
-/** Deletes objects under `prefix` last modified before `cutoff`; keys outside the prefix are never touched. */
-async function prune(client: S3Client, prefix: string, cutoff: number): Promise<number> {
-  const old: string[] = [];
-  let token: string | undefined;
-  do {
-    const r = await client.list({ prefix, continuationToken: token });
-    for (const o of r.contents ?? []) {
-      const at = o.lastModified ? Date.parse(o.lastModified) : Number.NaN;
-      if (o.key.startsWith(prefix) && at < cutoff) old.push(o.key);
-    }
-    token = r.isTruncated ? r.nextContinuationToken : undefined;
-  } while (token);
-  // Listing finishes before deleting so continuation tokens stay valid.
-  for (const key of old) await client.delete(key);
-  return old.length;
+/** Newest good copy of one item (02 DatabaseInfo.lastBackupAt, 03 delete-site dialog); null if none. */
+export function lastGoodItem(db: Db, kind: BackupLastGood["kind"], name: string): BackupLastGood | null {
+  return lastGoodAll(db).find((g) => g.kind === kind && g.name === name) ?? null;
 }
 
-function createBackupService(deps: BackupDeps) {
-  const { db, dataDir, system } = deps;
-  const tmpDir = join(dataDir, "backup-tmp");
+let lastTick: Date | null = null;
+/** Liveness of the daily tick for /dev/health (DECISIONS B5). */
+export const backupScheduler = { lastTickAt: (): Date | null => lastTick };
+
+function createBackupService(input: BackupDeps) {
+  const deps: RunDeps = { ...input, freeBytes: input.freeBytes ?? freeBytesIn };
+  const { db, dataDir } = deps;
   let running: Promise<void> | null = null;
 
   // Runs still "running" were cut off by a restart; their temp files are leftovers.
@@ -57,97 +79,54 @@ function createBackupService(deps: BackupDeps) {
     .set({ status: "failed", error: "interrupted by panel restart", finishedAt: new Date() })
     .where(eq(backupRun.status, "running"))
     .run();
-  rmSync(tmpDir, { recursive: true, force: true });
+  rmSync(join(dataDir, "backup-tmp"), { recursive: true, force: true });
 
   const config = (): BackupConfig => readBackupConfig(deps);
+  const restores = createRestoreService(deps, () => running !== null, config);
+  const busy = () => running !== null || restores.running();
 
-  const restoreHint = (i: BackupItemRow): string => {
-    const file = i.key.split("/").pop() ?? i.key;
-    if (i.kind === "database") return `pg_restore -U postgres -d ${i.name} --clean ${file}`;
-    const live = join(dataDir, PANEL_DB);
-    return `sv down panel && cp ${file} ${live} && rm -f ${live}-wal ${live}-shm && sv up panel`;
+  const toRun = (r: RunRow): BackupRun => {
+    const paths = backupPaths(deps);
+    return {
+      id: r.id,
+      trigger: r.trigger,
+      status: r.status,
+      startedAt: r.startedAt.toISOString(),
+      finishedAt: r.finishedAt ? r.finishedAt.toISOString() : null,
+      items: r.items.map((i) => ({ ...i, pruned: i.pruned ?? false, restoreHint: restoreHint(i, paths) })),
+      error: r.error,
+      includesSecrets: r.includesSecrets,
+      panelVersion: r.panelVersion,
+      prunedAt: r.prunedAt ? r.prunedAt.toISOString() : null,
+    };
   };
 
-  const toRun = (r: typeof backupRun.$inferSelect): BackupRun => ({
-    id: r.id,
-    trigger: r.trigger,
-    status: r.status,
-    startedAt: r.startedAt.toISOString(),
-    finishedAt: r.finishedAt ? r.finishedAt.toISOString() : null,
-    items: r.items.map((i) => ({ ...i, restoreHint: restoreHint(i) })),
-    error: r.error,
-  });
-
-  async function execute(id: string, s3: S3Config, cfg: BackupConfig, startedAt: Date, actorId: string | null) {
-    const client = new S3Client(s3);
-    const stem = runKeyStem(cfg.prefix, startedAt);
-    const items: BackupItemRow[] = [];
-    const errors: string[] = [];
-    const save = (patch: Partial<typeof backupRun.$inferInsert> = {}) =>
-      db
-        .update(backupRun)
-        .set({ items: [...items], ...patch })
-        .where(eq(backupRun.id, id))
-        .run();
-
-    async function item(kind: BackupItemRow["kind"], name: string, key: string, produce: (f: string) => unknown) {
-      const file = join(tmpDir, `${crypto.randomUUID()}.tmp`);
-      try {
-        await produce(file);
-        const sizeBytes = Bun.file(file).size;
-        await client.write(key, Bun.file(file));
-        items.push({ kind, name, key, sizeBytes, ok: true, error: null });
-      } catch (e) {
-        const error = `${kind} ${name} -> ${key}: ${describe(e, s3)}`;
-        log.warn(`[backup] run ${id} item failed: ${error}`);
-        items.push({ kind, name, key, sizeBytes: null, ok: false, error });
-      } finally {
-        rmSync(file, { force: true });
-      }
-      save();
-    }
-
-    mkdirSync(tmpDir, { recursive: true });
-    let names: string[] = [];
-    try {
-      names = (await system.postgres.listDatabases()).map((d) => d.name);
-    } catch (e) {
-      errors.push(`list databases: ${errMsg(e)}`);
-    }
-    for (const name of names) await item("database", name, `${stem}${name}.dump`, (f) => system.postgres.dump(name, f));
-    await item("panel", "panel", `${stem}${PANEL_DB}`, (f) => db.$client.run("VACUUM INTO ?", [f]));
-
-    const ok = items.filter((i) => i.ok).length;
-    const status = ok === items.length && !errors.length ? "succeeded" : ok === 0 ? "failed" : "partial";
-    let pruned = 0;
-    if (status !== "failed") {
-      try {
-        pruned = await prune(client, cfg.prefix, startedAt.getTime() - cfg.retentionDays * MS_PER_DAY);
-      } catch (e) {
-        errors.push(`retention under ${cfg.prefix}: ${describe(e, s3)}`);
-      }
-    }
-    const error = errors.length ? errors.join("; ") : null;
-    save({ status, error, finishedAt: new Date() });
-    const trigger = actorId ? "manual" : "schedule";
-    recordAudit(db, { actorId, action: "backup.run", target: id, meta: { trigger, status, items: items.length } });
-    log.info(`[backup] run ${id} ${status}: ${ok}/${items.length} items, pruned ${pruned}`);
-  }
-
-  /** Starts a run in the background; 400 `not_configured`, 409 `busy` while another run is in progress. */
+  /** Starts a run in the background; 409 key_mismatch, 400 not_configured, 409 busy (run or restore). */
   function start(trigger: BackupTrigger, actorId: string | null): { runId: string } {
     const cfg = config();
+    if (cfg.keyMismatch) throw new ApiError(409, "key_mismatch", "backup settings cannot be read with the data key");
     if (!cfg.s3) throw new ApiError(400, "not_configured", `missing settings: ${cfg.missing.join(", ")}`);
-    if (running) throw new ApiError(409, "busy", "a backup run is already in progress");
+    if (busy()) throw new ApiError(409, "busy", "a backup run or restore is in progress");
     const id = crypto.randomUUID();
     const startedAt = new Date();
-    db.insert(backupRun).values({ id, trigger, status: "running", items: [], actorId, startedAt }).run();
+    db.insert(backupRun)
+      .values({
+        id,
+        trigger,
+        status: "running",
+        items: [],
+        actorId,
+        startedAt,
+        includesSecrets: cfg.includeSecrets,
+        panelVersion: pkg.version,
+      })
+      .run();
     const s3 = cfg.s3;
-    running = execute(id, s3, cfg, startedAt, actorId)
+    running = executeRun(deps, { id, startedAt, actorId }, cfg, s3)
       .catch((e) => {
-        log.error(`[backup] run ${id} crashed: ${describe(e, s3)}`);
+        log.error(`[backup] run ${id} crashed: ${describeS3Error(e, s3)}`);
         db.update(backupRun)
-          .set({ status: "failed", error: describe(e, s3), finishedAt: new Date() })
+          .set({ status: "failed", error: describeS3Error(e, s3), finishedAt: new Date() })
           .where(eq(backupRun.id, id))
           .run();
       })
@@ -163,20 +142,39 @@ function createBackupService(deps: BackupDeps) {
     /** Unset required setting keys (empty = configured). */
     missing: () => config().missing,
     start,
-    /** Resolves when the current run (if any) has finished. */
-    idle: () => running ?? Promise.resolve(),
+    /** A run or a restore is in progress (02 refuses restarting `panel`, 03 refuses `database_drop`). */
+    busy,
+    /** Resolves when the current run and restore (if any) have finished. */
+    idle: async () => {
+      await (running ?? Promise.resolve());
+      await restores.idle();
+    },
+    restores,
+    /** S3 connection test, POST /api/dev/backup/verify. */
+    verify: (actorId: string, draft?: BackupVerifyInput) => verifyBackupTarget(deps, actorId, draft),
 
+    /** Never throws because of the data key: keyMismatch is reported instead (F7.4). */
     status(now = new Date()): BackupStatus {
       const cfg = config();
-      const last = db.select().from(backupRun).orderBy(desc(backupRun.startedAt)).limit(1).get();
+      const last = db.select().from(backupRun).orderBy(desc(sql`rowid`)).limit(1).get();
+      const excluded: BackupExcluded[] = ["site_binaries", "cloudflared_cert"];
+      if (!cfg.includeSecrets) excluded.push("secrets_off");
       return {
-        configured: cfg.s3 !== null,
+        configured: cfg.missing.length === 0,
         missing: cfg.missing,
+        keyMismatch: cfg.keyMismatch,
         hourLocal: cfg.hour,
         nextRunAt: cfg.s3 && cfg.hour !== null ? nextRunAt(cfg.hour, now).toISOString() : null,
         retentionDays: cfg.retentionDays,
+        keepMinRuns: cfg.keepMinRuns,
+        maxItemMb: cfg.maxItemBytes / (1024 * 1024),
+        includeSecrets: cfg.includeSecrets,
         running: running !== null,
+        restoring: restores.running(),
         lastRun: last ? toRun(last) : null,
+        lastGood: lastGoodAll(db),
+        excluded,
+        lastRestoreTest: restores.lastSucceeded(),
       };
     },
 
@@ -184,7 +182,7 @@ function createBackupService(deps: BackupDeps) {
       const rows = db
         .select()
         .from(backupRun)
-        .orderBy(desc(backupRun.startedAt))
+        .orderBy(desc(sql`rowid`))
         .limit(paging.pageSize)
         .offset(paging.offset)
         .all();
@@ -192,32 +190,50 @@ function createBackupService(deps: BackupDeps) {
       return { items: rows.map(toRun), total, page: paging.page, pageSize: paging.pageSize };
     },
 
-    /** Presigned GET URL (15 min) of a successful item; audited. */
-    downloadUrl(actorId: string, id: string, rawIndex: string): string {
+    /** Presigned GET URL (15 min) of an uploaded item; `secrets` = super_admin + fresh session (F4). Audited. */
+    downloadUrl(who: { id: string; role: Role; session: { createdAt: Date } }, id: string, rawIndex: string): string {
       const row = getRow(id);
       if (!row) throw new ApiError(404, "not_found", `backup run ${id} not found`);
       const index = Number(rawIndex);
       const item = Number.isInteger(index) && index >= 0 ? row.items[index] : undefined;
       if (!item?.ok) throw new ApiError(404, "not_found", `backup run ${id} has no uploaded item ${rawIndex}`);
+      if (item.kind === "secrets") {
+        if (!hasRole(who.role, "super_admin")) throw new ApiError(403, "forbidden", "secrets need a super admin");
+        assertFresh(who.session);
+      }
+      if (item.pruned) throw new ApiError(410, "pruned", `item ${rawIndex} of run ${id} was deleted by retention`);
       const cfg = config();
+      if (cfg.keyMismatch) throw new ApiError(409, "key_mismatch", "backup settings cannot be read with the data key");
       if (!cfg.s3) throw new ApiError(400, "not_configured", `missing settings: ${cfg.missing.join(", ")}`);
       const url = new S3Client(cfg.s3).presign(item.key, { expiresIn: PRESIGN_TTL_SEC, method: "GET" });
-      recordAudit(db, { actorId, action: "backup.download", target: item.key, meta: { runId: id } });
+      recordAudit(db, { actorId: who.id, action: "backup.download", target: item.key, meta: { runId: id } });
       return url;
     },
 
-    /** Daily schedule: re-reads settings every tick; never overlaps a run. Returns a stop function. */
+    /**
+     * Daily tick: re-reads settings, starts the scheduled run, never overlaps a run, and prunes the audit
+     * log when the local date changes (K13). Returns a stop function.
+     */
     startScheduler(tickMs = SCHEDULER_TICK_MS, clock: () => Date = () => new Date()): () => void {
       let prev = clock();
       const timer = setInterval(() => {
         const now = clock();
         const since = prev;
         prev = now;
+        lastTick = now;
+        try {
+          if (localDay(since) !== localDay(now)) pruneAudit(db, Number(getSetting(deps, "audit.retention_days")), now);
+        } catch (e) {
+          log.error(`[backup] audit retention failed: ${errMsg(e)}`);
+        }
         try {
           const cfg = config();
           if (!isDue(cfg.hour, since, now)) return;
+          // isDue fires once per local day, so this warns at most once a day (F2.1).
+          if (cfg.keyMismatch)
+            return log.warn("[backup] scheduled run skipped: backup settings unreadable with the data key");
           if (!cfg.s3) return log.warn(`[backup] scheduled run skipped: missing ${cfg.missing.join(", ")}`);
-          if (running) return log.warn("[backup] scheduled run skipped: a run is in progress");
+          if (busy()) return log.warn("[backup] scheduled run skipped: a run or restore is in progress");
           start("schedule", null);
         } catch (e) {
           log.error(`[backup] scheduler tick failed: ${errMsg(e)}`);
