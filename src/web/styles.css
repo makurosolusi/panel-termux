@@ -80,6 +80,7 @@
   --warning: oklch(0.82 0.14 80); /* 8.8:1 */
   --warning-subtle: oklch(0.26 0.04 80);
   --danger: oklch(0.72 0.17 25); /* 5.9:1 */
+  /* destructive button fill = danger/60: white on danger/60 over dark background: 6.0:1 */
   --danger-subtle: oklch(0.26 0.05 25);
   --info: oklch(0.76 0.12 250); /* 7.5:1 */
   --info-subtle: oklch(0.25 0.04 250);
@@ -212,6 +213,17 @@
   background-image:
     linear-gradient(var(--lp-line) 1px, transparent 1px), linear-gradient(90deg, var(--lp-line) 1px, transparent 1px);
   background-size: 32px 32px;
+}
+
+/*
+ * Fixed phone chrome heights, set only while the element is in the DOM: the bottom nav (shell) and the sticky
+ * ActionBar. Toasts (ui/sonner.tsx) and ActionBar offset themselves by these so nothing overlaps.
+ */
+:root:has([data-bottom-nav]) {
+  --bottom-nav-h: 3.5rem;
+}
+:root:has([data-action-bar]) {
+  --action-bar-h: 4rem;
 }
 
 @layer base {

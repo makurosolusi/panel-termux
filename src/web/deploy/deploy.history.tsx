@@ -9,7 +9,7 @@ import { DEV_PAGE_SIZE, parsePageParam } from "@/web/dev/dev.pagination";
 import { Pager } from "@/web/dev/pager";
 import { id } from "@/web/i18n/id";
 import { StatusBadge } from "@/web/panel/status.badge";
-import { ConfirmAction } from "@/web/shared/confirm.dialog";
+import { LegacyConfirmAction as ConfirmAction } from "@/web/shared/confirm.dialog";
 import { formatBytes, formatDateTime } from "@/web/shared/format";
 import { QueryView } from "@/web/shared/query.state";
 import { useApiQuery } from "@/web/shared/use-api-query";

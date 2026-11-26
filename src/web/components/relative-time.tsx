@@ -1,31 +1,30 @@
-import { useEffect, useState } from "react";
 import { formatDateTime, formatRelative } from "@/web/shared/format";
-
-/** Re-render tick for relative times; one interval per mounted element is cheap at this scale. */
-const TICK_MS = 5_000;
+import { useNow } from "./now.store";
 
 /**
- * "3 mnt lalu" that keeps itself current; the exact local time is in the tooltip and `dateTime`. `format` wraps
- * the relative text, e.g. `id.common.updatedAgo` → "Diperbarui 3 mnt lalu".
+ * "3 mnt lalu" that keeps itself current on the shared clock (`useNow`); `absolute` shows the exact local time
+ * instead (detail and history pages). Readers get the exact time (sr-only text; `aria-label` is not supported on `<time>`), pointers via `title`. `format`
+ * wraps the visible text, e.g. `id.common.updatedAgo` → "Diperbarui 3 mnt lalu".
  */
 export function RelativeTime({
   at,
-  format = (rel) => rel,
+  absolute = false,
+  format = (text) => text,
   className,
 }: {
   at: string | Date;
-  format?: (rel: string) => string;
+  absolute?: boolean;
+  format?: (text: string) => string;
   className?: string;
 }) {
-  const [now, setNow] = useState(() => new Date());
-  useEffect(() => {
-    const t = setInterval(() => setNow(new Date()), TICK_MS);
-    return () => clearInterval(t);
-  }, []);
+  const now = useNow();
   const iso = at instanceof Date ? at.toISOString() : at;
+  const exact = formatDateTime(iso, true);
+  const spoken = formatDateTime(iso);
   return (
-    <time dateTime={iso} title={formatDateTime(iso, true)} className={className}>
-      {format(formatRelative(at, now))}
+    <time dateTime={iso} title={exact} className={className}>
+      <span aria-hidden>{format(absolute ? exact : formatRelative(at, now))}</span>
+      <span className="sr-only">{format(spoken)}</span>
     </time>
   );
 }

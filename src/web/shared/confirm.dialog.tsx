@@ -14,8 +14,11 @@ import {
 import { Button } from "@/web/components/ui/button";
 import { id } from "@/web/i18n/id";
 
-/** Wraps `trigger` (a single button) so clicking it asks for confirmation before calling `onConfirm`. */
-export function ConfirmAction({
+/**
+ * Legacy confirm (closes on click, no pending/error state). Kept only until its callers move to
+ * `components/confirm-action.tsx` (page waves W5/W6); deleted by the shell cleanup worker once unused.
+ */
+export function LegacyConfirmAction({
   trigger,
   title,
   description,
@@ -64,7 +67,7 @@ export function ConfirmDelete({
   onConfirm: () => void;
 }) {
   return (
-    <ConfirmAction
+    <LegacyConfirmAction
       {...rest}
       destructive
       confirmLabel={id.dev.common.delete}

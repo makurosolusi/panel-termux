@@ -3,7 +3,7 @@ import { CONTROL_ACTIONS, type ControlAction } from "@/shared/panel.types";
 import { Button } from "@/web/components/ui/button";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/web/components/ui/tooltip";
 import { id } from "@/web/i18n/id";
-import { ConfirmAction } from "@/web/shared/confirm.dialog";
+import { LegacyConfirmAction as ConfirmAction } from "@/web/shared/confirm.dialog";
 import { type BlockReason, dropsAllDomains } from "./panel.status";
 
 const t = id.panel;

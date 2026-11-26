@@ -1,13 +1,13 @@
 import { cn } from "cn";
 import { RefreshCwIcon } from "lucide-react";
-import type { ReactNode } from "react";
+import { createContext, type ReactNode, useContext, useLayoutEffect } from "react";
 import { Button } from "@/web/components/ui/button";
 import { id } from "@/web/i18n/id";
 import { RelativeTime } from "./relative-time";
 
 const t = id.shell.time;
 
-/** Freshness line for live pages: live dot + "Diperbarui 3 dtk lalu" + refresh button. */
+/** Freshness line for live pages: live dot + "Diperbarui 3 mnt lalu" + refresh button. */
 export type PageMeta = {
   updatedAt?: string | Date | null;
   onRefresh?: () => void;
@@ -16,25 +16,65 @@ export type PageMeta = {
   live?: boolean;
 };
 
-/** Page title row: h1, optional description, actions on the right, optional freshness meta under the title. */
+/** Link to the parent list; on phones it becomes the "‹" button of the top bar. */
+export type PageBack = { to: string; label: string };
+
+/** What a page tells the shell (phone top bar title + back button). */
+export type ShellPage = { title: string; back?: PageBack };
+
+/**
+ * Registration channel PageHeader → shell. The shell layout provides the setter; without a provider (tests,
+ * landing) registration is a no-op. A context instead of a layout import keeps components/ free of layout/.
+ */
+export const ShellPageContext = createContext<((page: ShellPage | null) => void) | null>(null);
+
+/**
+ * Page title row: the page's only h1 (`#page-title`, route focus target; visually hidden on phones where the top bar
+ * shows the title), optional status badge, description, freshness meta and actions (below the title on phones).
+ */
 export function PageHeader({
   title,
   description,
+  status,
   actions,
   meta,
+  back,
   className,
 }: {
   title: string;
   description?: ReactNode;
+  status?: ReactNode;
   actions?: ReactNode;
   meta?: PageMeta;
+  back?: PageBack;
   className?: string;
 }) {
+  const register = useContext(ShellPageContext);
+  const backTo = back?.to;
+  const backLabel = back?.label;
+  // before paint, so the phone top bar never shows the static route title first and then flips
+  useLayoutEffect(() => {
+    if (!register) return;
+    register({ title, back: backTo && backLabel ? { to: backTo, label: backLabel } : undefined });
+    return () => register(null);
+  }, [register, title, backTo, backLabel]);
+
   return (
-    <header className={cn("mb-6 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between", className)}>
-      <div className="min-w-0">
-        <h1 className="text-xl font-semibold tracking-tight text-balance sm:text-2xl">{title}</h1>
-        {description && <p className="mt-1 max-w-prose text-sm text-muted-foreground">{description}</p>}
+    <header
+      className={cn("mb-6 flex flex-col gap-3 max-md:mb-4 sm:flex-row sm:items-start sm:justify-between", className)}
+    >
+      <div className="flex min-w-0 flex-col gap-1">
+        <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+          <h1
+            id="page-title"
+            tabIndex={-1}
+            className="text-xl font-semibold tracking-tight text-balance outline-none max-md:sr-only sm:text-2xl"
+          >
+            {title}
+          </h1>
+          {status}
+        </div>
+        {description && <p className="max-w-prose text-sm text-muted-foreground">{description}</p>}
         {meta && <MetaLine meta={meta} />}
       </div>
       {actions && <div className="flex shrink-0 flex-wrap items-center gap-2">{actions}</div>}
@@ -44,10 +84,10 @@ export function PageHeader({
 
 function MetaLine({ meta }: { meta: PageMeta }) {
   return (
-    <div className="mt-2 flex items-center gap-2 text-xs text-muted-foreground">
+    <div className="mt-1 flex items-center gap-2 text-xs text-muted-foreground">
       {meta.live && (
         <span className="relative flex size-2" title={t.live}>
-          <span className="absolute inline-flex size-full animate-ping rounded-full bg-success opacity-60" />
+          <span className="absolute inline-flex size-full rounded-full bg-success opacity-60 motion-safe:animate-ping" />
           <span className="relative inline-flex size-2 rounded-full bg-success" />
           <span className="sr-only">{t.live}</span>
         </span>
@@ -56,13 +96,13 @@ function MetaLine({ meta }: { meta: PageMeta }) {
       {meta.onRefresh && (
         <Button
           variant="ghost"
-          size="icon-xs"
+          size="icon-sm"
           onClick={meta.onRefresh}
           disabled={meta.refreshing}
           aria-label={t.refresh}
           title={t.refresh}
         >
-          <RefreshCwIcon className={cn(meta.refreshing && "animate-spin")} aria-hidden />
+          <RefreshCwIcon className={cn(meta.refreshing && "motion-safe:animate-spin")} aria-hidden />
         </Button>
       )}
     </div>

@@ -6,8 +6,11 @@ import { id } from "@/web/i18n/id";
 const t = id.shell.copy;
 const RESET_MS = 1_500;
 
-/** Icon button that copies `value` to the clipboard and confirms with a check (announced to screen readers). */
-export function CopyButton({ value, label = t.copy }: { value: string; label?: string }) {
+/**
+ * Icon button that copies `value` (or what the function returns at click time) to the clipboard and confirms with
+ * a check, announced to screen readers. 24 px visual, 44 px hit-area on touch screens (Button `icon-xs`).
+ */
+export function CopyButton({ value, label = t.copy }: { value: string | (() => string); label?: string }) {
   const [state, setState] = useState<"idle" | "copied" | "failed">("idle");
   useEffect(() => {
     if (state === "idle") return;
@@ -15,7 +18,7 @@ export function CopyButton({ value, label = t.copy }: { value: string; label?: s
     return () => clearTimeout(timer);
   }, [state]);
   const copy = () =>
-    navigator.clipboard.writeText(value).then(
+    navigator.clipboard.writeText(typeof value === "function" ? value() : value).then(
       () => setState("copied"),
       () => setState("failed"), // clipboard denied (insecure origin / permission): tell the user, nothing to retry
     );

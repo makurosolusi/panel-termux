@@ -1,7 +1,7 @@
 import { cn } from "cn";
 import type { LucideIcon } from "lucide-react";
 import type { ReactNode } from "react";
-import { type StatusTone, TONE_FILL } from "./status.tone";
+import { type StatusTone, TONE_FILL, TONE_TEXT } from "./status.tone";
 
 /** Percent at/above which a usage bar turns warning / danger. Override per tile (e.g. disk 85/95). */
 export type Thresholds = { warn: number; danger: number };
@@ -10,14 +10,6 @@ export const DEFAULT_THRESHOLDS: Thresholds = { warn: 75, danger: 90 };
 /** Tone of a usage percentage against thresholds. */
 export const usageTone = (pct: number, th: Thresholds = DEFAULT_THRESHOLDS): StatusTone =>
   pct >= th.danger ? "danger" : pct >= th.warn ? "warning" : "success";
-
-const VALUE_TONE: Partial<Record<StatusTone, string>> = {
-  success: "text-success",
-  warning: "text-warning",
-  danger: "text-danger",
-  info: "text-info",
-  accent: "text-brand-text",
-};
 
 /**
  * Compact KPI: small label (+icon), tabular value, optional hint line and usage bar. `progress` (0–100) colours the
@@ -50,7 +42,7 @@ export function StatTile({
         {Icon && <Icon className="size-3.5" aria-hidden />}
         {label}
       </span>
-      <span className={cn("truncate text-lg font-semibold tabular-nums", tone && VALUE_TONE[tone])}>{value}</span>
+      <span className={cn("text-xl font-semibold break-words tabular-nums", tone && TONE_TEXT[tone])}>{value}</span>
       {pct !== undefined && barTone && (
         <div
           className="h-1.5 w-full overflow-hidden rounded-full bg-muted"
@@ -66,7 +58,7 @@ export function StatTile({
           />
         </div>
       )}
-      {hint && <span className="truncate text-xs text-muted-foreground tabular-nums">{hint}</span>}
+      {hint && <span className="line-clamp-2 text-xs text-muted-foreground tabular-nums">{hint}</span>}
     </div>
   );
 }
