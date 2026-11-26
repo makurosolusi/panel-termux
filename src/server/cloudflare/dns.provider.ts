@@ -1,9 +1,10 @@
 import { eq } from "drizzle-orm";
+import type { CloudflareVerify, CloudflareVerifyCode } from "../../shared/dev.types";
 import { recordAudit } from "../audit.service";
 import type { Db } from "../db/client";
 import { dnsRecord } from "../db/schema";
 import { log } from "../log.service";
-import { getSetting } from "../settings.service";
+import { getSetting, KeyMismatchError } from "../settings.service";
 import { type CfClient, type CfClientOptions, CloudflareApiError, createCfClient } from "./cloudflare.client";
 import { DnsConflictError, DnsNotConfiguredError, type SiteDnsProvider } from "./dns.types";
 
@@ -28,8 +29,11 @@ type CfRecord = { id: string; type: string; name: string; content: string };
 /** CNAME target of a tunnel. */
 export const tunnelTarget = (tunnelId: string) => `${tunnelId}.cfargotunnel.com`;
 
+/** Coded token check behind POST /dev/cloudflare/verify; `draftToken` tests a token before it is saved. */
+export type CloudflareVerifier = { verifyToken(draftToken?: string): Promise<CloudflareVerify> };
+
 /** Cloudflare-backed DnsProvider. Reads the token on every call so a /dev change applies without restart. */
-export function createDnsProvider(deps: DnsProviderDeps): Required<SiteDnsProvider> {
+export function createDnsProvider(deps: DnsProviderDeps): Required<SiteDnsProvider> & CloudflareVerifier {
   const { db, secret } = deps;
   let zoneCache: { token: string; at: number; zones: Zone[] } | null = null;
 
@@ -74,23 +78,40 @@ export function createDnsProvider(deps: DnsProviderDeps): Required<SiteDnsProvid
   const sameTunnel = (existing: CfRecord[], target: string) =>
     existing.length === 1 && existing[0]?.type === "CNAME" && existing[0].content === target;
 
+  async function verifyToken(draftToken?: string): Promise<CloudflareVerify> {
+    const res = (ok: boolean, code: CloudflareVerifyCode, zones: number | null, detail: string) =>
+      ({ ok, code, zones, detail }) satisfies CloudflareVerify;
+    let token: string | null;
+    try {
+      token = draftToken ?? getSetting({ db, secret }, "cloudflare.api_token");
+    } catch (e) {
+      if (e instanceof KeyMismatchError) return res(false, "key_mismatch", null, e.message);
+      throw e;
+    }
+    if (!token) return res(false, "not_set", null, "Cloudflare API token is not set (/dev settings)");
+    const s = { cf: createCfClient(token, deps), token };
+    try {
+      const accountId = getSetting({ db, secret }, "cloudflare.account_id");
+      // Account-owned tokens only verify on the account endpoint; user tokens on /user/tokens/verify.
+      const path = accountId ? `/accounts/${accountId}/tokens/verify` : "/user/tokens/verify";
+      const r = await s.cf.request<{ status: string }>("verify token", "GET", path);
+      if (r.result.status !== "active") return res(false, "inactive", null, `token status is ${r.result.status}`);
+      zoneCache = null; // the cache is keyed by token, so a draft only costs the saved token one refetch
+      const n = (await zones(s)).length;
+      if (n === 0) return res(false, "no_zones", 0, "token is active but has access to no zones (needs Zone:Read)");
+      return res(true, "ok", n, `token is active; ${n} zone(s) accessible`);
+    } catch (e) {
+      // Client errors carry operation + Cloudflare code, never the token; redact anyway in case a proxy echoes it.
+      return res(false, "api_error", null, (e as Error).message.replaceAll(token, "[redacted]"));
+    }
+  }
+
   return {
+    verifyToken,
+
     async verify() {
-      try {
-        const s = session();
-        const accountId = getSetting({ db, secret }, "cloudflare.account_id");
-        // Account-owned tokens only verify on the account endpoint; user tokens on /user/tokens/verify.
-        const path = accountId ? `/accounts/${accountId}/tokens/verify` : "/user/tokens/verify";
-        const r = await s.cf.request<{ status: string }>("verify token", "GET", path);
-        if (r.result.status !== "active") return { ok: false, message: `token status is ${r.result.status}` };
-        zoneCache = null;
-        const n = (await zones(s)).length;
-        if (n === 0) return { ok: false, message: "token is active but has access to no zones (needs Zone:Read)" };
-        return { ok: true, message: `token is active; ${n} zone(s) accessible` };
-      } catch (e) {
-        // Errors here carry operation + Cloudflare code, never the token; surface them to /dev as-is.
-        return { ok: false, message: (e as Error).message };
-      }
+      const r = await verifyToken();
+      return { ok: r.ok, message: r.detail ?? r.code };
     },
 
     async inspect(rawHostname, tunnelId) {
