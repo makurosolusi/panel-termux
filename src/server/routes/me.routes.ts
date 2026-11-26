@@ -2,7 +2,7 @@ import { Elysia } from "elysia";
 import type { Me } from "../../shared/me.types";
 import { homeFor, isRole } from "../../shared/roles";
 import type { Auth } from "../auth/auth.service";
-import { requestUserIds } from "../auth/role.guard";
+import { getSessionChecked, requestUserIds } from "../auth/role.guard";
 import { createSessionsService } from "../auth/sessions.service";
 import type { Db } from "../db/client";
 import { panelOnError } from "./panel.routes";
@@ -13,7 +13,7 @@ export function createMeRoutes(auth: Auth, db: Db) {
   return new Elysia({ prefix: "/me" })
     .onError(panelOnError as never)
     .get("", async ({ request, status }) => {
-      const s = await auth.api.getSession({ headers: request.headers });
+      const s = await getSessionChecked(auth, request.headers);
       if (!s) return status(401, { error: "unauthorized", message: "sign in required" });
       const { id, email, name, image, role, createdAt } = s.user;
       requestUserIds.set(request.headers, id);

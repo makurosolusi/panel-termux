@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { eq } from "drizzle-orm";
 import { createAuth } from "@/server/auth/auth.service";
-import { maskIp, shortUserAgent } from "@/server/auth/sessions.service";
+import { maskIp, revokeAllSessions, revokeUserSessions, shortUserAgent } from "@/server/auth/sessions.service";
 import { type Db, openDb } from "@/server/db/client";
 import { runMigrations } from "@/server/db/migrate";
 import { appMeta, auditLog, session, site, user } from "@/server/db/schema";
@@ -212,5 +212,49 @@ describe("/api/dev/setup", () => {
       adopt_sites: true,
       admins: true,
     });
+  });
+});
+
+describe("revokeUserSessions / revokeAllSessions", () => {
+  const sessionsOf = (id: string) => db.select().from(session).where(eq(session.userId, id)).all();
+
+  test("revokes every session of another user, env super admin included; 409 self; 404 unknown", async () => {
+    const actor = addUser("revoker@x.io", "super_admin");
+    // The env super admin (runs after /api/dev/setup, which created it): only self is refused (B6).
+    const envBoss =
+      db
+        .select({ id: user.id })
+        .from(user)
+        .where(eq(user.email, SUPER[0] ?? ""))
+        .get()?.id ?? addUser(SUPER[0] ?? "", "super_admin");
+    db.delete(session).where(eq(session.userId, envBoss)).run();
+    await login(envBoss);
+    await login(envBoss);
+    const mine = await login(actor);
+    expect(() => revokeUserSessions(db, actor, actor)).toThrow(expect.objectContaining({ status: 409, code: "self" }));
+    expect(() => revokeUserSessions(db, actor, "nobody")).toThrow(expect.objectContaining({ status: 404 }));
+    expect(revokeUserSessions(db, actor, envBoss)).toEqual({ revoked: 2 });
+    expect(sessionsOf(envBoss)).toHaveLength(0);
+    expect(db.select({ role: user.role }).from(user).where(eq(user.id, envBoss)).get()?.role).toBe("super_admin");
+    expect((await call("GET", "/me", mine.cookie)).status).toBe(200);
+    const row = db.select().from(auditLog).where(eq(auditLog.target, envBoss)).get();
+    expect(row).toMatchObject({
+      actorId: actor,
+      action: "session.revoke",
+      meta: { scope: "user", userId: envBoss, revoked: 2 },
+    });
+  });
+
+  test("revokeAllSessions keeps only the caller's session and audits the count", async () => {
+    const actor = addUser("all@x.io", "super_admin");
+    const mine = await login(actor);
+    await login(actor);
+    await login(addUser("victim@x.io"));
+    const others = db.select().from(session).all().length - 1;
+    expect(revokeAllSessions(db, mine.id)).toEqual({ revoked: others });
+    expect(db.select({ id: session.id }).from(session).all()).toEqual([{ id: mine.id }]);
+    const row = db.select().from(auditLog).where(eq(auditLog.action, "session.revoke_all")).get();
+    expect(row).toMatchObject({ actorId: actor, target: "*", meta: { count: others } });
+    expect(() => revokeAllSessions(db, "missing")).toThrow("caller session missing not found");
   });
 });

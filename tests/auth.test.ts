@@ -4,10 +4,13 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { eq } from "drizzle-orm";
 import { decideRole, syncSuperAdminsOnBoot, syncUserRole } from "@/server/auth/access.service";
+import { flushFailedSignIns, handleAuthRequest } from "@/server/auth/auth.audit";
 import { createAuth } from "@/server/auth/auth.service";
+import { SESSION_ABSOLUTE_MAX_DAYS } from "@/server/auth/role.guard";
 import { type Db, openDb } from "@/server/db/client";
 import { runMigrations } from "@/server/db/migrate";
-import { session, user } from "@/server/db/schema";
+import { auditLog, session, user } from "@/server/db/schema";
+import { readLogs } from "@/server/log.service";
 import { createApiRoutes } from "@/server/routes/api.routes";
 import type { Role } from "@/shared/roles";
 
@@ -181,6 +184,75 @@ describe("HTTP API", () => {
     expect(res.status).toBe(302);
     const me = await get("/api/me", sessionCookie(res));
     expect(await me.json()).toMatchObject({ role: "super_admin", home: "/panel" });
+  });
+});
+
+describe("session lifetime and auth audit", () => {
+  const DAY = 86_400_000;
+  const actions = (actorId: string) =>
+    db
+      .select({ a: auditLog.action })
+      .from(auditLog)
+      .where(eq(auditLog.actorId, actorId))
+      .all()
+      .map((r) => r.a);
+
+  test("a session older than SESSION_ABSOLUTE_MAX_DAYS is deleted and treated as signed out", async () => {
+    const id = addUser("old-session@x.io", "admin");
+    const cookie = await cookieFor(id);
+    const age = (days: number) =>
+      db
+        .update(session)
+        .set({ createdAt: new Date(Date.now() - days * DAY) })
+        .where(eq(session.userId, id))
+        .run();
+    age(SESSION_ABSOLUTE_MAX_DAYS - 1);
+    expect((await get("/api/panel/ping", cookie)).status).toBe(200);
+    age(SESSION_ABSOLUTE_MAX_DAYS + 1);
+    expect((await get("/api/panel/ping", cookie)).status).toBe(401);
+    expect(db.select().from(session).where(eq(session.userId, id)).all()).toHaveLength(0);
+    expect((await get("/api/me", cookie)).status).toBe(401);
+  });
+
+  test("new Google account is audited as auth.account_created, then auth.sign_in", async () => {
+    await googleCallback("fresh.person@x.io");
+    const u = db.select({ id: user.id }).from(user).where(eq(user.email, "fresh.person@x.io")).get();
+    expect(u).toBeDefined();
+    expect(actions(u?.id ?? "").sort()).toEqual(["auth.account_created", "auth.sign_in"]);
+  });
+
+  test("handleAuthRequest audits a successful sign-out with the user read beforehand", async () => {
+    const id = addUser("leaver@x.io");
+    const cookie = await cookieFor(id);
+    const res = await handleAuthRequest(
+      auth,
+      db,
+      new Request(`${BASE}/api/auth/sign-out`, { method: "POST", headers: { cookie, origin: BASE } }),
+    );
+    expect(res.status).toBe(200);
+    expect(db.select().from(session).where(eq(session.userId, id)).all()).toHaveLength(0);
+    expect(actions(id)).toContain("auth.sign_out");
+    // Anonymous sign-out: nothing to audit.
+    const before = db.select().from(auditLog).all().length;
+    await handleAuthRequest(
+      auth,
+      db,
+      new Request(`${BASE}/api/auth/sign-out`, { method: "POST", headers: { origin: BASE } }),
+    );
+    expect(db.select().from(auditLog).all()).toHaveLength(before);
+  });
+
+  test("failed callbacks are only counted into one aggregate warn (codes, no audit row)", async () => {
+    const before = db.select().from(auditLog).all().length;
+    const bad = () => handleAuthRequest(auth, db, new Request(`${BASE}/api/auth/callback/google?state=nope&code=c`));
+    const res = await bad();
+    expect(res.status).toBe(302);
+    expect(res.headers.get("location")).toContain("/login?error=");
+    await bad();
+    flushFailedSignIns();
+    const line = readLogs({ level: "warn", q: "failed sign-in callbacks", limit: 1 })[0]?.msg ?? "";
+    expect(line).toMatch(/^\[auth\] 2 failed sign-in callbacks in the last minute: \w+×2$/);
+    expect(db.select().from(auditLog).all()).toHaveLength(before);
   });
 });
 

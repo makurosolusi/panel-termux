@@ -34,6 +34,14 @@ export function createAuth({ db, env, secret }: AuthDeps) {
       },
     },
     databaseHooks: {
+      user: {
+        create: {
+          after: async (created) => {
+            recordAudit(db, { actorId: created.id, action: "auth.account_created", target: created.id });
+            log.info(`[auth] user ${created.id} created`);
+          },
+        },
+      },
       session: {
         create: {
           // Every session creation: sync role with SUPER_ADMIN_EMAILS before the session is issued.

@@ -1,5 +1,6 @@
 import { Elysia } from "elysia";
 import { hasRole, isRole, type Role } from "../../shared/roles";
+import { log } from "../log.service";
 import { ApiError } from "../routes/http.error";
 import type { Auth } from "./auth.service";
 
@@ -15,15 +16,40 @@ export type SessionRef = { id: string; createdAt: Date };
 /** How long after sign-in a session counts as fresh for sensitive changes (PLAN/04 §3.5). */
 export const FRESH_SESSION_MS = 15 * 60_000;
 
+/** Absolute session lifetime from sign-in, however active the session stays (PLAN/04 K14). */
+export const SESSION_ABSOLUTE_MAX_DAYS = 30;
+const SESSION_ABSOLUTE_MAX_MS = SESSION_ABSOLUTE_MAX_DAYS * 86_400_000;
+
 /** Throws ApiError 403 `reauth_required` when the session was created more than FRESH_SESSION_MS before `now`. */
 export function assertFresh(session: { createdAt: Date }, now: Date = new Date()): void {
-  // Stub per PLAN/04 §3.7; wkr-audit-02 (W2) owns the final version alongside getSessionChecked.
   if (now.getTime() - session.createdAt.getTime() > FRESH_SESSION_MS)
     throw new ApiError(403, "reauth_required", "sign in again to change this setting");
 }
 
-async function readSession(auth: Auth, headers: Headers): Promise<{ user: SessionUser; session: SessionRef } | null> {
+/** Better Auth's session as returned by getSession. */
+export type SessionWithUser = NonNullable<Awaited<ReturnType<Auth["api"]["getSession"]>>>;
+
+/**
+ * getSession plus the absolute-age check: a session created more than SESSION_ABSOLUTE_MAX_DAYS ago is
+ * deleted and treated as signed out. Every authenticated path (role guard, /me, sessions) goes through here.
+ */
+export async function getSessionChecked(
+  auth: Auth,
+  headers: Headers,
+  now: Date = new Date(),
+): Promise<SessionWithUser | null> {
   const s = await auth.api.getSession({ headers });
+  if (!s) return null;
+  if (now.getTime() - new Date(s.session.createdAt).getTime() <= SESSION_ABSOLUTE_MAX_MS) return s;
+  await (await auth.$context).internalAdapter.deleteSession(s.session.token);
+  log.info(
+    `[auth] session ${s.session.id} of user ${s.user.id} expired (older than ${SESSION_ABSOLUTE_MAX_DAYS} days)`,
+  );
+  return null;
+}
+
+async function readSession(auth: Auth, headers: Headers): Promise<{ user: SessionUser; session: SessionRef } | null> {
+  const s = await getSessionChecked(auth, headers);
   if (!s) return null;
   const { id, email, name, image, role } = s.user;
   requestUserIds.set(headers, id);

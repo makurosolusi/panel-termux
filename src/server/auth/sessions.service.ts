@@ -1,12 +1,13 @@
-import { and, desc, eq, gt } from "drizzle-orm";
+import { and, desc, eq, gt, ne } from "drizzle-orm";
 import type { MeSession } from "../../shared/me.types";
+import type { RevokedSessions } from "../../shared/security.types";
 import { recordAudit } from "../audit.service";
 import type { Db } from "../db/client";
-import { session } from "../db/schema";
+import { session, user } from "../db/schema";
 import { log } from "../log.service";
 import { ApiError } from "../routes/http.error";
 import type { Auth } from "./auth.service";
-import { requestUserIds } from "./role.guard";
+import { getSessionChecked, requestUserIds } from "./role.guard";
 
 const BROWSERS: [RegExp, string][] = [
   [/EdgA?\//, "Edge"],
@@ -47,7 +48,7 @@ export function maskIp(ip: string | null): string | null {
 /** The signed-in user's own sessions behind /api/me/sessions. Tokens stay server-side. */
 export function createSessionsService(auth: Auth, db: Db) {
   const current = async (headers: Headers) => {
-    const s = await auth.api.getSession({ headers });
+    const s = await getSessionChecked(auth, headers);
     if (!s) throw new ApiError(401, "unauthorized", "sign in required");
     requestUserIds.set(headers, s.user.id);
     return s;
@@ -103,4 +104,28 @@ export function createSessionsService(auth: Auth, db: Db) {
       return { revoked: before };
     },
   };
+}
+
+/**
+ * Signs user `userId` out everywhere (super_admin action, B6): any target except the caller (409 `self`),
+ * env super admins included. Roles stay.
+ */
+export function revokeUserSessions(db: Db, actorId: string, userId: string): RevokedSessions {
+  if (actorId === userId) throw new ApiError(409, "self", "use your own sessions page to sign out your devices");
+  if (!db.select({ id: user.id }).from(user).where(eq(user.id, userId)).get())
+    throw new ApiError(404, "not_found", `unknown user ${userId}`);
+  const revoked = db.delete(session).where(eq(session.userId, userId)).returning({ id: session.id }).all().length;
+  recordAudit(db, { actorId, action: "session.revoke", target: userId, meta: { scope: "user", userId, revoked } });
+  log.info(`[auth] user ${actorId} revoked ${revoked} session(s) of user ${userId}`);
+  return { revoked };
+}
+
+/** "Keluarkan semua pengguna": ends every session of every user except `exceptSessionId` (the caller's). */
+export function revokeAllSessions(db: Db, exceptSessionId: string): RevokedSessions {
+  const own = db.select({ userId: session.userId }).from(session).where(eq(session.id, exceptSessionId)).get();
+  if (!own) throw new Error(`revokeAllSessions: caller session ${exceptSessionId} not found`);
+  const count = db.delete(session).where(ne(session.id, exceptSessionId)).returning({ id: session.id }).all().length;
+  recordAudit(db, { actorId: own.userId, action: "session.revoke_all", target: "*", meta: { count } });
+  log.info(`[auth] user ${own.userId} revoked all ${count} other session(s)`);
+  return { revoked: count };
 }
