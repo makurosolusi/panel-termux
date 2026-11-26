@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.2.1] - 2026-11-26
+
+### Fixed
+
+- Panel di belakang Cloudflare Access langsung menampilkan login Access saat sesi belum ada/habis, bukan galat jaringan.
+
 ## [0.2.0] - 2026-11-26
 
 ### Added
