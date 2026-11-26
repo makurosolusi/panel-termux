@@ -3,7 +3,7 @@ import { PageHeader } from "@/web/components/page-header";
 import { Card, CardContent } from "@/web/components/ui/card";
 import { id } from "@/web/i18n/id";
 
-/** Placeholder section page (/panel, /dev) until later waves add content. */
+/** Placeholder section page (/panel) until later waves add content. */
 export function EmptySectionPage({ title, subtitle }: { title: string; subtitle: string }) {
   return (
     <>
