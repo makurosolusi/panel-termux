@@ -126,7 +126,31 @@ Binary Android jalan langsung di Termux tanpa `grun` (sekitar 65 MB RSS).
 
    buat DNS-nya (`cloudflared tunnel route dns <tunnel> panel.<domain>`) lalu `sv restart cloudflared`.
 
-4. Lindungi hostname itu dengan **Cloudflare Access** (Zero Trust → Access → Applications, kebijakan email yang diizinkan). Login Google panel tetap berlaku di belakangnya. `APP_BASE_URL` = `https://panel.<domain>`.
+4. Set `APP_BASE_URL` = `https://panel.<domain>`, lalu lindungi **path privat** panel dengan **Cloudflare Access**. Landing page `/` dan alur login Google sengaja tetap publik.
+
+   Di Cloudflare dashboard: **Zero Trust → Access controls → Applications → Create new application → Self-hosted and private**. Buat **satu** aplikasi, lalu **Add public hostname** sekali per path (domain `panel.<domain>` sama semua):
+
+   | Path (kolom **Path**) | Melindungi                                    |
+   | --------------------- | --------------------------------------------- |
+   | `profile`             | halaman `/profile`                            |
+   | `panel`               | halaman `/panel` dan `/panel/...`             |
+   | `dev`                 | halaman `/dev` dan `/dev/...`                 |
+   | `api/panel`           | API `/api/panel/...` (termasuk upload deploy) |
+   | `api/dev`             | API `/api/dev/...`                            |
+
+   Tulis path **tanpa** `/*`: menurut dokumentasi Access, `panel/*` hanya mencakup `/panel/<sesuatu>` dan **tidak** mencakup `/panel` itu sendiri, sedangkan `panel` mencakup path itu beserta sub-path-nya. Kosongkan kolom Path berarti seluruh hostname terlindungi, termasuk landing page, jadi jangan lakukan itu. Query string tidak didukung di path Access (tidak masalah, panel tidak memakainya untuk routing).
+
+   Tambahkan satu policy **Allow** dengan selector **Emails** berisi email pemilik panel (boleh lebih dari satu), lalu **Create**.
+
+   Yang sengaja **tidak** dilindungi Access, dan alasannya:
+   - `/` (landing page) dan `/login`: harus bisa dibuka siapa pun.
+   - `/api/auth/...`: sign-in Google dan callback Better Auth; bila dilindungi, login dari landing page tidak jalan untuk tamu.
+   - `/api/me`: dipanggil landing page untuk tamu (jawab 401 bila belum login); bila dilindungi, fetch-nya dialihkan ke halaman login Access dan landing page gagal memuat.
+   - `/api/health` dan aset bundle di root (`/chunk-*.js`, `/chunk-*.css`): tidak berisi data, dan landing page memerlukannya.
+
+   Access hanya lapisan di depan. Di belakangnya login Google panel dan peran tetap berlaku, dan `/api/panel/*` serta `/api/dev/*` tetap dijaga peran di server walaupun Access salah konfigurasi.
+
+   Efek praktis karena panel adalah SPA: Access hanya bisa menampilkan halaman loginnya saat browser memuat halaman penuh di path yang dilindungi. Pindah dari `/` atau `/login` ke `/panel` lewat tombol terjadi di sisi klien tanpa memuat halaman, jadi Access tidak sempat meminta login; panggilan `/api/panel/...` berikutnya lalu dialihkan ke halaman login Access dan muncul sebagai galat jaringan. Hal yang sama terjadi saat sesi Access kedaluwarsa (bawaan 24 jam) ketika panel sedang terbuka. Solusinya: buka `https://panel.<domain>/panel` (atau `/dev`, `/profile`) langsung di address bar, atau muat ulang halaman. Setelah login Access, cookie `CF_Authorization` berlaku untuk hostname itu dan navigasi di dalam panel berjalan normal sampai sesi Access habis.
 
 ## Login dan peran
 
@@ -191,10 +215,10 @@ sv up panel
 
 ## Keamanan
 
-- Login terbuka untuk semua akun Google, tetapi akun baru hanya mendapat peran `user` (cuma `/profile`). Karena siapa pun bisa login, tetap pasang **Cloudflare Access** di depan panel agar hanya email yang kamu izinkan yang sampai ke halaman login.
+- Login terbuka untuk semua akun Google, tetapi akun baru hanya mendapat peran `user` (cuma `/profile`). Karena siapa pun bisa login, pasang **Cloudflare Access** di depan path privat (`/profile`, `/panel`, `/dev`, `/api/panel`, `/api/dev`) agar hanya email yang kamu izinkan yang sampai ke sana (resep di **Instal di HP** langkah 4). Landing page `/`, `/login`, `/api/auth/*`, `/api/me`, `/api/health`, dan aset bundle sengaja tetap publik. `/api/panel/*` dan `/api/dev/*` tetap dijaga peran di server, jadi Access adalah lapisan tambahan, bukan satu-satunya penjaga.
 - Super admin dari env disinkronkan ulang setiap boot dan login (email yang dihapus dari env turun ke `user`).
 - Nilai rahasia di pengaturan dienkripsi dengan data secret (`PANEL_DATA_DIR/secret`, dibuat otomatis, mode 600). Backup file ini terpisah (lihat di atas).
-- Panel hanya listen di `127.0.0.1`. Jangan pernah membuka port panel ke publik/LAN; akses lewat tunnel + Cloudflare Access.
+- Panel hanya listen di `127.0.0.1`. Jangan pernah membuka port panel ke publik/LAN; akses lewat tunnel, dengan path privat di belakang Cloudflare Access.
 - `.env` panel dan `.env` site disimpan mode 600.
 
 ## Keterbatasan
