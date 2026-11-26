@@ -16,14 +16,13 @@ import type { SystemAdapters } from "../system/system.types";
 import { createDeployRoutes } from "./deploy.routes";
 import { createDevRoutes, type DevDeps } from "./dev.routes";
 import { createMeRoutes } from "./me.routes";
-import { rejectForeignOrigin } from "./origin.guard";
 import { createPanelRoutes, panelOnError } from "./panel.routes";
 import { createSiteRoutes } from "./sites.routes";
 
 const HTTP_UNAVAILABLE = 503;
 
 /**
- * Auth-aware API under /api: Better Auth endpoints, /ready, /me, and role-guarded /panel and /dev areas.
+ * Auth-aware API under /api (CSRF guard and limits run before it, in createApiHandler): Better Auth endpoints, /ready, /me, and role-guarded /panel and /dev areas.
  * `system` defaults to auto-detected adapters (Termux when `$PREFIX/bin/sv` exists, else fake);
  * `dns` defaults to the Cloudflare provider (one instance shared by site jobs and /dev/cloudflare).
  * `deploy.healthTimeoutMs` shortens the post-deploy health wait (tests). The site job runner is exposed
@@ -47,8 +46,6 @@ export function createApiRoutes(
   });
   return (
     new Elysia({ prefix: "/api" })
-      // CSRF: state-changing requests must come from the panel's own pages (see origin.guard.ts).
-      .onRequest(({ request }) => rejectForeignOrigin(request, auth.options.baseURL) ?? undefined)
       // Better Auth owns /api/auth/* (sign-in/social, callback/google, get-session, sign-out, ...).
       .all("/auth/*", ({ request }) => auth.handler(request), { parse: "none" })
       .decorate("siteJobs", sites.jobs)

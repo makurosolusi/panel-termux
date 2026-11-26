@@ -1,6 +1,9 @@
 import { requestUserIds } from "../auth/role.guard";
+import { maskIp, shortUserAgent } from "../auth/sessions.service";
 import { log } from "../log.service";
+import { rejectForeignOrigin } from "../routes/origin.guard";
 import { AUTH_LIMIT_PER_IP, clientIp, createRateLimiter, MUTATION_LIMIT_PER_SESSION } from "./rate.limit";
+import { runWithRequest } from "./request.context";
 import { logRequest } from "./request.log";
 import { API_CSP, applySecurityHeaders } from "./security.headers";
 
@@ -10,12 +13,18 @@ const HTTP_TOO_MANY = 429;
 const HTTP_TOO_LARGE = 413;
 const HTTP_INTERNAL = 500;
 const HTTP_CLIENT_ERROR = 400;
+const HTTP_MISDIRECTED = 421;
 const ERROR_LOG_SNIPPET = 300;
 
 /** Binary deploy chunks: own size check (DEPLOY_CHUNK_SIZE) and exempt from the mutation limit. */
 const CHUNK_ROUTE = /^\/api\/panel\/uploads\/[^/]+\/chunks\/\d+$/;
 const AUTH_LIMITED = /^\/api\/auth\/(sign-in|callback)\//;
-const MUTATION_AREA = /^\/api\/(panel|dev)\//;
+const MUTATION_AREA = /^\/api\/(panel|dev|me)\//;
+/** Areas where an authenticated request carrying a Cloudflare Access JWT proves Access is in front. */
+const ACCESS_AREA = /^\/api\/(panel|dev)\//;
+const ACCESS_JWT_HEADER = "cf-access-jwt-assertion";
+/** Hosts the installer, probes and local dev use; always accepted besides the APP_BASE_URL host. */
+const LOOPBACK_HOSTS = new Set(["127.0.0.1", "localhost", "[::1]"]);
 const SAFE_METHODS = new Set(["GET", "HEAD", "OPTIONS"]);
 const SESSION_COOKIE = /(?:^|;\s*)(?:__Secure-)?better-auth\.session_token=([^;]+)/;
 
@@ -82,18 +91,35 @@ async function readCapped(req: Request, max: number): Promise<Blob | null> {
   return new Blob(parts);
 }
 
+/**
+ * Last time an authenticated /api/panel or /api/dev request came through Cloudflare Access. Single source
+ * for onboarding/health; display only, never used for authorization.
+ */
+export const accessSeen: { at: Date | null } = { at: null };
+
 type Handler = { handle(req: Request): Response | Promise<Response> };
 type Peer = { requestIP(req: Request): { address: string } | null } | undefined;
 
 /**
- * Wraps the API with the cross-cutting HTTP rules: rate limits, JSON body limit, uniform error bodies
- * (500 → request id, no stack), security headers, one log line per request.
+ * Wraps the API with the cross-cutting HTTP rules, in order: host check (421 `wrong_host`) → CSRF origin
+ * guard (403, before the rate limit so foreign pages cannot burn a session's quota) → rate limits → JSON
+ * body limit → handler inside the request context. Plus uniform error bodies (500 → request id, no stack),
+ * security headers, `cache-control: no-store`, one log line per request and `accessSeen`.
  */
-export function createApiHandler(api: Handler, { https }: { https: boolean }) {
+export function createApiHandler(api: Handler, { appBaseUrl }: { appBaseUrl: string }) {
+  const base = new URL(appBaseUrl);
+  const https = base.protocol === "https:";
   const authLimit = createRateLimiter(AUTH_LIMIT_PER_IP);
   const mutationLimit = createRateLimiter(MUTATION_LIMIT_PER_SESSION);
 
-  async function respond(req: Request, path: string, ip: string, requestId: string): Promise<Response> {
+  async function respond(req: Request, url: URL, ip: string, requestId: string): Promise<Response> {
+    const path = url.pathname;
+    // A second ingress pointed at the panel port must not bypass Access: only our own host or loopback.
+    if (url.host !== base.host && !LOOPBACK_HOSTS.has(url.hostname))
+      return errorResponse(HTTP_MISDIRECTED, { error: "wrong_host", message: `host ${url.host} is not served here` });
+    const foreign = rejectForeignOrigin(req, appBaseUrl);
+    if (foreign) return foreign;
+
     const chunk = CHUNK_ROUTE.test(path);
     let retry: number | null = null;
     if (AUTH_LIMITED.test(path)) retry = authLimit.take(ip);
@@ -124,7 +150,8 @@ export function createApiHandler(api: Handler, { https }: { https: boolean }) {
     }
 
     try {
-      const res = await api.handle(forward);
+      const ctx = { requestId, ipMasked: maskIp(ip), userAgent: shortUserAgent(req.headers.get("user-agent")) };
+      const res = await runWithRequest(ctx, () => api.handle(forward));
       return res.status >= HTTP_CLIENT_ERROR ? await normalizeError(res, requestId) : res;
     } catch (e) {
       log.error(`[http] ${requestId} ${req.method} ${path} threw: ${e instanceof Error ? e.message : String(e)}`);
@@ -133,18 +160,21 @@ export function createApiHandler(api: Handler, { https }: { https: boolean }) {
     } finally {
       const userId = requestUserIds.get(forward.headers);
       if (userId) requestUserIds.set(req.headers, userId);
+      if (userId && ACCESS_AREA.test(path) && req.headers.has(ACCESS_JWT_HEADER)) accessSeen.at = new Date();
     }
   }
 
   return async (req: Request, server?: Peer): Promise<Response> => {
     const t0 = performance.now();
     const requestId = crypto.randomUUID();
-    const path = new URL(req.url).pathname;
+    const url = new URL(req.url);
+    const path = url.pathname;
     const ip = clientIp(req.headers, server?.requestIP(req)?.address ?? null);
-    const raw = await respond(req, path, ip, requestId);
+    const raw = await respond(req, url, ip, requestId);
     // Fresh Response: handler/fetch responses may carry immutable headers.
     const headers = applySecurityHeaders(new Headers(raw.headers), API_CSP, https);
     headers.set("x-request-id", requestId);
+    headers.set("cache-control", "no-store");
     const res = new Response(raw.body, { status: raw.status, statusText: raw.statusText, headers });
     const userId = requestUserIds.get(req.headers) ?? null;
     logRequest({ method: req.method, path, status: res.status, ms: performance.now() - t0, userId });

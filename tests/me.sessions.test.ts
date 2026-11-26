@@ -154,7 +154,7 @@ describe("/api/me/sessions", () => {
   test("request log names the user id, never the email or query", async () => {
     const me = addUser("logged.person@x.io");
     const { cookie } = await login(me);
-    const handle = createApiHandler(api, { https: false });
+    const handle = createApiHandler(api, { appBaseUrl: BASE });
     const res = await handle(new Request(`${BASE}/api/me/sessions?debug=1`, { headers: { cookie } }));
     expect(res.status).toBe(200);
     const line = readLogs({ level: "info", q: `user=${me}`, limit: 1 })[0]?.msg;

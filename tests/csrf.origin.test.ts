@@ -6,6 +6,9 @@ import { Elysia } from "elysia";
 import { createAuth } from "@/server/auth/auth.service";
 import { type Db, openDb } from "@/server/db/client";
 import { runMigrations } from "@/server/db/migrate";
+import { user } from "@/server/db/schema";
+import { createApiHandler } from "@/server/http/api.handler";
+import { MUTATION_LIMIT_PER_SESSION } from "@/server/http/rate.limit";
 import { app, servePanel } from "@/server/index";
 import { readLogs } from "@/server/log.service";
 import { createApiRoutes } from "@/server/routes/api.routes";
@@ -22,20 +25,36 @@ const dir = mkdtempSync(join(tmpdir(), "panel-csrf-"));
 let db: Db;
 /** Composed like start(): health app + API routes nested in a root Elysia. */
 let api: { handle(req: Request): Response | Promise<Response> };
+/** What servePanel puts in front of `api` (the guard lives here, before the rate limit). */
+let handle: ReturnType<typeof createApiHandler>;
+let auth: ReturnType<typeof createAuth>;
 
 beforeAll(() => {
   db = openDb(dir);
   runMigrations(db);
-  const auth = createAuth({ db, env, secret: SECRET });
+  auth = createAuth({ db, env, secret: SECRET });
   api = new Elysia().use(app).use(createApiRoutes(auth, { db, secret: SECRET, superAdmins: SUPER, dataDir: dir }));
+  handle = createApiHandler(api, { appBaseUrl: BASE });
 });
 afterAll(() => {
   db.$client.close();
   rmSync(dir, { recursive: true, force: true });
 });
 
+/** Signed Better Auth session cookie of a fresh user (what the browser sends after sign-in). */
+async function signedInCookie(): Promise<string> {
+  db.insert(user).values({ id: "victim", email: "victim@example.com", name: "v", role: "user" }).run();
+  const s = await (await auth.$context).internalAdapter.createSession("victim");
+  const enc = new TextEncoder();
+  const key = await crypto.subtle.importKey("raw", enc.encode(SECRET), { name: "HMAC", hash: "SHA-256" }, false, [
+    "sign",
+  ]);
+  const sig = new Uint8Array(await crypto.subtle.sign("HMAC", key, enc.encode(s.token)));
+  return `better-auth.session_token=${encodeURIComponent(`${s.token}.${btoa(String.fromCharCode(...sig))}`)}`;
+}
+
 const send = (method: string, path: string, headers: Record<string, string>) =>
-  api.handle(new Request(`${BASE}${path}`, { method, headers }));
+  handle(new Request(`${BASE}${path}`, { method, headers }));
 
 // One state-changing route per family; anon requests that pass the guard reach the role guard → 401.
 const MUTATIONS: [string, string][] = [
@@ -48,7 +67,7 @@ const MUTATIONS: [string, string][] = [
   ["POST", "/api/panel/backups/run"],
   ["PATCH", "/api/dev/users/x"],
   ["DELETE", "/api/dev/users/x"],
-  ["PUT", "/api/dev/settings/sites.dir"],
+  ["PATCH", "/api/dev/settings"],
   ["POST", "/api/dev/cloudflare/verify"],
 ];
 
@@ -82,14 +101,30 @@ describe("state-changing /api requests", () => {
   }
 
   test("rejection is logged at warn with method, path and origin host only", async () => {
+    // Own origin host: the log is throttled per host per minute and evil.example.com was used above.
     await send("POST", "/api/panel/services/cloudflared/restart", {
-      origin: "https://evil.example.com",
+      origin: "https://logged.example.com",
       cookie: "better-auth.session_token=s3cr3t",
     });
     const [entry] = readLogs({ level: "warn", q: "[csrf]", limit: 1 });
     expect(entry?.msg).toBe(
-      "[csrf] rejected POST /api/panel/services/cloudflared/restart origin=evil.example.com fetch-site=-",
+      "[csrf] rejected POST /api/panel/services/cloudflared/restart origin=logged.example.com fetch-site=-",
     );
+  });
+
+  test(`${MUTATION_LIMIT_PER_SESSION + 1} foreign POSTs then 1 legit POST → 200 (not rate limited)`, async () => {
+    const cookie = await signedInCookie();
+    const path = "/api/me/sessions/revoke-others";
+    for (let i = 0; i <= MUTATION_LIMIT_PER_SESSION; i++) {
+      const res = await send("POST", path, {
+        origin: "https://site.example.com",
+        "sec-fetch-site": "same-site",
+        cookie,
+      });
+      expect(res.status).toBe(403);
+    }
+    const legit = await send("POST", path, { ...OK, cookie });
+    expect(legit.status).toBe(200); // guard ran before the limiter: the victim's quota is untouched
   });
 });
 
