@@ -1,6 +1,5 @@
 import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
-import { S3Client } from "bun";
 import { and, desc, eq, isNotNull, isNull, ne, sql } from "drizzle-orm";
 import pkg from "../../../package.json" with { type: "json" };
 import { recordAudit } from "../audit.service";
@@ -9,6 +8,7 @@ import { appMeta, type BackupItemRow, backupRestore, backupRun, site } from "../
 import { log } from "../log.service";
 import type { SettingsDeps } from "../settings.service";
 import { sitePaths } from "../sites/site.checks";
+import { s3ClientFor } from "../system/external.clients";
 import type { SystemAdapters } from "../system/system.types";
 import { type BackupConfig, describeS3Error, runKeyStem, type S3Config } from "./backup.config";
 import {
@@ -68,7 +68,7 @@ export type RunInfo = { id: string; startedAt: Date; actorId: string | null };
 export async function executeRun(deps: RunDeps, run: RunInfo, cfg: BackupConfig, s3: S3Config): Promise<void> {
   const { db, system } = deps;
   const tmpDir = join(deps.dataDir, "backup-tmp");
-  const client = new S3Client(s3);
+  const client = s3ClientFor(system.offline, s3);
   const stem = runKeyStem(cfg.prefix, run.startedAt);
   const items: BackupItemRow[] = [];
   const errors: string[] = [];

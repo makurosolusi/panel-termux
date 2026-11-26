@@ -7,9 +7,9 @@ const FAKE_SERVER_VERSION = "18.7";
 /** Tables every fake restore reports. */
 const FAKE_TABLE_COUNT = 3;
 
-/** In-memory PostgreSQL: dumps are small marker files that verify/restore check. */
-export function createFakePostgres(): PostgresAdapter {
-  const databases: DatabaseInfo[] = [
+/** In-memory PostgreSQL: dumps are small marker files that verify/restore check. `initial` replaces the demo list. */
+export function createFakePostgres(initial?: DatabaseInfo[]): PostgresAdapter {
+  const databases: DatabaseInfo[] = initial?.map((d) => ({ ...d })) ?? [
     { name: "adminneo", owner: "postgres", sizeBytes: 8_000_000 },
     { name: "solusi", owner: "solusi", sizeBytes: 24_500_000 },
   ];

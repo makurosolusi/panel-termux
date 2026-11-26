@@ -1,11 +1,11 @@
 import { Database } from "bun:sqlite";
 import { copyFileSync, existsSync, mkdirSync, readdirSync, rmSync, statfsSync, statSync } from "node:fs";
 import { basename, join } from "node:path";
-import type { S3Client } from "bun";
 import type { BackupItemErrorCode, BackupItemKind, BackupItemWarning } from "../../shared/backup.types";
 import { SITE_BINARY_NAMES } from "../../shared/site.types";
 import type { BackupItemRow } from "../db/schema";
 import { log } from "../log.service";
+import type { S3Like } from "../system/external.clients";
 import { describeS3Error, type S3Config } from "./backup.config";
 
 /** Free space kept on top of an item's estimated size (PLAN/04 K7). */
@@ -102,7 +102,7 @@ export type ItemSpec = {
 /** Shared per-run context of the item pipeline. */
 export type ItemCtx = {
   runId: string;
-  client: S3Client;
+  client: S3Like;
   s3: S3Config;
   tmpDir: string;
   maxItemBytes: number;

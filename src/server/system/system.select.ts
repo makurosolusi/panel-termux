@@ -32,10 +32,13 @@ export function createTermuxSystem(): SystemAdapters {
   };
 }
 
-/** Termux adapters when `$PREFIX/bin/sv` exists, else the in-memory fake; logs the chosen mode. */
-export function selectSystem(): SystemAdapters {
+/**
+ * Termux adapters when `$PREFIX/bin/sv` exists, else the fake with offline S3/Telegram/DNS (D-W9-4) and sandbox HOME
+ * `fakeHome` (boot: `<data dir>/fake-home`, kept across restarts; default a fresh temp dir). Logs the chosen mode.
+ */
+export function selectSystem(opts: { fakeHome?: string } = {}): SystemAdapters {
   const sv = `${termuxPrefix()}/bin/sv`;
-  const system = existsSync(sv) ? createTermuxSystem() : createFakeSystem();
+  const system = existsSync(sv) ? createTermuxSystem() : createFakeSystem({ home: opts.fakeHome, offline: true });
   log.info(`[panel] system adapters: ${system.mode}${system.mode === "fake" ? ` (${sv} not found)` : ""}`);
   return system;
 }

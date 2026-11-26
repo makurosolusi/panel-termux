@@ -51,7 +51,7 @@ export function createApiRoutes(
   auth: Auth,
   dev: ApiDeps,
   system: SystemAdapters = selectSystem(),
-  dns: SiteDnsProvider = createDnsProvider({ db: dev.db, secret: dev.secret }),
+  dns: SiteDnsProvider = system.offline?.dns ?? createDnsProvider({ db: dev.db, secret: dev.secret }),
   deploy: { healthTimeoutMs?: number; healthTiming?: HealthTiming } = {},
 ) {
   const { db, secret, dataDir } = dev;
@@ -121,7 +121,7 @@ export function createApiRoutes(
       .use(createDeployRoutes(auth, deploys))
       .use(createBackupRoutes({ auth, db, secret, dataDir, system }))
       .use(createBackupDevRoutes({ auth, db, secret, dataDir, system }))
-      .use(createAlertRoutes({ auth, db, secret, monitor }))
+      .use(createAlertRoutes({ auth, db, secret, monitor, telegramFetch: system.offline?.telegramFetch }))
       .use(createSecurityRoutes(auth, { db, secret, appBaseUrl, createdThisBoot }))
       .use(createDevRoutes(auth, dev))
       .use(createDevAdminRoutes({ auth, db, secret, system, monitor, backup, jobs, appBaseUrl, createdThisBoot }))

@@ -1,5 +1,5 @@
 import { uptime } from "node:os";
-import { basename, resolve } from "node:path";
+import { basename, join, resolve } from "node:path";
 import { Elysia } from "elysia";
 import pkg from "../../package.json" with { type: "json" };
 import { pruneAudit, recordAudit } from "./audit.service";
@@ -18,6 +18,7 @@ import { createApiRoutes } from "./routes/api.routes";
 import { loadOrCreateSecret } from "./secret";
 import { getSetting } from "./settings.service";
 import { consumeCleanShutdownMarker, createShutdown } from "./shutdown";
+import { FAKE_HOME_DIR } from "./system/system.fake";
 import { selectSystem } from "./system/system.select";
 import type { SystemAdapters } from "./system/system.types";
 
@@ -76,7 +77,7 @@ export async function bootPanel(env: Env, opts: BootOpts = {}) {
   });
 
   let adminSeen = false;
-  const system = opts.system ?? selectSystem();
+  const system = opts.system ?? selectSystem({ fakeHome: join(dataDir, FAKE_HOME_DIR) });
   const routes = createApiRoutes(
     createAuth({ db, env, secret }),
     {

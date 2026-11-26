@@ -15,7 +15,15 @@ import { panelOnError } from "./panel.routes";
 export const TEST_SEND_GAP_MS = 5_000;
 
 /** Deps of createAlertRoutes; `telegramBaseUrl` points at a mock Bot API in tests. */
-export type AlertRoutesDeps = { auth: Auth; db: Db; secret: string; monitor: MonitorService; telegramBaseUrl?: string };
+export type AlertRoutesDeps = {
+  auth: Auth;
+  db: Db;
+  secret: string;
+  monitor: MonitorService;
+  telegramBaseUrl?: string;
+  /** Offline Bot API stand-in in fake mode (D-W9-4); default: global fetch. */
+  telegramFetch?: typeof fetch;
+};
 
 /** Bot API failure → 502 with its AlertErrorCode; anything else is rethrown. */
 function asApiError(e: unknown): never {
@@ -27,9 +35,16 @@ function asApiError(e: unknown): never {
 }
 
 /** super_admin routes POST /dev/alerts/test and POST /dev/alerts/telegram/chats. */
-export function createAlertRoutes({ auth, db, secret, monitor, telegramBaseUrl = TELEGRAM_API_URL }: AlertRoutesDeps) {
+export function createAlertRoutes({
+  auth,
+  db,
+  secret,
+  monitor,
+  telegramBaseUrl = TELEGRAM_API_URL,
+  telegramFetch,
+}: AlertRoutesDeps) {
   let lastTestAt = Number.NEGATIVE_INFINITY;
-  const client = (token: string) => createTelegramClient({ token, baseUrl: telegramBaseUrl });
+  const client = (token: string) => createTelegramClient({ token, baseUrl: telegramBaseUrl, fetch: telegramFetch });
 
   return roleGuard(auth, "/dev/alerts", "super_admin")
     .onError(panelOnError as never)

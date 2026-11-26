@@ -1,21 +1,24 @@
 // Fictional demo data + signed sessions for QA/screenshots (PLAN/05 W3). Prints counts only, never cookies or keys.
-// Usage: bun scripts/demo-seed.ts --data-dir <dir> --base-url <url>; then run the panel on that dir (fake mode).
+// Usage: bun scripts/demo-seed.ts --data-dir <dir> --base-url <url>; then run the panel on that dir in fake mode with
+// APP_BASE_URL=<url>. Give each parallel instance its own host, e.g. http://demo1.localhost:3421: browser cookies are
+// per host, not per port, so two instances on localhost would sign each other out.
 import { Database } from "bun:sqlite";
-import { chmodSync, existsSync, mkdirSync, statSync, writeFileSync } from "node:fs";
+import { chmodSync, existsSync, statSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { join, resolve, sep } from "node:path";
 import { parseArgs } from "node:util";
 import { sql } from "drizzle-orm";
 import pkg from "../package.json" with { type: "json" };
 import { createAuth } from "../src/server/auth/auth.service";
-import { type Db, openDb } from "../src/server/db/client";
+import { openDb } from "../src/server/db/client";
 import { runMigrations } from "../src/server/db/migrate";
-import type { BackupItemRow } from "../src/server/db/schema";
 import * as t from "../src/server/db/schema";
 import { loadOrCreateSecret } from "../src/server/secret";
 import { setSettings } from "../src/server/settings.service";
 import type { Role } from "../src/shared/roles";
 import type { JobStep } from "../src/shared/site.types";
+import { seedBackups, seedMonitor, type Tx } from "./demo-seed.history";
+import { DEMO_BINARY_BYTES, DEMO_BUCKET, demoHome, writeDemoHome } from "./demo-seed.sandbox";
 
 /** Must be in the panel's SUPER_ADMIN_EMAILS, or boot demotes the demo super admin. */
 export const DEMO_SUPER_ADMIN_EMAIL = "demo@contoh.test";
@@ -24,9 +27,8 @@ export const DEMO_MARKER = "demo_seed";
 /** Cookie file written into the data dir (mode 600). */
 export const COOKIE_FILE = "demo-cookies.json";
 
-const HOUR = 3_600_000;
-const SAMPLE_EVERY_MS = 10 * 60_000;
-const HISTORY_SPAN_MS = 7 * 24 * HOUR - HOUR; // inside the 7-day history retention
+const MINUTE = 60_000;
+const HOUR = 60 * MINUTE;
 const SHA = (c: string) => c.repeat(64);
 /** Tables the seed owns: wiped on rerun (children first) and counted in the result. */
 const TABLES = (
@@ -72,28 +74,26 @@ async function signedCookie(token: string, secret: string, baseUrl: string): Pro
   return `${name}=${encodeURIComponent(`${token}.${sig}`)}`;
 }
 
-type Tx = Parameters<Parameters<Db["transaction"]>[0]>[0];
 type P = JobStep["params"];
 type S = JobStep["status"];
 const step = (key: string, status: S, code: string | null, params: P = {}): JobStep => ({ key, status, code, params });
 const ok = (key: string, code: string, params: P = {}) => step(key, "done", code, params);
 const err = (code: string, params: P = {}) => JSON.stringify({ code, params, detail: null });
 
+/** Site name → [port, database, runtime, managed, hosts]; makuro-solusi = the fake pm2 app + ingress, adopted. */
+const SITES = {
+  "toko-kopi": [3010, "toko_kopi", "native", true, ["toko-kopi.contoh.com"]],
+  blog: [3011, null, "grun", true, ["blog.contoh.com", "blog.contoh.test"]],
+  "makuro-solusi": [3005, null, "grun", false, ["solusi.contoh.test"]],
+} as const;
+
 /** Users, 3 sites (one adopted), 7 jobs in every end state and 4 deploys (newest one live). */
-function seedSites(tx: Tx, dataDir: string, ago: (h: number) => Date): void {
+function seedSites(tx: Tx, dataDir: string, liveBinary: string, ago: (h: number) => Date): void {
   tx.insert(t.user)
     .values(USERS.map((u, i) => ({ ...u, emailVerified: true, createdAt: ago(170 - i * 20) })))
     .run();
-  // [name, port, database, runtime, managed, hosts]; makuro-solusi = the fake pm2 app + ingress, adopted.
-  const sites = [
-    ["toko-kopi", 3010, "toko_kopi", "native", true, ["toko-kopi.contoh.com"]],
-    ["blog", 3011, null, "grun", true, ["blog.contoh.com", "blog.contoh.test"]],
-    ["makuro-solusi", 3005, null, "grun", false, ["solusi.contoh.test"]],
-  ] as const;
-  for (const [i, [name, port, database, runtime, managed, hosts]] of sites.entries()) {
-    const dir = join(dataDir, "demo-sites", name);
-    mkdirSync(dir, { recursive: true });
-    writeFileSync(join(dir, ".env"), `PORT=${port}\n`, { mode: 0o600 });
+  for (const [i, [name, [port, database, runtime, managed, hosts]]] of Object.entries(SITES).entries()) {
+    const dir = demoHome(dataDir).site(name);
     const app = managed ? null : name;
     tx.insert(t.site)
       .values({ name, port, app, database, runtime, managed, dir, createdAt: ago(160 - i * 10) })
@@ -104,21 +104,22 @@ function seedSites(tx: Tx, dataDir: string, ago: (h: number) => Date): void {
         .run();
   }
   // Live binary of toko-kopi: its newest deploy shows as active (stat identity match).
-  const binFile = join(dataDir, "demo-sites", "toko-kopi", "app");
-  writeFileSync(binFile, "demo binary\n", { mode: 0o755 });
-  const bin = statSync(binFile);
+  const bin = statSync(liveBinary);
 
-  const create = (site: string) => [
-    ok("validate", "validated"),
-    ok("folder", "folder_created"),
-    ok("env_write", "env_written"),
-    ok("ingress", "ingress_added"),
-    ok("dns", "dns_created"),
-    ok("tunnel_restart", "tunnel_restarted"),
-    ok("domain_probe", "domain_reachable", { hostname: `${site}.contoh.com` }),
-  ];
+  const create = (site: keyof typeof SITES) => {
+    const hostnames = SITES[site][4].join(", ");
+    return [
+      ok("validate", "validated"),
+      ok("folder", "folder_created", { path: `~/sites/${site}` }),
+      ok("env_write", "env_written", { count: 2 }),
+      ok("ingress", "ingress_added", { hostnames }),
+      ok("dns", "dns_created", { hostnames }),
+      ok("tunnel_restart", "tunnel_restarted", { seconds: 4 }),
+      ok("domain_probe", "domain_reachable", { hostname: SITES[site][4][0], status: 200 }),
+    ];
+  };
   const head = (runtime: string) => [
-    ok("stage", "staged"),
+    ok("stage", "staged", { sizeBytes: DEMO_BINARY_BYTES }),
     ok("detect", `runtime_${runtime}`),
     ok("chmod", "chmod_done"),
   ];
@@ -133,7 +134,7 @@ function seedSites(tx: Tx, dataDir: string, ago: (h: number) => Date): void {
     ...tail,
     ok("health", "healthy", { status: 200, path: "/", ms: 840 }),
   ];
-  const timeout = { seconds: 60, last: 502 };
+  const timeout = { seconds: 60, last: 502, path: "/" };
   const dnsConflict = { hostname: "blog.contoh.test" };
   // [id, kind, target, status, steps, error, actor, hours ago]
   const jobs = [
@@ -175,7 +176,11 @@ function seedSites(tx: Tx, dataDir: string, ago: (h: number) => Date): void {
       "hostname.add",
       "blog",
       "failed",
-      [ok("validate", "validated"), ok("ingress", "ingress_added"), step("dns", "failed", "dns_conflict", dnsConflict)],
+      [
+        ok("validate", "validated"),
+        ok("ingress", "ingress_added", { hostnames: dnsConflict.hostname }),
+        step("dns", "failed", "dns_conflict", dnsConflict),
+      ],
       err("dns_conflict", dnsConflict),
       "demo-admin",
       3,
@@ -221,81 +226,6 @@ function seedSites(tx: Tx, dataDir: string, ago: (h: number) => Date): void {
   }
 }
 
-/** 5 backup runs (succeeded/failed/partial) with items and 3 restore tests. */
-function seedBackups(tx: Tx, ago: (h: number) => Date): void {
-  const item = (
-    kind: BackupItemRow["kind"],
-    name: string,
-    run: string,
-    good: boolean,
-    errorCode: BackupItemRow["errorCode"],
-  ): BackupItemRow => ({
-    kind,
-    name,
-    key: `panel-termux/${run}/${kind}-${name}.gz`,
-    sizeBytes: good ? 2_400_000 + name.length * 91_000 : null,
-    ok: good,
-    error: good ? null : "demo failure",
-    errorCode: good ? null : errorCode,
-    sha256: good ? SHA("f") : null,
-    checked: good,
-  });
-  // [id, trigger, status, hours ago]
-  const runs = [
-    ["bk-demo-1", "schedule", "succeeded", 148],
-    ["bk-demo-2", "schedule", "succeeded", 124],
-    ["bk-demo-3", "schedule", "failed", 100],
-    ["bk-demo-4", "manual", "partial", 52],
-    ["bk-demo-5", "schedule", "succeeded", 4],
-  ] as const;
-  for (const [id, trigger, status, h] of runs) {
-    const rest = status !== "failed";
-    const items = [
-      item("database", "toko_kopi", id, status === "succeeded", "produce_failed"),
-      item("panel", "panel.db", id, rest, "upload_failed"),
-      item("sites", "toko-kopi", id, rest, "upload_failed"),
-      item("cloudflared", "config.yml", id, rest, "upload_failed"),
-    ];
-    tx.insert(t.backupRun)
-      .values({
-        id,
-        trigger,
-        status,
-        items,
-        error: rest ? null : "upload_failed",
-        actorId: trigger === "manual" ? "demo-super" : null,
-        startedAt: ago(h),
-        finishedAt: new Date(ago(h).getTime() + 240_000),
-        includesSecrets: false,
-        panelVersion: pkg.version,
-      })
-      .run();
-  }
-  // [id, run, target db, status, actor, hours ago, dropped hours ago]
-  const restores = [
-    ["rs-demo-1", "bk-demo-2", "toko_kopi_uji_1", "succeeded", "demo-super", 120, 118],
-    ["rs-demo-2", "bk-demo-5", "toko_kopi_uji_2", "succeeded", "demo-super", 3, null],
-    ["rs-demo-3", "bk-demo-1", "toko_kopi_uji_3", "failed", "demo-admin", 140, null],
-  ] as const;
-  for (const [id, runId, targetDb, status, actorId, h, dropped] of restores)
-    tx.insert(t.backupRestore)
-      .values({
-        id,
-        runId,
-        itemIndex: 0,
-        sourceName: "toko_kopi",
-        targetDb,
-        status,
-        actorId,
-        startedAt: ago(h),
-        finishedAt: ago(h - 0.1),
-        tableCount: status === "succeeded" ? 12 : null,
-        error: status === "failed" ? "psql exited with 3" : null,
-        droppedAt: dropped === null ? null : ago(dropped),
-      })
-      .run();
-}
-
 /** 20 audit entries over the week across many actions (sign-ins come from the session hook). */
 function seedAudit(tx: Tx, ago: (h: number) => Date): void {
   const audits: [string, string, string | null, Record<string, unknown> | null][] = [
@@ -336,67 +266,10 @@ function seedAudit(tx: Tx, ago: (h: number) => Date): void {
   tx.insert(t.auditLog).values(rows).run();
 }
 
-/** Closed problems; 7 days of metric samples and checks of the fake ingress hosts. */
-function seedMonitor(tx: Tx, now: number): void {
-  // [code, kind, target, severity, params, opened h ago, closed h ago]
-  const events = [
-    ["domain_unreachable", "domain", "old.contoh.test", "danger", { failures: 3 }, 150, 149],
-    ["app_errored", "app", "kasir-lama", "danger", { restarts: 15 }, 130, 128],
-    ["backup_failed", "backup", "backup", "danger", {}, 100, 76],
-    ["battery_hot", "battery", "battery", "warning", { temperatureC: 43.5 }, 70, 69.5],
-    ["disk_low", "disk", "disk", "warning", { freePct: 9 }, 40, 30],
-    ["internet_down", "network", "internet", "danger", { domains: 3 }, 26, 25.8],
-    ["site_job_failed", "site", "toko-kopi", "danger", { jobId: "job-demo-04" }, 48, 47],
-  ] as const;
-  tx.insert(t.problemEvent)
-    .values(
-      events.map(([code, kind, target, severity, params, from, to]) => ({
-        key: `${code}:${target}`,
-        code,
-        kind,
-        target,
-        severity,
-        params,
-        openedAt: now - from * HOUR,
-        lastSeenAt: now - to * HOUR,
-        closedAt: now - to * HOUR,
-        notifiedState: "closed" as const,
-        notifiedSeverity: severity,
-        lastSentAt: now - to * HOUR,
-      })),
-    )
-    .run();
-  const samples: (typeof t.metricSample.$inferInsert)[] = [];
-  const checks: (typeof t.checkResult.$inferInsert)[] = [];
-  for (let at = now - HISTORY_SPAN_MS, i = 0; at < now; at += SAMPLE_EVERY_MS, i++) {
-    const w = Math.sin(i / 24);
-    samples.push({
-      at,
-      batteryPct: Math.round(70 + 25 * Math.sin(i / 40)),
-      batteryStatus: i % 80 < 40 ? "charging" : "discharging",
-      batteryTempC: 31 + 4 * w,
-      memAvailableMb: Math.round(3_800 + 900 * w),
-      memTotalMb: 11_776,
-      diskFreeMb: 186_000 - i * 4,
-      load1: 18 + 4 * w,
-      load5: 19 + 3 * w,
-      problemsDanger: i % 90 === 0 ? 1 : 0,
-      problemsWarning: i % 50 < 3 ? 1 : 0,
-    });
-    for (const hostname of ["db.contoh.test", "old.contoh.test", "solusi.contoh.test"])
-      checks.push({
-        hostname,
-        at,
-        status: hostname.startsWith("old.") && i % 7 === 0 ? null : 200,
-        ms: 40 + (i % 9) * 12,
-        localStatus: null,
-      });
-  }
-  tx.insert(t.metricSample).values(samples).run();
-  tx.insert(t.checkResult).values(checks).run();
-}
+/** Ports of the site folders in the fake HOME: the 3 sites + demo-api (adoption candidate). */
+const PORTS = { ...Object.fromEntries(Object.entries(SITES).map(([n, v]) => [n, v[0]])), "demo-api": 3007 };
 
-/** Seeds `dataDir` (migrations, demo rows, sessions), writes the cookie file; returns row counts. */
+/** Seeds `dataDir` (migrations, demo rows, fake HOME, sessions), writes the cookie file; returns row counts. */
 export async function seedDemo(opts: { dataDir: string; baseUrl: string }): Promise<Record<string, number>> {
   const dataDir = resolve(opts.dataDir);
   assertDemoDir(dataDir);
@@ -405,7 +278,9 @@ export async function seedDemo(opts: { dataDir: string; baseUrl: string }): Prom
   const db = openDb(dataDir);
   try {
     runMigrations(db);
-    const now = Date.now();
+    // Whole minutes: no seed time lands on odd seconds (times are shown without seconds).
+    const now = Math.floor(Date.now() / MINUTE) * MINUTE;
+    const { liveBinary } = writeDemoHome(dataDir, PORTS);
     const ago = (h: number) => new Date(now - h * HOUR);
     db.transaction((tx) => {
       // Rerun = wipe and rewrite: fresh timestamps and sessions.
@@ -418,19 +293,21 @@ export async function seedDemo(opts: { dataDir: string; baseUrl: string }): Prom
         .values(meta)
         .onConflictDoUpdate({ target: t.appMeta.key, set: { value: sql`excluded.value` } })
         .run();
-      seedSites(tx, dataDir, ago);
-      seedBackups(tx, ago);
+      seedSites(tx, dataDir, liveBinary, ago);
+      seedBackups(tx, dataDir, ago);
       seedAudit(tx, ago);
       seedMonitor(tx, now);
     });
-    // Fictional S3 target: backups count as configured (the 03:00 run fails harmlessly).
-    const s3 = {
+    // Fictional S3 target; in fake mode the panel uses the offline bucket under fake-home, so runs succeed.
+    const demoSettings = {
       "backup.s3_endpoint": "https://s3.contoh.test",
-      "backup.s3_bucket": "cadangan-demo",
+      "backup.s3_bucket": DEMO_BUCKET,
+      // Fictional token: the setup card is complete; fake mode answers Cloudflare calls offline.
+      "cloudflare.api_token": "demo_token_bukan_asli_0001",
       "backup.s3_access_key_id": "DEMOKEYID0001",
       "backup.s3_secret_access_key": "DEMOSECRETKEY0001",
     };
-    setSettings({ db, secret }, s3, "demo-super");
+    setSettings({ db, secret }, demoSettings, "demo-super");
 
     const env = { APP_BASE_URL: opts.baseUrl, GOOGLE_CLIENT_ID: "x", GOOGLE_CLIENT_SECRET: "x" };
     const ctx = await createAuth({ db, secret, env: { ...env, SUPER_ADMIN_EMAILS: [DEMO_SUPER_ADMIN_EMAIL] } })
@@ -462,7 +339,10 @@ if (import.meta.main) {
   try {
     console.log(`demo-seed: ${JSON.stringify(await seedDemo({ dataDir, baseUrl }))}`);
     console.log(`demo-seed: cookies (mode 600) in ${join(resolve(dataDir), COOKIE_FILE)}`);
-    console.log(`demo-seed: start the panel with SUPER_ADMIN_EMAILS=${DEMO_SUPER_ADMIN_EMAIL}`);
+    console.log(
+      `demo-seed: start the panel (fake mode) with PANEL_DATA_DIR=${resolve(dataDir)} APP_BASE_URL=${baseUrl} ` +
+        `SUPER_ADMIN_EMAILS=${DEMO_SUPER_ADMIN_EMAIL}`,
+    );
   } catch (e) {
     console.error((e as Error).message);
     process.exit(1);

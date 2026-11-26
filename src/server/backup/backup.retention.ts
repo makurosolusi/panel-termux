@@ -1,9 +1,9 @@
-import type { S3Client } from "bun";
 import { eq } from "drizzle-orm";
 import { recordAudit } from "../audit.service";
 import type { Db } from "../db/client";
 import { type BackupItemRow, backupRun } from "../db/schema";
 import { log } from "../log.service";
+import type { S3Like } from "../system/external.clients";
 import { describeS3Error, type S3Config, s3ErrorCode } from "./backup.config";
 
 const MS_PER_DAY = 86_400_000;
@@ -74,7 +74,7 @@ export type PruneResult = { deleted: number; failed: number; denied: number };
  */
 export async function applyPrune(
   db: Db,
-  client: S3Client,
+  client: S3Like,
   s3: S3Config,
   plan: PruneCandidate[],
   currentRunId: string,

@@ -1,7 +1,8 @@
-import { S3Client } from "bun";
 import type { BackupVerify, BackupVerifyCode, BackupVerifyInput, BackupVerifyStep } from "../../shared/backup.types";
 import { recordAudit } from "../audit.service";
 import type { SettingsDeps } from "../settings.service";
+import { s3ClientFor } from "../system/external.clients";
+import type { SystemAdapters } from "../system/system.types";
 import { describeS3Error, draftS3Config, s3ErrorCode } from "./backup.config";
 
 /** Whole-test budget (PLAN/04 F5.2). */
@@ -41,7 +42,7 @@ const result = (code: BackupVerifyCode, failed: BackupVerifyStep | null, t0: num
  * it, delete it. No list step (retention never lists, K3). Never throws; audited as `backup.verify`.
  */
 export async function verifyBackupTarget(
-  deps: SettingsDeps,
+  deps: SettingsDeps & { system?: Pick<SystemAdapters, "offline"> },
   actorId: string,
   draft: BackupVerifyInput = {},
   timeoutMs = VERIFY_TIMEOUT_MS,
@@ -53,7 +54,7 @@ export async function verifyBackupTarget(
   else if (!cfg.s3) out = result("not_configured", null, t0, null);
   else {
     const s3 = cfg.s3;
-    const client = new S3Client(s3);
+    const client = s3ClientFor(deps.system?.offline, s3);
     const key = `${cfg.prefix}.panel-termux-check-${crypto.randomUUID()}`;
     const deadline = t0 + timeoutMs;
     const timed = <T>(p: Promise<T>): Promise<T> => {

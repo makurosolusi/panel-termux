@@ -1,12 +1,21 @@
 import { afterAll, describe, expect, test } from "bun:test";
-import { mkdtempSync, readFileSync, rmSync, statSync } from "node:fs";
+import { createHash } from "node:crypto";
+import { existsSync, mkdtempSync, readFileSync, realpathSync, rmSync, statSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createAuth } from "@/server/auth/auth.service";
 import { openDb } from "@/server/db/client";
 import { runMigrations } from "@/server/db/migrate";
+import type { BackupItemRow } from "@/server/db/schema";
 import { user } from "@/server/db/schema";
+import { BATTERY_DANGER_PERCENT } from "@/server/panel/overview.problems";
+import { SETTINGS } from "@/server/settings.registry";
+import { candidateOf } from "@/server/sites/adopt.candidates";
+import { snippetCurrent } from "@/server/sites/integration.service";
+import { FAKE_S3_DIR } from "@/server/system/external.fake";
+import { createFakeSystem, FAKE_HOME_DIR } from "@/server/system/system.fake";
 import { COOKIE_FILE, DEMO_SUPER_ADMIN_EMAIL, seedDemo } from "../scripts/demo-seed";
+import { DEMO_BUCKET } from "../scripts/demo-seed.sandbox";
 
 const BASE = "http://localhost:3415"; // test-only
 const root = mkdtempSync(join(tmpdir(), "demo-seed-"));
@@ -34,7 +43,16 @@ describe("scripts/demo-seed", () => {
 
   test("seeds every page's data and writes signed cookies (mode 600) for the three roles", async () => {
     const counts = await seedDemo({ dataDir: dir, baseUrl: BASE });
-    expect(counts).toMatchObject({ user: 5, session: 3, site: 3, job: 7, deploy: 4, backup_run: 5, backup_restore: 3 });
+    expect(counts).toMatchObject({
+      user: 5,
+      session: 3,
+      site: 3,
+      job: 7,
+      deploy: 4,
+      backup_run: 5,
+      backup_restore: 3,
+      setting: 5,
+    });
     expect(counts.problem_event).toBe(7);
     expect(counts.audit_log).toBeGreaterThanOrEqual(20);
     expect(counts.metric_sample).toBeGreaterThan(1000); // 7 days at 10 min
@@ -52,6 +70,75 @@ describe("scripts/demo-seed", () => {
     expect(col("SELECT name AS v FROM site WHERE managed = 0")).toEqual(["makuro-solusi"]);
     expect(col("SELECT id AS v FROM deploy WHERE bin_ino IS NOT NULL")).toEqual(["dep-demo-05"]);
     db.$client.close();
+  });
+
+  test("fake HOME matches the rows: pm2 runs toko-kopi on its port, rollback has app.prev, pm2 setup passes", async () => {
+    const home = join(dir, FAKE_HOME_DIR);
+    const sys = createFakeSystem({ home, offline: true }); // what boot builds for this data dir
+    expect((await sys.pm2.list()).find((a) => a.name === "toko-kopi")).toMatchObject({ status: "online" });
+    expect(await sys.net.isListening(3010)).toBe(true); // deploy/restart health checks can pass
+    expect(await sys.net.isListening(3011)).toBe(false); // blog was never deployed
+    expect(existsSync(join(home, "sites", "toko-kopi", "app.prev"))).toBe(true);
+    expect(snippetCurrent(readFileSync(join(home, "sites", "ecosystem.config.js"), "utf8"))).toBe(true);
+    const db = openDb(dir);
+    try {
+      const live = db.$client.query("SELECT bin_ino AS ino FROM deploy WHERE id = 'dep-demo-05'").get() as {
+        ino: number;
+      };
+      expect(live.ino).toBe(statSync(join(home, "sites", "toko-kopi", "app")).ino);
+      const dirs = (db.$client.query("SELECT dir FROM site").all() as { dir: string }[]).map((r) => r.dir);
+      expect(dirs.every((d) => d.startsWith(join(home, "sites")))).toBe(true);
+    } finally {
+      db.$client.close();
+    }
+  });
+
+  test("PLAN/02 §6 scenario: battery 22 % warning, held failing domain, adoptable app", async () => {
+    const sys = createFakeSystem({ home: join(dir, FAKE_HOME_DIR) });
+    const battery = (await sys.device.read()).battery;
+    expect(battery).toMatchObject({ percent: 22, charging: false, status: "discharging" });
+    const warnAt = Number(SETTINGS["monitor.battery_warn_percent"].default);
+    expect((battery?.percent ?? 0) < warnAt && (battery?.percent ?? 0) >= BATTERY_DANGER_PERCENT).toBe(true);
+    // old.contoh.test fails (502) and points at the errored kasir-lama → its problem is held behind the app's.
+    const old = (await sys.cloudflared.listIngress()).find((r) => r.hostname === "old.contoh.test");
+    const procs = await sys.pm2.procs();
+    expect(procs.find((p) => p.port === old?.port)).toMatchObject({ name: "kasir-lama", status: "errored" });
+    expect((await sys.cloudflared.probe("old.contoh.test")).status).toBe(502);
+    const api = procs.find((p) => p.name === "demo-api");
+    if (!api) throw new Error("demo-api missing from the fake pm2");
+    const cand = candidateOf(api, realpathSync(join(dir, FAKE_HOME_DIR, "sites")), new Set([3007]));
+    expect(cand).toMatchObject({ blockers: [], runtime: "native", port: 3007 });
+  });
+
+  test("backups and databases agree: every uploaded item is in the fake bucket with its sha256", async () => {
+    const db = openDb(dir);
+    const runs = db.$client.query("SELECT items, started_at AS at FROM backup_run").all() as { items: string }[];
+    const restores = db.$client.query("SELECT target_db AS t FROM backup_restore WHERE dropped_at IS NULL").all();
+    const times = db.$client.query("SELECT started_at AS v FROM job UNION ALL SELECT at FROM deploy").all();
+    db.$client.close();
+    const names = (await createFakeSystem({ home: join(dir, FAKE_HOME_DIR) }).postgres.listDatabases()).map(
+      (d) => d.name,
+    );
+    const items = runs.flatMap((r) => JSON.parse(r.items) as BackupItemRow[]);
+    for (const i of items.filter((x) => x.ok)) {
+      const body = readFileSync(join(dir, FAKE_HOME_DIR, FAKE_S3_DIR, DEMO_BUCKET, i.key));
+      expect(createHash("sha256").update(body).digest("hex")).toBe(i.sha256 as string);
+    }
+    for (const i of items.filter((x) => x.kind === "database")) expect(names).toContain(i.name);
+    expect(new Set(items.map((i) => `${i.kind}/${i.name}`)).size).toBe(7); // one name per item, as a real run
+    for (const r of restores as { t: string }[]) expect(names).toContain(r.t);
+    for (const { v } of times as { v: number }[]) expect(v % 60_000).toBe(0); // no odd seconds
+  });
+
+  test("job steps carry the params their messages need", () => {
+    const db = openDb(dir);
+    const steps = (db.$client.query("SELECT steps FROM job").all() as { steps: string }[]).flatMap(
+      (r) => JSON.parse(r.steps) as { code: string | null; params: object }[],
+    );
+    db.$client.close();
+    const needs = ["folder_created", "env_written", "ingress_added", "dns_created", "tunnel_restarted", "staged"];
+    for (const st of steps.filter((x) => needs.includes(x.code ?? "")))
+      expect(Object.keys(st.params).length).toBeGreaterThan(0);
   });
 
   test("rerun is idempotent: same counts, fresh sessions, old cookies rejected", async () => {

@@ -1,4 +1,4 @@
-import { existsSync, mkdirSync, realpathSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, realpathSync, writeFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import type { App, ControlAction } from "../../shared/panel.types";
 import { PM2_GUARD_NAME } from "../../shared/site.types";
@@ -17,7 +17,8 @@ export type FakePm2Behaviour = { onlineWithoutPid?: boolean; runtimeExitsOnMissi
 /** The runit `pm2` service as the fake pm2 sees it. */
 export type FakeSupervisor = { isUp(): boolean; crash(): void };
 
-type FakeApp = Omit<Pm2Proc, "uptimeSec"> & { since: number };
+/** `listen` = the port the app's process would accept TCP on while online (fake net, D-W9 health checks). */
+type FakeApp = Omit<Pm2Proc, "uptimeSec"> & { since: number; listen: number | null };
 type EcosystemEntry = { name?: unknown; cwd?: unknown; script?: unknown; args?: unknown; env?: { PORT?: unknown } };
 
 const MS_PER_SEC = 1000;
@@ -45,7 +46,38 @@ const blank = (name: string, cwd: string, execPath: string): FakeApp => ({
   args: [],
   startedAtMs: null,
   since: Date.now(),
+  listen: null,
 });
+
+const validPort = (v: unknown): number | null => {
+  const n = Number(v);
+  return Number.isInteger(n) && n > 0 ? n : null;
+};
+/** Port a started entry listens on: pm2 `env.PORT`, else `PORT=` in `<cwd>/.env` (what a panel binary reads). */
+function listenPortOf(e: EcosystemEntry, cwd: string): number | null {
+  const env = validPort(e.env?.PORT);
+  if (env !== null) return env;
+  const file = join(cwd, ".env");
+  return existsSync(file) ? validPort(readFileSync(file, "utf8").match(/^PORT=(\d+)\s*$/m)?.[1]) : null;
+}
+/** `<sites>/apps.json` entries (empty when absent or unreadable: the fake then starts nothing from it). */
+function appsJsonEntries(sitesDir: string): EcosystemEntry[] {
+  try {
+    const list = JSON.parse(readFileSync(join(sitesDir, "apps.json"), "utf8")) as unknown;
+    return Array.isArray(list) ? list.filter((e) => typeof e?.name === "string") : [];
+  } catch {
+    return []; // absent or invalid apps.json: pm2-runtime would skip it too (ecosystem snippet, B18)
+  }
+}
+/** An ecosystem/apps.json entry as a stopped app (cwd/script resolved like pm2, listen port from env or .env). */
+function entryApp(e: EcosystemEntry, baseDir: string): FakeApp {
+  const cwd = String(e.cwd ?? baseDir);
+  return Object.assign(blank(String(e.name), cwd, resolve(cwd, String(e.script ?? ""))), {
+    port: validPort(e.env?.PORT),
+    args: Array.isArray(e.args) ? e.args.map(String) : [],
+    listen: listenPortOf(e, cwd),
+  });
+}
 
 /** Demo apps shaped like the phone's: glibc via grun, php, a native site without its binary, modules, one errored. */
 function seedApps(home: string): FakeApp[] {
@@ -60,10 +92,18 @@ function seedApps(home: string): FakeApp[] {
   }
   mkdirSync(site("demo-api"), { recursive: true });
   const t0 = Date.now();
-  const on = (a: FakeApp, pid: number, memoryMb: number, extra: Partial<FakeApp> = {}): FakeApp =>
+  const on = (a: FakeApp, pid: number, memoryMb: number, extra: Partial<FakeApp> = {}): FakeApp => {
     Object.assign(a, { status: "online", pid, memoryMb, startedAtMs: t0, since: t0 }, extra);
+    a.listen ??= a.port;
+    return a;
+  };
   const logrotate = join(home, ".pm2", "modules", "pm2-logrotate");
-  return [
+  // pm2-runtime starts the runnable apps.json entries at boot (a demo seed writes them into the sandbox).
+  const fromAppsJson = appsJsonEntries(site(""))
+    .map((e) => entryApp(e, site("")))
+    .filter((a) => a.execPath !== null && existsSync(a.execPath))
+    .map((a, i) => on(a, 2100 + i, 54.3));
+  const fixed = [
     on(blank("adminneo", site("adminneo"), join(bin, "php")), 2001, 61.2, {
       port: 3006,
       args: ["-S", "127.0.0.1:3006", "index.php"],
@@ -82,6 +122,7 @@ function seedApps(home: string): FakeApp[] {
     on(blank(PM2_GUARD_NAME, home, join(bin, "sleep")), 2004, 1, { args: ["infinity"], module: true }),
     on(blank("pm2-logrotate", logrotate, join(logrotate, "app.js")), 2003, 40, { module: true }),
   ];
+  return [...fixed.filter((a) => !fromAppsJson.some((x) => x.name === a.name)), ...fromAppsJson];
 }
 
 /** Loads `apps` of an ecosystem file the way pm2 does (fresh require, its apps.json too). */
@@ -97,17 +138,20 @@ function loadEcosystem(file: string): EcosystemEntry[] {
   }
 }
 
-/** In-memory pm2 whose availability follows the fake runit `pm2` service; `appCount` = apps that are not modules. */
+/**
+ * In-memory pm2 whose availability follows the fake runit `pm2` service; `appCount` = apps that are not modules,
+ * `listens(port)` = an online app accepts TCP on that port.
+ */
 export function createFakePm2(opts: {
   home: string;
   delayMs: number;
   supervisor: FakeSupervisor;
   nextPid: () => number;
   behaviour: FakePm2Behaviour;
-}): { pm2: Pm2Adapter; appCount: () => number } {
+}): { pm2: Pm2Adapter; appCount: () => number; listens: (port: number) => boolean } {
   const { home, delayMs, supervisor, nextPid, behaviour } = opts;
   const apps = seedApps(home);
-  const proc = ({ since, ...a }: FakeApp): Pm2Proc => ({
+  const proc = ({ since, listen, ...a }: FakeApp): Pm2Proc => ({
     ...a,
     uptimeSec: a.status === "online" ? Math.floor((Date.now() - since) / MS_PER_SEC) : null,
   });
@@ -133,12 +177,7 @@ export function createFakePm2(opts: {
       throw new Pm2UnavailableError("service_down");
     }
     const e = entries.find((x) => x.name === name);
-    if (!e) return undefined;
-    const port = Number(e.env?.PORT);
-    return Object.assign(blank(name, cwdOf(e), scriptOf(e)), {
-      port: Number.isInteger(port) && port > 0 ? port : null,
-      args: Array.isArray(e.args) ? e.args.map(String) : [],
-    });
+    return e ? entryApp(e, dirname(ecosystem)) : undefined;
   }
 
   const pm2: Pm2Adapter = {
@@ -179,11 +218,20 @@ export function createFakePm2(opts: {
       const existing = apps.find((x) => x.name === name);
       if (existing) return view(existing);
       if (loaded === undefined) return null;
-      const a = loaded ?? blank(name, join(home, "sites", name), join(home, "sites", name, "run"));
+      // Without the strict loader: the apps.json entry next to the ecosystem file, as the real snippet spreads it.
+      const sitesDir = dirname(ecosystem);
+      const entry = appsJsonEntries(sitesDir).find((e) => e.name === name);
+      const a =
+        loaded ??
+        (entry ? entryApp(entry, sitesDir) : blank(name, join(home, "sites", name), join(home, "sites", name, "run")));
       run(a);
       apps.push(a);
       return view(a);
     },
   };
-  return { pm2, appCount: () => apps.filter((a) => !a.module).length };
+  return {
+    pm2,
+    appCount: () => apps.filter((a) => !a.module).length,
+    listens: (port) => apps.some((a) => a.status === "online" && a.listen === port),
+  };
 }

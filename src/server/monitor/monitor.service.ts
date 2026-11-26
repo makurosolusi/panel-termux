@@ -144,7 +144,11 @@ export function createMonitor(deps: MonitorDeps): MonitorService {
       const token = getSetting(deps, "alerts.telegram_bot_token");
       const chat = getSetting(deps, "alerts.telegram_chat_id");
       if (!token || !chat) throw new TelegramError("telegram_bad_request", "alerts are not configured");
-      const client = createTelegramClient({ token, baseUrl: deps.telegramBaseUrl ?? TELEGRAM_API_URL });
+      const client = createTelegramClient({
+        token,
+        baseUrl: deps.telegramBaseUrl ?? TELEGRAM_API_URL,
+        fetch: deps.system.offline?.telegramFetch,
+      });
       await client.sendMessage(chat, text, { silent, onChatMigrated: (id) => onChatMigrated(deps, id) });
     },
   });

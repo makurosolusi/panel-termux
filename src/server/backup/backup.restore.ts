@@ -1,6 +1,5 @@
 import { mkdirSync, rmSync } from "node:fs";
 import { join } from "node:path";
-import { S3Client } from "bun";
 import { count, desc, eq, isNotNull } from "drizzle-orm";
 import type { BackupRestore, BackupRestoreStarted } from "../../shared/backup.types";
 import type { Page } from "../../shared/dev.types";
@@ -8,6 +7,7 @@ import { recordAudit } from "../audit.service";
 import { backupRestore, backupRun, site, user } from "../db/schema";
 import { log } from "../log.service";
 import { ApiError, type Paging } from "../routes/http.error";
+import { s3ClientFor } from "../system/external.clients";
 import { SQL_IDENT_RE } from "../system/system.types";
 import { type BackupConfig, describeS3Error, minuteStamp, type S3Config } from "./backup.config";
 import { SPACE_MARGIN_BYTES, sha256File } from "./backup.items";
@@ -79,7 +79,7 @@ export function createRestoreService(deps: RunDeps, runBusy: () => boolean, conf
     };
     try {
       mkdirSync(tmpDir, { recursive: true });
-      await stage("download_failed", () => Bun.write(tmp, new S3Client(s3).file(item.key)));
+      await stage("download_failed", () => Bun.write(tmp, s3ClientFor(system.offline, s3).file(item.key)));
       if (item.sha256 === null) log.info(`[backup] restore ${id}: item has no sha256 (pre-0.3.0), checksum skipped`);
       else if ((await sha256File(tmp)) !== item.sha256)
         throw new RestoreError("checksum_mismatch", `sha256 of ${item.key} differs from the recorded one`);

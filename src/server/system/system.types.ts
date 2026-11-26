@@ -8,6 +8,7 @@ import type {
   Service,
   ServiceState,
 } from "../../shared/panel.types";
+import type { OfflineClients } from "./external.clients";
 
 /** Service as the supervisor sees it; the panel adds `protected` and `lockout`. */
 export type RunitService = Omit<Service, "protected" | "lockout">;
@@ -140,4 +141,6 @@ export type SystemAdapters = {
   postgres: PostgresAdapter;
   device: DeviceAdapter;
   archive: ArchiveAdapter;
+  /** Offline S3/Telegram/DNS fakes; set only in the panel's own fake mode (D-W9-4), absent = real clients. */
+  offline?: OfflineClients;
 };
