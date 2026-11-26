@@ -69,12 +69,12 @@ function JobView({ job }: { job: Job }) {
         <p className="text-sm text-muted-foreground">
           {t.recover.cleans}{" "}
           <Link className="underline underline-offset-2" to={`/panel/jobs/${encodeURIComponent(job.cleans)}`}>
-            {job.cleans.slice(0, 8)}
+            {t.recover.cleansLink}
           </Link>
         </p>
       )}
       <div className="rounded-lg border bg-card p-4">
-        <JobSteps steps={job.steps} />
+        <JobSteps job={job} />
       </div>
       <JobFinal job={job} />
       {isJobFinished(job) && (
@@ -124,7 +124,13 @@ export function JobPage() {
             </>
           )
         }
-        meta={{ updatedAt: query.updatedAt, live: running, onRefresh: query.reload, refreshing: query.loading }}
+        meta={{
+          updatedAt: query.updatedAt,
+          live: running,
+          stale: view === "stale",
+          onRefresh: query.reload,
+          refreshing: query.loading,
+        }}
       />
       {view === "blip" && (
         <p

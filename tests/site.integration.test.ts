@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { readFileSync, writeFileSync } from "node:fs";
+import { readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { PROBE_ENV_KEYS } from "@/server/sites/ecosystem.probe";
 import { ECOSYSTEM_SNIPPET } from "@/server/sites/integration.service";
@@ -23,6 +23,8 @@ const snippetEco = (extra = "") =>
 
 describe.skipIf(!node)("integration checks (real node probe)", () => {
   test("GET never writes; 0.2.x ecosystem without apps.json → not ready, reasons coded", async () => {
+    // the fake sandbox now ships the current template: put the 0.2.x block back for this upgrade scenario
+    writeFileSync(eco, 'module.exports = { apps: [...require("./apps.json")] };\n');
     const i = await json<Integration>(await call("GET", "/integration"));
     expect(read(appsJson)).toBeNull();
     expect(i.ready).toBe(false);
@@ -126,5 +128,19 @@ describe.skipIf(!node)("integration checks (real node probe)", () => {
     expect(c?.detail).toContain("boom in ecosystem");
     expect((c?.detail ?? "").length).toBeLessThanOrEqual(300);
     expect(i.ready).toBe(false);
+  });
+
+  test("no ecosystem.config.js → only the root cause, not 'cannot load / old block / no guard'", async () => {
+    const before = read(eco);
+    rmSync(eco);
+    try {
+      const i = await verify();
+      expect(checkOf(i, "ecosystem_file")?.state).toBe("error");
+      for (const key of ["ecosystem_loads", "ecosystem_spreads_apps_json", "snippet_current", "pm2_guard"] as const)
+        expect(checkOf(i, key)).toBeUndefined();
+      expect(i.ready).toBe(false);
+    } finally {
+      if (before !== null) writeFileSync(eco, before);
+    }
   });
 });

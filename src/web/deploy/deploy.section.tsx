@@ -9,6 +9,7 @@ import { DeployCard } from "./deploy.card";
 import { DeployHistory } from "./deploy.history";
 import { RollbackAction } from "./deploy.rollback";
 import { shortSha } from "./deploy.state";
+import type { Uploader } from "./deploy.uploader";
 
 const t = idDeploy;
 
@@ -38,14 +39,14 @@ function LiveVersion({ site }: { site: SiteDetail }) {
 }
 
 /** Content of the site detail `#deploy` anchor: live version, upload card, rollback and deploy history. */
-export function DeploySection({ site }: { site: SiteDetail }) {
+export function DeploySection({ site, uploader }: { site: SiteDetail; uploader: Uploader }) {
   return (
     <div className="flex flex-col gap-6">
       {!site.managed && <p className="text-sm text-muted-foreground">{t.adoptedNote}</p>}
       <Section title={t.live.title} action={<RollbackAction site={site} />}>
         <LiveVersion site={site} />
       </Section>
-      <DeployCard site={site} />
+      <DeployCard site={site} up={uploader} />
       <Section title={t.history.title}>
         <DeployHistory site={site.name} />
       </Section>

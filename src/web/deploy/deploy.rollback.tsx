@@ -14,16 +14,16 @@ const t = idDeploy.rollback;
 
 function Side({ label, value }: { label: string; value: string }) {
   return (
-    <p className="flex flex-col gap-0.5 rounded-md border px-3 py-2">
+    <p className="flex min-w-0 flex-1 flex-col gap-0.5 rounded-md border px-3 py-2 text-left">
       <span className="text-xs text-muted-foreground">{label}</span>
-      <span className="font-mono text-[0.8125rem] break-all text-foreground">{value}</span>
+      <span className="font-mono text-[0.8125rem] wrap-anywhere text-foreground">{value}</span>
     </p>
   );
 }
 
 function Carry({ title, items }: { title: string; items: readonly string[] }) {
   return (
-    <div>
+    <div className="text-left">
       <p className="font-medium text-foreground">{title}</p>
       <ul className="list-disc pl-5">
         {items.map((i) => (
@@ -71,7 +71,7 @@ export function RollbackAction({ site, variant = "outline" }: { site: SiteDetail
           </div>
           <Carry title={t.carries} items={t.carriesList} />
           <Carry title={t.notCarried} items={t.notCarriedList} />
-          <p>{t.note}</p>
+          <p className="text-left">{t.note}</p>
         </>
       }
       onConfirm={async () => {

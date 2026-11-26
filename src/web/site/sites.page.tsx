@@ -6,7 +6,7 @@ import type { ActiveJob, Discovered, Integration, Job, Site } from "@/shared/sit
 import { DataTable } from "@/web/components/data-table";
 import { EmptyState } from "@/web/components/empty-state";
 import { PageHeader } from "@/web/components/page-header";
-import { QueryView } from "@/web/components/query-view";
+import { QueryView, StaleNotice } from "@/web/components/query-view";
 import { Button } from "@/web/components/ui/button";
 import { idSite } from "@/web/i18n/id.site";
 import { PANEL_REFRESH_MS, panelUrl } from "@/web/panel/panel.api";
@@ -78,6 +78,8 @@ export function SitesPage() {
   const unresolved = interrupted.data?.items.find((j) => j.recoverMode && !j.resolvedBy);
   const ready = integration.data ? integrationReady(integration.data) : true;
   const adoptable = discovered.data ? discoveredRows(discovered.data).filter((r) => r.adoptable).length : 0;
+  // stale notice goes above the (long) Persiapan card, not below it; QueryView then renders the list without one
+  const stale = Boolean(sites.error && sites.data);
   const refresh = () => {
     sites.reload();
     integration.reload();
@@ -91,7 +93,13 @@ export function SitesPage() {
       <PageHeader
         title={t.title}
         description={t.description}
-        meta={{ updatedAt: sites.updatedAt, onRefresh: refresh, refreshing: sites.loading, live: true }}
+        meta={{
+          updatedAt: sites.updatedAt,
+          onRefresh: refresh,
+          refreshing: sites.loading,
+          live: true,
+          stale: Boolean(sites.error),
+        }}
         actions={
           <>
             <Button asChild variant="outline">
@@ -104,13 +112,14 @@ export function SitesPage() {
           </>
         }
       />
+      {stale && <StaleNotice updatedAt={sites.updatedAt} onRetry={sites.reload} retrying={sites.loading} />}
       {active.data?.job && <JobBanner job={active.data.job} />}
       {unresolved && <JobBanner job={unresolved} interrupted />}
       {integration.data && (
         <SiteSetup integration={integration.data} adoptable={adoptable} onVerified={integration.reload} />
       )}
       <QueryView
-        query={sites}
+        query={stale ? { ...sites, error: undefined } : sites}
         codes={SITE_ERROR_CODES}
         empty={
           <EmptyState

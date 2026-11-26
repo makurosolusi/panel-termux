@@ -45,6 +45,17 @@ export function stepDurationMs(step: Pick<JobStep, "startedAt" | "finishedAt">, 
   return Math.max(0, end - new Date(step.startedAt).getTime());
 }
 
+/** Step status as shown; "interrupted" = the step was still running when its job ended (server keeps `running`, D11). */
+export type ShownStepStatus = JobStepStatus | "interrupted";
+
+/** A step left `running` in a finished job did not keep going: it was cut off there. */
+export const shownStepStatus = (step: Pick<JobStep, "status">, job: Pick<Job, "status">): ShownStepStatus =>
+  step.status === "running" && isJobFinished(job) ? "interrupted" : step.status;
+
+/** Duration end for a step: its own finish, else the job's finish (cut-off steps stop counting), else `now`. */
+export const stepEndMs = (job: Pick<Job, "finishedAt">, now: number): number =>
+  job.finishedAt ? new Date(job.finishedAt).getTime() : now;
+
 /** Index of the running step, else of the last step that settled, else 0. */
 export function currentStepIndex(steps: readonly Pick<JobStep, "status">[]): number {
   const running = steps.findIndex((s) => s.status === "running");
@@ -54,11 +65,11 @@ export function currentStepIndex(steps: readonly Pick<JobStep, "status">[]): num
 }
 
 /** The one live-region sentence: "Langkah 4 dari 8: Menukar binary… selesai". */
-export function liveAnnouncement(job: Pick<Job, "steps">): string {
+export function liveAnnouncement(job: Pick<Job, "steps" | "status">): string {
   const i = currentStepIndex(job.steps);
   const step = job.steps[i];
   if (!step) return "";
-  return idJob.liveStep(i + 1, job.steps.length, stepLabel(step), idJob.stepStatuses[step.status]);
+  return idJob.liveStep(i + 1, job.steps.length, stepLabel(step), idJob.stepStatuses[shownStepStatus(step, job)]);
 }
 
 /**
@@ -78,7 +89,7 @@ export function pollErrorView(
   return step && BLIP_STEPS.has(step.key) ? "blip" : "stale";
 }
 
-/** The recover button of a job: plain "Bersihkan", or a confirmed "Ulangi hapus situs/domain"; null = none. */
+/** The recover button of a job: plain "Pulihkan", or a confirmed "Ulangi hapus situs/domain"; null = none. */
 export type RecoverAction = { mode: "cleanup" | "retry"; label: string; confirm: boolean };
 
 /** Decides the recover button from `recoverMode` (server rules, PLAN/03 §3.5) and the job kind. */

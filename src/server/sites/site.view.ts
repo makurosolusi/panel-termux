@@ -60,6 +60,10 @@ export function toSites(db: Db, rows: (typeof site.$inferSelect)[], procs: Pm2Pr
   });
 }
 
-/** Errored app or failed/interrupted last deploy: listed first. */
+/** pm2 has no process for a site that has a binary (adopted, or deployed): web shows "Tidak berjalan di pm2" (D-W9-3). */
+const missingFromPm2 = (s: Site): boolean =>
+  s.appStatus === "not_deployed" && (!s.managed || ["succeeded", "rolled_back"].includes(s.lastDeploy?.status ?? ""));
+
+/** Errored or missing app, or failed/interrupted last deploy: listed first. */
 export const troubled = (s: Site): boolean =>
-  s.appStatus === "errored" || ["failed", "interrupted"].includes(s.lastDeploy?.status ?? "");
+  s.appStatus === "errored" || missingFromPm2(s) || ["failed", "interrupted"].includes(s.lastDeploy?.status ?? "");

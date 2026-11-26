@@ -42,6 +42,13 @@ const READY_KEYS: IntegrationCheckKey[] = [
   "pm2_runtime",
   "tunnel",
 ];
+/** Checks that only mean something once ecosystem.config.js exists. */
+const NEEDS_ECOSYSTEM: ReadonlySet<IntegrationCheckKey> = new Set([
+  "ecosystem_loads",
+  "ecosystem_spreads_apps_json",
+  "snippet_current",
+  "pm2_guard",
+]);
 /** Snippet text is current when it has the panelApps block with the existsSync filter (B18). */
 export const snippetCurrent = (eco: string | null) => eco !== null && /panelApps/.test(eco) && /existsSync/.test(eco);
 
@@ -102,10 +109,13 @@ async function compute(ctx: SiteCtx, probe: EcosystemProbe): Promise<Integration
     { ...check("tunnel", tunnelId !== null, "error"), detail: tunnelDetail },
     check("cloudflare_token", tokenSet, "warning"),
   ];
-  const failing = checks.filter((c) => c.state !== "ok");
+  // Without the file, "cannot load / old block / no guard" only restate ecosystem_file: show the root cause alone.
+  // `ready` stays false: the hidden READY_KEYS are missing, so they do not count as ok.
+  const shown = eco === null ? checks.filter((c) => !NEEDS_ECOSYSTEM.has(c.key)) : checks;
+  const failing = shown.filter((c) => c.state !== "ok");
   return {
-    ready: READY_KEYS.every((k) => checks.find((c) => c.key === k)?.state === "ok"),
-    checks,
+    ready: READY_KEYS.every((k) => shown.find((c) => c.key === k)?.state === "ok"),
+    checks: shown,
     snippet: ECOSYSTEM_SNIPPET,
     ecosystemPath: p.ecosystem,
     appsJsonPath: p.appsJson,

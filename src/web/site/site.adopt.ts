@@ -25,7 +25,10 @@ export function discoveredRow(i: DiscoveredIngress, apps: readonly AdoptCandidat
   const target = `${port} → ${match ?? d.noApp}`;
   if (i.blockers?.includes("wildcard")) return { hostname: i.hostname, target, adoptable: false, reason: d.wildcard };
   const any = apps.some((app) => app.blockers.length === 0);
-  return { hostname: i.hostname, target, adoptable: any, reason: any ? null : d.noCandidates };
+  // the app this domain points at is the useful reason; "no matching app" only when nothing matched
+  const blocker = apps.find((app) => app.name === match)?.blockers[0];
+  const reason = blocker ? a.blockers[blocker] : any ? null : d.noCandidates;
+  return { hostname: i.hostname, target, adoptable: any, reason };
 }
 
 /** Rows of the "Belum dikelola" section: adoptable first, the panel's own host last. */

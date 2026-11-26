@@ -1,12 +1,12 @@
 import { cn } from "cn";
 import { ChevronDownIcon } from "lucide-react";
 import { useId, useState } from "react";
-import type { JobStep } from "@/shared/job.types";
+import type { Job, JobStep } from "@/shared/job.types";
 import { CopyButton } from "@/web/components/copy-button";
 import { StatusIcon } from "@/web/components/status-icon";
 import { Button } from "@/web/components/ui/button";
 import { idJob } from "@/web/i18n/id.job";
-import { durationText, outcomeText, stepDurationMs, stepLabel } from "./job.state";
+import { durationText, outcomeText, shownStepStatus, stepDurationMs, stepEndMs, stepLabel } from "./job.state";
 import { JOB_STEP_STATUS_KEY } from "./job.status-key";
 
 const t = idJob;
@@ -14,10 +14,11 @@ const t = idJob;
 /** Copy text of a step's technical detail and log lines. */
 const detailText = (s: JobStep) => [s.detail, ...(s.log ?? [])].filter(Boolean).join("\n");
 
-function Step({ step, last }: { step: JobStep; last: boolean }) {
+function Step({ step, job, last }: { step: JobStep; job: Job; last: boolean }) {
   const [open, setOpen] = useState(false);
   const panelId = useId();
-  const ms = stepDurationMs(step, Date.now()); // running steps re-render with every 1 s poll
+  const ms = stepDurationMs(step, stepEndMs(job, Date.now())); // running steps re-render with every 1 s poll
+  const status = shownStepStatus(step, job);
   const outcome = outcomeText(step.code, step.params);
   const details = detailText(step);
   const muted = step.status === "pending" || step.status === "skipped";
@@ -25,7 +26,7 @@ function Step({ step, last }: { step: JobStep; last: boolean }) {
     <li className="relative flex gap-3 pb-4 last:pb-0">
       {!last && <span aria-hidden className="absolute top-6 bottom-0 left-[9px] w-px bg-border" />}
       <span className="relative mt-0.5 flex size-5 shrink-0 items-center justify-center rounded-full bg-background">
-        <StatusIcon state={JOB_STEP_STATUS_KEY[step.status]} className="size-5" />
+        <StatusIcon state={JOB_STEP_STATUS_KEY[status]} className="size-5" />
       </span>
       <div className="flex min-w-0 flex-1 flex-col gap-0.5">
         <div className="flex flex-col gap-x-3 sm:flex-row sm:items-baseline sm:justify-between">
@@ -35,7 +36,7 @@ function Step({ step, last }: { step: JobStep; last: boolean }) {
           {ms !== null && <span className="text-xs text-muted-foreground tabular-nums">{durationText(ms)}</span>}
         </div>
         {outcome && (
-          <p className={cn("text-xs break-words", step.status === "failed" ? "text-danger" : "text-muted-foreground")}>
+          <p className={cn("text-xs break-words", status === "failed" ? "text-danger" : "text-muted-foreground")}>
             {outcome}
           </p>
         )}
@@ -68,12 +69,13 @@ function Step({ step, last }: { step: JobStep; last: boolean }) {
 }
 
 /** Vertical stepper of a job: icon (status for readers), coded label + outcome, duration, expandable detail/log. */
-export function JobSteps({ steps }: { steps: JobStep[] }) {
+export function JobSteps({ job }: { job: Job }) {
+  const { steps } = job;
   return (
     <ol className="flex flex-col">
       {steps.map((s, i) => (
         // biome-ignore lint/suspicious/noArrayIndexKey: a job's step list never reorders; keys may repeat in cleanup jobs
-        <Step key={`${i}-${s.key}`} step={s} last={i === steps.length - 1} />
+        <Step key={`${i}-${s.key}`} step={s} job={job} last={i === steps.length - 1} />
       ))}
     </ol>
   );

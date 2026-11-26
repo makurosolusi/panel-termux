@@ -70,8 +70,7 @@ function AppLog({ app }: { app: string }) {
       size="inline"
       lines={lines}
       loading={query.loading && !query.data}
-      error={query.error ? t.appLogMissing : undefined}
-      empty={t.appLogEmpty}
+      empty={query.error ? t.appLogMissing : t.appLogEmpty}
     />
   );
 }
@@ -80,7 +79,8 @@ function AppLog({ app }: { app: string }) {
 export function JobFinal({ job }: { job: Job }) {
   if (job.status === "running") return null;
   const tone = job.resolvedBy ? "info" : FINAL_TONE[job.status];
-  const reason = job.error ? outcomeText(job.error.code, job.error.params) : null;
+  // "interrupted" is already the headline (final.interrupted) and the cut-off step's outcome: no third copy
+  const reason = job.error && job.error.code !== "interrupted" ? outcomeText(job.error.code, job.error.params) : null;
   return (
     <div className="flex flex-col gap-3">
       <div role="status" className={cn("flex flex-col gap-1 rounded-lg border p-3 text-sm", TONE_CLASS[tone])}>

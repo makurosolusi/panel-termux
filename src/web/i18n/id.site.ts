@@ -34,6 +34,7 @@ export const idSite = {
   },
   list: {
     title: "Situs",
+    missingFromPm2: "Tidak berjalan di pm2",
     description: "Domain yang diarahkan cloudflared ke aplikasi pm2 di HP ini.",
     label: "Daftar situs",
     create: "Buat situs",
@@ -271,7 +272,8 @@ export const idSite = {
   notes: {
     dns_same_tunnel: "Record DNS sudah mengarah ke tunnel HP ini, jadi dipakai apa adanya.",
     dns_owned: "Record DNS dibuat panel sebelumnya dan akan dipakai ulang.",
-    dns_token_missing: "Token Cloudflare belum diisi. Buat record DNS domain ini secara manual setelah situs dibuat.",
+    dns_token_missing:
+      "Token Cloudflare belum diisi, jadi panel tidak membuat record DNS domain ini. Buat record-nya secara manual di dasbor Cloudflare.",
     dns_check_failed: "DNS tidak bisa dicek sekarang. Situs tetap bisa dibuat; panel mencoba lagi saat membuat record.",
   } satisfies Record<SiteNoteCode, Copy>,
   // Job kind names for the running-job banner on /panel/sites (the job pages read id.job).
@@ -285,7 +287,7 @@ export const idSite = {
       "site.rollback": "Rollback",
       "site.restart": "Mulai ulang situs",
       "site.env": "Ubah variabel lingkungan",
-      "job.cleanup": "Bersihkan perubahan terputus",
+      "job.cleanup": "Pulihkan perubahan terputus",
     } satisfies Record<JobKind, string>,
   },
 } as const;

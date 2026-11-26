@@ -28,7 +28,7 @@ export const idJob = {
     "site.rollback": "Rollback",
     "site.restart": "Mulai ulang situs",
     "site.env": "Ubah variabel lingkungan",
-    "job.cleanup": "Bersihkan perubahan terputus",
+    "job.cleanup": "Pulihkan perubahan terputus",
   } satisfies Record<JobKind, string>,
   steps: {
     validate: "Memeriksa permintaan",
@@ -60,7 +60,8 @@ export const idJob = {
     failed: "gagal",
     rolled_back: "dikembalikan",
     skipped: "dilewati",
-  } satisfies Record<JobStepStatus, string>,
+    interrupted: "terputus",
+  } satisfies Record<JobStepStatus | "interrupted", string>,
   outcomes: {
     validated: () => "Permintaan valid.",
     invalid_site: (p) => `Permintaan tidak valid: ${s(p.issues)}.`,
@@ -158,7 +159,7 @@ export const idJob = {
     app_no_pid: () =>
       "pm2 melaporkan aplikasi berjalan, tetapi tidak ada prosesnya. Biasanya binary tidak bisa dijalankan.",
     unexpected: () => "Terjadi kesalahan tak terduga. Lihat detail teknis.",
-    interrupted: () => "Panel dimulai ulang saat perubahan ini berjalan.",
+    interrupted: () => "Terhenti di langkah ini karena panel dimulai ulang.",
   } satisfies Record<string, Outcome>,
   /** Shown when a server code has no copy yet (newer server): the raw code stays visible for support. */
   unknownOutcome: (code: string) => `Hasil: ${code}`,
@@ -175,17 +176,18 @@ export const idJob = {
     app_log: "Lihat log aplikasi",
     open_site: "Buka detail situs",
     first_deploy: "Unggah binary pertama",
-    redeploy: "Coba lagi",
+    redeploy: "Deploy ulang",
   } satisfies Record<JobNextAction, string>,
   recover: {
-    cleanup: "Bersihkan",
+    cleanup: "Pulihkan",
     retryDelete: "Ulangi hapus situs",
     retryHostname: "Ulangi hapus domain",
     retryTitle: (target: string) => `Ulangi hapus ${target}?`,
     retryBody:
       "Langkah yang sudah selesai dilewati, sisanya dijalankan lagi dari catatan perubahan ini. Yang sudah terhapus tidak bisa dikembalikan.",
     started: "Pemulihan dimulai.",
-    cleans: "Membersihkan perubahan",
+    cleans: "Memulihkan sisa dari",
+    cleansLink: "perubahan yang terputus",
   },
   allSites: "Ke daftar situs",
   whyFailed: "Kenapa gagal",

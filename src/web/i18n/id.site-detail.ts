@@ -27,6 +27,10 @@ export const idSiteDetail = {
     noAnswer: (path: string) => `Tidak sehat: ${path} tidak menjawab. Lihat log aplikasi.`,
     healthFailed: "Cek kesehatan tidak bisa dijalankan. Coba lagi sebentar lagi.",
     pm2Unknown: "Status aplikasi tidak bisa dibaca dari pm2.",
+    missingFromPm2Help:
+      "pm2 tidak menjalankan aplikasi ini. Tekan Mulai ulang untuk memuatnya lagi dari `~/sites/apps.json`, atau periksa file itu lewat ssh.",
+    missingFromPm2Adopted:
+      "pm2 tidak menjalankan aplikasi ini. Periksa entrinya di `ecosystem.config.js` lewat ssh, lalu jalankan lagi dengan pm2.",
   },
   anchors: {
     label: "Bagian halaman",
@@ -97,6 +101,7 @@ export const idSiteDetail = {
     description: "Nilai tidak pernah ditampilkan setelah disimpan. Isi kolom untuk mengganti nilai.",
     empty: "Belum ada variabel. Tambah variabel bila aplikasi butuh konfigurasi selain PORT.",
     key: "Nama",
+    keyLabel: (n: number) => `Nama variabel baris ${n}`,
     value: "Nilai",
     add: "Tambah variabel",
     replace: "Ganti nilai",
@@ -141,7 +146,7 @@ export const idSiteDetail = {
     label: "Isi .env",
     preview: "Pratinjau",
     nothing: "Belum ada baris KEY=nilai yang terbaca.",
-    cols: { key: "Nama", action: "Aksi", value: "Nilai", problems: "Masalah" },
+    cols: { key: "Nama", action: "Aksi", value: "Nilai" },
     actions: { new: "Baru", replace: "Ganti nilai", skip: "Dilewati" },
     masked: (n: number) => `•••• (${n} karakter)`,
     line: (n: number) => `baris ${n}`,

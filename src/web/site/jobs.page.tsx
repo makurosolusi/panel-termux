@@ -62,7 +62,7 @@ function FilterSelect<T extends string>(props: {
 }) {
   return (
     <Select value={props.value ?? ALL} onValueChange={(v) => props.onChange(v === ALL ? null : (v as T))}>
-      <SelectTrigger size="sm" className="w-44 pointer-coarse:h-11" aria-label={props.label}>
+      <SelectTrigger size="sm" className="w-44" aria-label={props.label}>
         <SelectValue />
       </SelectTrigger>
       <SelectContent>
@@ -128,7 +128,12 @@ export function JobsPage() {
       <PageHeader
         title={target ? t.forTarget(target) : idJob.listTitle}
         description={idJob.listDescription}
-        meta={{ updatedAt: query.updatedAt, onRefresh: query.reload, refreshing: query.loading }}
+        meta={{
+          updatedAt: query.updatedAt,
+          onRefresh: query.reload,
+          refreshing: query.loading,
+          stale: Boolean(query.error),
+        }}
       />
       <QueryView
         query={query}

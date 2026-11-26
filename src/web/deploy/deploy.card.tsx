@@ -1,6 +1,7 @@
 import { AlertCircleIcon, FileUpIcon, PlayIcon, UploadIcon, XIcon } from "lucide-react";
 import { useRef } from "react";
 import type { SiteDetail } from "@/shared/site.types";
+import { CodeText } from "@/web/components/code-text";
 import { ConfirmAction } from "@/web/components/confirm-action";
 import { CopyButton } from "@/web/components/copy-button";
 import { Button } from "@/web/components/ui/button";
@@ -8,7 +9,7 @@ import { idDeploy } from "@/web/i18n/id.deploy";
 import { formatBytes, formatDateTime } from "@/web/shared/format";
 import { DEPLOY_ERROR_CODES } from "./deploy.api";
 import { missingChunks } from "./deploy.upload";
-import { useUploader } from "./deploy.uploader";
+import type { Uploader } from "./deploy.uploader";
 import { UploadProgress } from "./upload.progress";
 
 const t = idDeploy.upload;
@@ -41,8 +42,7 @@ function BuildHelp() {
 }
 
 /** Upload card of #deploy: pick binary → per-chunk sha → resumable chunked upload → job page. */
-export function DeployCard({ site }: { site: SiteDetail }) {
-  const up = useUploader(site.name);
+export function DeployCard({ site, up }: { site: SiteDetail; up: Uploader }) {
   const input = useRef<HTMLInputElement>(null);
   const { state, active } = up;
   const blocker = site.deployBlocker ? DEPLOY_ERROR_CODES[BLOCKER_CODE[site.deployBlocker]] : null;
@@ -112,7 +112,9 @@ export function DeployCard({ site }: { site: SiteDetail }) {
       {state.kind === "failed" && (
         <div role="alert" className="flex items-start gap-2 rounded-md border border-danger/25 bg-danger-subtle p-3">
           <AlertCircleIcon className="mt-0.5 size-4 shrink-0 text-danger" aria-hidden />
-          <p className="break-words">{state.failure.message}</p>
+          <p className="break-words">
+            <CodeText>{state.failure.message}</CodeText>
+          </p>
         </div>
       )}
 

@@ -156,6 +156,8 @@ describe("resume plan from server `received`", () => {
   test("progress: % of stored bytes, speed only from bytes sent this session", () => {
     expect(uploadProgress(20, 40, 10, 2_000)).toEqual({ pct: 50, bytesPerSec: 5 });
     expect(uploadProgress(999, 1000, 0, 1).pct).toBe(99);
+    expect(uploadProgress(1000, 1000, 0, 1).pct).toBe(99); // all stored, `complete` not accepted yet
+    expect(uploadProgress(0, 0, 0, 1).pct).toBe(0);
     expect(uploadProgress(0, 100, 0, 0)).toEqual({ pct: 0, bytesPerSec: 0 });
   });
 
@@ -250,7 +252,7 @@ describe("stepper state", () => {
   test("current step, live sentence, progress", () => {
     expect(currentStepIndex(steps)).toBe(2);
     expect(currentStepIndex([step("a", "done"), step("b", "failed"), step("c", "pending")])).toBe(1);
-    expect(liveAnnouncement({ steps })).toBe("Langkah 3 dari 4: Menukar binary… sedang berjalan");
+    expect(liveAnnouncement({ steps, status: "running" })).toBe("Langkah 3 dari 4: Menukar binary… sedang berjalan");
     expect(jobProgress(job({ steps }))).toBe(50);
     expect(jobProgress(job({ status: "rolled_back", steps }))).toBe(100);
   });
@@ -291,7 +293,7 @@ describe("recover and next actions", () => {
   test("cleanup is a plain button, retry is confirmed with a kind-specific label", () => {
     expect(recoverAction(job({ status: "interrupted", recoverMode: "cleanup" }))).toEqual({
       mode: "cleanup",
-      label: "Bersihkan",
+      label: "Pulihkan",
       confirm: false,
     });
     expect(recoverAction(job({ kind: "site.delete", status: "failed", recoverMode: "retry" }))).toEqual({

@@ -1,6 +1,7 @@
 // Raw job and job-step states → canonical StatusKey (DECISIONS B12): "Dikembalikan"/"Terputus" are warnings (A10).
-import type { JobStatus, JobStepStatus } from "@/shared/job.types";
+import type { JobStatus } from "@/shared/job.types";
 import type { StatusKey } from "@/web/components/status.vocab";
+import type { ShownStepStatus } from "./job.state";
 
 /** Badge key of a job. */
 export const JOB_STATUS_KEY = {
@@ -11,7 +12,7 @@ export const JOB_STATUS_KEY = {
   interrupted: "interrupted",
 } as const satisfies Record<JobStatus, StatusKey>;
 
-/** Icon/tone key of one stepper step. */
+/** Icon/tone key of one stepper step; `interrupted` = still "running" in a job that ended (see shownStepStatus). */
 export const JOB_STEP_STATUS_KEY = {
   pending: "pending",
   running: "processing",
@@ -19,4 +20,5 @@ export const JOB_STEP_STATUS_KEY = {
   failed: "failed",
   rolled_back: "rolled_back",
   skipped: "skipped",
-} as const satisfies Record<JobStepStatus, StatusKey>;
+  interrupted: "interrupted",
+} as const satisfies Record<ShownStepStatus, StatusKey>;

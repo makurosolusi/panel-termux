@@ -13,10 +13,10 @@ import type { ReactNode } from "react";
 import { Link, useNavigate } from "react-router";
 import { toast } from "sonner";
 import type { Job, JobAccepted, SiteDetail } from "@/shared/site.types";
+import { CodeText } from "@/web/components/code-text";
 import { ConfirmAction } from "@/web/components/confirm-action";
 import { PageHeader, type PageMeta } from "@/web/components/page-header";
 import { RelativeTime } from "@/web/components/relative-time";
-import { StatusBadge } from "@/web/components/status-badge";
 import { Button } from "@/web/components/ui/button";
 import {
   DropdownMenu,
@@ -29,7 +29,7 @@ import { idSiteDetail } from "@/web/i18n/id.site-detail";
 import { ERROR_TOAST_MS } from "@/web/shared/api.action";
 import { apiErrorMessage, apiFetch, type ErrorCodes } from "@/web/shared/api.client";
 import { jobPath, siteUrl } from "./site.api";
-import { HostLink, siteStatusKey } from "./site.card";
+import { canRestart, HostLink, missingFromPm2, SiteAppBadge } from "./site.card";
 import { healthToast, type SiteBanner, siteBanners, siteBusy } from "./site-detail.state";
 
 const t = idSiteDetail.header;
@@ -53,7 +53,7 @@ export function RestartAction({ site, codes, variant = "outline" }: RestartProps
         navigate(jobPath((await apiFetch<JobAccepted>("POST", siteUrl(site.name, "/restart"))).jobId))
       }
       trigger={
-        <Button variant={variant} size="sm" disabled={siteBusy(site) || site.appStatus === "not_deployed"}>
+        <Button variant={variant} size="sm" disabled={siteBusy(site) || !canRestart(site)}>
           <RotateCwIcon aria-hidden />
           {t.restart}
         </Button>
@@ -82,7 +82,7 @@ export function SiteHeader(props: { site: SiteDetail; meta: PageMeta; codes: Err
     <PageHeader
       title={site.name}
       back={{ to: "/panel/sites", label: idSiteDetail.back }}
-      status={<StatusBadge state={siteStatusKey(site.appStatus)} />}
+      status={<SiteAppBadge site={site} />}
       meta={props.meta}
       description={
         <span className="flex flex-wrap items-center gap-x-3 gap-y-1">
@@ -92,6 +92,11 @@ export function SiteHeader(props: { site: SiteDetail; meta: PageMeta; codes: Err
           </span>
           {!site.managed && <span>{t.adopted}</span>}
           {site.appStatus === "unknown" && <span>{t.pm2Unknown}</span>}
+          {missingFromPm2(site) && (
+            <span className="text-danger">
+              <CodeText>{site.managed ? t.missingFromPm2Help : t.missingFromPm2Adopted}</CodeText>
+            </span>
+          )}
         </span>
       }
       actions={

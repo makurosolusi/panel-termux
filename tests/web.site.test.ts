@@ -215,9 +215,14 @@ describe("belum dikelola", () => {
   test("row shows port → app; wildcard and no usable app are blocked with a reason", () => {
     expect(discoveredRow(ingress(), [app()])).toMatchObject({ target: "port 3005 → makuro-solusi", adoptable: true });
     expect(discoveredRow(ingress({ blockers: ["wildcard"] }), [app()])).toMatchObject({ adoptable: false });
-    expect(discoveredRow(ingress(), [app({ blockers: ["outside_sites_dir"] })])).toMatchObject({
+    expect(discoveredRow(ingress(), [app({ name: "other", blockers: ["outside_sites_dir"] })])).toMatchObject({
       adoptable: false,
       reason: idSite.discovered.noCandidates,
+    });
+    // the matched app's own blocker explains the row, not "no matching app" (QA m2)
+    expect(discoveredRow(ingress(), [app({ blockers: ["no_binary"] })])).toMatchObject({
+      adoptable: false,
+      reason: idSite.adopt.blockers.no_binary,
     });
   });
 
@@ -338,7 +343,7 @@ describe("site list", () => {
   });
 
   test("row edge only for sites that need a look", () => {
-    const site = (appStatus: Site["appStatus"]) => ({ appStatus }) as Site;
+    const site = (appStatus: Site["appStatus"]) => ({ appStatus, managed: true, lastDeploy: null }) as Site;
     expect(siteRowTone(site("errored"))).toBe("danger");
     expect(siteRowTone(site("stopped"))).toBe("warning");
     expect(siteRowTone(site("online"))).toBeUndefined();

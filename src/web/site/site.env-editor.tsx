@@ -12,7 +12,7 @@ import { idSiteDetail } from "@/web/i18n/id.site-detail";
 import { useTaskMode } from "@/web/layout/task.mode";
 import { ERROR_TOAST_MS } from "@/web/shared/api.action";
 import { apiErrorMessage, apiFetch, type ErrorCodes } from "@/web/shared/api.client";
-import { EnvPasteDialog, EnvRowsEditor, SecretInput } from "./env.editor";
+import { EnvPasteDialog, EnvRowsEditor } from "./env.editor";
 import {
   type EnvDraft,
   type EnvKeyBadge,
@@ -25,7 +25,9 @@ import {
   replacedErrors,
   toggleUnset,
 } from "./env.rows";
+import { SecretInput } from "./env.secret-input";
 import { jobPath, siteUrl } from "./site.api";
+import { canRestart } from "./site.card";
 
 const t = idSiteDetail.env;
 
@@ -111,7 +113,6 @@ export function SiteEnvEditor({ site, busy, codes, onSaved }: EditorProps) {
   const counts = envDraftCounts(draft);
   const dirty = counts.replaced + counts.added + counts.unset > 0 || draft.rows.length > 0;
   const savable = !busy && !pending && envDraftSavable(draft, site.envKeys, locked);
-  const canRestart = site.appStatus !== "not_deployed";
   const valueErrors = replacedErrors(draft);
   useTaskMode(dirty);
 
@@ -178,7 +179,7 @@ export function SiteEnvEditor({ site, busy, codes, onSaved }: EditorProps) {
           <Button type="button" variant="link" size="sm" onClick={() => setDraft(emptyEnvDraft())}>
             {t.discard}
           </Button>
-          <p className="text-xs text-muted-foreground">{canRestart ? t.saveRestartHint : t.noRestart}</p>
+          <p className="text-xs text-muted-foreground">{canRestart(site) ? t.saveRestartHint : t.noRestart}</p>
           <ActionBar>
             <span aria-live="polite" className="mr-auto text-sm text-muted-foreground max-sm:hidden">
               {t.summary(counts.replaced, counts.added, counts.unset)}
@@ -187,7 +188,7 @@ export function SiteEnvEditor({ site, busy, codes, onSaved }: EditorProps) {
               <SaveIcon aria-hidden />
               {t.save}
             </Button>
-            <Button type="button" disabled={!savable || !canRestart} onClick={() => void save(true)}>
+            <Button type="button" disabled={!savable || !canRestart(site)} onClick={() => void save(true)}>
               <RotateCwIcon aria-hidden />
               {t.saveRestart}
             </Button>

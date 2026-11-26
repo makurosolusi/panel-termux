@@ -38,7 +38,10 @@ export function fileProblem(file: { size: number }): string | null {
   return null;
 }
 
-/** Upload card controller of one site. */
+/**
+ * Upload card controller of one site. Called by the detail page above its QueryView: a failed detail poll (offline)
+ * swaps the view to stale/error and remounts the card, which must not drop a running or paused upload (PLAN/03 §6).
+ */
 export function useUploader(site: string) {
   const navigate = useNavigate();
   const active = useApiQuery<UploadState | null>(siteUrl(site, "/uploads/active"));
@@ -46,7 +49,12 @@ export function useUploader(site: string) {
   const ctrl = useRef<AbortController | null>(null);
   const lastId = useRef<string | null>(null);
 
-  useEffect(() => () => ctrl.current?.abort(), []); // leaving the page stops the transfer; the server keeps chunks
+  // leaving the page (or switching site) stops the transfer; the server keeps the chunks for "Lanjutkan"
+  // biome-ignore lint/correctness/useExhaustiveDependencies: `site` is the reset trigger, not read inside
+  useEffect(() => {
+    setState({ kind: "idle" });
+    return () => ctrl.current?.abort();
+  }, [site]);
 
   const start = async (file: File, resumeId: string | null) => {
     ctrl.current?.abort();
@@ -110,3 +118,6 @@ export function useUploader(site: string) {
     dismiss: () => setState((s) => (s.kind === "confirm_different" ? { kind: "idle" } : s)),
   };
 }
+
+/** What useUploader returns, handed down to the upload card. */
+export type Uploader = ReturnType<typeof useUploader>;

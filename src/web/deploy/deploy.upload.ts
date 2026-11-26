@@ -59,11 +59,12 @@ export function missingChunks(state: Pick<UploadState, "chunks" | "received">): 
 }
 
 /**
- * Upload progress: percent of the file stored (whole, never 100 before the last byte), and speed in bytes/second of
- * what this session actually sent (skipped chunks do not inflate it).
+ * Upload progress: percent of the file stored, at most 99 (100 would claim "done" while `complete` may still be
+ * retrying offline; the card leaves for the job page once the server accepts it), and speed in bytes/second of what
+ * this session actually sent (skipped chunks do not inflate it).
  */
 export function uploadProgress(doneBytes: number, totalBytes: number, sessionBytes: number, elapsedMs: number) {
-  const pct = totalBytes > 0 ? Math.min(100, Math.floor((doneBytes / totalBytes) * 100)) : 100;
+  const pct = totalBytes > 0 ? Math.min(99, Math.floor((doneBytes / totalBytes) * 100)) : 0;
   const bytesPerSec = elapsedMs > 0 ? (sessionBytes / elapsedMs) * 1_000 : 0;
   return { pct, bytesPerSec };
 }

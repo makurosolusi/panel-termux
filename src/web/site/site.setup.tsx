@@ -4,6 +4,7 @@ import { Link } from "react-router";
 import { toast } from "sonner";
 import { hasRole } from "@/shared/roles";
 import type { Integration, IntegrationCheck } from "@/shared/site.types";
+import { CodeText } from "@/web/components/code-text";
 import { CopyButton } from "@/web/components/copy-button";
 import { InlineCode } from "@/web/components/inline-code";
 import { RelativeTime } from "@/web/components/relative-time";
@@ -21,24 +22,6 @@ import { SITE_ERROR_CODES } from "./site.api";
 
 const t = idSite.setup;
 const CHECK_STATE: Record<IntegrationCheck["state"], StatusKey> = { ok: "done", warning: "attention", error: "failed" };
-
-/** Copy text with `backtick` spans rendered as inline code (file names, commands). */
-export function CodeText({ text }: { text: string }) {
-  return (
-    <>
-      {text.split("`").map((part, i) =>
-        i % 2 === 1 ? (
-          // biome-ignore lint/suspicious/noArrayIndexKey: parts of one fixed string, never reordered
-          <code key={i} className="rounded bg-muted px-1 font-mono text-[0.8125em]">
-            {part}
-          </code>
-        ) : (
-          part
-        ),
-      )}
-    </>
-  );
-}
 
 /** Code block with a copy button in its corner. */
 function CodeBlock({ code, copyLabel }: { code: string; copyLabel?: string }) {
@@ -64,7 +47,7 @@ function Checklist({ checks }: { checks: IntegrationCheck[] }) {
         <li key={c.key} className="flex items-start gap-2">
           <StatusIcon state={CHECK_STATE[c.state]} className="mt-0.5" />
           <span className={c.state === "ok" ? "text-muted-foreground" : undefined}>
-            <CodeText text={checkText(c)} />
+            <CodeText>{checkText(c)}</CodeText>
             {c.key === "cloudflare_token" && c.state !== "ok" && hasRole(me.role, "super_admin") && (
               <>
                 {" "}
@@ -84,30 +67,40 @@ function SnippetSteps({ integration }: { integration: Integration }) {
   return (
     <div className="flex flex-col gap-3">
       <h3 className="text-sm font-semibold">{t.stepsTitle}</h3>
-      <ol className="flex list-decimal flex-col gap-3 pl-5 text-sm marker:text-muted-foreground">
-        <li className="flex flex-col gap-1.5">
-          {t.step1}
+      <ol className="list-decimal space-y-3 pl-5 text-sm marker:text-muted-foreground">
+        <li className="space-y-1.5">
+          <p>{t.step1}</p>
           <InlineCode copy>{editCommand(integration)}</InlineCode>
         </li>
-        <li className="flex flex-col gap-1.5">
-          <CodeText text={t.step2} />
+        <li className="space-y-1.5">
+          <p>
+            <CodeText>{t.step2}</CodeText>
+          </p>
           {integration.snippet && <CodeBlock code={integration.snippet} copyLabel={t.copySnippet} />}
           {oldSnippet(integration) && (
-            <p className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+            <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
               <StatusBadge tone="warning" label={t.oldSnippet} />
-              <CodeText text={t.oldSnippetBody} />
-            </p>
+              <span className="min-w-0 flex-1 basis-48">
+                <CodeText>{t.oldSnippetBody}</CodeText>
+              </span>
+            </div>
           )}
         </li>
-        <li className="flex flex-col gap-1.5">
-          <CodeText text={t.step3} />
+        <li className="space-y-1.5">
+          <p>
+            <CodeText>{t.step3}</CodeText>
+          </p>
           <CodeBlock code={t.exampleExports} />
         </li>
-        <li>{t.step4}</li>
+        <li>
+          <p>{t.step4}</p>
+        </li>
       </ol>
       <p className="flex items-start gap-2 rounded-md border border-warning/25 bg-warning-subtle p-3 text-sm">
         <TriangleAlertIcon className="mt-0.5 size-4 shrink-0 text-warning" aria-hidden />
-        <CodeText text={t.warning} />
+        <span className="min-w-0 flex-1">
+          <CodeText>{t.warning}</CodeText>
+        </span>
       </p>
     </div>
   );

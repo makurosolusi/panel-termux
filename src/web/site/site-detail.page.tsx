@@ -9,6 +9,7 @@ import { QueryView } from "@/web/components/query-view";
 import { RelativeTime } from "@/web/components/relative-time";
 import { Button } from "@/web/components/ui/button";
 import { DeploySection } from "@/web/deploy/deploy.section";
+import { type Uploader, useUploader } from "@/web/deploy/deploy.uploader";
 import { idSiteDetail } from "@/web/i18n/id.site-detail";
 import { panelUrl } from "@/web/panel/panel.api";
 import type { ErrorCodes } from "@/web/shared/api.client";
@@ -43,9 +44,15 @@ function Summary({ site }: { site: SiteDetail }) {
   );
 }
 
-type SectionsProps = { site: SiteDetail; reload: () => void; deleting: boolean; setDeleting: (open: boolean) => void };
+type SectionsProps = {
+  site: SiteDetail;
+  reload: () => void;
+  deleting: boolean;
+  setDeleting: (open: boolean) => void;
+  uploader: Uploader;
+};
 
-function SiteSections({ site, reload, deleting, setDeleting }: SectionsProps) {
+function SiteSections({ site, reload, deleting, setDeleting, uploader }: SectionsProps) {
   const busy = siteBusy(site);
   const jobs = useApiQuery<Page<Job>>(
     panelUrl("/jobs", { target: site.name, status: "interrupted", page: 1, pageSize: 1 }),
@@ -60,7 +67,7 @@ function SiteSections({ site, reload, deleting, setDeleting }: SectionsProps) {
         <Summary site={site} />
       </AnchorSection>
       <AnchorSection id="deploy" title={t.anchors.deploy}>
-        <DeploySection site={site} />
+        <DeploySection site={site} uploader={uploader} />
       </AnchorSection>
       <AnchorSection id="domains" title={t.anchors.domains} description={t.domains.description}>
         <SiteHostnames site={site} busy={busy} codes={CODES} />
@@ -88,10 +95,17 @@ function SiteSections({ site, reload, deleting, setDeleting }: SectionsProps) {
 export function SiteDetailPage() {
   const { name = "" } = useParams();
   const query = useApiQuery<SiteDetail>(siteUrl(name), DETAIL_REFRESH_MS);
+  const uploader = useUploader(name); // above QueryView: survives the stale/error remount of the sections
   const [deleting, setDeleting] = useState(false); // header menu and danger zone open the same dialog
   const back = { to: "/panel/sites", label: t.back };
   const site = query.data;
-  const meta = { updatedAt: query.updatedAt, onRefresh: query.reload, refreshing: query.loading, live: true };
+  const meta = {
+    updatedAt: query.updatedAt,
+    onRefresh: query.reload,
+    refreshing: query.loading,
+    live: true,
+    stale: Boolean(query.error),
+  };
 
   if (query.error?.status === 404 && !site)
     return (
@@ -117,7 +131,15 @@ export function SiteDetailPage() {
       )}
       {site && <SiteAnchors />}
       <QueryView query={query} codes={CODES} empty={null} isEmpty={() => false}>
-        {(s) => <SiteSections site={s} reload={query.reload} deleting={deleting} setDeleting={setDeleting} />}
+        {(s) => (
+          <SiteSections
+            site={s}
+            reload={query.reload}
+            deleting={deleting}
+            setDeleting={setDeleting}
+            uploader={uploader}
+          />
+        )}
       </QueryView>
     </>
   );

@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useNavigate } from "react-router";
 import type { Discovered, DiscoveredIngress } from "@/shared/site.types";
+import { CodeText } from "@/web/components/code-text";
 import { type DataColumn, DataTable } from "@/web/components/data-table";
 import { Section } from "@/web/components/section";
 import { Button } from "@/web/components/ui/button";
@@ -19,7 +20,11 @@ const COLUMNS: readonly DataColumn<DiscoveredRow>[] = [
     cell: (r) => (
       <span className="flex flex-col">
         <span className="font-mono text-xs">{r.target}</span>
-        {r.reason && <span className="text-xs text-muted-foreground">{r.reason}</span>}
+        {r.reason && (
+          <span className="text-xs text-muted-foreground">
+            <CodeText>{r.reason}</CodeText>
+          </span>
+        )}
       </span>
     ),
   },

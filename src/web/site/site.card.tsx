@@ -1,7 +1,7 @@
 import { ExternalLinkIcon, MoreHorizontalIcon } from "lucide-react";
 import { useState } from "react";
 import { Link, useNavigate } from "react-router";
-import type { JobAccepted, Site, SiteAppStatus } from "@/shared/site.types";
+import type { JobAccepted, Site, SiteAppStatus, SiteDetail } from "@/shared/site.types";
 import { ConfirmAction } from "@/web/components/confirm-action";
 import type { DataColumn } from "@/web/components/data-table";
 import { RelativeTime } from "@/web/components/relative-time";
@@ -40,12 +40,31 @@ const ROW_TONE: Partial<Record<SiteAppStatus, StatusTone>> = {
   launching: "warning",
 };
 
-/** Row edge tone: only sites whose app needs a look get one. */
-export const siteRowTone = (s: Site): StatusTone | undefined => ROW_TONE[s.appStatus];
+type StatusFacts = Pick<Site, "appStatus" | "managed" | "lastDeploy"> & Partial<Pick<SiteDetail, "binary">>;
 
-/** pm2 status badge of a site's app ("not_deployed" = no pm2 process). */
-export function SiteAppBadge({ status }: { status: SiteAppStatus }) {
-  return <StatusBadge state={siteStatusKey(status)} />;
+/**
+ * pm2 has no process although the site has a binary (D-W9-3): adopted (it ran when adopted), a live binary, or a last
+ * deploy that left one in place. Only a site with none of these is "Belum di-deploy".
+ */
+export const missingFromPm2 = (s: StatusFacts): boolean =>
+  s.appStatus === "not_deployed" &&
+  (!s.managed || Boolean(s.binary?.live) || ["succeeded", "rolled_back"].includes(s.lastDeploy?.status ?? ""));
+
+/** Restart has an app to act on: pm2 knows it, or a managed site's entry can be (re)loaded from apps.json. */
+export const canRestart = (s: StatusFacts): boolean =>
+  s.appStatus !== "not_deployed" || (s.managed && missingFromPm2(s));
+
+/** Row edge tone: only sites whose app needs a look get one. */
+export const siteRowTone = (s: StatusFacts): StatusTone | undefined =>
+  missingFromPm2(s) ? "danger" : ROW_TONE[s.appStatus];
+
+/** pm2 status badge of a site's app: "Tidak berjalan di pm2" (danger) when it should be there. */
+export function SiteAppBadge({ site }: { site: StatusFacts }) {
+  return missingFromPm2(site) ? (
+    <StatusBadge state="down" label={t.missingFromPm2} />
+  ) : (
+    <StatusBadge state={siteStatusKey(site.appStatus)} />
+  );
 }
 
 /** Hostname as an external link. */
@@ -77,7 +96,7 @@ export const SITE_COLUMNS: readonly DataColumn<Site>[] = [
       </span>
     ),
   },
-  { key: "status", header: t.cols.status, mobile: "badge", cell: (s) => <SiteAppBadge status={s.appStatus} /> },
+  { key: "status", header: t.cols.status, mobile: "badge", cell: (s) => <SiteAppBadge site={s} /> },
   {
     key: "domain",
     header: t.cols.domain,
@@ -126,7 +145,7 @@ export function SiteRowActions({ site }: { site: Site }) {
           <DropdownMenuItem asChild>
             <Link to={`/panel/sites/${encodeURIComponent(site.name)}#deploy`}>{t.deploy}</Link>
           </DropdownMenuItem>
-          <DropdownMenuItem disabled={site.appStatus === "not_deployed"} onSelect={() => setRestarting(true)}>
+          <DropdownMenuItem disabled={!canRestart(site)} onSelect={() => setRestarting(true)}>
             {t.restart}
           </DropdownMenuItem>
           <DropdownMenuItem asChild>
