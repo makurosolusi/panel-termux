@@ -1,11 +1,16 @@
 import { describe, expect, test } from "bun:test";
+import * as sharedFormat from "@/shared/format.id";
 import type { Role } from "@/shared/roles";
+import { typedMatches } from "@/web/components/confirm-action";
 import { ROLE_TONE } from "@/web/components/role-badge";
 import { usageTone } from "@/web/components/stat-tile";
 import { LEGACY_TONE, toneForStatus } from "@/web/components/status.tone";
 import { breadcrumbsFor, documentTitleFor, navGroupsFor, navMatch } from "@/web/layout/nav.items";
+import * as webFormat from "@/web/shared/format";
 import {
   formatBytes,
+  formatClock,
+  formatDayLabel,
   formatDuration,
   formatLoadPerCore,
   formatMegabytes,
@@ -117,7 +122,8 @@ describe("status → tone", () => {
     ["partial", "warning"],
     ["failed", "danger"],
     ["errored", "danger"],
-    ["rolled_back", "danger"],
+    ["rolled_back", "warning"],
+    ["interrupted", "warning"],
     ["stopped", "neutral"],
     ["whatever", "neutral"],
   ] as const)("%s → %s", (status, tone) => expect(toneForStatus(status)).toBe(tone));
@@ -149,9 +155,11 @@ describe("formatters (shell)", () => {
     const ago = (s: number) => new Date(now.getTime() - s * 1000);
     expect(formatRelative(ago(2), now)).toBe("baru saja");
     expect(formatRelative(ago(-30), now)).toBe("baru saja");
-    expect(formatRelative(ago(42), now)).toBe("42 dtk lalu");
+    expect(formatRelative(ago(59), now)).toBe("baru saja"); // D16: seconds are never shown
+    expect(formatRelative(ago(60), now)).toBe("1 mnt lalu");
     expect(formatRelative(ago(3 * 60 + 20), now)).toBe("3 mnt lalu");
     expect(formatRelative(ago(2 * 3600 + 5), now)).toBe("2 jam lalu");
+    expect(formatRelative(ago(2 * 3600 + 5 * 60 + 9), now)).toBe("2 jam 5 mnt lalu");
     expect(formatRelative(ago(86_400 + 60), now)).toBe("kemarin");
     expect(formatRelative(ago(4 * 86_400), now)).toBe("4 hari lalu");
     expect(formatRelative(ago(30 * 86_400), now)).toMatch(/2026/);
@@ -161,13 +169,41 @@ describe("formatters (shell)", () => {
 
   test("bytes, megabytes, numbers, percent", () => {
     expect(formatMegabytes(3776)).toBe("3,7 GB");
-    expect(formatMegabytes(11_269)).toBe("11 GB");
+    expect(formatMegabytes(11_269)).toBe("11,0 GB");
     expect(formatMegabytes(512)).toBe("512 MB");
     expect(formatBytes(1.5 * 1024 ** 3)).toBe("1,5 GB");
+    expect(formatBytes(64 * 1024 ** 3)).toBe("64,0 GB");
+    expect(formatBytes(232 * 1024 ** 3)).toBe("232,0 GB");
+    expect(formatBytes(512 * 1024 ** 2)).toBe("512 MB");
+    expect(formatBytes(1.5 * 1024)).toBe("1,5 KB");
     expect(formatNumber(12_345.67, 1)).toBe("12.345,7");
     expect(formatPercent(42.25)).toBe("42%");
     expect(formatPercent(42.25, 1)).toBe("42,3%");
     expect(formatPercent(Number.POSITIVE_INFINITY)).toBe("–");
+  });
+
+  test("web re-exports the shared Indonesian formatters unchanged", () => {
+    expect(webFormat.formatBytes).toBe(sharedFormat.formatBytes);
+    expect(webFormat.formatDuration).toBe(sharedFormat.formatDuration);
+    expect(webFormat.formatNumber).toBe(sharedFormat.formatNumber);
+    expect(webFormat.formatPercent).toBe(sharedFormat.formatPercent);
+    expect(webFormat.formatMegabytes).toBe(sharedFormat.formatMegabytes);
+    expect(webFormat.formatTemperature).toBe(sharedFormat.formatTemperature);
+  });
+
+  test("log clock and day label in local time", () => {
+    const prevTz = process.env.TZ;
+    process.env.TZ = "Asia/Jakarta"; // test-only: UTC+7, restored below so other files keep the host zone
+    try {
+      expect(formatClock("2026-11-26T14:54:07.234Z")).toBe("21.54.07");
+      expect(formatClock(null)).toBe("");
+      expect(formatClock("nope")).toBe("");
+      expect(formatDayLabel("2026-11-26T14:54:07Z")).toBe("Kamis, 26 Nov 2026");
+      expect(formatDayLabel(null)).toBe("");
+    } finally {
+      if (prevTz === undefined) delete process.env.TZ;
+      else process.env.TZ = prevTz;
+    }
   });
 
   test("load average per core", () => {
@@ -176,5 +212,12 @@ describe("formatters (shell)", () => {
     expect(formatLoadPerCore(1.2, 8)).toEqual({ text: "1,2 / 8 inti", tone: "success" });
     expect(formatLoadPerCore(1.2, null)).toEqual({ text: "1,2", tone: "neutral" });
     expect(formatLoadPerCore(-1, 8)).toEqual({ text: "–", tone: "neutral" });
+  });
+});
+
+describe("typed confirmation", () => {
+  test("trims input but is case-sensitive", () => {
+    expect(typedMatches(" blog ", "blog")).toBe(true);
+    expect(typedMatches("Blog", "blog")).toBe(false);
   });
 });

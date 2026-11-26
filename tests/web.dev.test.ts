@@ -10,7 +10,7 @@ import { formatBytes, formatDateTime, formatUptime, usedPercent } from "@/web/sh
 describe("errorFromResponse / redirectFor / devErrorMessage", () => {
   test.each([
     [401, "unauthorized", "/login"],
-    [403, "forbidden", "/"],
+    [403, "forbidden", "/login"], // B20
     [400, "client", null],
     [409, "client", null],
     [500, "server", null],
@@ -128,7 +128,7 @@ describe("formatters", () => {
     [0, "0 B"],
     [1023, "1.023 B"],
     [1536, "1,5 KB"],
-    [5 * 1024 ** 3, "5 GB"],
+    [5 * 1024 ** 3, "5,0 GB"], // D16: GB/TB always one decimal
     [150 * 1024 ** 2, "150 MB"],
     [-1, "–"],
   ] as const)("formatBytes(%d) = %s", (n, s) => expect(formatBytes(n)).toBe(s));

@@ -1,13 +1,12 @@
 import { describe, expect, test } from "bun:test";
 import { id } from "@/web/i18n/id";
 import {
-  ACCESS_RELOAD_WINDOW_MS,
   AJAX_HEADERS,
+  type ApiErrorKind,
   apiErrorMessage,
   errorFromResponse,
   isAccessChallenge,
   redirectFor,
-  shouldReloadForAccess,
 } from "@/web/shared/api.client";
 
 describe("Cloudflare Access 401 vs panel 401", () => {
@@ -32,9 +31,13 @@ describe("Cloudflare Access 401 vs panel 401", () => {
     expect(redirectFor(access)).toBeNull();
     expect(apiErrorMessage(access)).toBe(id.common.errors.access);
 
-    expect(errorFromResponse(403, null).kind).toBe("forbidden");
+    const forbidden = errorFromResponse(403, { error: "forbidden" });
+    expect(forbidden.kind).toBe("forbidden");
+    expect(redirectFor(forbidden)).toBe("/login"); // B20: not the public landing "/"
     expect(errorFromResponse(502, null).kind).toBe("server");
     expect(errorFromResponse(404, null).kind).toBe("client");
+    expect(redirectFor(errorFromResponse(500, null))).toBeNull();
+    expect(redirectFor(errorFromResponse(409, { error: "conflict" }))).toBeNull();
   });
 
   test("AJAX header asks Access for a 401 instead of a redirect", () => {
@@ -42,16 +45,18 @@ describe("Cloudflare Access 401 vs panel 401", () => {
   });
 });
 
-describe("shouldReloadForAccess (loop guard)", () => {
-  const now = 1_000_000; // test-only
-  test.each([
-    ["never reloaded", null, true],
-    ["just reloaded", now - 1, false],
-    ["reloaded inside window", now - ACCESS_RELOAD_WINDOW_MS + 1, false],
-    ["reloaded exactly window ago", now - ACCESS_RELOAD_WINDOW_MS, true],
-    ["reloaded long ago", now - 24 * 3600 * 1000, true],
-    ["garbage marker", Number.NaN, true],
-  ] as const)("%s → %p", (_label, last, expected) => {
-    expect(shouldReloadForAccess(last, now)).toBe(expected);
+describe("error copy", () => {
+  test("every error kind has a title", () => {
+    const kinds: ApiErrorKind[] = ["network", "unauthorized", "access", "forbidden", "client", "server"];
+    expect(Object.keys(id.common.errorTitles).sort()).toEqual([...kinds].sort());
+    for (const kind of kinds) expect(id.common.errorTitles[kind]).toBeTruthy();
+  });
+
+  test("known code first, then 4xx server message, then per kind", () => {
+    const conflict = errorFromResponse(409, { error: "name_taken", message: "Name taken" });
+    expect(apiErrorMessage(conflict, { name_taken: "Nama sudah dipakai." })).toBe("Nama sudah dipakai.");
+    expect(apiErrorMessage(conflict)).toBe("Name taken");
+    expect(apiErrorMessage(errorFromResponse(503, null))).toBe(id.common.errors.server);
+    expect(apiErrorMessage(new Error("x"))).toBe(id.common.errors.generic);
   });
 });

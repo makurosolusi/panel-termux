@@ -8,10 +8,19 @@ export const idCommon = {
   copy: "Salin",
   loading: "Memuat…",
   empty: "Belum ada yang bisa ditampilkan di sini.",
-  /** "Diperbarui 12 dtk lalu" — replaces the static "Diperbarui otomatis tiap N detik" lines; relative pieces live in `id.shell.time`. */
+  /** "Diperbarui 3 mnt lalu" — replaces the static "Diperbarui otomatis tiap N detik" lines; relative pieces live in `id.shell.time`. */
   updatedAgo: (rel: string) => `Diperbarui ${rel}`,
   /** Duration unit labels: "7 mnt 17 dtk", "1 hari 9 jam". */
   units: { day: "hari", hour: "jam", minute: "mnt", second: "dtk" },
+  /** Short heading per ApiErrorKind (ErrorState title); the sentence below it comes from `errors`. */
+  errorTitles: {
+    network: "Tidak bisa terhubung ke server",
+    unauthorized: "Sesi kamu sudah berakhir",
+    access: "Perlu masuk lewat Cloudflare Access",
+    forbidden: "Kamu tidak punya akses",
+    client: "Permintaan tidak berhasil",
+    server: "Server sedang bermasalah",
+  },
   errors: {
     network: "Tidak bisa terhubung ke server. Periksa koneksi internet, lalu coba lagi.",
     unauthorized: "Sesi kamu sudah berakhir. Mengalihkan ke halaman masuk…",

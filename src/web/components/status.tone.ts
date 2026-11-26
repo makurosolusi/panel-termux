@@ -19,10 +19,11 @@ const STATUS_TONE: Record<string, StatusTone> = {
   pending: "neutral",
   finish: "warning",
   partial: "warning",
+  rolled_back: "warning", // failed, but the old version was restored (DECISIONS A10)
+  interrupted: "warning", // cut off by a panel restart; guided clean-up, not a failure (B12)
   // failure
   errored: "danger",
   failed: "danger",
-  rolled_back: "danger",
   // deliberately idle / unknown
   down: "neutral",
   stopped: "neutral",
@@ -60,4 +61,14 @@ export const TONE_FILL: Record<StatusTone, string> = {
   info: "bg-info",
   neutral: "bg-muted-foreground",
   accent: "bg-brand",
+};
+
+/** Text colour class per tone for values and icons. */
+export const TONE_TEXT: Record<StatusTone, string> = {
+  success: "text-success",
+  warning: "text-warning",
+  danger: "text-danger",
+  info: "text-info",
+  neutral: "text-muted-foreground",
+  accent: "text-brand-text",
 };
