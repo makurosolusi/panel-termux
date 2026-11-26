@@ -1,18 +1,20 @@
-import { id } from "@/web/i18n/id";
+import { idLanding } from "@/web/i18n/id.landing";
 import { useDocumentTitle } from "@/web/layout/document.title";
 import { ArchSection } from "./arch.section";
 import { FaqSection } from "./faq.section";
 import { FeaturesSection } from "./features.section";
 import { FinalSection, LandingFooter } from "./final.section";
 import { HeroSection } from "./hero.section";
+import { InstallSection } from "./install.section";
 import { LandingHeader } from "./landing.header";
+import { LimitsSection } from "./limits.section";
+import { ShotsSection } from "./shots.section";
 import { StepsSection } from "./steps.section";
 import { WhySection } from "./why.section";
 
-/** `/`: public marketing page for panel-termux, shown to everyone (signed in or not). */
+/** `/`: public product page for people who want Panel Termux on their own phone (signed in or not). */
 export function LandingPage() {
-  // TODO(landing): use id.landing.meta.title once wkr-adm-landing-01 adds it (PLAN/05 §5, W5)
-  useDocumentTitle(id.appName, { raw: true });
+  useDocumentTitle(idLanding.meta.title, { raw: true });
   return (
     <div className="relative min-h-svh overflow-x-clip bg-lp-paper text-lp-ink selection:bg-lp-signal selection:text-lp-signal-ink">
       <div
@@ -22,10 +24,13 @@ export function LandingPage() {
       <LandingHeader />
       <main className="relative">
         <HeroSection />
+        <InstallSection />
+        <ShotsSection />
         <WhySection />
         <FeaturesSection />
         <StepsSection />
         <ArchSection />
+        <LimitsSection />
         <FaqSection />
         <FinalSection />
       </main>

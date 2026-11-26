@@ -1,54 +1,132 @@
-/** Indonesian strings of the public landing page at `/` (merged into `id.landing`). */
+const REPO = "https://github.com/makurosolusi/panel-termux";
+
+/** Indonesian strings of the public landing page at `/` (imported directly by src/web/landing, also `id.landing`). */
 export const idLanding = {
-  githubUrl: "https://github.com/makurosolusi/panel-termux",
-  nav: { label: "Navigasi halaman", features: "Fitur", how: "Cara kerja", faq: "FAQ", github: "GitHub" },
+  /** Tab title + link preview; must equal `OG_TEXT` in src/server/http/seo.ts (tests/web.landing.test.ts). */
+  meta: {
+    title: "Panel Termux — HP Android jadi server",
+    description:
+      "Panel web yang mengubah HP Android dengan Termux jadi server untuk aplikasi Bun single-binary: pantau, deploy, backup, dan domain lewat Cloudflare Tunnel.",
+    imageAlt: "Logo Panel Termux dan tulisan: HP Android jadi server untuk aplikasi Bun",
+  },
+  links: {
+    github: REPO,
+    releases: `${REPO}/releases`,
+    license: `${REPO}/blob/main/LICENSE`,
+    changelog: `${REPO}/blob/main/CHANGELOG.md`,
+    script: `${REPO}/blob/main/scripts/install-release.sh`,
+    readmeInstall: `${REPO}#instal-di-hp`,
+  },
+  nav: {
+    label: "Navigasi halaman",
+    install: "Pasang",
+    features: "Fitur",
+    how: "Cara kerja",
+    faq: "FAQ",
+    github: "GitHub",
+  },
   cta: {
-    signIn: "Masuk dengan Google",
+    install: "Pasang di HP-mu",
+    github: "Lihat di GitHub",
+    signIn: "Masuk",
     open: "Buka panel",
-    secondary: "Lihat cara kerjanya",
+    account: "Akun saya",
   },
   hero: {
-    eyebrow: "bun-linux-arm64-android · tanpa root · tanpa Docker",
-    titleA: "HP bekas di laci?",
+    eyebrow: "Tanpa root · tanpa Docker",
+    titleA: "HP lama di laci?",
     titleB: "Jadikan",
     titleEm: "server",
-    titleC: "yang menyala 24 jam.",
-    lead: "Panel Termux mengubah HP Android dengan Termux jadi server untuk aplikasi web Bun. Buat situs, deploy, pantau, dan cadangkan dari browser. Tanpa root, tanpa Docker, tanpa IP publik.",
-    mockLabel: "Ilustrasi tampilan panel di HP: status perangkat, layanan, dan log deploy",
-    mockCaption: "tampilan ilustrasi",
-    stamp: "tanpa root",
+    titleC: "untuk aplikasimu.",
+    lead: "Panel Termux mengubah HP Android dengan Termux jadi server untuk aplikasi web Bun. Buat situs, deploy, pantau, dan cadangkan dari browser, lewat Cloudflare Tunnel tanpa IP publik.",
+    shotCaption: "Tangkapan layar dari mode demo, data contoh",
   },
   specs: {
     label: "Spesifikasi singkat",
     items: [
-      { value: "1", unit: "binary", note: "native Android, langsung jalan di Termux" },
-      { value: "~110", unit: "MB", note: "ukuran file binary" },
-      { value: "~65", unit: "MB RAM", note: "terukur di HP sungguhan" },
+      { value: "1", unit: "binary", note: "native Android, jalan di Termux biasa" },
+      { value: "~65", unit: "MB RAM", note: "diukur di HP sungguhan (v0.2)" },
+      { value: "±30", unit: "menit", note: "penyiapan pertama, sekali saja" },
       { value: "0", unit: "root", note: "tanpa root, tanpa Docker" },
     ],
   },
-  mock: {
-    host: "panel · ringkasan",
-    battery: "Baterai",
-    charging: "mengisi",
-    temp: "Suhu",
-    tempOk: "normal",
-    memory: "Memori",
-    disk: "Disk",
-    services: "Layanan",
-    running: "berjalan",
-    deploy: "deploy toko-kopi",
-    upload: "↑ unggah 8/8 · sha256 ✓",
-    deployOk: "health 200 · selesai",
+  install: {
+    kicker: "§01 — pasang",
+    title: "Pasang di HP-mu.",
+    lead: "Penyiapannya jujur saja: beberapa akun dan sekitar setengah jam. Setelah itu panel berjalan sendiri sebagai layanan di Termux.",
+    prereqTitle: "Yang perlu disiapkan",
+    prereqs: [
+      "HP Android 64-bit (arm64) yang bisa dibiarkan menyala dan tercolok charger.",
+      "Termux dari F-Droid atau GitHub, bukan Play Store, beserta Termux:API untuk membaca baterai. Termux:Boot opsional, untuk menyalakan Termux lagi setelah HP restart.",
+      "termux-services (pkg install termux-services), lalu tutup dan buka lagi Termux.",
+      "cloudflared, dan domain yang dikelola di akun Cloudflare.",
+      "PostgreSQL dan pm2, bila ingin situs dengan database.",
+      "Akun Google Cloud untuk membuat OAuth client login.",
+      "Komputer untuk membuat OAuth client dan mem-build aplikasimu.",
+    ],
+    stepsTitle: "Lima langkah",
+    steps: [
+      {
+        title: "Jalankan skrip instal di Termux",
+        body: "Skrip mengunduh panel-termux-android-arm64.tar.gz dari rilis terbaru, memeriksa SHA-256-nya terhadap SHA256SUMS, lalu memasang panel sebagai layanan runit.",
+      },
+      {
+        title: "Buat OAuth client Google, isi ~/panel/.env",
+        body: "Skrip membuat ~/panel/.env dan menyebut variabel yang masih kosong. Panel belum menyala sampai file ini lengkap.",
+        code: "nano ~/panel/.env",
+      },
+      {
+        title: "Hubungkan Cloudflare Tunnel",
+        body: "Tambahkan domain panel ke ingress cloudflared dan buat DNS-nya. Panel hanya mendengarkan di 127.0.0.1.",
+        code: "cloudflared tunnel route dns <tunnel> panel.<domain>",
+      },
+      {
+        title: "Pasang Cloudflare Access",
+        body: "Tidak wajib untuk menyalakan panel, tapi tanpa Access siapa pun dengan akun Google bisa sampai ke halaman login. Lindungi path /panel, /dev, /profile, dan API-nya.",
+      },
+      {
+        title: "Jalankan skrip sekali lagi",
+        body: "Skrip memulai ulang panel dan menunggu sampai panel menjawab.",
+        code: "sh install.sh",
+      },
+    ],
+    command:
+      "curl -fsSLo install.sh https://github.com/makurosolusi/panel-termux/releases/latest/download/install.sh && sh install.sh",
+    copy: "Salin perintah instal",
+    viewScript: "Lihat isi skrip",
+    checksum: "Skrip memeriksa SHA-256 unduhan sebelum memasang.",
+    readme: "Panduan lengkap di README",
+    upgrade: "Upgrade: jalankan perintah yang sama.",
+  },
+  shots: {
+    kicker: "§02 — tampilan",
+    title: "Seperti ini rupanya.",
+    label: "Galeri tangkapan layar panel, geser untuk melihat semuanya",
+    pending: "Tangkapan layar menyusul",
+    items: {
+      overview: {
+        caption: "Ringkasan di HP",
+        alt: "Halaman Ringkasan di layar HP: baterai, suhu, memori, layanan, dan masalah terbaru",
+      },
+      sites: {
+        caption: "Situs dan deploy",
+        alt: "Daftar situs dengan status, domain, dan progres deploy di layar desktop",
+      },
+      health: {
+        caption: "Kesehatan sistem",
+        alt: "Halaman Kesehatan sistem di layar desktop: vonis, cadangan, dan pemeriksaan",
+      },
+      services: {
+        caption: "Layanan di HP",
+        alt: "Daftar layanan sshd, postgres, pm2, dan cloudflared beserta tombol mulai ulang di layar HP",
+      },
+    },
   },
   why: {
-    kicker: "§01 — kenapa HP lama",
+    kicker: "§03 — kenapa HP lama",
     title: "Server yang sudah kamu punya.",
     items: [
-      {
-        title: "UPS bawaan",
-        body: "Baterai HP jadi cadangan daya. Listrik padam sebentar, server tetap berjalan.",
-      },
+      { title: "UPS bawaan", body: "Baterai HP jadi cadangan daya. Listrik padam sebentar, server tetap berjalan." },
       {
         title: "Daya kecil",
         body: "Chip ARM di HP dirancang hemat daya, cocok dibiarkan menyala 24 jam di pojok meja.",
@@ -64,7 +142,7 @@ export const idLanding = {
     ],
   },
   features: {
-    kicker: "§02 — fitur",
+    kicker: "§04 — fitur",
     title: "Pekerjaan yang biasanya lewat SSH, kini dari browser.",
     items: [
       {
@@ -74,39 +152,39 @@ export const idLanding = {
       },
       {
         title: "Deploy dari browser",
-        body: "Unggah binary per potongan dengan checksum SHA-256. Binary native atau glibc terdeteksi otomatis, lalu dicek kesehatannya. Bila gagal, versi lama kembali otomatis; rollback manual cukup satu klik.",
+        body: "Unggah binary per potongan dengan checksum SHA-256, lalu panel mengecek kesehatannya. Bila gagal, versi lama kembali otomatis; versi sebelumnya bisa dikembalikan kapan saja.",
       },
       {
         title: "Pantau perangkat",
-        body: "Baterai, status pengisian, suhu, memori, penyimpanan, dan beban CPU dalam satu layar.",
+        body: "Baterai, status pengisian, suhu, memori, penyimpanan, dan beban sistem dalam satu layar.",
       },
       {
         title: "Layanan & aplikasi",
-        body: "Mulai, hentikan, dan mulai ulang layanan runit (sshd, postgres, pm2, cloudflared) serta aplikasi pm2, lengkap dengan log. Layanan inti tidak bisa dihentikan tanpa sengaja.",
+        body: "Mulai, hentikan, dan mulai ulang layanan runit (sshd, postgres, pm2, cloudflared) serta aplikasi pm2, lengkap dengan log.",
       },
       {
         title: "Cadangan di luar HP",
-        body: "Setiap hari, semua database dan data panel di-dump ke Cloudflare R2 atau S3, dengan masa simpan yang bisa diatur. Perintah pemulihan tinggal disalin.",
+        body: "Setiap hari, semua database dan data panel dikirim ke Cloudflare R2 atau S3, dengan masa simpan yang bisa diatur. Perintah pemulihan tinggal disalin.",
       },
       {
         title: "Akses & audit",
-        body: "Masuk dengan Google, tiga peran (Pengguna, Admin, Super Admin), log audit untuk aksi penting, dan pengaturan rahasia yang tersimpan terenkripsi.",
+        body: "Masuk dengan Google, tiga peran (Pengguna, Admin, Super Admin), log audit untuk aksi penting, dan nilai rahasia tersimpan terenkripsi. Admin punya kendali penuh atas HP.",
       },
     ],
   },
   how: {
-    kicker: "§03 — cara kerja",
+    kicker: "§05 — cara kerja",
     title: "Dari laci ke internet dalam empat langkah.",
     steps: [
       {
         title: "Siapkan Termux",
-        body: "Pasang Termux beserta termux-services, pm2, cloudflared, dan PostgreSQL.",
+        body: "Pasang Termux beserta termux-services, cloudflared, dan bila perlu PostgreSQL dan pm2.",
         code: "pkg install termux-services",
       },
       {
-        title: "Pasang panel",
-        body: "Salin binary ke HP dan jalankan script instalasinya. Panel berjalan sebagai layanan runit.",
-        code: "sh scripts/install-phone.sh ./dist/panel-android-arm64",
+        title: "Pasang panel dari rilis GitHub",
+        body: "Skrip instal mengunduh rilis, memeriksa checksum, dan memasang panel sebagai layanan runit.",
+        code: "sh install.sh",
       },
       {
         title: "Hubungkan domain",
@@ -121,49 +199,96 @@ export const idLanding = {
     ],
   },
   arch: {
-    kicker: "§04 — arsitektur",
+    kicker: "§06 — arsitektur",
     title: "Koneksi keluar saja. Tidak ada port yang dibuka.",
     lead: "cloudflared di HP membuka tunnel keluar ke Cloudflare. Pengunjung datang lewat domainmu, Cloudflare meneruskannya ke tunnel.",
     label: "Diagram alur: HP Android ke cloudflared ke Cloudflare ke internet",
     nodes: [
-      { title: "HP Android", detail: "Termux · panel :3200 · app :3001–3999" },
-      { title: "cloudflared", detail: "service runit · tunnel keluar" },
+      { title: "HP Android", detail: "Termux · panel :3200 · aplikasi :3001–3999" },
+      { title: "cloudflared", detail: "layanan runit · tunnel keluar" },
       { title: "Cloudflare", detail: "DNS · Tunnel · Access" },
       { title: "Internet", detail: "https://app.domainmu" },
     ],
   },
+  limits: {
+    kicker: "§07 — keterbatasan",
+    title: "Yang perlu kamu tahu sebelum memasang.",
+    items: [
+      {
+        title: "Tanpa CPU% per proses",
+        body: "Android memblokir /proc/stat, jadi panel tidak bisa menampilkan pemakaian CPU per proses.",
+      },
+      {
+        title: "Domain putus sebentar",
+        body: "Setiap perubahan domain memulai ulang cloudflared, sehingga semua domain di tunnel putus beberapa detik.",
+      },
+      {
+        title: "Tidak bisa melapor bila mati",
+        body: "Bila panel atau HP mati, panel tidak bisa memberi tahu. Pakai pemantau dari luar untuk itu.",
+      },
+      {
+        title: "Optimasi baterai",
+        body: "Android bisa menghentikan Termux bila optimasi baterai aktif. Matikan untuk Termux.",
+      },
+      {
+        title: "Tanpa root, tanpa Docker",
+        body: "Aplikasi harus berupa binary Bun (atau proses yang bisa dijalankan pm2). Container tidak didukung.",
+      },
+      {
+        title: "Admin = kendali penuh",
+        body: "Admin bisa menjalankan, menghapus, dan mengganti apa pun di HP. Berikan peran ini hanya ke orang yang kamu percaya.",
+      },
+      {
+        title: "Login terbuka untuk akun Google",
+        body: "Siapa pun bisa masuk sebagai Pengguna tanpa akses. Cloudflare Access praktis wajib di depan panel.",
+      },
+      {
+        title: "Cadangan butuh R2 atau S3",
+        body: "Tanpa bucket R2/S3 tidak ada cadangan di luar HP. Panggilan ke R2 dan API Cloudflare belum diuji end-to-end dengan akun nyata.",
+      },
+    ],
+  },
   faq: {
-    kicker: "§05 — tanya jawab",
+    kicker: "§08 — tanya jawab",
     title: "Pertanyaan yang wajar.",
     items: [
       {
         q: "Perlu root?",
-        a: "Tidak. Panel Termux adalah satu binary native Android yang langsung jalan di Termux biasa, tanpa root dan tanpa Docker.",
-      },
-      {
-        q: "Bagaimana dengan baterai?",
-        a: "Biarkan HP tercolok charger. Panel menampilkan persen baterai, status pengisian, dan suhu, jadi kamu cepat tahu bila ada yang tidak beres.",
+        a: "Tidak. Panel Termux adalah satu binary native Android yang jalan di Termux biasa, tanpa root dan tanpa Docker.",
       },
       {
         q: "Aman dibuka ke internet?",
-        a: "Panel hanya mendengarkan di 127.0.0.1 dan dibuka lewat Cloudflare Tunnel. Akun baru hanya mendapat peran Pengguna, nilai rahasia di pengaturan dienkripsi, dan aksi penting tercatat di log audit. Untuk lapisan tambahan, pasang Cloudflare Access di depan halaman panel.",
+        a: "Panel hanya mendengarkan di 127.0.0.1 dan dibuka lewat Cloudflare Tunnel. Akun baru hanya mendapat peran Pengguna tanpa akses, nilai rahasia dienkripsi, dan aksi penting tercatat di log audit. Pasang Cloudflare Access di depan halaman dan API panel: tanpa itu, halaman login terbuka untuk siapa saja.",
+      },
+      { q: "Gratis?", a: "Ya, kode terbuka berlisensi MIT." },
+      {
+        q: "Perlu komputer?",
+        a: "Tidak untuk memasang panel; perlu untuk membuat OAuth client Google dan mem-build aplikasimu.",
+      },
+      {
+        q: "Data saya dikirim ke kalian?",
+        a: "Tidak ada telemetri. Panel hanya menghubungi layanan yang kamu atur (Cloudflare, bucket cadangan, Telegram) dan satu alamat Google untuk mengecek koneksi internet HP.",
       },
       {
         q: "Aplikasi apa saja yang bisa jalan?",
         a: "Aplikasi web Bun yang di-compile jadi satu binary. Target bun-linux-arm64-android jalan langsung; target bun-linux-arm64 (glibc) jalan lewat grun. Setiap situs bisa punya database PostgreSQL sendiri dan dijalankan oleh pm2.",
       },
       {
-        q: "Kalau HP rusak, bagaimana datanya?",
-        a: "Cadangan harian dikirim ke luar HP, ke Cloudflare R2 atau S3: dump setiap database dan data panel, lengkap dengan perintah pemulihannya.",
+        q: "Bagaimana dengan baterai?",
+        a: "Biarkan HP tercolok charger. Panel menampilkan persen baterai, status pengisian, dan suhu, jadi kamu cepat tahu bila ada yang tidak beres.",
       },
     ],
   },
   final: {
-    title: "Laci kosong, server penuh.",
+    title: "Laci kosong, server menyala.",
     body: "Ambil HP lama itu, colok ke charger, dan jalankan aplikasimu sendiri.",
   },
   footer: {
     tagline: "Panel web untuk menjadikan HP Android (Termux) sebagai server.",
-    source: "Kode sumber di GitHub",
+    label: "Tautan proyek",
+    github: "GitHub",
+    license: "Lisensi MIT",
+    changelog: "Catatan perubahan",
+    releases: "Rilis",
   },
 } as const;

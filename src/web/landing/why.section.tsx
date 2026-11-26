@@ -1,8 +1,8 @@
 import { BatteryFullIcon, CloudIcon, CpuIcon, LeafIcon } from "lucide-react";
-import { id } from "@/web/i18n/id";
+import { idLanding } from "@/web/i18n/id.landing";
 import { SectionHead } from "./section.head";
 
-const t = id.landing.why;
+const t = idLanding.why;
 const ICONS = [BatteryFullIcon, LeafIcon, CloudIcon, CpuIcon];
 
 /** "Kenapa HP bekas": four value props laid out like a spec sheet. */
