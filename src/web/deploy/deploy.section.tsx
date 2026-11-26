@@ -1,4 +1,4 @@
-import type { SiteDetail } from "@/shared/site.types";
+import type { BinaryInfo, SiteDetail } from "@/shared/site.types";
 import { KeyValue } from "@/web/components/key-value";
 import { RelativeTime } from "@/web/components/relative-time";
 import { Section } from "@/web/components/section";
@@ -13,10 +13,8 @@ import type { Uploader } from "./deploy.uploader";
 
 const t = idDeploy;
 
-/** "Versi berjalan": the live binary, or why it has no deploy record. */
-function LiveVersion({ site }: { site: SiteDetail }) {
-  const live = site.binary?.live;
-  if (!live) return <p className="text-sm text-muted-foreground">{t.live.none}</p>;
+/** "Versi berjalan": the live binary, and a note when it has no deploy record. */
+function LiveVersion({ live }: { live: BinaryInfo }) {
   return (
     <div className="flex flex-col gap-2">
       {!live.deployId && (
@@ -40,12 +38,18 @@ function LiveVersion({ site }: { site: SiteDetail }) {
 
 /** Content of the site detail `#deploy` anchor: live version, upload card, rollback and deploy history. */
 export function DeploySection({ site, uploader }: { site: SiteDetail; uploader: Uploader }) {
+  const live = site.binary?.live;
   return (
     <div className="flex flex-col gap-6">
       {!site.managed && <p className="text-sm text-muted-foreground">{t.adoptedNote}</p>}
-      <Section title={t.live.title} action={<RollbackAction site={site} />}>
-        <LiveVersion site={site} />
-      </Section>
+      {live ? (
+        <Section title={t.live.title} action={<RollbackAction site={site} />}>
+          <LiveVersion live={live} />
+        </Section>
+      ) : (
+        // Nothing runs yet: no "Versi berjalan" heading and no rollback to offer, only the next step.
+        <p className="text-sm text-muted-foreground">{t.live.none}</p>
+      )}
       <DeployCard site={site} up={uploader} />
       <Section title={t.history.title}>
         <DeployHistory site={site.name} />

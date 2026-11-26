@@ -134,6 +134,8 @@ export type SystemAdapters = {
   mode: PanelMode;
   /** HOME the site files live under (`~` in sites.dir, ~/.cloudflared); a temp sandbox in fake mode. */
   home: string;
+  /** Termux `$PREFIX` to read service files under; the fake's sandbox `<home>/usr`, absent = termuxPrefix(). */
+  prefix?: string;
   net: NetAdapter;
   runit: RunitAdapter;
   pm2: Pm2Adapter;

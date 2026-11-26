@@ -83,7 +83,10 @@ async function compute(ctx: SiteCtx, probe: EcosystemProbe): Promise<Integration
   } catch (e) {
     pm2Reason = e instanceof Pm2UnavailableError ? e.reason : (e as Error).message;
   }
-  const svRun = readTextOrNull(join(termuxPrefix(), "var", "service", "pm2", "run"));
+  // The flag must be on a command line: the shipped script also names it in a comment.
+  const autoExitOff = (run: string | null) =>
+    (run ?? "").split("\n").some((l) => !l.trimStart().startsWith("#") && l.includes("--no-auto-exit"));
+  const svRun = readTextOrNull(join(ctx.system.prefix ?? termuxPrefix(), "var", "service", "pm2", "run"));
   const tokenSet = describeSetting(ctx.db, "cloudflare.api_token").isSet;
   const spreads = probe.ok && probe.loadedAppsJson && runnable.every((a) => probe.names.includes(a.name as string));
   const loads = check("ecosystem_loads", probe.ok, "error", probe.ok ? {} : { reason: probe.reason });
@@ -104,7 +107,7 @@ async function compute(ctx: SiteCtx, probe: EcosystemProbe): Promise<Integration
       count: (apps ?? []).length - runnable.length,
     }),
     check("pm2_runtime", pm2Reason === null, "error", pm2Reason ? { reason: pm2Reason } : {}),
-    check("pm2_auto_exit", svRun?.includes("--no-auto-exit") ?? false, "warning"),
+    check("pm2_auto_exit", autoExitOff(svRun), "warning"),
     check("pm2_guard", probe.ok && probe.names.some((n) => !panelNames.has(n)), "warning"),
     { ...check("tunnel", tunnelId !== null, "error"), detail: tunnelDetail },
     check("cloudflare_token", tokenSet, "warning"),

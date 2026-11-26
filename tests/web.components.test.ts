@@ -3,13 +3,16 @@ import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { CodeText, codeSegments } from "@/web/components/code-text";
 import { typedMatches } from "@/web/components/confirm-action";
+import { DataTable } from "@/web/components/data-table";
 import { PaginationFooter } from "@/web/components/pagination-footer";
-import { isEmptyData, queryViewState } from "@/web/components/query-view";
+import { isEmptyData, QueryView, queryViewState } from "@/web/components/query-view";
 import { buttonVariants } from "@/web/components/ui/button";
 import { Select, SelectTrigger, SelectValue } from "@/web/components/ui/select";
 import { Switch } from "@/web/components/ui/switch";
 import { parsePageParam } from "@/web/components/use-page-param";
 import { ApiError } from "@/web/shared/api.client";
+import type { ApiQuery } from "@/web/shared/use-api-query";
+import { focusOpener } from "@/web/site/focus.return";
 
 const err = new ApiError("network", null, null, null); // test-only
 
@@ -129,5 +132,72 @@ describe("touch targets under pointer: coarse (D-W9-5)", () => {
     const html = renderToStaticMarkup(createElement(Switch));
     expect(html).toContain("pointer-coarse:after:size-11");
     expect(html).toMatch(/class="[^"]*(^| )relative /);
+  });
+});
+
+describe("QueryView root stays the same element between content and stale", () => {
+  const view = (error: ApiError | undefined) => {
+    const query: ApiQuery<number[]> = { data: [1], error, loading: false, updatedAt: null, reload: () => {} };
+    return QueryView({ query, empty: null, children: (d) => createElement("section", null, d.length) });
+  };
+  test("same root type and children slots, so a failed refresh does not remount the page sections", () => {
+    const content = view(undefined);
+    const stale = view(new ApiError("network", null, null, null));
+    expect(stale.type).toBe(content.type);
+    const kids = (el: typeof content) => el.props.children as unknown[];
+    expect(kids(stale).length).toBe(kids(content).length);
+    expect(kids(content)[0]).toBeFalsy(); // StaleNotice slot is kept empty, not dropped
+    expect((kids(stale)[1] as { type: unknown }).type).toBe((kids(content)[1] as { type: unknown }).type);
+    expect(renderToStaticMarkup(stale)).toContain("Coba lagi");
+  });
+});
+
+describe("DataTable phone card meta line", () => {
+  type Row = { id: string; a: string; b: string | null; c: string };
+  const html = renderToStaticMarkup(
+    createElement(DataTable<Row>, {
+      label: "t",
+      rows: [{ id: "1", a: "judul", b: null, c: "tiga" }],
+      rowKey: (r) => r.id,
+      columns: [
+        { key: "a", header: "A", cell: (r) => r.a, mobile: "title" },
+        { key: "b", header: "B", cell: (r) => r.b },
+        { key: "e", header: "E", cell: () => "" },
+        { key: "c", header: "C", cell: (r) => r.c },
+      ],
+      actions: () => createElement("button", { type: "button" }, "x"),
+    }),
+  );
+  test("empty cells are skipped, so separators never double up", () => {
+    expect(html).toContain("tiga");
+    expect(html).not.toMatch(/·\s*·/);
+    expect(html).not.toMatch(/<p[^>]*>\s*·/);
+  });
+  test("title may wrap to two lines; actions footer wraps", () => {
+    expect(html).toContain("line-clamp-2");
+    expect(html).toContain("flex-wrap items-center justify-between");
+  });
+});
+
+describe("focusOpener", () => {
+  const el = (attrs: Record<string, string>, parent: object | null, doc: object) => ({
+    focus: () => {},
+    ownerDocument: doc,
+    getAttribute: (k: string) => attrs[k] ?? null,
+    closest(sel: string): unknown {
+      return sel === '[role="menu"]' && attrs.role === "menu"
+        ? this
+        : ((parent as { closest?: (s: string) => unknown })?.closest?.(sel) ?? null);
+    },
+  });
+  test("a menu item hands focus back to the menu's trigger; other elements to themselves", () => {
+    const trigger = { focus: () => {} };
+    const doc = { getElementById: (id: string) => (id === "trig" ? trigger : null) };
+    const menu = el({ role: "menu", "aria-labelledby": "trig" }, null, doc);
+    const item = el({ role: "menuitem" }, menu, doc);
+    expect(focusOpener(item as unknown as Element)).toBe(trigger as unknown as HTMLElement);
+    const button = el({}, null, doc);
+    expect(focusOpener(button as unknown as Element)).toBe(button as unknown as HTMLElement);
+    expect(focusOpener(null)).toBeNull();
   });
 });

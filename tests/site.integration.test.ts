@@ -73,6 +73,16 @@ describe.skipIf(!node)("integration checks (real node probe)", () => {
     writeFileSync(appsJson, "[]\n");
   });
 
+  test("pm2_auto_exit reads the sandbox's runit script in fake mode, not the host $PREFIX", async () => {
+    expect(system.prefix).toBe(join(home, "usr"));
+    expect(checkOf(await verify(), "pm2_auto_exit")?.state).toBe("ok");
+    const run = join(home, "usr", "var", "service", "pm2", "run");
+    const shipped = readFileSync(run, "utf8");
+    writeFileSync(run, shipped.replace("--no-auto-exit ", ""));
+    expect(checkOf(await verify(), "pm2_auto_exit")?.state).toBe("warning");
+    writeFileSync(run, shipped);
+  });
+
   test("pm2 not running → pm2_runtime error, not ready; GET is cached ≤ 30 s, verify refreshes", async () => {
     const before = await json<Integration>(await call("GET", "/integration"));
     await system.runit.control("pm2", "stop");

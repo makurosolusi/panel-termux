@@ -108,7 +108,7 @@ export function SiteDelete(props: {
     <div className="flex flex-col gap-3 rounded-md border border-danger/25 p-4">
       <div>
         <p className="text-sm font-medium">{t.zone}</p>
-        <p className="text-sm text-muted-foreground">{t.zoneBody}</p>
+        <p className="text-sm text-muted-foreground">{site.managed ? t.zoneBody : t.zoneBodyAdopted}</p>
       </div>
       <Button
         variant="destructive"

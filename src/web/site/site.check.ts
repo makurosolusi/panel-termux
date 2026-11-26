@@ -42,7 +42,14 @@ export type SiteForm = { name: string; hostnames: string[]; port: string; databa
 /** Empty wizard form. */
 export const EMPTY_SITE_FORM: SiteForm = { name: "", hostnames: [""], port: "", database: false, env: [] };
 
-const cleanHost = (h: string) => h.trim().toLowerCase();
+/** A domain as typed or pasted, normalized: trimmed, lower-cased, without `https://`, path, query or trailing dot. */
+export const cleanHost = (h: string) =>
+  h
+    .trim()
+    .toLowerCase()
+    .replace(/^[a-z][a-z0-9+.-]*:\/\//, "")
+    .replace(/[/?#].*$/, "")
+    .replace(/\.$/, "");
 
 /** Trimmed name and the filled-in domains (trimmed, lower-cased), as both /check and create receive them. */
 export function normalizeTarget(f: Pick<SiteForm, "name" | "hostnames">) {

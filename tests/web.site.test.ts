@@ -107,6 +107,14 @@ describe("wizard target", () => {
       database: true,
     }));
 
+  test("a pasted URL becomes its domain (m13)", () =>
+    expect(
+      checkRequest(form({ hostnames: ["https://Kedai.contoh.com/menu?x=1", "http://b.contoh.com."] })),
+    ).toMatchObject({
+      hostname: "kedai.contoh.com",
+      extraHostnames: ["b.contoh.com"],
+    }));
+
   test("no check while name/domain empty or port invalid; empty port lets the server suggest", () => {
     expect(checkRequest(EMPTY_SITE_FORM)).toBeNull();
     expect(checkRequest(form({ hostnames: [" "] }))).toBeNull();

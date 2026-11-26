@@ -9,7 +9,7 @@ import { PageHeader } from "@/web/components/page-header";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/web/components/ui/select";
 import { idCommon } from "@/web/i18n/id.common";
 import { idDevLogs } from "@/web/i18n/id.dev.logs";
-import { apiErrorMessage } from "@/web/shared/api.client";
+import { apiErrorDetail } from "@/web/shared/api.client";
 import { useApiQuery } from "@/web/shared/use-api-query";
 
 const t = idDevLogs;
@@ -94,7 +94,7 @@ export function LogsPage() {
             <ErrorState
               compact
               title={idCommon.errorTitles[query.error.kind]}
-              description={apiErrorMessage(query.error, t.errorCodes)}
+              description={apiErrorDetail(query.error, t.errorCodes)}
               onRetry={query.reload}
               retrying={query.loading}
             />

@@ -3,6 +3,8 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 // @ts-expect-error TS7016: Bun embeds the shipped template as text (`type: "text"`); tsc has no type for a .js text import.
 import ECOSYSTEM_TEMPLATE from "../../../deploy/pm2/ecosystem.config.js" with { type: "text" };
+// @ts-expect-error TS2307: Bun embeds the shipped runit script as text; tsc cannot resolve an extensionless module.
+import PM2_RUN_TEMPLATE from "../../../deploy/pm2/run" with { type: "text" };
 import type { Battery, ControlAction, DatabaseInfo } from "../../shared/panel.types";
 import { createTarArchive } from "./archive.tar";
 import { createTermuxCloudflared } from "./cloudflared.termux";
@@ -63,7 +65,9 @@ function seedSandbox(home: string): void {
   const cfDir = join(home, ".cloudflared");
   const sitesDir = join(home, "sites");
   const binDir = join(home, "usr", "bin");
-  for (const d of [cfDir, sitesDir, binDir]) mkdirSync(d, { recursive: true });
+  const pm2Sv = join(home, "usr", "var", "service", "pm2"); // the shipped runit script, read by the pm2_auto_exit check
+  for (const d of [cfDir, sitesDir, binDir, pm2Sv]) mkdirSync(d, { recursive: true });
+  if (!existsSync(join(pm2Sv, "run"))) writeFileSync(join(pm2Sv, "run"), PM2_RUN_TEMPLATE);
   if (!existsSync(join(cfDir, "config.yml"))) writeFileSync(join(cfDir, "config.yml"), FAKE_CONFIG);
   if (!existsSync(join(sitesDir, "ecosystem.config.js")))
     writeFileSync(join(sitesDir, "ecosystem.config.js"), fakeEcosystem(home));
@@ -205,6 +209,7 @@ export function createFakeSystem({
     },
     // Real tar on the host (macOS/Linux); site archives are small in tests.
     archive: createTarArchive(Bun.which("tar") ?? "/usr/bin/tar"),
+    prefix: join(home, "usr"),
     ...(offline ? { offline: createOfflineClients(home) } : {}),
   };
 }

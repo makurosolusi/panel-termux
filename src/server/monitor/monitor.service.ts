@@ -187,7 +187,10 @@ export function createMonitor(deps: MonitorDeps): MonitorService {
     state,
     probe: (h) => system.cloudflared.probe(h),
     localStatus: (port) => system.net.httpStatus(port),
-    connectivity: () => httpReachable(deps.connectivityUrl ?? CONNECTIVITY_PROBE_URL),
+    // Fake mode is fully offline (D-W9-4): never reach out, report the internet as reachable.
+    connectivity: system.offline
+      ? async () => true
+      : () => httpReachable(deps.connectivityUrl ?? CONNECTIVITY_PROBE_URL),
     intervalSec: () => intSetting(deps, "monitor.sample_interval_sec", 60),
     context: (intervalSec) => {
       const warn = getSetting(deps, "monitor.battery_warn_percent");

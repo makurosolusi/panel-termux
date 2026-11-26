@@ -92,6 +92,13 @@ export function apiErrorMessage(err: unknown, codes: ErrorCodes = {}): string {
   return idCommon.errors[err.kind];
 }
 
+/** Like apiErrorMessage, but for under an `errorTitles` heading: the per-kind text is only the next step, not a repeat. */
+export function apiErrorDetail(err: unknown, codes: ErrorCodes = {}): string {
+  const msg = apiErrorMessage(err, codes);
+  const kind = err instanceof ApiError ? err.kind : null;
+  return kind && kind !== "client" && msg === idCommon.errors[kind] ? idCommon.errorSteps[kind] : msg;
+}
+
 /** Query value; empty strings, null and undefined are dropped. */
 type QueryValue = string | number | boolean | null | undefined;
 

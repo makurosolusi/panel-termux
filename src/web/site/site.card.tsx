@@ -1,7 +1,7 @@
 import { ExternalLinkIcon, MoreHorizontalIcon } from "lucide-react";
 import { useState } from "react";
 import { Link, useNavigate } from "react-router";
-import type { JobAccepted, Site, SiteAppStatus, SiteDetail } from "@/shared/site.types";
+import { type JobAccepted, missingFromPm2, type Site, type SiteAppStatus, type SiteDetail } from "@/shared/site.types";
 import { ConfirmAction } from "@/web/components/confirm-action";
 import type { DataColumn } from "@/web/components/data-table";
 import { RelativeTime } from "@/web/components/relative-time";
@@ -41,14 +41,6 @@ const ROW_TONE: Partial<Record<SiteAppStatus, StatusTone>> = {
 };
 
 type StatusFacts = Pick<Site, "appStatus" | "managed" | "lastDeploy"> & Partial<Pick<SiteDetail, "binary">>;
-
-/**
- * pm2 has no process although the site has a binary (D-W9-3): adopted (it ran when adopted), a live binary, or a last
- * deploy that left one in place. Only a site with none of these is "Belum di-deploy".
- */
-export const missingFromPm2 = (s: StatusFacts): boolean =>
-  s.appStatus === "not_deployed" &&
-  (!s.managed || Boolean(s.binary?.live) || ["succeeded", "rolled_back"].includes(s.lastDeploy?.status ?? ""));
 
 /** Restart has an app to act on: pm2 knows it, or a managed site's entry can be (re)loaded from apps.json. */
 export const canRestart = (s: StatusFacts): boolean =>

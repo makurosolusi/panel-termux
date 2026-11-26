@@ -245,5 +245,12 @@ describe("problem copy", () => {
     expect(title({ code: "backup_item_stale", target: "database:blog", params: { name: "blog", hours: null } })).toBe(
       "Cadangan blog belum pernah berhasil",
     );
+    expect(
+      title({
+        code: "backup_item_stale",
+        target: "globals:globals",
+        params: { itemKind: "globals", name: "globals", hours: 30 },
+      }),
+    ).toBe("Cadangan role Postgres sudah 30 jam tidak berhasil");
   });
 });

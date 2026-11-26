@@ -4,6 +4,7 @@ import {
   AJAX_HEADERS,
   ApiError,
   type ApiErrorKind,
+  apiErrorDetail,
   apiErrorMessage,
   apiFetch,
   errorFromResponse,
@@ -40,6 +41,16 @@ describe("Cloudflare Access 401 vs panel 401", () => {
     expect(errorFromResponse(404, null).kind).toBe("client");
     expect(redirectFor(errorFromResponse(500, null))).toBeNull();
     expect(redirectFor(errorFromResponse(409, { error: "conflict" }))).toBeNull();
+  });
+
+  test("detail under an error title is the next step only, never a repeat of the title", () => {
+    const network = new ApiError("network", null, null, null);
+    expect(apiErrorDetail(network)).toBe(idCommon.errorSteps.network);
+    expect(apiErrorDetail(network)).not.toContain(idCommon.errorTitles.network);
+    expect(apiErrorMessage(network)).toBe(idCommon.errors.network); // toasts keep the full sentence
+    expect(apiErrorDetail(errorFromResponse(503, null))).toBe(idCommon.errorSteps.server);
+    expect(apiErrorDetail(errorFromResponse(409, { error: "busy" }), { busy: "Sedang sibuk." })).toBe("Sedang sibuk.");
+    expect(apiErrorDetail(new Error("x"))).toBe(idCommon.errors.generic);
   });
 
   test("AJAX header asks Access for a 401 instead of a redirect", () => {

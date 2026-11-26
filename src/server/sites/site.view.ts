@@ -1,6 +1,6 @@
 // Site rows → API `Site` view (list + detail base), split out of site.service.ts (file health).
 import { eq, inArray, sql } from "drizzle-orm";
-import type { Site } from "../../shared/site.types";
+import { missingFromPm2, type Site } from "../../shared/site.types";
 import type { Db } from "../db/client";
 import { deploy, type site, siteHostname, user } from "../db/schema";
 import { appName } from "../deploy/deploy.steps";
@@ -59,10 +59,6 @@ export function toSites(db: Db, rows: (typeof site.$inferSelect)[], procs: Pm2Pr
     };
   });
 }
-
-/** pm2 has no process for a site that has a binary (adopted, or deployed): web shows "Tidak berjalan di pm2" (D-W9-3). */
-const missingFromPm2 = (s: Site): boolean =>
-  s.appStatus === "not_deployed" && (!s.managed || ["succeeded", "rolled_back"].includes(s.lastDeploy?.status ?? ""));
 
 /** Errored or missing app, or failed/interrupted last deploy: listed first. */
 export const troubled = (s: Site): boolean =>

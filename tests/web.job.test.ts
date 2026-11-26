@@ -1,10 +1,11 @@
 import { describe, expect, test } from "bun:test";
 import type { Job, JobStep } from "@/shared/job.types";
 import type { Site } from "@/shared/site.types";
+import { missingFromPm2 } from "@/shared/site.types";
 import { idJob } from "@/web/i18n/id.job";
 import { liveAnnouncement, shownStepStatus, stepDurationMs, stepEndMs } from "@/web/site/job.state";
 import { JOB_STEP_STATUS_KEY } from "@/web/site/job.status-key";
-import { canRestart, missingFromPm2, siteRowTone } from "@/web/site/site.card";
+import { canRestart, siteRowTone } from "@/web/site/site.card";
 
 const step = (key: string, status: JobStep["status"], over: Partial<JobStep> = {}): JobStep => ({
   key,

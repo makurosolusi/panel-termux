@@ -3,7 +3,7 @@ import type { ReactNode } from "react";
 import { Button } from "@/web/components/ui/button";
 import { idCommon } from "@/web/i18n/id.common";
 import { idShell } from "@/web/i18n/id.shell";
-import { apiErrorMessage, type ErrorCodes } from "@/web/shared/api.client";
+import { apiErrorDetail, type ErrorCodes } from "@/web/shared/api.client";
 import type { ApiQuery } from "@/web/shared/use-api-query";
 import { ErrorState } from "./error-state";
 import { RelativeTime } from "./relative-time";
@@ -59,22 +59,22 @@ export function QueryView<T>({
       return (
         <ErrorState
           title={idCommon.errorTitles[error?.kind ?? "network"]}
-          description={apiErrorMessage(error, codes)}
+          description={apiErrorDetail(error, codes)}
           onRetry={reload}
           retrying={loading}
         />
       );
-    case "stale":
-      return (
-        <div className="flex flex-col gap-4">
-          <StaleNotice updatedAt={query.updatedAt} onRetry={reload} retrying={loading} />
-          {children(data as T)}
-        </div>
-      );
     case "empty":
       return <>{empty}</>;
     default:
-      return <>{children(data as T)}</>;
+      // One element for "content" and "stale": switching root type would remount every section of the page each time
+      // a refresh fails or recovers. `contents` keeps the children in the parent's layout, like a fragment.
+      return (
+        <div className="contents">
+          {error && <StaleNotice updatedAt={query.updatedAt} onRetry={reload} retrying={loading} />}
+          {children(data as T)}
+        </div>
+      );
   }
 }
 

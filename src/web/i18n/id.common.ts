@@ -14,6 +14,15 @@ export const idCommon = {
     client: "Permintaan tidak berhasil",
     server: "Server sedang bermasalah",
   },
+  /** Next step only, shown under `errorTitles` (the title already says what happened). */
+  errorSteps: {
+    network: "Periksa koneksi internet, lalu coba lagi.",
+    unauthorized: "Mengalihkan ke halaman masuk…",
+    access:
+      "Buka alamat panel langsung di address bar untuk masuk lewat Access. Bila tetap ditolak, minta admin memastikan email kamu diizinkan di kebijakan Access.",
+    forbidden: "Minta Super Admin mengubah peranmu bila perlu.",
+    server: "Coba lagi beberapa saat lagi.",
+  },
   errors: {
     network: "Tidak bisa terhubung ke server. Periksa koneksi internet, lalu coba lagi.",
     unauthorized: "Sesi kamu sudah berakhir. Mengalihkan ke halaman masuk…",

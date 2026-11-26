@@ -137,7 +137,7 @@ export function DataTable<T>({
               >
                 <MobileCard columns={columns} titleCol={titleCol} title={titleCell(row)} row={row} />
                 {actions && (
-                  <div className="relative z-10 mt-1 flex items-center justify-between gap-2 border-t pt-2">
+                  <div className="relative z-10 mt-1 flex flex-wrap items-center justify-between gap-2 border-t pt-2">
                     {actions(row)}
                   </div>
                 )}
@@ -163,11 +163,15 @@ function MobileCard<T>({
   row: T;
 }) {
   const badges = columns.filter((c) => c !== titleCol && c.mobile === "badge");
-  const meta = columns.filter((c) => c !== titleCol && (c.mobile ?? "meta") === "meta");
+  // Cells with nothing to show (null/""/false) are skipped, so the line never reads "a ·  · b".
+  const meta = columns
+    .filter((c) => c !== titleCol && (c.mobile ?? "meta") === "meta")
+    .map((c) => ({ key: c.key, node: c.cell(row) }))
+    .filter((m) => m.node !== null && m.node !== undefined && m.node !== "" && m.node !== false);
   return (
     <>
       <div className="flex min-w-0 items-start justify-between gap-2">
-        <div className="min-w-0 truncate font-medium">{title}</div>
+        <div className="line-clamp-2 min-w-0 font-medium [overflow-wrap:anywhere]">{title}</div>
         {badges.length > 0 && (
           <div className="flex shrink-0 items-center gap-1">
             {badges.map((c) => (
@@ -178,10 +182,10 @@ function MobileCard<T>({
       </div>
       {meta.length > 0 && (
         <p className="text-xs text-muted-foreground tabular-nums">
-          {meta.map((c, i) => (
-            <Fragment key={c.key}>
+          {meta.map((m, i) => (
+            <Fragment key={m.key}>
               {i > 0 && " · "}
-              {c.cell(row)}
+              {m.node}
             </Fragment>
           ))}
         </p>

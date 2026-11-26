@@ -95,6 +95,16 @@ export type SiteDetail = Site & {
   activeJob?: ActiveJob | null;
 };
 
+/**
+ * pm2 has no process although the site has a binary (D-W9-3): adopted (it ran when adopted), a live binary, or a last
+ * deploy that left one in place. Only a site with none of these is "Belum di-deploy". One rule for server and web.
+ */
+export const missingFromPm2 = (
+  s: Pick<Site, "appStatus" | "managed" | "lastDeploy"> & Partial<Pick<SiteDetail, "binary">>,
+): boolean =>
+  s.appStatus === "not_deployed" &&
+  (!s.managed || Boolean(s.binary?.live) || ["succeeded", "rolled_back"].includes(s.lastDeploy?.status ?? ""));
+
 /** GET /sites/discovered (0.3.0; 0.2.x returns DiscoveredIngress[]). */
 export type Discovered = { ingress: DiscoveredIngress[]; apps: AdoptCandidateApp[] };
 

@@ -6,7 +6,7 @@ import { Input } from "@/web/components/ui/input";
 import { idSite } from "@/web/i18n/id.site";
 import { FormField } from "./form.field";
 import { jobPath } from "./site.api";
-import { MAX_HOSTNAMES, notesByHost, parsePort, type SiteForm, targetIssues } from "./site.check";
+import { cleanHost, MAX_HOSTNAMES, notesByHost, parsePort, type SiteForm, targetIssues } from "./site.check";
 
 const t = idSite.wizard;
 
@@ -38,6 +38,7 @@ function HostnameRow(props: {
           placeholder={t.hostnamePlaceholder}
           value={props.value}
           onChange={(e) => props.onChange(e.target.value)}
+          onBlur={(e) => props.onChange(cleanHost(e.target.value))}
           {...invalidProps(id, props.errors)}
         />
         {props.onRemove && (
@@ -76,7 +77,6 @@ export function WizardTarget({
   const notes = notesByHost(check.result);
   const portErrors = parsePort(form.port) === "invalid" ? [t.portInvalid] : issues.port;
   const setHost = (i: number, v: string) => onChange({ hostnames: form.hostnames.map((h, j) => (j === i ? v : h)) });
-  const key = (h: string) => h.trim().toLowerCase();
 
   return (
     <div className="flex flex-col gap-5">
@@ -103,8 +103,8 @@ export function WizardTarget({
             key={i}
             index={i}
             value={h}
-            errors={issues.hostnames[key(h)] ?? []}
-            notes={notes[key(h)] ?? []}
+            errors={issues.hostnames[cleanHost(h)] ?? []}
+            notes={notes[cleanHost(h)] ?? []}
             onChange={(v) => setHost(i, v)}
             onRemove={i === 0 ? undefined : () => onChange({ hostnames: form.hostnames.filter((_, j) => j !== i) })}
           />

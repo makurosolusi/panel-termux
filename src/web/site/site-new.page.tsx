@@ -1,5 +1,5 @@
 import { cn } from "cn";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router";
 import type { Integration, Site } from "@/shared/site.types";
 import { ActionBar } from "@/web/components/action-bar";
@@ -60,6 +60,15 @@ export function SiteNewPage() {
   const sites = useApiQuery<Site[]>(panelUrl("/sites"));
   const check = useSiteCheck(checkRequest(form));
 
+  // Move focus to the step heading when the step changes (not on first render), so screen readers hear the new step.
+  const stepHeading = useRef<HTMLHeadingElement>(null);
+  const shownStep = useRef(step);
+  useEffect(() => {
+    if (shownStep.current === step) return;
+    shownStep.current = step;
+    stepHeading.current?.focus();
+  }, [step]);
+
   const suggestedPort = suggested.data?.port;
   useEffect(() => {
     if (suggestedPort !== undefined && !portTouched) setForm((f) => ({ ...f, port: String(suggestedPort) }));
@@ -90,9 +99,9 @@ export function SiteNewPage() {
     <div className="flex max-w-2xl flex-col">
       <PageHeader title={t.title} description={t.description} back={{ to: "/panel/sites", label: idSite.list.title }} />
       <Stepper step={step} />
-      <p className="sr-only" aria-live="polite">
+      <h2 ref={stepHeading} tabIndex={-1} className="sr-only">
         {t.stepOf(step + 1, t.steps.length, t.steps[step] ?? "")}
-      </p>
+      </h2>
       {integration.data && !ready && <IntegrationBanner />}
       <form
         className="mt-4 flex flex-col gap-6"

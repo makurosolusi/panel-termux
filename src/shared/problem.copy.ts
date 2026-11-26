@@ -9,6 +9,15 @@ export type ProblemText = Pick<Problem, "code" | "target" | "params">;
 const num = (v: unknown): number | null => (typeof v === "number" && Number.isFinite(v) ? v : null);
 const str = (v: unknown): string => (v === null || v === undefined ? "" : String(v));
 
+/** How a backup item reads mid-sentence; only databases have a meaningful own name (the others are fixed ids). */
+const BACKUP_ITEM: Partial<Record<string, string>> = {
+  globals: "role Postgres",
+  panel: "database panel",
+  sites: "file situs",
+  cloudflared: "konfigurasi tunnel",
+  secrets: "kunci rahasia",
+};
+
 type Copy = { title: (p: ProblemText) => string; detail: (p: ProblemText) => string };
 
 function domainReason({ params }: ProblemText): string {
@@ -77,7 +86,7 @@ const COPY: Record<ProblemCode, Copy> = {
   backup_item_stale: {
     title: (p) => {
       const hours = num(p.params.hours);
-      const name = str(p.params.name);
+      const name = BACKUP_ITEM[str(p.params.itemKind)] ?? str(p.params.name);
       return hours === null
         ? `Cadangan ${name} belum pernah berhasil`
         : `Cadangan ${name} sudah ${formatNumber(hours)} jam tidak berhasil`;

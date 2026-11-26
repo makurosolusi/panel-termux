@@ -184,6 +184,8 @@ export const idSiteDetail = {
   remove: {
     zone: "Zona berbahaya",
     zoneBody: "Menghapus situs tidak bisa dibatalkan.",
+    zoneBodyAdopted:
+      "Hanya catatan situs ini di panel yang dihapus. Folder, aplikasi pm2, domain, dan database tetap ada.",
     button: "Hapus situs",
     title: (name: string) => `Hapus situs ${name}?`,
     stops: (hosts: string) => `Domain berhenti bisa dibuka: ${hosts}.`,

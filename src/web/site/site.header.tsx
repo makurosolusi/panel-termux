@@ -12,7 +12,7 @@ import {
 import type { ReactNode } from "react";
 import { Link, useNavigate } from "react-router";
 import { toast } from "sonner";
-import type { Job, JobAccepted, SiteDetail } from "@/shared/site.types";
+import { type Job, type JobAccepted, missingFromPm2, type SiteDetail } from "@/shared/site.types";
 import { CodeText } from "@/web/components/code-text";
 import { ConfirmAction } from "@/web/components/confirm-action";
 import { PageHeader, type PageMeta } from "@/web/components/page-header";
@@ -29,7 +29,7 @@ import { idSiteDetail } from "@/web/i18n/id.site-detail";
 import { ERROR_TOAST_MS } from "@/web/shared/api.action";
 import { apiErrorMessage, apiFetch, type ErrorCodes } from "@/web/shared/api.client";
 import { jobPath, siteUrl } from "./site.api";
-import { canRestart, HostLink, missingFromPm2, SiteAppBadge } from "./site.card";
+import { canRestart, HostLink, SiteAppBadge } from "./site.card";
 import { healthToast, type SiteBanner, siteBanners, siteBusy } from "./site-detail.state";
 
 const t = idSiteDetail.header;
