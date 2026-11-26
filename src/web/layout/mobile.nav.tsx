@@ -3,6 +3,7 @@ import { EllipsisIcon } from "lucide-react";
 import { useState } from "react";
 import { NavLink, useLocation } from "react-router";
 import { id } from "@/web/i18n/id";
+import { NavBadge } from "@/web/panel/nav.badge.provider";
 import type { Me } from "@/web/session/session.api";
 import { MobileMore } from "./mobile.more";
 import { activeInMore, type NavGroup, type NavItem } from "./nav.items";
@@ -31,7 +32,10 @@ export function MobileNav({ primary, more, me }: { primary: readonly NavItem[]; 
                 cn(SLOT, "text-muted-foreground", isActive && "font-medium text-foreground [&_svg]:text-brand-text")
               }
             >
-              <Icon className="size-5" aria-hidden />
+              <span className="relative">
+                <Icon className="size-5" aria-hidden />
+                <NavBadge to={to} dot className="absolute -top-0.5 -right-1" />
+              </span>
               <span className="max-w-full truncate px-0.5">{label}</span>
             </NavLink>
           </li>

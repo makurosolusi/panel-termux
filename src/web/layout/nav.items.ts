@@ -5,6 +5,7 @@ import {
   DatabaseIcon,
   GlobeIcon,
   HeartPulseIcon,
+  HistoryIcon,
   LayersIcon,
   LayoutDashboardIcon,
   type LucideIcon,
@@ -17,6 +18,7 @@ import {
 } from "lucide-react";
 import { canAccess, type Role } from "@/shared/roles";
 import { id } from "@/web/i18n/id";
+import { idHistory } from "@/web/i18n/id.history";
 
 const n = id.shell.nav;
 
@@ -63,7 +65,10 @@ export const NAV_GROUPS: readonly NavGroup[] = [
 ];
 
 /** Routes without their own sidebar link, titled under the group of their path. */
-const HIDDEN_PAGES: readonly NavItem[] = [{ to: "/panel/jobs", label: n.jobs, icon: ActivityIcon }];
+const HIDDEN_PAGES: readonly NavItem[] = [
+  { to: "/panel/jobs", label: n.jobs, icon: ActivityIcon },
+  { to: "/panel/problems", label: idHistory.problems.title, icon: HistoryIcon },
+];
 
 /** Phone bottom bar slots 1–4 (PLAN/01 §3.7); slot 5 is the "Lainnya" sheet with everything else. */
 export const MOBILE_PRIMARY: readonly string[] = ["/panel", "/panel/sites", "/panel/services", "/panel/apps"];

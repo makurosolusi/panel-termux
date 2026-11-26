@@ -1,9 +1,11 @@
+import { lazy, Suspense } from "react";
 import type { Problem } from "@/shared/monitor.types";
 import type { DeviceInfo, PanelOverview } from "@/shared/panel.types";
 import { PageHeader } from "@/web/components/page-header";
 import { QueryView } from "@/web/components/query-view";
 import { StatTilesSkeleton } from "@/web/components/skeletons";
 import { StatusBadge } from "@/web/components/status-badge";
+import { OnboardingBanner } from "@/web/dev/onboarding.banner";
 import { idOverview } from "@/web/i18n/id.overview";
 import { idPanel } from "@/web/i18n/id.panel";
 import { useMe } from "@/web/session/use-me";
@@ -14,6 +16,10 @@ import { ActivityList, AlertsLine, BackupSection, CountCards } from "./overview.
 import { PANEL_REFRESH_MS, panelUrl } from "./panel.api";
 
 const t = idOverview;
+
+// History blocks load in their own chunks after the first render, keeping /panel within its gzip budget (PLAN/01 §3.11).
+const MetricTrends = lazy(() => import("./sparkline").then((m) => ({ default: m.MetricTrends })));
+const RecentProblems = lazy(() => import("./problems.page").then((m) => ({ default: m.RecentProblems })));
 
 function Overview({ o }: { o: PanelOverview }) {
   const { role } = useMe();
@@ -30,13 +36,21 @@ function Overview({ o }: { o: PanelOverview }) {
         dataAt={o.dataAt ?? null}
       />
       <DeviceTiles device={device} baseline={o.loadBaseline} problems={problems} />
+      <Suspense fallback={null}>
+        <MetricTrends />
+      </Suspense>
       <CountCards o={o} problems={problems} />
       <div className="grid gap-6 lg:grid-cols-2">
         <div className="flex flex-col gap-4">
           <BackupSection backup={backup} />
           <AlertsLine alerts={o.alerts} role={role} />
         </div>
-        <ActivityList entries={o.recentActivity} role={role} />
+        <div className="flex flex-col gap-6">
+          <ActivityList entries={o.recentActivity} role={role} />
+          <Suspense fallback={null}>
+            <RecentProblems />
+          </Suspense>
+        </div>
       </div>
     </div>
   );
@@ -48,6 +62,7 @@ export function OverviewPage() {
   const fake = query.data?.mode === "fake";
   return (
     <>
+      <OnboardingBanner />
       <PageHeader
         title={t.title}
         status={fake && <StatusBadge tone="warning" label={idPanel.fakeMode} />}

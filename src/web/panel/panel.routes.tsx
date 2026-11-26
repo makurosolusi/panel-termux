@@ -1,17 +1,23 @@
 import type { RouteObject } from "react-router";
-import { id } from "@/web/i18n/id";
+import { idHistory } from "@/web/i18n/id.history";
+import { idShell } from "@/web/i18n/id.shell";
 import type { RouteHandle } from "@/web/layout/shell.page";
 
-const n = id.shell.nav;
+const n = idShell.nav;
 const h = (title: string): RouteHandle => ({ title });
 
 // Pages load per route (own chunk) so the first /panel load stays within the 200 KB gzip budget (PLAN/01 §3.11).
-/** Server monitoring routes (PLAN/02): Ringkasan, Layanan, Aplikasi, Domain, Database and unit logs. */
+/** Server monitoring routes (PLAN/02): Ringkasan, problem history, Layanan, Aplikasi, Domain, Database and unit logs. */
 export const panelRoutes: RouteObject[] = [
   {
     path: "/panel",
     handle: h(n.overview),
     lazy: { Component: () => import("./overview.page").then((m) => m.OverviewPage) },
+  },
+  {
+    path: "/panel/problems",
+    handle: h(idHistory.problems.title),
+    lazy: { Component: () => import("./problems.page").then((m) => m.ProblemsPage) },
   },
   {
     path: "/panel/services",

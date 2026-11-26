@@ -8,11 +8,13 @@ import { QueryView } from "@/web/components/query-view";
 import { RelativeTime } from "@/web/components/relative-time";
 import { STATUS_META } from "@/web/components/status.vocab";
 import { StatusBadge } from "@/web/components/status-badge";
+import { idHistory } from "@/web/i18n/id.history";
 import { idPanel } from "@/web/i18n/id.panel";
 import { formatNumber } from "@/web/shared/format";
 import { useApiQuery } from "@/web/shared/use-api-query";
 import { CodeText } from "./code.text";
 import { DomainCheckButton } from "./domain.check";
+import { HeartbeatStrip } from "./heartbeat.strip";
 import { DOMAINS_REFRESH_MS, panelUrl } from "./panel.api";
 import { domainHolder, domainVerdict, isWildcard, type Verdict } from "./panel.status-key";
 
@@ -68,6 +70,11 @@ const columns: DataColumn<Row>[] = [
     header: t.cols.response,
     align: "right",
     cell: (d) => (d.health.ms === null ? idPanel.dash : t.ms(formatNumber(d.health.ms))),
+  },
+  {
+    key: "recent",
+    header: idHistory.heartbeat.column,
+    cell: (d) => <HeartbeatStrip checks={d.recent} />,
   },
   {
     key: "checked",

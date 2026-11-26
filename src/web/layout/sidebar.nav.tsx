@@ -1,6 +1,7 @@
 import { cn } from "cn";
 import { NavLink } from "react-router";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/web/components/ui/tooltip";
+import { NavBadge } from "@/web/panel/nav.badge.provider";
 import type { NavGroup, NavItem } from "./nav.items";
 
 /**
@@ -76,6 +77,7 @@ function SidebarLink({
           {isActive && <span aria-hidden className="absolute inset-y-1.5 left-0 w-0.5 rounded-full bg-brand" />}
           <Icon className={cn("size-4 shrink-0", isActive && "text-brand-text")} aria-hidden />
           <span className={cn("truncate", collapsed && "sr-only")}>{item.label}</span>
+          <NavBadge to={item.to} dot={collapsed} className={cn(collapsed && "absolute top-1 right-1")} />
         </>
       )}
     </NavLink>

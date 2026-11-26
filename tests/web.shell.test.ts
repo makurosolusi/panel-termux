@@ -98,6 +98,15 @@ describe("route meta", () => {
     expect(breadcrumbsFor("/nope", "x")).toEqual([]);
   });
 
+  test("breadcrumbs: problem history is a hidden Server page, not in the 'Lainnya' sheet", () => {
+    expect(navMatch("/panel/problems")?.item.to).toBe("/panel/problems");
+    expect(breadcrumbsFor("/panel/problems", "Riwayat masalah")).toEqual([
+      { label: "Server" },
+      { label: "Riwayat masalah" },
+    ]);
+    expect(activeInMore("/panel/problems", mobileNavFor("super_admin").more)).toBe(false);
+  });
+
   test("every breadcrumb link points at a nav item (an existing route)", () => {
     const navPaths = new Set(navGroupsFor("super_admin").flatMap((g) => g.items.map((i) => i.to)));
     navPaths.add("/panel/jobs");
@@ -156,7 +165,9 @@ describe("route titles", () => {
     const leaves = (rs: R[]): R[] => rs.flatMap((r) => (r.children ? leaves(r.children) : [r]));
     // app.routes itself pulls the browser-only auth client; it only concatenates these four arrays
     const all = leaves([...panelRoutes, ...siteRoutes, ...backupRoutes, ...devRoutes] as R[]);
-    expect(all.length).toBe(18);
+    // 19 = every leaf of the four arrays; a new route must bump this and carry a title
+    expect(all.length).toBe(19);
+    expect(routeMeta(all.filter((r) => r.path === "/panel/problems")).title).toBe("Riwayat masalah");
     for (const r of all) expect(routeMeta([r]).title, r.path).toBeTruthy();
     expect(routeMeta(all.filter((r) => r.path === "/panel/sites/new")).task).toBe(true);
     expect(routeMeta(all.filter((r) => r.path === "/panel/sites")).task).toBe(false);
