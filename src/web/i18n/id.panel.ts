@@ -17,7 +17,7 @@ export const idPanel = {
     protected: "Layanan inti ini tidak boleh dihentikan dari panel.",
     busy: "Masih ada aksi lain yang berjalan. Tunggu sebentar lalu coba lagi.",
     not_found: "Tidak ditemukan (mungkin sudah dihapus atau berganti nama).",
-  } as Record<string, string>,
+  },
   fakeMode: "Mode demo: data di bawah ini palsu (perangkat bukan Termux).",
   refreshing: "Diperbarui otomatis tiap 10 detik",
   device: {

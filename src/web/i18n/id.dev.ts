@@ -28,7 +28,7 @@ export const idDev = {
     exists: "Email ini sudah diundang.",
     protected: "Akun ini dilindungi dan tidak bisa diubah.",
     not_found: "Data tidak ditemukan (mungkin sudah dihapus).",
-  } as Record<string, string>,
+  },
   health: {
     refreshing: "Diperbarui otomatis tiap 15 detik",
     version: "Versi",
