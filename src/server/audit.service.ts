@@ -5,14 +5,14 @@ import type { Db } from "./db/client";
 import { auditLog, user } from "./db/schema";
 import type { Paging } from "./routes/http.error";
 
-/** Known audit actions; panel waves add theirs here. */
+/**
+ * Known audit actions for new events; panel waves add theirs here. Stored as plain text, so rows with
+ * retired actions (`auth.denied`, `invite.*` from the invite-only era) still list and filter fine.
+ */
 export type AuditAction =
   | "auth.sign_in"
-  | "auth.denied"
   | "user.role_change"
   | "user.delete"
-  | "invite.create"
-  | "invite.delete"
   | "settings.update"
   | "dns.create"
   | "dns.delete"
@@ -45,9 +45,6 @@ export function recordAudit(db: Db, { actorId, action, target = null, meta = nul
     throw new Error(`recordAudit ${action} failed: ${(e as Error).message}`, { cause: e });
   }
 }
-
-/** Domain part of an email, so audit/log entries for strangers avoid storing the full address. */
-export const emailDomain = (email: string): string => email.split("@").pop()?.toLowerCase() ?? "";
 
 /** Optional filters for listAudit (exact match). */
 export type AuditFilter = { action?: string; actorId?: string };

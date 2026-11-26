@@ -1,66 +1,38 @@
 import { eq } from "drizzle-orm";
 import { isRole, type Role } from "../../shared/roles";
 import type { Db } from "../db/client";
-import { allowedEmail, session, user } from "../db/schema";
+import { user } from "../db/schema";
 import { log } from "../log.service";
 
-/** Error code Better Auth puts in `/login?error=` when an account is not invited. */
-export const NOT_INVITED = "not_invited";
-
-/** Result of the invite/role policy for one account. */
-export type AccessDecision = { allowed: false } | { allowed: true; role: Role };
-
 /**
- * Invite-only policy. Env super admins always get super_admin; anyone else must be invited, and a
- * super_admin who left SUPER_ADMIN_EMAILS drops to `user` (admin is granted only by a super_admin).
+ * Role policy (any Google account may sign in). Env super admins always get super_admin; everyone
+ * else keeps the stored role, except a super_admin who left SUPER_ADMIN_EMAILS drops to `user`
+ * (admin is granted only by a super_admin).
  */
-export function decideAccess(email: string, currentRole: Role, superAdminEmails: readonly string[], invited: boolean) {
-  if (superAdminEmails.includes(email.toLowerCase())) return { allowed: true, role: "super_admin" } as AccessDecision;
-  if (!invited) return { allowed: false } as AccessDecision;
-  return { allowed: true, role: currentRole === "super_admin" ? "user" : currentRole } as AccessDecision;
+export function decideRole(email: string, currentRole: Role, superAdminEmails: readonly string[]): Role {
+  if (superAdminEmails.includes(email.toLowerCase())) return "super_admin";
+  return currentRole === "super_admin" ? "user" : currentRole;
 }
 
-/** Whether `email` (any case) is on the allowed_email invite list. */
-export function isInvited(db: Db, email: string): boolean {
-  const row = db
-    .select({ email: allowedEmail.email })
-    .from(allowedEmail)
-    .where(eq(allowedEmail.email, email.toLowerCase()))
-    .get();
-  return row !== undefined;
-}
-
-/** Whether `email` may sign in at all (env super admin or invited). */
-export const isEmailAllowed = (db: Db, email: string, superAdminEmails: readonly string[]): boolean =>
-  superAdminEmails.includes(email.toLowerCase()) || isInvited(db, email);
-
-/**
- * Applies the policy to stored user `userId` and persists a role change. Returns the decision;
- * callers refuse the session when `allowed` is false.
- */
-export function syncUserRole(db: Db, userId: string, superAdminEmails: readonly string[]): AccessDecision {
+/** Applies the role policy to stored user `userId`, persists a change and returns the resulting role. */
+export function syncUserRole(db: Db, userId: string, superAdminEmails: readonly string[]): Role {
   const row = db.select({ email: user.email, role: user.role }).from(user).where(eq(user.id, userId)).get();
   if (!row) throw new Error(`syncUserRole: user ${userId} not found`);
-  const current: Role = isRole(row.role) ? row.role : "user";
-  const decision = decideAccess(row.email, current, superAdminEmails, isInvited(db, row.email));
-  if (decision.allowed && decision.role !== row.role) {
-    db.update(user).set({ role: decision.role }).where(eq(user.id, userId)).run();
-    log.info(`[auth] user ${userId} role ${row.role} -> ${decision.role}`);
+  const role = decideRole(row.email, isRole(row.role) ? row.role : "user", superAdminEmails);
+  if (role !== row.role) {
+    db.update(user).set({ role }).where(eq(user.id, userId)).run();
+    log.info(`[auth] user ${userId} role ${row.role} -> ${role}`);
   }
-  return decision;
+  return role;
 }
 
 /**
- * Boot-time pass so env changes apply without waiting for the next sign-in: re-syncs every
- * super_admin and revokes sessions of those who lost access entirely.
+ * Boot-time pass so env changes apply without waiting for the next sign-in: demotes every
+ * super_admin no longer in SUPER_ADMIN_EMAILS. Sessions stay (everyone may sign in); the role guard
+ * reads the role fresh from the DB on each request.
  */
 export function syncSuperAdminsOnBoot(db: Db, superAdminEmails: readonly string[]): void {
   // ponytail: one query per super_admin; fine for a handful of admins, batch if that ever grows.
   const rows = db.select({ id: user.id }).from(user).where(eq(user.role, "super_admin")).all();
-  for (const { id } of rows) {
-    if (!syncUserRole(db, id, superAdminEmails).allowed) {
-      db.delete(session).where(eq(session.userId, id)).run();
-      log.info(`[auth] user ${id} lost access; sessions revoked`);
-    }
-  }
+  for (const { id } of rows) syncUserRole(db, id, superAdminEmails);
 }

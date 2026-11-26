@@ -6,7 +6,7 @@ import { eq } from "drizzle-orm";
 import { createAuth } from "@/server/auth/auth.service";
 import { type Db, openDb } from "@/server/db/client";
 import { runMigrations } from "@/server/db/migrate";
-import { allowedEmail, auditLog, user } from "@/server/db/schema";
+import { auditLog, user } from "@/server/db/schema";
 import { createApiRoutes } from "@/server/routes/api.routes";
 import { setSetting } from "@/server/settings.service";
 import { createFakeSystem } from "@/server/system/system.fake";
@@ -34,7 +34,6 @@ function addUser(email: string, role: Role): string {
   db.insert(user)
     .values({ id, email, name: `n${seq}`, role })
     .run();
-  db.insert(allowedEmail).values({ email }).run();
   return id;
 }
 

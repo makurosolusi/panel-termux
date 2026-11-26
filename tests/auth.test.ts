@@ -3,24 +3,18 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { eq } from "drizzle-orm";
-import {
-  decideAccess,
-  isEmailAllowed,
-  NOT_INVITED,
-  syncSuperAdminsOnBoot,
-  syncUserRole,
-} from "@/server/auth/access.service";
+import { decideRole, syncSuperAdminsOnBoot, syncUserRole } from "@/server/auth/access.service";
 import { createAuth } from "@/server/auth/auth.service";
 import { type Db, openDb } from "@/server/db/client";
 import { runMigrations } from "@/server/db/migrate";
-import { allowedEmail, session, user } from "@/server/db/schema";
+import { session, user } from "@/server/db/schema";
 import { createApiRoutes } from "@/server/routes/api.routes";
 import type { Role } from "@/shared/roles";
 
 // test-only dummy values
 const BASE = "http://localhost:3200";
 const SECRET = "0123456789abcdef".repeat(4);
-const SUPER = ["boss@example.com", "boss.dev@example.com"];
+const SUPER = ["boss@example.com", "boss.dev@example.com", "boss.oauth@example.com"];
 const env = { APP_BASE_URL: BASE, GOOGLE_CLIENT_ID: "cid", GOOGLE_CLIENT_SECRET: "csecret", SUPER_ADMIN_EMAILS: SUPER };
 
 const dir = mkdtempSync(join(tmpdir(), "panel-auth-"));
@@ -40,12 +34,11 @@ afterAll(() => {
 });
 
 let seq = 0;
-function addUser(email: string, role: Role = "user", invited = false): string {
+function addUser(email: string, role: Role = "user"): string {
   const id = `u${++seq}`;
   db.insert(user)
     .values({ id, email, name: `n${seq}`, role })
     .run();
-  if (invited) db.insert(allowedEmail).values({ email }).run();
   return id;
 }
 const roleOf = (id: string) => db.select({ role: user.role }).from(user).where(eq(user.id, id)).get()?.role;
@@ -69,58 +62,50 @@ async function cookieFor(userId: string): Promise<string> {
 const get = (path: string, cookie?: string) =>
   api.handle(new Request(`${BASE}${path}`, { headers: cookie ? { cookie } : {} }));
 
-describe("decideAccess", () => {
-  test("env email → super_admin regardless of case or invite", () => {
-    expect(decideAccess("Boss@Example.com", "user", SUPER, false)).toEqual({ allowed: true, role: "super_admin" });
+describe("decideRole", () => {
+  test("env email → super_admin regardless of case", () => {
+    expect(decideRole("Boss@Example.com", "user", SUPER)).toBe("super_admin");
   });
-  test("invited email keeps its role", () => {
-    expect(decideAccess("a@x.io", "admin", SUPER, true)).toEqual({ allowed: true, role: "admin" });
+  test("anyone else keeps the stored role", () => {
+    expect(decideRole("a@x.io", "admin", SUPER)).toBe("admin");
+    expect(decideRole("stranger@x.io", "user", SUPER)).toBe("user");
   });
-  test("stranger is refused", () => {
-    expect(decideAccess("stranger@x.io", "user", SUPER, false)).toEqual({ allowed: false });
-  });
-  test("ex super_admin still invited is demoted to user", () => {
-    expect(decideAccess("old@x.io", "super_admin", SUPER, true)).toEqual({ allowed: true, role: "user" });
+  test("ex super_admin is demoted to user", () => {
+    expect(decideRole("old@x.io", "super_admin", SUPER)).toBe("user");
   });
 });
 
-describe("invite list + role sync (DB)", () => {
-  test("isEmailAllowed: env, invited (case-insensitive), stranger", () => {
-    db.insert(allowedEmail).values({ email: "guest@x.io" }).run();
-    expect(isEmailAllowed(db, "BOSS@example.com", SUPER)).toBe(true);
-    expect(isEmailAllowed(db, "Guest@X.io", SUPER)).toBe(true);
-    expect(isEmailAllowed(db, "nobody@x.io", SUPER)).toBe(false);
-  });
-
+describe("role sync (DB)", () => {
   test("promotes env email to super_admin", () => {
     const id = addUser("boss@example.com");
-    expect(syncUserRole(db, id, SUPER)).toEqual({ allowed: true, role: "super_admin" });
+    expect(syncUserRole(db, id, SUPER)).toBe("super_admin");
     expect(roleOf(id)).toBe("super_admin");
   });
 
   test("demotes super_admin removed from env", () => {
-    const id = addUser("former@x.io", "super_admin", true);
-    expect(syncUserRole(db, id, SUPER).allowed).toBe(true);
+    const id = addUser("former@x.io", "super_admin");
+    expect(syncUserRole(db, id, SUPER)).toBe("user");
     expect(roleOf(id)).toBe("user");
   });
 
-  test("session creation is refused with not_invited for an uninvited user", async () => {
-    const id = addUser("revoked@x.io");
+  test("session creation for any stored user succeeds (no invite gate)", async () => {
+    const id = addUser("anyone@x.io");
     const ctx = await auth.$context;
-    const err = await ctx.internalAdapter.createSession(id).catch((e: unknown) => e);
-    expect((err as { body?: { code?: string } }).body?.code).toBe(NOT_INVITED);
-    expect(db.select().from(session).where(eq(session.userId, id)).all()).toHaveLength(0);
+    expect(await ctx.internalAdapter.createSession(id)).toMatchObject({ userId: id });
+    expect(db.select().from(session).where(eq(session.userId, id)).all()).toHaveLength(1);
   });
 
-  test("boot sync demotes/revokes stale super_admins", async () => {
-    const id = addUser("gone@x.io", "super_admin", true);
+  test("boot sync demotes stale super_admins and keeps their sessions", async () => {
+    const id = addUser("gone@x.io", "super_admin");
     const cookie = await cookieFor(id); // session hook already demotes on creation
     expect(roleOf(id)).toBe("user");
     db.update(user).set({ role: "super_admin" }).where(eq(user.id, id)).run();
-    db.delete(allowedEmail).where(eq(allowedEmail.email, "gone@x.io")).run();
     syncSuperAdminsOnBoot(db, SUPER);
-    expect(db.select().from(session).where(eq(session.userId, id)).all()).toHaveLength(0);
-    expect((await get("/api/me", cookie)).status).toBe(401);
+    expect(roleOf(id)).toBe("user");
+    expect(db.select().from(session).where(eq(session.userId, id)).all()).toHaveLength(1);
+    const me = await get("/api/me", cookie);
+    expect(me.status).toBe(200);
+    expect(await me.json()).toMatchObject({ role: "user", home: "/profile" });
   });
 });
 
@@ -132,7 +117,7 @@ describe("HTTP API", () => {
   });
 
   test("GET /api/me → 200 with session", async () => {
-    const id = addUser("member@x.io", "user", true);
+    const id = addUser("member@x.io");
     const res = await get("/api/me", await cookieFor(id));
     expect(res.status).toBe(200);
     expect(await res.json()).toEqual({
@@ -147,16 +132,16 @@ describe("HTTP API", () => {
 
   test("/api/panel/ping: 401 anon, 403 user, 200 admin", async () => {
     expect((await get("/api/panel/ping")).status).toBe(401);
-    const u = await get("/api/panel/ping", await cookieFor(addUser("p-user@x.io", "user", true)));
+    const u = await get("/api/panel/ping", await cookieFor(addUser("p-user@x.io")));
     expect(u.status).toBe(403);
     expect(await u.json()).toEqual({ error: "forbidden" });
-    const a = await get("/api/panel/ping", await cookieFor(addUser("p-admin@x.io", "admin", true)));
+    const a = await get("/api/panel/ping", await cookieFor(addUser("p-admin@x.io", "admin")));
     expect(a.status).toBe(200);
     expect(await a.json()).toEqual({ ok: true });
   });
 
   test("/api/dev/ping: 403 admin, 200 super_admin", async () => {
-    const a = await get("/api/dev/ping", await cookieFor(addUser("d-admin@x.io", "admin", true)));
+    const a = await get("/api/dev/ping", await cookieFor(addUser("d-admin@x.io", "admin")));
     expect(a.status).toBe(403);
     expect(await a.json()).toEqual({ error: "forbidden" });
     const bossId = addUser("boss.dev@example.com");
@@ -180,24 +165,30 @@ describe("HTTP API", () => {
     expect(u.searchParams.get("redirect_uri")).toBe(`${BASE}/api/auth/callback/google`);
   });
 
-  test("OAuth callback for an uninvited Google account redirects to /login?error=not_invited", async () => {
-    const res = await googleCallback("stranger@x.io");
-    expect(res.status).toBe(302);
-    const loc = new URL(res.headers.get("location") ?? "", BASE);
-    expect(loc.pathname).toBe("/login");
-    expect(loc.searchParams.get("error")).toBe(NOT_INVITED);
-    expect(db.select().from(user).where(eq(user.email, "stranger@x.io")).all()).toHaveLength(0);
-  });
-
-  test("OAuth callback for an invited Google account signs in and redirects to callbackURL", async () => {
-    db.insert(allowedEmail).values({ email: "newbie@x.io" }).run();
-    const res = await googleCallback("Newbie@X.io");
+  test("OAuth callback for a never-seen Google account signs in as user", async () => {
+    const res = await googleCallback("Stranger@X.io");
     expect(res.status).toBe(302);
     expect(res.headers.get("location")).toBe("/");
-    expect(res.headers.getSetCookie().some((c) => c.startsWith("better-auth.session_token="))).toBe(true);
-    expect(db.select({ role: user.role }).from(user).where(eq(user.email, "newbie@x.io")).get()?.role).toBe("user");
+    const cookie = sessionCookie(res);
+    const me = await get("/api/me", cookie);
+    expect(me.status).toBe(200);
+    expect(await me.json()).toMatchObject({ email: "stranger@x.io", role: "user", home: "/profile" });
+  });
+
+  test("OAuth callback for an env super admin email signs in as super_admin", async () => {
+    const res = await googleCallback("Boss.OAuth@Example.com");
+    expect(res.status).toBe(302);
+    const me = await get("/api/me", sessionCookie(res));
+    expect(await me.json()).toMatchObject({ role: "super_admin", home: "/dev" });
   });
 });
+
+/** `name=value` cookie header from a response's session Set-Cookie. */
+const sessionCookie = (res: Response): string => {
+  const c = res.headers.getSetCookie().find((h) => h.startsWith("better-auth.session_token="));
+  if (!c) throw new Error("no session cookie in response");
+  return c.split(";")[0] ?? "";
+};
 
 /** Drives sign-in/social → callback/google with a faked Google token endpoint returning `email`. */
 async function googleCallback(email: string): Promise<Response> {

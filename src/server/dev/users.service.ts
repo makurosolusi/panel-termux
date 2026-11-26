@@ -3,7 +3,7 @@ import type { AssignableRole, DevUser, Page } from "../../shared/dev.types";
 import { isRole } from "../../shared/roles";
 import { recordAudit } from "../audit.service";
 import type { Db } from "../db/client";
-import { allowedEmail, user } from "../db/schema";
+import { user } from "../db/schema";
 import { log } from "../log.service";
 import { ApiError, type Paging } from "../routes/http.error";
 
@@ -96,13 +96,13 @@ export function changeRole(ctx: UsersCtx, id: string, role: AssignableRole): Dev
   return getUser(ctx.db, ctx.superAdmins, id);
 }
 
-/** Deletes a user with its sessions/accounts (FK cascade) and its invite; 409 protected like changeRole. */
+/**
+ * Deletes a user with its sessions/accounts (FK cascade); 409 protected like changeRole. Sign-in is
+ * open, so the same Google account may sign in again later as a fresh `user`.
+ */
 export function deleteUser(ctx: UsersCtx, id: string): void {
-  const target = assertMutable(ctx, id);
-  ctx.db.transaction((tx) => {
-    tx.delete(allowedEmail).where(eq(allowedEmail.email, target.email.toLowerCase())).run();
-    tx.delete(user).where(eq(user.id, id)).run();
-  });
+  assertMutable(ctx, id);
+  ctx.db.delete(user).where(eq(user.id, id)).run();
   recordAudit(ctx.db, { actorId: ctx.actorId, action: "user.delete", target: id });
   log.info(`[dev] user ${id} deleted by ${ctx.actorId}`);
 }

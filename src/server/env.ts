@@ -12,8 +12,8 @@ export type Env = {
 
 const DEFAULT_PORT = 3200;
 const DEFAULT_DATA_DIR = "./data";
-/** Loose email shape check shared by env parsing and invites. */
-export const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+/** Loose email shape check for SUPER_ADMIN_EMAILS entries. */
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 /** Thrown when an env var is missing or invalid; message names the variable, never its value. */
 export class EnvError extends Error {}

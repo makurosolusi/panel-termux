@@ -8,7 +8,7 @@ import { createFakeDnsProvider } from "@/server/cloudflare/dns.provider";
 import { DnsNotConfiguredError, type DnsProvider } from "@/server/cloudflare/dns.types";
 import { type Db, openDb } from "@/server/db/client";
 import { runMigrations } from "@/server/db/migrate";
-import { allowedEmail, user } from "@/server/db/schema";
+import { user } from "@/server/db/schema";
 import { createApiRoutes } from "@/server/routes/api.routes";
 import { createFakeSystem } from "@/server/system/system.fake";
 import type { DatabaseInfo } from "@/shared/panel.types";
@@ -58,7 +58,6 @@ export function siteHarness(opts: { healthTimeoutMs?: number } = {}) {
     db.insert(user)
       .values({ id, email, name: `n${seq}`, role })
       .run();
-    db.insert(allowedEmail).values({ email }).run();
     return id;
   }
 

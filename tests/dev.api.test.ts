@@ -6,11 +6,11 @@ import { eq } from "drizzle-orm";
 import { createAuth } from "@/server/auth/auth.service";
 import { type Db, openDb } from "@/server/db/client";
 import { runMigrations } from "@/server/db/migrate";
-import { account, allowedEmail, auditLog, session, setting, user } from "@/server/db/schema";
+import { account, auditLog, session, setting, user } from "@/server/db/schema";
 import { log } from "@/server/log.service";
 import { createApiRoutes } from "@/server/routes/api.routes";
 import { getSetting, SETTINGS } from "@/server/settings.service";
-import type { DevAuditEntry, DevHealth, DevInvite, DevLogs, DevSetting, DevUser, Page } from "@/shared/dev.types";
+import type { DevAuditEntry, DevHealth, DevLogs, DevSetting, DevUser, Page } from "@/shared/dev.types";
 import type { Role } from "@/shared/roles";
 
 // test-only dummy values
@@ -30,12 +30,11 @@ let adminCookie: string;
 let userCookie: string;
 
 let seq = 0;
-function addUser(email: string, role: Role = "user", invited = true): string {
+function addUser(email: string, role: Role = "user"): string {
   const id = `d${++seq}`;
   db.insert(user)
     .values({ id, email, name: `name${seq}`, role })
     .run();
-  if (invited) db.insert(allowedEmail).values({ email }).run();
   return id;
 }
 
@@ -74,7 +73,7 @@ beforeAll(async () => {
   runMigrations(db);
   auth = createAuth({ db, env, secret: SECRET });
   api = createApiRoutes(auth, { db, secret: SECRET, superAdmins: SUPER, dataDir: dir });
-  rootId = addUser("root@example.com", "user", false); // promoted by the session hook
+  rootId = addUser("root@example.com"); // promoted by the session hook
   root = await cookieFor(rootId);
   adminCookie = await cookieFor(addUser("admin@x.io", "admin"));
   userCookie = await cookieFor(addUser("plain@x.io", "user"));
@@ -91,9 +90,6 @@ describe("access control", () => {
     ["GET", "/users", null],
     ["PATCH", "/users/x", { role: "admin" }],
     ["DELETE", "/users/x", null],
-    ["GET", "/invites", null],
-    ["POST", "/invites", { email: "a@b.io" }],
-    ["DELETE", "/invites/a%40b.io", null],
     ["GET", "/audit", null],
     ["GET", "/logs", null],
     ["GET", "/settings", null],
@@ -104,6 +100,15 @@ describe("access control", () => {
     expect(await json(await call(method, path, undefined, body), 401)).toEqual({ error: "unauthorized" });
     expect(await json(await call(method, path, userCookie, body), 403)).toEqual({ error: "forbidden" });
     expect(await json(await call(method, path, adminCookie, body), 403)).toEqual({ error: "forbidden" });
+  });
+  test("invite endpoints are gone → 404", async () => {
+    for (const [method, path] of [
+      ["GET", "/invites"],
+      ["POST", "/invites"],
+      ["DELETE", "/invites/a%40b.io"],
+    ] as const) {
+      expect((await call(method, path, root, method === "POST" ? { email: "a@b.io" } : undefined)).status).toBe(404);
+    }
   });
   test("sign-in is audited", () => {
     expect(auditRows("auth.sign_in").some((r) => r.actorId === rootId)).toBe(true);
@@ -122,7 +127,7 @@ describe("GET /health", () => {
       db: { sizeBytes: expect.any(Number) },
       dataDir: { freeBytes: expect.any(Number), totalBytes: expect.any(Number) },
       runtime: { bun: Bun.version, platform: process.platform, arch: process.arch },
-      counts: { users: 3, sessions: 3, invites: 2 },
+      counts: { users: 3, sessions: 3 },
     });
     expect(h.db.sizeBytes).toBeGreaterThan(0);
     expect(h.dataDir.totalBytes).toBeGreaterThan(h.dataDir.freeBytes);
@@ -168,7 +173,7 @@ describe("users", () => {
         error: "invalid_role",
       });
     }
-    const env2 = addUser("root2@example.com", "super_admin", false);
+    const env2 = addUser("root2@example.com", "super_admin");
     expect(await json(await call("PATCH", `/users/${env2}`, root, { role: "user" }), 409)).toMatchObject({
       error: "protected",
     });
@@ -180,7 +185,7 @@ describe("users", () => {
     });
   });
 
-  test("DELETE removes user, sessions, accounts, invite; protected cases", async () => {
+  test("DELETE removes user, sessions, accounts; protected cases", async () => {
     const id = addUser("gone@x.io");
     const cookie = await cookieFor(id);
     db.insert(account).values({ id: "acc-gone", accountId: "g", providerId: "google", userId: id }).run();
@@ -188,70 +193,10 @@ describe("users", () => {
     expect(db.select().from(user).where(eq(user.id, id)).all()).toHaveLength(0);
     expect(db.select().from(session).where(eq(session.userId, id)).all()).toHaveLength(0);
     expect(db.select().from(account).where(eq(account.userId, id)).all()).toHaveLength(0);
-    expect(db.select().from(allowedEmail).where(eq(allowedEmail.email, "gone@x.io")).all()).toHaveLength(0);
     expect((await api.handle(new Request(`${BASE}/api/me`, { headers: { cookie } }))).status).toBe(401);
     expect(auditRows("user.delete").at(-1)).toMatchObject({ actorId: rootId, target: id });
     expect(await json(await call("DELETE", `/users/${rootId}`, root), 409)).toMatchObject({ error: "protected" });
     expect(await json(await call("DELETE", "/users/nope", root), 404)).toMatchObject({ error: "not_found" });
-  });
-});
-
-describe("invites", () => {
-  test("create, invalid, duplicate, env super admin", async () => {
-    const inv = await json<DevInvite>(await call("POST", "/invites", root, { email: "  New@Guest.IO " }), 201);
-    expect(inv).toEqual({
-      email: "new@guest.io",
-      invitedBy: { id: rootId, name: expect.any(String) },
-      createdAt: expect.any(String),
-      registered: false,
-    });
-    expect(auditRows("invite.create").at(-1)).toMatchObject({ actorId: rootId, target: "new@guest.io" });
-    for (const email of ["nope", "", 42, undefined]) {
-      expect(await json(await call("POST", "/invites", root, { email }), 400)).toMatchObject({
-        error: "invalid_email",
-      });
-    }
-    expect(await json(await call("POST", "/invites", root, { email: "NEW@guest.io" }), 409)).toMatchObject({
-      error: "exists",
-    });
-    expect(await json(await call("POST", "/invites", root, { email: "root2@example.com" }), 409)).toMatchObject({
-      error: "exists",
-    });
-    expect(await json(await call("POST", "/invites", root, "not-an-object"), 400)).toMatchObject({
-      error: "invalid_email",
-    });
-  });
-
-  test("list: registered flag, inviter, pagination", async () => {
-    addUser("member@guest.io"); // invited + registered (no inviter)
-    const page = await json<Page<DevInvite>>(await call("GET", "/invites?pageSize=100", root));
-    expect(page.total).toBe(page.items.length);
-    expect(page.items.find((i) => i.email === "member@guest.io")).toMatchObject({ registered: true, invitedBy: null });
-    expect(page.items.find((i) => i.email === "new@guest.io")).toMatchObject({ registered: false });
-    const small = await json<Page<DevInvite>>(await call("GET", "/invites?page=2&pageSize=1", root));
-    expect(small).toMatchObject({ page: 2, pageSize: 1, total: page.total });
-    expect(small.items).toHaveLength(1);
-  });
-
-  test("DELETE revokes the user's sessions; 404 when missing", async () => {
-    const id = addUser("kick@guest.io");
-    const cookie = await cookieFor(id);
-    expect((await call("DELETE", `/invites/${encodeURIComponent("Kick@guest.io")}`, root)).status).toBe(204);
-    expect(db.select().from(session).where(eq(session.userId, id)).all()).toHaveLength(0);
-    expect((await api.handle(new Request(`${BASE}/api/me`, { headers: { cookie } }))).status).toBe(401);
-    expect(auditRows("invite.delete").at(-1)).toMatchObject({ target: "kick@guest.io", meta: { sessionsRevoked: 1 } });
-    expect(await json(await call("DELETE", "/invites/kick%40guest.io", root), 404)).toMatchObject({
-      error: "not_found",
-    });
-  });
-
-  test("denied sign-in is audited with the email domain only", async () => {
-    const id = addUser("stranger@denied.io", "user", false);
-    const ctx = await auth.$context;
-    await ctx.internalAdapter.createSession(id).catch(() => "refused");
-    const row = auditRows("auth.denied").at(-1);
-    expect(row?.target).toBe("denied.io");
-    expect(JSON.stringify(row)).not.toContain("stranger");
   });
 });
 
@@ -261,13 +206,31 @@ describe("audit", () => {
     expect(all.total).toBeGreaterThan(5);
     const ids = all.items.map((e) => e.id);
     expect(ids).toEqual([...ids].sort((a, b) => b - a));
-    const inv = await json<Page<DevAuditEntry>>(await call("GET", "/audit?action=invite.create", root));
-    expect(inv.items.length).toBeGreaterThan(0);
-    expect(inv.items.every((e) => e.action === "invite.create" && e.actor?.id === rootId)).toBe(true);
+    const del = await json<Page<DevAuditEntry>>(await call("GET", "/audit?action=user.delete", root));
+    expect(del.items.length).toBeGreaterThan(0);
+    expect(del.items.every((e) => e.action === "user.delete" && e.actor?.id === rootId)).toBe(true);
     const byActor = await json<Page<DevAuditEntry>>(await call("GET", `/audit?actorId=${rootId}&pageSize=1`, root));
     expect(byActor.items).toHaveLength(1);
     expect(byActor.items[0]?.actor).toEqual({ id: rootId, name: expect.any(String) });
     expect(await json(await call("GET", "/audit?page=0", root), 400)).toMatchObject({ error: "invalid_pagination" });
+  });
+
+  test("rows with retired actions from the invite-only era still list and filter", async () => {
+    db.insert(auditLog).values({ actorId: rootId, action: "invite.create", target: "old@guest.io" }).run();
+    db.insert(auditLog).values({ actorId: null, action: "auth.denied", target: "x.io" }).run();
+    const old = await json<Page<DevAuditEntry>>(await call("GET", "/audit?action=invite.create", root));
+    expect(old.items).toEqual([
+      {
+        id: expect.any(Number),
+        at: expect.any(String),
+        actor: { id: rootId, name: expect.any(String) },
+        action: "invite.create",
+        target: "old@guest.io",
+        meta: null,
+      },
+    ]);
+    const all = await json<Page<DevAuditEntry>>(await call("GET", "/audit?pageSize=2", root));
+    expect(all.items.map((e) => e.action)).toEqual(["auth.denied", "invite.create"]);
   });
 });
 

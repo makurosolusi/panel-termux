@@ -19,6 +19,8 @@ describe("runMigrations", () => {
     expect(row.value).toBe(v1);
     const applied = db.$client.query("SELECT COUNT(*) AS n FROM __drizzle_migrations").get() as { n: number };
     expect(applied.n).toBe(embeddedMigrations().length);
+    // 0005_drop_invites: the invite table from the invite-only era is gone.
+    expect(db.$client.query("SELECT name FROM sqlite_master WHERE name = 'allowed_email'").get()).toBeNull();
     expect((db.$client.query("PRAGMA journal_mode").get() as { journal_mode: string }).journal_mode).toBe("wal");
     db.$client.close();
   });

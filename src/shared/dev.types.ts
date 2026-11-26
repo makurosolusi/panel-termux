@@ -18,7 +18,7 @@ export type DevHealth = {
   db: { sizeBytes: number };
   dataDir: { freeBytes: number; totalBytes: number };
   runtime: { bun: string; platform: string; arch: string };
-  counts: { users: number; sessions: number; invites: number };
+  counts: { users: number; sessions: number };
 };
 
 /** Item of GET /api/dev/users (also the PATCH /users/:id response). */
@@ -39,11 +39,8 @@ export type AssignableRole = Exclude<Role, "super_admin">;
 /** Body of PATCH /api/dev/users/:id */
 export type DevUserPatch = { role: AssignableRole };
 
-/** Small user reference (actor/inviter); null when that user was deleted. */
+/** Small user reference (actor); null when that user was deleted. */
 export type UserRef = { id: string; name: string };
-
-/** Item of GET /api/dev/invites (also the POST /invites response). */
-export type DevInvite = { email: string; invitedBy: UserRef | null; createdAt: string; registered: boolean };
 
 /** Item of GET /api/dev/audit, newest first. */
 export type DevAuditEntry = {

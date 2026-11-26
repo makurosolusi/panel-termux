@@ -9,7 +9,7 @@ import { createBackupRoutes } from "@/server/backup/backup.routes";
 import { backupServiceFor } from "@/server/backup/backup.service";
 import { type Db, openDb } from "@/server/db/client";
 import { runMigrations } from "@/server/db/migrate";
-import { allowedEmail, auditLog, backupRun, user } from "@/server/db/schema";
+import { auditLog, backupRun, user } from "@/server/db/schema";
 import { readLogs } from "@/server/log.service";
 import { type SettingKey, setSetting } from "@/server/settings.service";
 import { createFakeSystem } from "@/server/system/system.fake";
@@ -42,7 +42,6 @@ const texts: string[] = [];
 async function cookieFor(auth: ReturnType<typeof createAuth>, email: string, role: Role): Promise<[string, string]> {
   const id = crypto.randomUUID();
   db.insert(user).values({ id, email, name: role, role }).run();
-  db.insert(allowedEmail).values({ email }).run();
   const s = await (await auth.$context).internalAdapter.createSession(id);
   if (!s) throw new Error(`createSession for ${email} returned null`);
   const key = await crypto.subtle.importKey(

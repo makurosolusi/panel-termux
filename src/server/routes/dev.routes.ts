@@ -4,7 +4,6 @@ import type { Auth } from "../auth/auth.service";
 import { roleGuard } from "../auth/role.guard";
 import type { Db } from "../db/client";
 import { getHealth } from "../dev/health.service";
-import { createInvite, deleteInvite, listInvites } from "../dev/invites.service";
 import { changeRole, deleteUser, listUsers } from "../dev/users.service";
 import { log, readLogs } from "../log.service";
 import { describeSetting, InvalidSettingError, isSettingKey, listSettings, setSetting } from "../settings.service";
@@ -26,7 +25,7 @@ function logLimit(raw: string | undefined): number {
   return Math.min(n, MAX_LOG_LIMIT);
 }
 
-/** super_admin developer API under /dev (users, invites, audit, logs, settings, health). */
+/** super_admin developer API under /dev (users, audit, logs, settings, health). */
 export function createDevRoutes(auth: Auth, { db, secret, superAdmins, dataDir }: DevDeps) {
   const ctx = (actorId: string) => ({ db, superAdmins, actorId });
   return roleGuard(auth, "/dev", "super_admin")
@@ -47,12 +46,6 @@ export function createDevRoutes(auth: Auth, { db, secret, superAdmins, dataDir }
     })
     .delete("/users/:id", ({ params, user, status }) => {
       deleteUser(ctx(user.id), params.id);
-      return status(204);
-    })
-    .get("/invites", ({ query }) => listInvites(db, parsePaging(query)))
-    .post("/invites", ({ body, user, status }) => status(201, createInvite(ctx(user.id), field(body, "email"))))
-    .delete("/invites/:email", ({ params, user, status }) => {
-      deleteInvite(ctx(user.id), decodeURIComponent(params.email));
       return status(204);
     })
     .get("/audit", ({ query }) =>
