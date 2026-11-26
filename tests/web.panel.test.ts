@@ -10,8 +10,11 @@ import { logUrls, parseStream } from "@/web/panel/log.page";
 import {
   batteryView,
   countBadge,
+  DESKTOP_PROBLEM_ROWS,
+  hiddenProblems,
   isFrozen,
   loadView,
+  PHONE_PROBLEM_ROWS,
   problemLogHref,
   problemSetKey,
   sinceText,
@@ -21,6 +24,7 @@ import { controlPlan, isDeferredRestart } from "@/web/panel/panel.control";
 import { appKey, domainHolder, domainVerdict, serviceKey } from "@/web/panel/panel.status-key";
 import { cloudflaredPoll, needsFullReload, panelPoll } from "@/web/panel/restart.state";
 import { serviceSince, sortServices } from "@/web/panel/services.page";
+import { consequences } from "@/web/panel/unit.actions";
 import { apiErrorMessage, errorFromResponse } from "@/web/shared/api.client";
 
 // test-only fixtures
@@ -297,12 +301,12 @@ describe("Ringkasan state", () => {
   test("load is neutral without baseline, toned by ratio to the usual median (K6)", () => {
     const base: LoadBaseline = { p10: 18, p50: 20, p90: 22, spanHours: 48 };
     expect(loadView([20.9, 20.7, 20], null)).toEqual({
-      value: "Beban sistem 20,9 · 20,7 · 20",
+      value: "Beban sistem 20,9 · 20,7 · 20,0",
       usual: "nilai biasanya muncul setelah 1 hari pemantauan",
       tone: undefined,
     });
     expect(loadView([20, 21, 20], base)).toEqual({
-      value: "Beban sistem 20 · 21 · 20",
+      value: "Beban sistem 20,0 · 21,0 · 20,0",
       usual: "biasanya 18–22",
       tone: undefined,
     });
@@ -344,6 +348,10 @@ describe("list pages", () => {
     expect(serviceSince(svc({ uptimeSec: 10_800 }))).toBe("aktif 3 jam");
     expect(serviceSince(svc({ state: "down", downSec: 118_800, uptimeSec: null }))).toBe("mati 1 hari 9 jam");
     expect(serviceSince(svc({ state: "down", uptimeSec: null }))).toBe("–");
+    // QA #20: no seconds, under a minute reads as "baru …"
+    expect(serviceSince(svc({ uptimeSec: 1 }))).toBe("baru mulai");
+    expect(serviceSince(svc({ state: "down", downSec: 0, uptimeSec: null }))).toBe("baru berhenti");
+    expect(serviceSince(svc({ uptimeSec: 125 }))).toBe("aktif 2 mnt");
   });
   test("apps table has no CPU column", () => expect(appColumns.map((c) => c.key)).not.toContain("cpu"));
   test("database backup older than 36 h is stale; never backed up is not flagged", () => {
@@ -373,4 +381,19 @@ describe("panel error messages", () => {
   ] as const)("%i %s", (status, error, text) =>
     expect(apiErrorMessage(errorFromResponse(status, { error }), idPanel.errorCodes)).toContain(text),
   );
+});
+
+describe("W9 QA fixes", () => {
+  test("panel/cloudflared restart: the impact line replaces the generic 'beberapa detik' sentence (#20)", () => {
+    expect(consequences({ kind: "services", item: svc({ name: "panel" }) }, "restart")).toEqual([
+      idPanel.serviceImpact.panel as string,
+    ]);
+    expect(consequences({ kind: "services", item: svc({ name: "postgres" }) }, "restart")).toHaveLength(2);
+  });
+  test("problem caps: 3 on phones, 5 on desktop, none once expanded (M7)", () => {
+    expect(hiddenProblems(9, PHONE_PROBLEM_ROWS, false)).toBe(6);
+    expect(hiddenProblems(9, DESKTOP_PROBLEM_ROWS, false)).toBe(4);
+    expect(hiddenProblems(2, PHONE_PROBLEM_ROWS, false)).toBe(0);
+    expect(hiddenProblems(9, PHONE_PROBLEM_ROWS, true)).toBe(0);
+  });
 });

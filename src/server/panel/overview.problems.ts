@@ -226,7 +226,8 @@ function suppress(list: Problem[], appOfDomain: Map<string, string | null>): Omi
   const allDomains =
     has("internet_down") || has("service_down", "cloudflared") || has("service_crash_loop", "cloudflared");
   const keyBad = has("key_mismatch");
-  const backupStale = has("backup_stale");
+  // A failed or stale run already says every item is behind; per-item rows would add 6+ warnings (QA #9).
+  const backupStale = has("backup_stale") || has("backup_failed");
   const hidden = (p: Problem): boolean => {
     if (p.kind === "domain") {
       const app = appOfDomain.get(p.target) ?? null;

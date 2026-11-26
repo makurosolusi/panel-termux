@@ -24,6 +24,13 @@ export function runBlock(s: BackupStatus): RunBlock | null {
 /** The page polls (and announces) while a run or a restore is going. */
 export const isBackupBusy = (s: BackupStatus | undefined): boolean => Boolean(s?.running || s?.restoring);
 
+/**
+ * The page keeps polling while the status OR any loaded run/restore row is still running: a restore that fails
+ * within a few hundred ms may never be seen as `restoring` by /status, yet its row was fetched as "running".
+ */
+export const isPageBusy = (s: BackupStatus | undefined, rows: readonly { status: string }[] | undefined): boolean =>
+  isBackupBusy(s) || (rows ?? []).some((r) => r.status === "running");
+
 /** Top-of-page notices, most urgent first (PLAN/04 §5.1 item 2). `noKeyCopy` needs the super_admin data key state. */
 export type BackupBanner = "key_mismatch" | "not_configured" | "secrets_included" | "no_key_copy";
 

@@ -57,6 +57,14 @@ describe("monitor history", () => {
     expect(seed).toHaveLength(6);
     expect(seed.filter((c) => c.hostname === "a.test").map((c) => c.localStatus)).toEqual([502, 502, 502]);
     expect(seed.map((c) => c.at)).toEqual([...seed.map((c) => c.at)].sort((x, y) => x - y));
+    expect(
+      h
+        .lastChecksPerHost(db, 3)
+        .filter((c) => c.hostname === "b.test")
+        .map((c) => c.at),
+    ).toEqual([T0 + 2 * MIN, T0 + 3 * MIN, T0 + 4 * MIN]);
+    expect(h.lastChecksPerHost(db, 30)).toHaveLength(10); // fewer than n rows: all of them
+    expect(h.lastChecksPerHost(freshDb(), 30)).toEqual([]);
   });
 
   test("metricSeries downsamples on read to at most 100 bucket averages", () => {

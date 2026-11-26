@@ -147,8 +147,9 @@ export const idBackup = {
     title: (name: string) => `Pulihkan ${name} ke database baru?`,
     body: (target: string, at: string, size: string) =>
       `Panel membuat database baru ${target} dari cadangan ${at}. Database aslinya dan situsnya tidak diubah. Proses ini memakai CPU dan sekitar ${size} ruang penyimpanan HP.`,
-    newTarget: (name: string) => `salinan ${name}`,
-    started: "Pemulihan dimulai.",
+    /** The server names the copy `<name>_r<yyyymmddHHMM>` (restoreTargetName); the exact name is in the toast. */
+    newTarget: (name: string) => `${name}_r<tanggal-jam>`,
+    started: (target: string) => `Pemulihan ke ${target} dimulai.`,
   },
   restores: {
     title: "Uji pemulihan",

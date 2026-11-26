@@ -1,3 +1,4 @@
+import { cn } from "cn";
 import { ExternalLinkIcon, GlobeIcon } from "lucide-react";
 import type { Problem } from "@/shared/monitor.types";
 import type { Domain, PanelOverview } from "@/shared/panel.types";
@@ -17,6 +18,7 @@ import { DomainCheckButton } from "./domain.check";
 import { HeartbeatStrip } from "./heartbeat.strip";
 import { DOMAINS_REFRESH_MS, panelUrl } from "./panel.api";
 import { domainHolder, domainVerdict, isWildcard, type Verdict } from "./panel.status-key";
+import { TOUCH_HIT } from "./panel.touch";
 
 const t = idPanel.domains;
 
@@ -31,6 +33,8 @@ export function domainTarget(d: Domain): string {
 
 type Row = Domain & { verdict: Verdict };
 
+const checkedAt = (d: Row) => (d.health.checkedAt ? <RelativeTime at={d.health.checkedAt} /> : t.never);
+
 const columns: DataColumn<Row>[] = [
   {
     key: "domain",
@@ -42,7 +46,10 @@ const columns: DataColumn<Row>[] = [
         target="_blank"
         rel="noopener noreferrer"
         aria-label={t.open(d.hostname)}
-        className="relative z-10 inline-flex min-w-0 items-center gap-1.5 font-medium underline-offset-4 hover:underline"
+        className={cn(
+          TOUCH_HIT,
+          "z-10 inline-flex min-w-0 items-center gap-1.5 font-medium underline-offset-4 hover:underline",
+        )}
       >
         <span className="truncate">{d.hostname}</span>
         <ExternalLinkIcon className="size-3.5 shrink-0 text-muted-foreground" aria-hidden />
@@ -52,36 +59,40 @@ const columns: DataColumn<Row>[] = [
   {
     key: "target",
     header: t.cols.target,
+    className: "min-w-40 whitespace-normal",
     cell: (d) => <span className="text-muted-foreground">{domainTarget(d)}</span>,
   },
   {
+    // Desktop: the reason sits under the badge so the table fits 1280 px with the action visible (QA M2).
     key: "status",
     header: t.cols.status,
     mobile: "badge",
-    cell: (d) => <StatusBadge state={d.verdict.key} />,
+    className: "min-w-44 whitespace-normal",
+    cell: (d) => (
+      <span className="flex flex-col items-start gap-1">
+        <StatusBadge state={d.verdict.key} />
+        {d.verdict.reason && <span className="text-xs text-muted-foreground max-md:hidden">{d.verdict.reason}</span>}
+      </span>
+    ),
   },
-  {
-    key: "reason",
-    header: t.cols.reason,
-    cell: (d) => (d.verdict.reason ? <span className="text-xs text-muted-foreground">{d.verdict.reason}</span> : null),
-  },
+  { key: "reason", header: t.cols.reason, className: "hidden", cell: (d) => d.verdict.reason },
   {
     key: "response",
     header: t.cols.response,
     align: "right",
-    cell: (d) => (d.health.ms === null ? idPanel.dash : t.ms(formatNumber(d.health.ms))),
+    cell: (d) => (
+      <span className="md:flex md:flex-col md:items-end">
+        <span>{d.health.ms === null ? idPanel.dash : t.ms(formatNumber(d.health.ms))}</span>
+        <span className="text-xs text-muted-foreground max-md:hidden">{checkedAt(d)}</span>
+      </span>
+    ),
   },
   {
     key: "recent",
     header: idHistory.heartbeat.column,
     cell: (d) => <HeartbeatStrip checks={d.recent} />,
   },
-  {
-    key: "checked",
-    header: t.cols.checked,
-    align: "right",
-    cell: (d) => (d.health.checkedAt ? <RelativeTime at={d.health.checkedAt} /> : t.never),
-  },
+  { key: "checked", header: t.cols.checked, className: "hidden", cell: checkedAt },
 ];
 
 /** Domains with their verdict; app status and the holding problem come from the (cached) overview when loaded. */
@@ -108,7 +119,13 @@ export function DomainsPage() {
       <PageHeader
         title={t.title}
         description={t.description}
-        meta={{ updatedAt: query.updatedAt, onRefresh: query.reload, refreshing: query.loading, live: true }}
+        meta={{
+          updatedAt: query.updatedAt,
+          onRefresh: query.reload,
+          refreshing: query.loading,
+          live: true,
+          stale: !!query.error,
+        }}
       />
       <QueryView
         query={query}

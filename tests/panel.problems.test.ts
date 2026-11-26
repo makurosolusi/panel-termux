@@ -306,6 +306,10 @@ describe("computeProblems", () => {
       });
       expect(stale.problems.map((p) => p.id)).toEqual(["backup_stale:backup"]);
       expect(stale.suppressed.map((p) => p.code)).toContain("backup_item_stale");
+      // QA #9: a failed run is one danger row, not 1 danger + a warning per item
+      const failed = compute({ backup: ok(backup({ lastRun: run("failed", 0, items), lastGood })) });
+      expect(failed.problems.map((p) => p.id)).toEqual(["backup_failed:backup"]);
+      expect(failed.suppressed.map((p) => p.code)).toContain("backup_item_stale");
     });
     test("key_mismatch from security or backup hides backup_* (incl. status error)", () => {
       const sec = ok(

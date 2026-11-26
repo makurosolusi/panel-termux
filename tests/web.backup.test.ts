@@ -10,6 +10,7 @@ import {
   findItem,
   isBackupBusy,
   isInterrupted,
+  isPageBusy,
   lastGoodRows,
   runBlock,
   STALE_AFTER_MS,
@@ -99,6 +100,13 @@ describe("run button", () => {
     expect(isBackupBusy(status())).toBe(false);
     expect(isBackupBusy(undefined)).toBe(false);
   });
+
+  test("page keeps polling while a fetched restore row is still running, even if /status missed it (QA M1)", () => {
+    expect(isPageBusy(status(), [{ status: "running" }])).toBe(true);
+    expect(isPageBusy(status(), [{ status: "failed" }, { status: "succeeded" }])).toBe(false);
+    expect(isPageBusy(status({ restoring: true }), [])).toBe(true);
+    expect(isPageBusy(undefined, undefined)).toBe(false);
+  });
 });
 
 describe("banners", () => {
@@ -175,6 +183,10 @@ describe("download and restore rules", () => {
     expect(canDropRestore(restore({ droppedAt: "2026-11-26T05:00:00Z" }))).toBe(false);
     expect(canDropRestore(restore({ inUse: true }))).toBe(false);
     expect(canDropRestore(restore({ status: "running" }))).toBe(false);
+    // QA #19: failed before pg_restore → no database exists to drop
+    expect(canDropRestore(restore({ status: "failed", errorCode: "download_failed" }))).toBe(false);
+    expect(canDropRestore(restore({ status: "failed", errorCode: "checksum_mismatch" }))).toBe(false);
+    expect(canDropRestore(restore({ status: "failed", errorCode: "restore_failed" }))).toBe(true);
   });
 });
 

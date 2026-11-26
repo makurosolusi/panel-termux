@@ -21,7 +21,7 @@ import { BACKUP_ERROR_CODES, backupUrl, startBackupRun } from "./backup.api";
 import { LastGoodSection } from "./backup.last-good";
 import { RestoresSection } from "./backup.restores";
 import { BackupRunRow } from "./backup.runs";
-import { BACKUP_POLL_MS, backupBanners, isBackupBusy, runBlock } from "./backup.state";
+import { BACKUP_POLL_MS, backupBanners, isBackupBusy, isPageBusy, runBlock } from "./backup.state";
 import { BackupBanners, BackupStatusSection } from "./backup.status";
 import { backupHeadline } from "./backup.status-key";
 
@@ -50,16 +50,19 @@ export function BackupsPage() {
   const reasonId = useId();
 
   const busy = isBackupBusy(status.data);
-  const wasBusy = useRef(busy);
+  const pageBusy = isPageBusy(status.data, [...(runs.data?.items ?? []), ...(restores.data?.items ?? [])]);
+  const wasBusy = useRef(pageBusy);
+  const { reload: reloadStatus } = status;
   const { reload: reloadRuns } = runs;
   const { reload: reloadRestores } = restores;
   useEffect(() => {
-    setBusyPoll(busy);
-    if (wasBusy.current === busy) return;
-    wasBusy.current = busy;
-    reloadRuns(); // a run or restore started or finished: show it right away
+    setBusyPoll(pageBusy);
+    if (wasBusy.current === pageBusy) return;
+    wasBusy.current = pageBusy;
+    reloadStatus(); // a run or restore started or finished: show every part of it right away
+    reloadRuns();
     reloadRestores();
-  }, [busy, reloadRuns, reloadRestores]);
+  }, [pageBusy, reloadStatus, reloadRuns, reloadRestores]);
 
   const reloadAll = () => {
     status.reload();
@@ -84,7 +87,13 @@ export function BackupsPage() {
         title={t.title}
         description={t.subtitle}
         status={headline && <StatusBadge state={headline.state} label={headline.label} />}
-        meta={{ updatedAt: status.updatedAt, onRefresh: reloadAll, refreshing: status.loading, live: busy }}
+        meta={{
+          updatedAt: status.updatedAt,
+          onRefresh: reloadAll,
+          refreshing: status.loading,
+          live: busy,
+          stale: !!status.error,
+        }}
         actions={
           <>
             <Button

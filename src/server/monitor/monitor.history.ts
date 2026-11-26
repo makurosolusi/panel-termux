@@ -74,12 +74,22 @@ export function hostChecks(db: Db, hostname: string, limit: number) {
   return rows.reverse();
 }
 
-/** The newest `n` checks per host, oldest first (seeds the failure streaks at boot). */
+/**
+ * The newest `n` checks per host, oldest first (boot streak seed; /overview and /domains heartbeat strips).
+ * Walks the (hostname, at) primary key instead of numbering 7 days of rows: distinct hosts by index jumps, then each
+ * host's n-th newest `at` as the lower bound, so the cost is hosts × n, not the whole table, on every request.
+ */
 export function lastChecksPerHost(db: Db, n: number) {
   return db.$client
     .query(
-      `SELECT hostname, at, status, ms, local_status AS localStatus FROM (SELECT hostname, at, status, ms, local_status,
-         ROW_NUMBER() OVER (PARTITION BY hostname ORDER BY at DESC) AS rn FROM check_result) WHERE rn <= ? ORDER BY at`,
+      `WITH RECURSIVE h(name) AS (
+         SELECT min(hostname) FROM check_result
+         UNION ALL SELECT (SELECT min(hostname) FROM check_result WHERE hostname > h.name) FROM h WHERE h.name IS NOT NULL
+       )
+       SELECT c.hostname, c.at, c.status, c.ms, c.local_status AS localStatus
+       FROM h JOIN check_result c ON c.hostname = h.name
+        AND c.at >= coalesce((SELECT at FROM check_result WHERE hostname = h.name ORDER BY at DESC LIMIT 1 OFFSET ?1 - 1), 0)
+       ORDER BY c.at`,
     )
     .all(n) as { hostname: string; at: number; status: number | null; ms: number | null; localStatus: number | null }[];
 }

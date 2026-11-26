@@ -13,6 +13,8 @@ import { Button } from "@/web/components/ui/button";
 import { idOverview } from "@/web/i18n/id.overview";
 import { formatRelative } from "@/web/shared/format";
 import {
+  DESKTOP_PROBLEM_ROWS,
+  hiddenProblems,
   isFrozen,
   PHONE_PROBLEM_ROWS,
   problemLogHref,
@@ -20,25 +22,26 @@ import {
   sinceText,
   splitProblems,
 } from "./overview.state";
+import { TOUCH_HIT } from "./panel.touch";
 
 const t = idOverview;
 const ICON = { danger: OctagonXIcon, warning: TriangleAlertIcon, info: InfoIcon } as const;
-const LINK = "font-medium underline-offset-4 hover:underline pointer-coarse:py-2";
+const LINK = cn(TOUCH_HIT, "font-medium underline-offset-4 hover:underline");
 
-function ProblemRow({ p, frozenAt, phoneHidden }: { p: Problem; frozenAt: string | null; phoneHidden: boolean }) {
+function ProblemRow({ p, frozenAt, hidden }: { p: Problem; frozenAt: string | null; hidden: string | false }) {
   const now = useNow();
   const Icon = ICON[p.severity];
   const since = sinceText(p.since, now);
   const logHref = problemLogHref(p);
   return (
-    <li className={cn("flex gap-3 px-4 py-3", phoneHidden && "max-md:hidden")}>
+    <li className={cn("flex gap-3 px-4 py-3", hidden)}>
       <Icon className={cn("mt-0.5 size-4 shrink-0", TONE_TEXT[PROBLEM_TONE[p.severity]])} aria-hidden />
       <div className="flex min-w-0 flex-1 flex-col gap-0.5 text-sm">
         <p className="font-medium">
           <span className="sr-only">{t.severity[p.severity]}: </span>
           {title(p)}
         </p>
-        <p className="text-muted-foreground">{detail(p)}</p>
+        <p className="text-muted-foreground max-md:line-clamp-2">{detail(p)}</p>
         <p className="flex flex-wrap items-center gap-x-3 text-xs text-muted-foreground">
           {since && <span>{since}</span>}
           {frozenAt && <span className="text-warning">{t.frozen(formatRelative(frozenAt, now))}</span>}
@@ -83,7 +86,18 @@ export function ProblemStrip({
   const { alerts, info } = splitProblems(problems);
   const [expanded, setExpanded] = useState(false);
   const announcement = useAnnouncement(alerts);
-  const hiddenCount = expanded ? 0 : Math.max(0, alerts.length - PHONE_PROBLEM_ROWS);
+  const phoneMore = hiddenProblems(alerts.length, PHONE_PROBLEM_ROWS, expanded);
+  const desktopMore = hiddenProblems(alerts.length, DESKTOP_PROBLEM_ROWS, expanded);
+  // Rows past a cap hide per viewport (CSS only, no resize listener): past 5 everywhere, past 3 on phones.
+  const rowHidden = (i: number) =>
+    !expanded && (i >= DESKTOP_PROBLEM_ROWS ? "hidden" : i >= PHONE_PROBLEM_ROWS && "max-md:hidden");
+  const toggle = (more: number, className: string) => (
+    <div className={cn("border-t px-2 py-1", className)}>
+      <Button variant="ghost" size="sm" onClick={() => setExpanded(!expanded)} aria-expanded={expanded}>
+        {more > 0 ? t.showMore(more) : t.showLess}
+      </Button>
+    </div>
+  );
 
   return (
     <section aria-label={t.problemsLabel} className="flex flex-col gap-2">
@@ -101,21 +115,11 @@ export function ProblemStrip({
         <div className="overflow-hidden rounded-lg border bg-card">
           <ul className="divide-y">
             {alerts.map((p, i) => (
-              <ProblemRow
-                key={p.id}
-                p={p}
-                frozenAt={isFrozen(p, unavailable) ? dataAt : null}
-                phoneHidden={!expanded && i >= PHONE_PROBLEM_ROWS}
-              />
+              <ProblemRow key={p.id} p={p} frozenAt={isFrozen(p, unavailable) ? dataAt : null} hidden={rowHidden(i)} />
             ))}
           </ul>
-          {alerts.length > PHONE_PROBLEM_ROWS && (
-            <div className="border-t px-2 py-1 md:hidden">
-              <Button variant="ghost" size="sm" onClick={() => setExpanded(!expanded)} aria-expanded={expanded}>
-                {hiddenCount > 0 ? t.showMore(hiddenCount) : t.showLess}
-              </Button>
-            </div>
-          )}
+          {alerts.length > PHONE_PROBLEM_ROWS && toggle(phoneMore, "md:hidden")}
+          {alerts.length > DESKTOP_PROBLEM_ROWS && toggle(desktopMore, "max-md:hidden")}
         </div>
       )}
       {info.length > 0 && (

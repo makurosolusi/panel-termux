@@ -61,7 +61,8 @@ export function NavBadge({ to, dot = false, className }: { to: string; dot?: boo
       )}
     >
       <span aria-hidden>{view.count > 99 ? "99+" : view.count}</span>
-      <span className="sr-only">{label}</span>
+      {/* leading ", " so the link reads "Ringkasan, 9 masalah aktif", not "Ringkasan9 …" (QA #10) */}
+      <span className="sr-only">{`, ${label}`}</span>
     </span>
   );
 }

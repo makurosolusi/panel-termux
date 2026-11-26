@@ -14,6 +14,7 @@ import type {
   PanelOverview,
   Service,
 } from "../../shared/panel.types";
+import { PM2_GUARD_NAME } from "../../shared/site.types";
 import { listAudit, recordAudit } from "../audit.service";
 import type { BackupService } from "../backup/backup.service";
 import type { Db } from "../db/client";
@@ -124,8 +125,11 @@ export function createPanelService(deps: PanelDeps) {
   const protectedSet = () =>
     new Set((getSetting(deps, "panel.protected_services") ?? "").split(",").map((s) => s.trim()));
   const sites = () => db.select({ name: site.name, app: site.app, database: site.database }).from(site).all();
+  // pm2-guard is the panel's own keep-alive process: hidden everywhere in the UI, also from "Modul pm2" (B24, D-W9-1).
   const publicApps = (procs: Pm2Proc[], list = sites()): App[] =>
-    procs.map((p) => ({ ...toApp(p), site: list.find((s) => (s.app ?? s.name) === p.name)?.name ?? null }));
+    procs
+      .filter((p) => p.name !== PM2_GUARD_NAME)
+      .map((p) => ({ ...toApp(p), site: list.find((s) => (s.app ?? s.name) === p.name)?.name ?? null }));
   const domains = (snap: MonitorSnapshot, apps: App[]): Domain[] =>
     buildDomains(required(snap.ingress, "ingress"), apps, lastChecksPerHost(db, RECENT_CHECKS), deps.panelPort ?? null);
 
@@ -287,7 +291,12 @@ export function createPanelService(deps: PanelDeps) {
       const { lines } = redactLines(raw, stream ? siteSecretsFor(db, name) : []);
       const target = stream ? `app:${name}:${stream}` : `service:${name}`;
       recordAudit(db, { actorId, action: "log.download", target });
-      return { filename: `${name}-${stamp(new Date())}.log`, text: lines.length ? `${lines.join("\n")}\n` : "" };
+      // stderr gets its own name so both streams can be downloaded side by side (QA #14)
+      const suffix = stream === "err" ? "-stderr" : "";
+      return {
+        filename: `${name}${suffix}-${stamp(new Date())}.log`,
+        text: lines.length ? `${lines.join("\n")}\n` : "",
+      };
     },
   };
 }

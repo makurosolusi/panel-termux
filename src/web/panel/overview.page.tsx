@@ -12,13 +12,14 @@ import { useMe } from "@/web/session/use-me";
 import { useApiQuery } from "@/web/shared/use-api-query";
 import { DeviceTiles } from "./device.tiles";
 import { ProblemStrip } from "./overview.problems";
-import { ActivityList, AlertsLine, BackupSection, CountCards } from "./overview.sections";
+import { AlertsLine, BackupSection, CountCards } from "./overview.sections";
 import { PANEL_REFRESH_MS, panelUrl } from "./panel.api";
 
 const t = idOverview;
 
 // History blocks load in their own chunks after the first render, keeping /panel within its gzip budget (PLAN/01 §3.11).
 const MetricTrends = lazy(() => import("./sparkline").then((m) => ({ default: m.MetricTrends })));
+const ActivityList = lazy(() => import("./overview.activity").then((m) => ({ default: m.ActivityList })));
 const RecentProblems = lazy(() => import("./problems.page").then((m) => ({ default: m.RecentProblems })));
 
 function Overview({ o }: { o: PanelOverview }) {
@@ -46,7 +47,9 @@ function Overview({ o }: { o: PanelOverview }) {
           <AlertsLine alerts={o.alerts} role={role} />
         </div>
         <div className="flex flex-col gap-6">
-          <ActivityList entries={o.recentActivity} role={role} />
+          <Suspense fallback={null}>
+            <ActivityList entries={o.recentActivity} role={role} />
+          </Suspense>
           <Suspense fallback={null}>
             <RecentProblems />
           </Suspense>
@@ -62,7 +65,10 @@ export function OverviewPage() {
   const fake = query.data?.mode === "fake";
   return (
     <>
-      <OnboardingBanner />
+      {/* own gap so the banner does not touch the h1 / demo badge (QA #12); empty:hidden when it renders nothing */}
+      <div className="mb-6 empty:hidden">
+        <OnboardingBanner />
+      </div>
       <PageHeader
         title={t.title}
         status={fake && <StatusBadge tone="warning" label={idPanel.fakeMode} />}
@@ -72,6 +78,7 @@ export function OverviewPage() {
           onRefresh: query.reload,
           refreshing: query.loading,
           live: true,
+          stale: !!query.error,
         }}
       />
       <QueryView query={query} empty={null} isEmpty={() => false} skeleton={<StatTilesSkeleton />}>

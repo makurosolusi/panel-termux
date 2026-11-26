@@ -32,11 +32,10 @@ export const idOverview = {
     temperature: "Suhu baterai",
     temperatureNone: "Tidak tersedia",
     memory: "Memori",
-    memoryAvailable: (v: string) => `${v} tersedia`,
-    memoryOf: (total: string) => `dari ${total}`,
+    // Value stays one short figure so a phone tile does not wrap (2×2 ≤ 200 px, PLAN/02 §6); the word goes in the hint.
+    memoryOf: (total: string) => `tersedia dari ${total}`,
     disk: "Penyimpanan",
-    diskFree: (v: string) => `${v} bebas`,
-    diskOf: (total: string) => `dari ${total}`,
+    diskOf: (total: string) => `bebas dari ${total}`,
     load: (v: string) => `Beban sistem ${v}`,
     loadUsual: (lo: string, hi: string) => `biasanya ${lo}–${hi}`,
     loadNoBaseline: "nilai biasanya muncul setelah 1 hari pemantauan",
@@ -75,7 +74,6 @@ export const idOverview = {
   activity: {
     title: "Aktivitas terbaru",
     empty: "Belum ada aktivitas.",
-    system: "Sistem",
     viewAll: "Lihat semua",
   },
   sectionsLabel: "Ringkasan sistem",

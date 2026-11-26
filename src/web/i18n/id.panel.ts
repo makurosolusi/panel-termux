@@ -32,6 +32,8 @@ export const idPanel = {
   } satisfies Record<AppStatus, string>,
   actions: { start: "Mulai", stop: "Hentikan", restart: "Mulai ulang" } satisfies Record<ControlAction, string>,
   more: (name: string) => `Aksi lain untuk ${name}`,
+  /** Accessible name of a row's primary button, so five "Mulai ulang" buttons are told apart. */
+  actionFor: (action: string, name: string) => `${action} ${name}`,
   viewLog: "Lihat log",
   confirmTitle: { stop: (n: string) => `Hentikan ${n}?`, restart: (n: string) => `Mulai ulang ${n}?` },
   /** Consequence-first confirmation text per action. */
@@ -48,6 +50,8 @@ export const idPanel = {
     cloudflared: "Semua domain terputus beberapa detik selama tunnel cloudflared dimulai ulang.",
     panel: "Halaman ini terputus ±10–30 dtk lalu tersambung lagi.",
   } as Readonly<Record<string, string>>,
+  /** Services whose impact line replaces the generic restart sentence (it would contradict "beberapa detik"). */
+  restartImpactOnly: ["panel", "cloudflared"] as readonly string[],
   lockoutReason: (name: string) =>
     `Menghentikan ${name} memutus akses ke panel ini, dan panel tidak bisa menyalakannya lagi. ${SSH_HINT}`,
   /** Past-tense success toast per action. */
@@ -86,6 +90,8 @@ export const idPanel = {
     cols: { name: "Nama", status: "Status", since: "Sejak", pid: "PID" },
     upFor: (d: string) => `aktif ${d}`,
     downFor: (d: string) => `mati ${d}`,
+    upJustNow: "baru mulai",
+    downJustNow: "baru berhenti",
     crashLoop: "berulang kali dimulai ulang",
     emptyTitle: "Belum ada layanan runit",
     emptyBody: "Panel membaca layanan dari `$PREFIX/var/service`.",

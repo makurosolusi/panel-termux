@@ -14,6 +14,7 @@ import { useApiQuery } from "@/web/shared/use-api-query";
 import { CodeText } from "./code.text";
 import { PANEL_REFRESH_MS, panelUrl } from "./panel.api";
 import { appKey } from "./panel.status-key";
+import { TOUCH_HIT } from "./panel.touch";
 import { UnitActions } from "./unit.actions";
 import { usePanelControl } from "./use-panel-control";
 
@@ -34,7 +35,7 @@ export const appColumns: DataColumn<App>[] = [
       a.site ? (
         <Link
           to={`/panel/sites/${encodeURIComponent(a.site)}`}
-          className="relative z-10 underline-offset-4 hover:underline"
+          className={`${TOUCH_HIT} z-10 underline-offset-4 hover:underline`}
         >
           {a.site}
         </Link>
@@ -95,7 +96,13 @@ export function AppsPage() {
       <PageHeader
         title={t.title}
         description={t.description}
-        meta={{ updatedAt: query.updatedAt, onRefresh: query.reload, refreshing: query.loading, live: true }}
+        meta={{
+          updatedAt: query.updatedAt,
+          onRefresh: query.reload,
+          refreshing: query.loading,
+          live: true,
+          stale: !!query.error,
+        }}
       />
       {pm2Down ? (
         <Pm2Down onRetry={query.reload} retrying={query.loading} />
@@ -134,7 +141,7 @@ function AppList({ list, control }: { list: App[]; control: ReturnType<typeof us
       />
       {modules.length > 0 && (
         <details className="rounded-lg border bg-card px-4 py-3 text-sm">
-          <summary className="cursor-pointer font-medium pointer-coarse:py-2">{t.modules(modules.length)}</summary>
+          <summary className="cursor-pointer font-medium pointer-coarse:py-3">{t.modules(modules.length)}</summary>
           <DataTable
             className="mt-3"
             label={t.modules(modules.length)}

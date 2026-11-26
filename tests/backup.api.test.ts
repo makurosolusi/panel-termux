@@ -229,6 +229,16 @@ describe("configured", () => {
     const good = st.lastGood?.find((g) => g.kind === "database" && g.name === "solusi");
     expect(good).toMatchObject({ runId: run.id, itemIndex: 2, checked: true });
     expect(good?.restoreHint).toBe(item(run, "database", "solusi").restoreHint);
+    // perf: lastGood is reused between ticks, and a finished run refreshes it
+    expect(backup().status().lastGood).toBe(backup().status().lastGood);
+    const before = backup().status().lastGood;
+    const next = await runOnce();
+    expect(backup().status().lastGood).not.toBe(before);
+    expect(
+      backup()
+        .status()
+        .lastGood?.find((g) => g.name === "solusi")?.runId,
+    ).toBe(next.id);
   });
 
   test("failures per item: produce, check, size cap, space, upload, stat mismatch; all failing = failed", async () => {

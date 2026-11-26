@@ -9,13 +9,14 @@ import { RelativeTime } from "@/web/components/relative-time";
 import { Section } from "@/web/components/section";
 import { StatusBadge } from "@/web/components/status-badge";
 import { idOverview } from "@/web/i18n/id.overview";
-import { formatNumber } from "@/web/shared/format";
+import { formatDateTime, formatNumber } from "@/web/shared/format";
 import { countBadge } from "./overview.state";
+import { TOUCH_HIT } from "./panel.touch";
 
 const t = idOverview;
 const CARD =
   "relative flex min-h-[5.5rem] flex-col gap-2 rounded-lg border bg-card px-4 py-3 shadow-xs hover:bg-accent/40";
-const LINK = "font-medium underline-offset-4 hover:underline";
+const LINK = `${TOUCH_HIT} font-medium underline-offset-4 hover:underline`;
 
 type Count = {
   to: string;
@@ -86,6 +87,9 @@ export function CountCards({ o, problems }: { o: PanelOverview; problems: readon
 /** One line on the backup schedule, with a link to Cadangan; `backup` null = unreadable (its problem says why). */
 export function BackupSection({ backup }: { backup: PanelOverview["backup"] | null }) {
   const at = (iso: string | null, none: string) => (iso ? <RelativeTime at={iso} /> : none);
+  // formatRelative only speaks of the past ("baru saja" for any future time, QA M6): a schedule shows its clock time.
+  const next = (iso: string | null) =>
+    iso ? <time dateTime={iso}>{formatDateTime(iso)}</time> : t.backup.notScheduled;
   return (
     <Section
       title={t.backup.title}
@@ -101,7 +105,7 @@ export function BackupSection({ backup }: { backup: PanelOverview["backup"] | nu
         <KeyValue
           items={[
             { label: t.backup.lastRun, value: at(backup.lastRunAt, t.backup.never) },
-            { label: t.backup.nextRun, value: at(backup.nextRunAt, t.backup.notScheduled) },
+            { label: t.backup.nextRun, value: next(backup.nextRunAt) },
           ]}
         />
       )}
@@ -127,36 +131,5 @@ export function AlertsLine({ alerts, role }: { alerts: PanelOverview["alerts"]; 
           <span>{t.alerts.askSuperAdmin}</span>
         ))}
     </p>
-  );
-}
-
-/** Five newest audit entries (no sign-ins); "Lihat semua" only for super_admin (the audit page is theirs). */
-export function ActivityList({ entries, role }: { entries: PanelOverview["recentActivity"]; role: Role }) {
-  return (
-    <Section
-      title={t.activity.title}
-      action={
-        role === "super_admin" && (
-          <Link to="/dev/audit" className={`${LINK} text-sm`}>
-            {t.activity.viewAll}
-          </Link>
-        )
-      }
-    >
-      {entries.length === 0 ? (
-        <p className="text-sm text-muted-foreground">{t.activity.empty}</p>
-      ) : (
-        <ul className="divide-y rounded-lg border bg-card text-sm">
-          {entries.map((e) => (
-            <li key={e.id} className="flex flex-wrap items-baseline gap-x-2 px-4 py-2.5">
-              <span className="font-medium">{e.actor?.name ?? e.actorLabel ?? t.activity.system}</span>
-              <span className="font-mono text-xs">{e.action}</span>
-              {e.target && <span className="min-w-0 truncate font-mono text-xs text-muted-foreground">{e.target}</span>}
-              <RelativeTime at={e.at} className="ml-auto text-xs text-muted-foreground" />
-            </li>
-          ))}
-        </ul>
-      )}
-    </Section>
   );
 }

@@ -18,8 +18,12 @@ import { restoreStatusKey } from "./backup.status-key";
 
 const t = idBackup.restores;
 
-/** "Hapus database uji" is offered only for a finished, undropped restore that no site uses. */
-export const canDropRestore = (r: BackupRestore): boolean => !r.droppedAt && !r.inUse && r.status !== "running";
+/** Failures before pg_restore ran: the target database was never created, so there is nothing to drop (QA #19). */
+const NO_DATABASE_CODES: ReadonlySet<BackupRestore["errorCode"]> = new Set(["download_failed", "checksum_mismatch"]);
+
+/** "Hapus database uji" is offered only for a finished, undropped restore that created a database no site uses. */
+export const canDropRestore = (r: BackupRestore): boolean =>
+  !r.droppedAt && !r.inUse && r.status !== "running" && !(r.status === "failed" && NO_DATABASE_CODES.has(r.errorCode));
 
 function Result({ r }: { r: BackupRestore }) {
   if (r.droppedAt) return <span className="text-muted-foreground">{t.droppedAt}</span>;

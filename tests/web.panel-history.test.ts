@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test";
 import type { DomainCheck, MetricSeries, ProblemEvent } from "@/shared/monitor.types";
 import { heartbeatBars, heartbeatSummary } from "@/web/panel/heartbeat.strip";
 import { navBadgeView } from "@/web/panel/nav.badge.provider";
-import { eventDurationSec, groupByDay } from "@/web/panel/problems.page";
+import { closedText, eventDurationSec, groupByDay } from "@/web/panel/problems.page";
 import { seriesStats, sparklinePath, sparklineSummary, toSparkPoints } from "@/web/panel/sparkline";
 
 const MIN = 60_000;
@@ -136,5 +136,16 @@ describe("nav badge", () => {
     expect(navBadgeView({ danger: 0, warning: 2, sampledAt: null })).toEqual({ count: 2, tone: "warning" });
     expect(navBadgeView({ danger: 0, warning: 0, sampledAt: null })).toBeNull();
     expect(navBadgeView(undefined)).toBeNull();
+  });
+});
+
+describe("closedText (QA #13)", () => {
+  test("by local calendar day, not 24 h spans", () => {
+    const at = (d: number, h: number, m: number) => new Date(2026, 10, d, h, m).toISOString();
+    const now = new Date(2026, 10, 27, 2, 30);
+    expect(closedText(at(27, 1, 5), now)).toBe("hari ini 01.05");
+    expect(closedText(at(26, 21, 40), now)).toBe("kemarin 21.40");
+    // 26.5 h ago but two midnights back: not "kemarin"
+    expect(closedText(at(25, 23, 52), now)).not.toContain("kemarin");
   });
 });

@@ -29,10 +29,19 @@ export const sortServices = (list: readonly Service[]): Service[] =>
       a.name.localeCompare(b.name),
   );
 
-/** "aktif 3 jam" / "mati 33 jam" / "–". */
+/** Whole minutes only (content guide: no seconds): the row is polled, so a ticking "1 dtk" would freeze (QA #20). */
+const minutes = (sec: number): string | null => (sec < 60 ? null : formatDuration(sec - (sec % 60)));
+
+/** "aktif 3 jam" / "mati 33 jam" / "baru mulai" / "baru berhenti" (under a minute) / "–". */
 export function serviceSince(s: Service): string {
-  if (s.state === "run" && s.uptimeSec !== null) return t.upFor(formatDuration(s.uptimeSec));
-  if (s.state === "down" && s.downSec != null) return t.downFor(formatDuration(s.downSec));
+  if (s.state === "run" && s.uptimeSec !== null) {
+    const d = minutes(s.uptimeSec);
+    return d ? t.upFor(d) : t.upJustNow;
+  }
+  if (s.state === "down" && s.downSec != null) {
+    const d = minutes(s.downSec);
+    return d ? t.downFor(d) : t.downJustNow;
+  }
   return idPanel.dash;
 }
 
@@ -72,7 +81,13 @@ export function ServicesPage() {
       <PageHeader
         title={t.title}
         description={t.description}
-        meta={{ updatedAt: query.updatedAt, onRefresh: query.reload, refreshing: query.loading, live: true }}
+        meta={{
+          updatedAt: query.updatedAt,
+          onRefresh: query.reload,
+          refreshing: query.loading,
+          live: true,
+          stale: !!query.error,
+        }}
       />
       <QueryView
         query={query}

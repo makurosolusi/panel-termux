@@ -197,6 +197,7 @@ describe("monitoring reads", () => {
     const neo = o.apps.find((a) => a.name === "adminneo") as App & Record<string, unknown>;
     expect(neo).toMatchObject({ site: "neo", cpu: null, module: false });
     for (const k of ["outLog", "errLog", "cwd", "execPath", "args"]) expect(neo[k]).toBeUndefined();
+    expect(o.apps.some((a) => a.name === "pm2-guard")).toBe(false); // D-W9-1: hidden even from "Modul pm2"
     expect(o.services.find((s) => s.name === "panel")).toMatchObject({ lockout: true, protected: true });
   });
 
@@ -390,7 +391,7 @@ describe("logs", () => {
     const res = await call("GET", "/apps/adminneo/log/download?stream=err");
     expect(res.status).toBe(200);
     expect(res.headers.get("content-type")).toBe("text/plain; charset=utf-8");
-    expect(res.headers.get("content-disposition")).toMatch(/^attachment; filename="adminneo-\d{8}-\d{4}\.log"$/);
+    expect(res.headers.get("content-disposition")).toMatch(/^attachment; filename="adminneo-stderr-\d{8}-\d{4}\.log"$/);
     expect(await res.text()).not.toContain(SITE_SECRET);
     expect((await call("GET", "/services/sshd/log/download")).status).toBe(200);
     const targets = audits("log.download").map((r) => r.target);

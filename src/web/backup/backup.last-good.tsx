@@ -1,4 +1,5 @@
 import { DatabaseBackupIcon, TerminalIcon } from "lucide-react";
+import { toast } from "sonner";
 import type { BackupRun, BackupStatus } from "@/shared/backup.types";
 import { ConfirmAction } from "@/web/components/confirm-action";
 import { type DataColumn, DataTable } from "@/web/components/data-table";
@@ -98,8 +99,9 @@ export function LastGoodSection({
     if (!g) return null;
     const hint = findItem(runs, g.runId, g.itemIndex)?.restoreHint;
     const size = g.sizeBytes == null ? idBackup.runs.noSize : formatBytes(g.sizeBytes);
+    // Wraps on narrow cards (QA M3): download + restore + command did not fit 390 px in one line.
     return (
-      <>
+      <div className="flex min-w-0 flex-wrap items-center justify-end gap-1 max-md:justify-start">
         {canDownload({ kind: g.kind, ok: true }, access) && (
           <ItemDownload runId={g.runId} index={g.itemIndex} kind={g.kind} />
         )}
@@ -109,9 +111,9 @@ export function LastGoodSection({
             description={idBackup.restore.body(idBackup.restore.newTarget(g.name), formatDateTime(g.at), size)}
             confirmLabel={idBackup.restore.button}
             codes={BACKUP_ERROR_CODES}
-            successToast={idBackup.restore.started}
             onConfirm={async () => {
-              await startRestore(g.runId, g.itemIndex);
+              const { targetDb } = await startRestore(g.runId, g.itemIndex);
+              toast.success(idBackup.restore.started(targetDb));
               onRestoreStarted();
             }}
             trigger={
@@ -123,7 +125,7 @@ export function LastGoodSection({
           />
         )}
         {hint && <CommandSheet name={g.name} command={hint} />}
-      </>
+      </div>
     );
   };
   return (

@@ -15,12 +15,13 @@ import type { PanelControl } from "./use-panel-control";
 
 const t = idPanel;
 
-/** Consequence lines of a confirmation: the generic sentence, then the service/site specific impact. */
-function consequences(target: ControlTarget, action: "stop" | "restart"): string[] {
+/** Consequence lines of a confirmation (exported for tests): the generic sentence, then the service/site specific impact. */
+export function consequences(target: ControlTarget, action: "stop" | "restart"): string[] {
   const name = target.item.name;
   const lines = [t.confirmBodies[action](name)];
   if (target.kind === "services") {
     const impact = t.serviceImpact[name];
+    if (impact && action === "restart" && t.restartImpactOnly.includes(name)) return [impact];
     if (impact) lines.push(impact);
   } else if (action === "stop" && target.item.site) {
     lines.push(t.confirmBodies.siteStop(target.item.site));
@@ -56,14 +57,20 @@ export function UnitActions({
 
   const primary =
     plan.primary === "start" ? (
-      <Button size="sm" variant="secondary" disabled={busy} onClick={() => control.runNow(name, "start")}>
+      <Button
+        size="sm"
+        variant="secondary"
+        disabled={busy}
+        aria-label={t.actionFor(t.actions.start, name)}
+        onClick={() => control.runNow(name, "start")}
+      >
         {mine ? <Loader2Icon className="motion-safe:animate-spin" aria-hidden /> : <PlayIcon aria-hidden />}
         {t.actions.start}
       </Button>
     ) : (
       <ConfirmAction
         trigger={
-          <Button size="sm" variant="secondary" disabled={busy}>
+          <Button size="sm" variant="secondary" disabled={busy} aria-label={t.actionFor(t.actions.restart, name)}>
             {mine ? <Loader2Icon className="motion-safe:animate-spin" aria-hidden /> : <RotateCwIcon aria-hidden />}
             {t.actions.restart}
           </Button>

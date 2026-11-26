@@ -7,8 +7,16 @@ import { formatDuration, formatNumber } from "@/web/shared/format";
 
 const t = idOverview;
 
-/** Problem rows shown on a phone before "Tampilkan N lainnya". */
-export const PHONE_PROBLEM_ROWS = 5;
+/**
+ * Problem rows shown before "Tampilkan N lainnya": 3 on a phone so the strip + 4 tiles fit above the fold at 390×844
+ * (PLAN/02 §6 acceptance wins over the §5.1 "maks 5"), 5 on wider screens so a long list never buries the tiles.
+ */
+export const PHONE_PROBLEM_ROWS = 3;
+export const DESKTOP_PROBLEM_ROWS = 5;
+
+/** Rows hidden behind "Tampilkan N lainnya" for a viewport's cap (0 once expanded). */
+export const hiddenProblems = (count: number, cap: number, expanded: boolean): number =>
+  expanded ? 0 : Math.max(0, count - cap);
 
 /** Load5 above this many times the usual median is warning / danger (K6, display only). */
 export const LOAD_WARN_RATIO = 1.5;
@@ -84,7 +92,8 @@ export function loadView(
   load: readonly number[],
   baseline: LoadBaseline | null | undefined,
 ): { value: string; usual: string; tone: StatusTone | undefined } {
-  const value = t.device.load(load.map((n) => formatNumber(n, 1)).join(" · "));
+  // Always one decimal ("20,0", not "20"; QA #11). Load never reaches 1.000, so no thousands grouping is needed.
+  const value = t.device.load(load.map((n) => n.toFixed(1).replace(".", ",")).join(" · "));
   if (!baseline) return { value, usual: t.device.loadNoBaseline, tone: undefined };
   const load5 = load[1] ?? 0;
   const ratio = baseline.p50 > 0 ? load5 / baseline.p50 : 0;

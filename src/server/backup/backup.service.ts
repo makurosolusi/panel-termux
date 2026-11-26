@@ -78,6 +78,15 @@ function createBackupService(input: BackupDeps) {
   rmSync(join(dataDir, "backup-tmp"), { recursive: true, force: true });
 
   const config = (): BackupConfig => readBackupConfig(deps);
+  // status() runs on every monitor tick; lastGoodAll parses the items JSON of every unpruned run. Items change only
+  // inside a run (upload + retention), so the result is kept until a run starts/ends or a row is added elsewhere.
+  let lastGoodMemo: { key: number; value: BackupLastGood[] } | null = null;
+  const lastGood = (): BackupLastGood[] => {
+    if (running !== null) return lastGoodAll(db, backupPaths(deps)); // items are being written right now
+    const key = db.select({ k: sql<number | null>`max(rowid)` }).from(backupRun).get()?.k ?? 0;
+    if (lastGoodMemo?.key !== key) lastGoodMemo = { key, value: lastGoodAll(db, backupPaths(deps)) };
+    return lastGoodMemo.value;
+  };
   const restores = createRestoreService(deps, () => running !== null, config);
   const busy = () => running !== null || restores.running();
 
@@ -120,6 +129,7 @@ function createBackupService(input: BackupDeps) {
       })
       .run();
     const s3 = cfg.s3;
+    lastGoodMemo = null;
     running = executeRun(deps, { id, startedAt, actorId }, cfg, s3)
       .catch((e) => {
         log.error(`[backup] run ${id} crashed: ${describeS3Error(e, s3)}`);
@@ -130,6 +140,7 @@ function createBackupService(input: BackupDeps) {
       })
       .finally(() => {
         running = null;
+        lastGoodMemo = null; // the run wrote items and may have pruned older ones
       });
     return { runId: id };
   }
@@ -170,7 +181,7 @@ function createBackupService(input: BackupDeps) {
         running: running !== null,
         restoring: restores.running(),
         lastRun: last ? toRun(last) : null,
-        lastGood: lastGoodAll(db, backupPaths(deps)),
+        lastGood: lastGood(),
         excluded,
         lastRestoreTest: restores.lastSucceeded(),
       };

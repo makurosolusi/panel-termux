@@ -38,6 +38,8 @@ export const idHistory = {
     recentTitle: "Riwayat masalah",
     recentEmpty: "Belum ada masalah dalam 30 hari terakhir.",
     viewAll: "Lihat riwayat",
+    today: (clock: string) => `hari ini ${clock}`,
+    yesterday: (clock: string) => `kemarin ${clock}`,
   },
   navBadge: (n: number) => `${n} masalah aktif`,
 };

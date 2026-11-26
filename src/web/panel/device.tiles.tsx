@@ -9,6 +9,8 @@ import { batteryView, loadView, temperatureTone } from "./overview.state";
 
 const t = idOverview.device;
 const GRID = "grid grid-cols-2 gap-3 lg:grid-cols-4";
+/** Tighter phone tiles: the 2×2 block stays ≤ 200 px at 390 px (PLAN/02 §6, QA M7). */
+const TILE = "max-md:gap-0.5 max-md:py-2.5";
 
 /** Usage bars: memory warns at 90/97 %, disk at 90/95 % used (= the 10 %/5 % free disk rule). */
 const MEMORY_THRESHOLDS = { warn: 90, danger: 97 };
@@ -28,7 +30,7 @@ export function DeviceTiles({
     return (
       <div className={GRID}>
         {[t.battery, t.temperature, t.memory, t.disk].map((label) => (
-          <StatTile key={label} label={label} value="–" hint={idOverview.unavailable} />
+          <StatTile key={label} className={TILE} label={label} value="–" hint={idOverview.unavailable} />
         ))}
       </div>
     );
@@ -40,25 +42,35 @@ export function DeviceTiles({
   return (
     <div className="flex flex-col gap-2">
       <div className={GRID}>
-        <StatTile icon={BatteryIcon} label={t.battery} value={battery.value} hint={battery.hint} tone={battery.tone} />
         <StatTile
+          className={TILE}
+          icon={BatteryIcon}
+          label={t.battery}
+          value={battery.value}
+          hint={battery.hint}
+          tone={battery.tone}
+        />
+        <StatTile
+          className={TILE}
           icon={ThermometerIcon}
           label={t.temperature}
           value={temp === null ? t.temperatureNone : formatTemperature(temp)}
           tone={temp === null ? undefined : temperatureTone(problems)}
         />
         <StatTile
+          className={TILE}
           icon={MemoryStickIcon}
           label={t.memory}
-          value={t.memoryAvailable(formatMegabytes(device.memory.availableMb))}
+          value={formatMegabytes(device.memory.availableMb)}
           progress={usedPercent(device.memory.availableMb, device.memory.totalMb)}
           thresholds={MEMORY_THRESHOLDS}
           hint={t.memoryOf(formatMegabytes(device.memory.totalMb))}
         />
         <StatTile
+          className={TILE}
           icon={HardDriveIcon}
           label={t.disk}
-          value={t.diskFree(formatBytes(device.disk.freeBytes))}
+          value={formatBytes(device.disk.freeBytes)}
           progress={usedPercent(device.disk.freeBytes, device.disk.totalBytes)}
           thresholds={DISK_THRESHOLDS}
           hint={t.diskOf(formatBytes(device.disk.totalBytes))}
