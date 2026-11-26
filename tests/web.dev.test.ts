@@ -292,6 +292,10 @@ describe("describeAudit", () => {
     [{ action: "service.stop", target: "sshd" }, "Citra menghentikan layanan sshd"],
     [{ action: "session.revoke", meta: { scope: "others", count: 2 } }, "Citra keluar dari perangkat lain (2 sesi)"],
     [
+      { action: "session.revoke", meta: { scope: "user", revoked: 2, targetEmail: "rina@contoh.test" } },
+      "Citra mengeluarkan rina@contoh.test dari 2 sesi",
+    ],
+    [
       { action: "hostname.add", target: "blog", meta: { hostnames: ["a.x.co"] } },
       "Citra menambah domain a.x.co ke situs blog",
     ],

@@ -45,9 +45,8 @@ export const idAccount = {
     device: "Perangkat",
     ip: "Alamat IP",
     lastActive: "Terakhir aktif",
-    deviceOn: (browser: string, os: string) => `${browser} di ${os}`,
     ipHidden: "IP tidak tercatat",
-    currentHint: "Untuk perangkat ini, pakai Keluar di kartu Akun.",
+    currentHint: "Keluar lewat kartu Akun.",
     unknownDevice: "Perangkat tidak dikenal",
     activeToday: "Aktif hari ini",
     activeYesterday: "Aktif kemarin",
@@ -85,16 +84,13 @@ export const idAccount = {
   },
   deleteAccount: {
     title: "Hapus akun saya",
-    body: "Email dan namamu dihapus dari panel ini. Kamu bisa masuk lagi kapan saja sebagai Pengguna baru.",
+    body: "Akun, sesi, dan profilmu dihapus dari panel ini. Catatan aktivitas (audit) tetap menyimpan nama dan email yang kamu pakai sampai masa simpannya habis (bawaan 365 hari), lalu terhapus otomatis. Kamu bisa masuk lagi kapan saja sebagai Pengguna baru.",
     dialogTitle: "Hapus akun saya?",
-    confirm: (email: string) => `Ketik ${email} untuk konfirmasi`,
     button: "Hapus akun saya",
-    deleted: "Akun dihapus.",
     codes: {
       confirm_mismatch: "Email yang diketik tidak sama dengan email akunmu. Ketik ulang persis seperti tertulis.",
       forbidden: "Hanya akun berperan Pengguna yang bisa menghapus dirinya sendiri.",
     },
-    failed: "Akun tidak bisa dihapus. Periksa koneksi internet, lalu coba lagi.",
   },
   publicNotFound: {
     title: "Halaman tidak ditemukan",

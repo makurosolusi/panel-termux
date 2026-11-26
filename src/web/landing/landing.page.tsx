@@ -1,6 +1,7 @@
 import { idLanding } from "@/web/i18n/id.landing";
 import { useDocumentTitle } from "@/web/layout/document.title";
 import { ArchSection } from "./arch.section";
+import { AccountDeletedNotice } from "./deleted.notice";
 import { FaqSection } from "./faq.section";
 import { FeaturesSection } from "./features.section";
 import { FinalSection, LandingFooter } from "./final.section";
@@ -22,6 +23,7 @@ export function LandingPage() {
         className="lp-grid pointer-events-none absolute inset-x-0 top-0 h-[900px] opacity-60 [mask-image:linear-gradient(to_bottom,black,transparent)]"
       />
       <LandingHeader />
+      <AccountDeletedNotice />
       <main className="relative">
         <HeroSection />
         <InstallSection />

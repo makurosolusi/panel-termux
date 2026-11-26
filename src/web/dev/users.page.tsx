@@ -61,7 +61,7 @@ export function UsersPage() {
     <>
       <SearchField value={search} onChange={setSearch} label={t.search} placeholder={t.searchPlaceholder} />
       <Select value={role ?? ALL} onValueChange={(v) => setFilter("role", v === ALL ? null : v)}>
-        <SelectTrigger size="sm" className="w-40 pointer-coarse:h-11" aria-label={t.roleFilter}>
+        <SelectTrigger size="sm" className="w-40" aria-label={t.roleFilter}>
           <SelectValue />
         </SelectTrigger>
         <SelectContent>

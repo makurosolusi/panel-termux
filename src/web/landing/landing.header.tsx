@@ -15,7 +15,10 @@ export function LandingHeader() {
   return (
     <header className="sticky top-0 z-30 border-b border-lp-line bg-lp-paper/85 backdrop-blur-md">
       <div className="mx-auto flex h-14 max-w-6xl items-center justify-between gap-3 px-4 sm:px-6">
-        <a href="#top" className="min-w-0 rounded focus-visible:outline-2 focus-visible:outline-lp-signal">
+        <a
+          href="#top"
+          className="inline-flex min-h-11 min-w-0 items-center rounded focus-visible:outline-2 focus-visible:outline-lp-signal"
+        >
           <BrandLogo />
         </a>
         <nav aria-label={t.nav.label} className="hidden items-center gap-6 font-lp-mono text-sm text-lp-dim md:flex">

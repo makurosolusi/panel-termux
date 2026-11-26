@@ -93,7 +93,13 @@ export function HealthPage() {
             {h?.mode === "fake" && <StatusBadge tone="info" label={t.fakeMode} />}
           </>
         }
-        meta={{ updatedAt: query.updatedAt, onRefresh: query.reload, refreshing: query.loading, live: true }}
+        meta={{
+          updatedAt: query.updatedAt,
+          onRefresh: query.reload,
+          refreshing: query.loading,
+          live: true,
+          stale: !!query.error,
+        }}
         actions={
           ob.setup && !ob.visible ? (
             <Button size="sm" variant="outline" onClick={ob.reopen} disabled={ob.busy}>

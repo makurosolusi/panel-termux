@@ -1,6 +1,7 @@
 import { ExternalLinkIcon } from "lucide-react";
 import type { ReactNode } from "react";
 import type { DevSetting, SettingKey } from "@/shared/dev.types";
+import { CodeText } from "@/web/components/code-text";
 import { useNow } from "@/web/components/now.store";
 import { StatusBadge } from "@/web/components/status-badge";
 import { Button } from "@/web/components/ui/button";
@@ -63,7 +64,7 @@ export function SettingField(props: FieldProps) {
       )}
       <p id={helpId} className="text-xs text-muted-foreground">
         {status.kind === "unreadable" ? `${t.secret.unreadableBody} ` : null}
-        {copy.help}
+        <CodeText>{copy.help}</CodeText>
         {def.helpUrl && (
           <>
             {" "}
@@ -71,7 +72,7 @@ export function SettingField(props: FieldProps) {
               href={def.helpUrl}
               target="_blank"
               rel="noreferrer"
-              className="inline-flex items-center gap-0.5 font-medium text-brand-text underline-offset-4 hover:underline"
+              className="relative inline-flex items-center gap-0.5 font-medium text-brand-text underline-offset-4 hover:underline pointer-coarse:after:absolute pointer-coarse:after:inset-x-0 pointer-coarse:after:-inset-y-3.5 pointer-coarse:after:content-['']"
             >
               {t.helpLink}
               <ExternalLinkIcon className="size-3" aria-hidden />
@@ -81,7 +82,7 @@ export function SettingField(props: FieldProps) {
       </p>
       {error && (
         <p id={errorId} className="text-xs font-medium text-danger">
-          {error}
+          <CodeText>{error}</CodeText>
         </p>
       )}
     </div>
@@ -110,13 +111,7 @@ function PlainControl({
   let control: ReactNode;
   if (def.control === "switch")
     control = (
-      <Switch
-        {...aria}
-        checked={shown === ON}
-        disabled={disabled}
-        onCheckedChange={(on) => onDraft(on ? ON : OFF)}
-        className="pointer-coarse:scale-125"
-      />
+      <Switch {...aria} checked={shown === ON} disabled={disabled} onCheckedChange={(on) => onDraft(on ? ON : OFF)} />
     );
   else if (def.control === "select")
     control = (

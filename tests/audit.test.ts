@@ -37,7 +37,7 @@ const addUser = (id: string, name = `name-${id}`) =>
 describe("recordAudit", () => {
   test("fills actor snapshot and request context", () => {
     addUser("a1", "Ani");
-    const ctx = { requestId: "req-1", ipMasked: "203.0.113.x", userAgent: "Chrome on Android" };
+    const ctx = { requestId: "req-1", ipMasked: "203.0.113.x", userAgent: "Chrome di Android" };
     runWithRequest(ctx, () => recordAudit(db, { actorId: "a1", action: "settings.update", target: "x" }));
     const row = db.select().from(auditLog).get();
     expect(row).toMatchObject({
@@ -46,7 +46,7 @@ describe("recordAudit", () => {
       actorLabel: "Ani",
       actorEmail: "a1@x.io",
       ipMasked: "203.0.113.x",
-      userAgent: "Chrome on Android",
+      userAgent: "Chrome di Android",
       requestId: "req-1",
     });
   });

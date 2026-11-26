@@ -34,10 +34,8 @@ describe("sign-in error mapping", () => {
 
 describe("session row formatting", () => {
   test("device line in Indonesian, unknown → Perangkat tidak dikenal", () => {
-    expect(sessionDevice("Chrome on Android")).toBe("Chrome di Android");
-    expect(sessionDevice("Samsung Internet on Android")).toBe("Samsung Internet di Android");
-    expect(sessionDevice("curl")).toBe("curl");
-    expect(sessionDevice("Unknown device")).toBe(idAccount.sessions.unknownDevice);
+    expect(sessionDevice("Chrome di Android")).toBe("Chrome di Android");
+    expect(sessionDevice("")).toBe(idAccount.sessions.unknownDevice);
     expect(sessionDevice(null)).toBe(idAccount.sessions.unknownDevice);
   });
   test("last activity at day resolution", () => {
@@ -79,5 +77,16 @@ describe("role-dependent profile cards", () => {
   test("no-access copy gives concrete steps and links to install your own", () => {
     expect(idAccount.noAccess.steps).toHaveLength(3);
     expect(idAccount.noAccess.ownServerHref).toBe("/#pasang");
+  });
+});
+
+describe("delete-account copy (D-W9-2)", () => {
+  test("says plainly what is removed and that audit keeps name/email for the retention period", () => {
+    const body = idAccount.deleteAccount.body;
+    expect(body).toContain("sesi");
+    expect(body).toContain("audit");
+    expect(body).toContain("nama dan email");
+    expect(body).toContain("365 hari");
+    expect(body).not.toContain("Email dan namamu dihapus");
   });
 });

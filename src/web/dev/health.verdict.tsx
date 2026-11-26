@@ -4,6 +4,7 @@ import { type ReactNode, useEffect, useRef, useState } from "react";
 import { Link } from "react-router";
 import type { DevHealth, HealthStatus } from "@/shared/dev.types";
 import { detail, title } from "@/shared/problem.copy";
+import { CodeText } from "@/web/components/code-text";
 import { useNow } from "@/web/components/now.store";
 import { Section } from "@/web/components/section";
 import { TONE_CLASS } from "@/web/components/status.tone";
@@ -21,7 +22,6 @@ import {
   verdictProblems,
   verdictSentence,
 } from "./health.state";
-import { CodeText } from "./onboarding.card";
 
 const t = idDevHealth;
 
@@ -48,7 +48,7 @@ function Row({ icon, text, sub, link }: { icon: ReactNode; text: string; sub?: s
       <span className="mt-0.5">{icon}</span>
       <div className="min-w-0 flex-1 text-sm">
         <p className="text-pretty">
-          <CodeText text={text} />
+          <CodeText>{text}</CodeText>
         </p>
         {sub && <p className="mt-0.5 text-xs text-muted-foreground">{sub}</p>}
         {link}

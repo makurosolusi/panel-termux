@@ -15,15 +15,8 @@ import { useApiQuery } from "@/web/shared/use-api-query";
 
 const t = idAccount.sessions;
 const SESSIONS_URL = "/api/me/sessions";
-/** Server fallback of `shortUserAgent` when neither browser nor OS is recognised. */
-const SERVER_UNKNOWN_DEVICE = "Unknown device";
-
-/** Indonesian device line from the server's "Browser on OS" string; unknown/missing → "Perangkat tidak dikenal". */
-export function sessionDevice(userAgent: string | null): string {
-  if (!userAgent || userAgent === SERVER_UNKNOWN_DEVICE) return t.unknownDevice;
-  const [browser, os] = userAgent.split(" on ");
-  return browser && os ? t.deviceOn(browser, os) : userAgent;
-}
+/** Device line: the server already sends Indonesian ("Chrome di Android"); missing → "Perangkat tidak dikenal". */
+export const sessionDevice = (userAgent: string | null): string => userAgent || t.unknownDevice;
 
 const dayStart = (d: Date) => new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
 
@@ -41,7 +34,13 @@ export function sessionActiveLabel(iso: string, now: Date = new Date()): string 
 export const hasOtherSessions = (rows: readonly MeSession[]): boolean => rows.some((r) => !r.current);
 
 const COLUMNS: readonly DataColumn<MeSession>[] = [
-  { key: "device", header: t.device, mobile: "title", cell: (r) => sessionDevice(r.userAgent) },
+  {
+    key: "device",
+    header: t.device,
+    mobile: "title",
+    className: "whitespace-normal",
+    cell: (r) => sessionDevice(r.userAgent),
+  },
   {
     key: "current",
     header: <span className="sr-only">{t.current}</span>,
@@ -111,7 +110,10 @@ export function ProfileSessions() {
             rowTone={(r) => (r.current ? "info" : undefined)}
             actions={(r) =>
               r.current ? (
-                <span className="text-xs text-muted-foreground">{t.currentHint}</span>
+                // the actions td is nowrap (no DataColumn.className there): let the hint wrap so Aksi stays visible (QA M3)
+                <span className="block max-w-40 text-right text-xs whitespace-normal text-muted-foreground">
+                  {t.currentHint}
+                </span>
               ) : (
                 <ConfirmAction
                   title={t.revokeTitle(sessionDevice(r.userAgent))}

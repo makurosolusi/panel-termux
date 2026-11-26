@@ -16,7 +16,7 @@ const BROWSERS: [RegExp, string][] = [
   [/Firefox\/|FxiOS\//, "Firefox"],
   [/Chrome\/|CriOS\//, "Chrome"],
   [/Safari\//, "Safari"],
-  [/curl\//, "curl"],
+  [/curl\//, "curl (baris perintah)"],
 ];
 const SYSTEMS: [RegExp, string][] = [
   [/Android/, "Android"],
@@ -27,13 +27,19 @@ const SYSTEMS: [RegExp, string][] = [
   [/Linux/, "Linux"],
 ];
 
-/** "Browser on OS" from a User-Agent (first match wins; order matters: Edge/Opera also say Chrome). */
+/** Shown for a User-Agent that names no known browser or OS. */
+export const UNKNOWN_DEVICE = "Perangkat tidak dikenal";
+
+/**
+ * Indonesian device label "Browser di OS" from a User-Agent, shown as-is in /profile and /dev/audit
+ * (first match wins; order matters: Edge/Opera also say Chrome).
+ */
 export function shortUserAgent(ua: string | null): string | null {
   if (!ua) return null;
   const browser = BROWSERS.find(([re]) => re.test(ua))?.[1];
   const os = SYSTEMS.find(([re]) => re.test(ua))?.[1];
-  if (browser && os) return `${browser} on ${os}`;
-  return browser ?? os ?? "Unknown device";
+  if (browser && os) return `${browser} di ${os}`;
+  return browser ?? os ?? UNKNOWN_DEVICE;
 }
 
 /** IPv4 → last octet masked (`203.0.113.x`); IPv6 → first three groups (`2001:db8:1::/48`). */
@@ -112,10 +118,16 @@ export function createSessionsService(auth: Auth, db: Db) {
  */
 export function revokeUserSessions(db: Db, actorId: string, userId: string): RevokedSessions {
   if (actorId === userId) throw new ApiError(409, "self", "use your own sessions page to sign out your devices");
-  if (!db.select({ id: user.id }).from(user).where(eq(user.id, userId)).get())
-    throw new ApiError(404, "not_found", `unknown user ${userId}`);
+  const target = db.select({ email: user.email }).from(user).where(eq(user.id, userId)).get();
+  if (!target) throw new ApiError(404, "not_found", `unknown user ${userId}`);
   const revoked = db.delete(session).where(eq(session.userId, userId)).returning({ id: session.id }).all().length;
-  recordAudit(db, { actorId, action: "session.revoke", target: userId, meta: { scope: "user", userId, revoked } });
+  // targetEmail names the user in the audit sentence, like user.role_change / user.delete (G27 retention)
+  recordAudit(db, {
+    actorId,
+    action: "session.revoke",
+    target: userId,
+    meta: { scope: "user", userId, revoked, targetEmail: target.email },
+  });
   log.info(`[auth] user ${actorId} revoked ${revoked} session(s) of user ${userId}`);
   return { revoked };
 }

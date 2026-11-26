@@ -3,11 +3,11 @@ import { CircleCheckIcon, CircleDashedIcon, ExternalLinkIcon } from "lucide-reac
 import { useEffect, useRef } from "react";
 import { Link, useLocation } from "react-router";
 import type { DevSetup, SetupItem, SetupItemKey } from "@/shared/dev.types";
+import { CodeText } from "@/web/components/code-text";
 import { InlineCode } from "@/web/components/inline-code";
 import { Button } from "@/web/components/ui/button";
 import { idDevSetup } from "@/web/i18n/id.dev.setup";
 import {
-  codeSegments,
   type ItemAction,
   itemAction,
   manualToggle,
@@ -19,24 +19,6 @@ import {
 } from "./onboarding.state";
 
 const t = idDevSetup;
-
-/** Copy text with `backtick` spans rendered as inline code. */
-export function CodeText({ text }: { text: string }) {
-  return (
-    <>
-      {codeSegments(text).map((s, i) =>
-        s.code ? (
-          // biome-ignore lint/suspicious/noArrayIndexKey: static segments of one string, never reordered
-          <code key={i} className="rounded bg-muted px-1 py-0.5 font-mono text-[0.8125em]">
-            {s.text}
-          </code>
-        ) : (
-          s.text
-        ),
-      )}
-    </>
-  );
-}
 
 function ActionLink({ action }: { action: ItemAction }) {
   if (action.kind === "route")
@@ -73,7 +55,7 @@ function SetupRow({ item, busy, onToggle }: ItemProps) {
       <div className="flex min-w-0 flex-1 flex-col gap-1.5">
         <div className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
           <h3 className={cn("text-sm font-medium", item.done && "text-muted-foreground")}>
-            <CodeText text={copy.title} />
+            <CodeText>{copy.title}</CodeText>
           </h3>
           <span className="text-xs text-muted-foreground">{item.level ? t.levels[item.level] : null}</span>
           {item.done && (
@@ -85,7 +67,7 @@ function SetupRow({ item, busy, onToggle }: ItemProps) {
         </div>
         {!item.done && (
           <p className="text-sm text-pretty text-muted-foreground">
-            <CodeText text={copy.body} />
+            <CodeText>{copy.body}</CodeText>
           </p>
         )}
         {!item.done && item.key === "secret_saved" && (

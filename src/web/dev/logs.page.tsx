@@ -63,10 +63,16 @@ export function LogsPage() {
       <PageHeader
         title={t.title}
         description={t.description}
-        meta={{ updatedAt: query.updatedAt, onRefresh: query.reload, refreshing: query.loading, live }}
+        meta={{
+          updatedAt: query.updatedAt,
+          onRefresh: query.reload,
+          refreshing: query.loading,
+          live,
+          stale: !!query.error,
+        }}
         actions={
           <Select value={level} onValueChange={setLevel}>
-            <SelectTrigger size="sm" className="w-40 pointer-coarse:h-11" aria-label={t.level}>
+            <SelectTrigger size="sm" className="w-40" aria-label={t.level}>
               <SelectValue />
             </SelectTrigger>
             <SelectContent>

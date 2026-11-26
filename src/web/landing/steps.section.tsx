@@ -22,7 +22,9 @@ export function StepsSection() {
               aria-hidden
               className="absolute top-0 -left-[7px] size-3 rounded-full bg-lp-signal md:-top-[7px] md:left-0"
             />
-            <span className="font-lp-serif text-5xl leading-none font-semibold text-lp-ink/15">{i + 1}</span>
+            <span aria-hidden className="font-lp-serif text-5xl leading-none font-semibold text-lp-ink/15">
+              {i + 1}
+            </span>
             <h3 className="mt-2 font-lp-serif text-xl font-semibold">{s.title}</h3>
             <p className="mt-2 text-sm leading-relaxed text-lp-dim">{s.body}</p>
             <code className="mt-4 block rounded-lg bg-lp-screen px-3 py-2.5 font-lp-mono text-[11px] [overflow-wrap:anywhere] text-white/85">

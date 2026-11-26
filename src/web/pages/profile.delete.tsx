@@ -3,6 +3,7 @@ import type { Role } from "@/shared/roles";
 import { ConfirmAction } from "@/web/components/confirm-action";
 import { Button } from "@/web/components/ui/button";
 import { idAccount } from "@/web/i18n/id.account";
+import { ACCOUNT_DELETED_HREF } from "@/web/landing/account.deleted";
 import { apiFetch } from "@/web/shared/api.client";
 
 const t = idAccount.deleteAccount;
@@ -10,11 +11,11 @@ const t = idAccount.deleteAccount;
 /** Self-delete exists only for the `user` role; the server answers 403 for admins, so the card is not rendered. */
 export const canSelfDelete = (role: Role): boolean => role === "user";
 
-/** "Hapus akun saya" card: typed-email confirmation → DELETE /api/me → landing (PLAN/05 F8 step 5). */
+/** "Hapus akun saya" card: typed-email confirmation → DELETE /api/me → landing with an "akun dihapus" notice (PLAN/05 F8 step 5). */
 export function ProfileDelete({ email }: { email: string }) {
   const remove = async (typed?: string) => {
     await apiFetch<void>("DELETE", "/api/me", { confirm: typed });
-    window.location.assign("/"); // session rows are gone with the user; a full load resets the client state
+    window.location.assign(ACCOUNT_DELETED_HREF); // session rows are gone with the user; a full load resets the client state
   };
   return (
     <section

@@ -4,7 +4,13 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { eq } from "drizzle-orm";
 import { createAuth } from "@/server/auth/auth.service";
-import { maskIp, revokeAllSessions, revokeUserSessions, shortUserAgent } from "@/server/auth/sessions.service";
+import {
+  maskIp,
+  revokeAllSessions,
+  revokeUserSessions,
+  shortUserAgent,
+  UNKNOWN_DEVICE,
+} from "@/server/auth/sessions.service";
 import { type Db, openDb } from "@/server/db/client";
 import { runMigrations } from "@/server/db/migrate";
 import { appMeta, auditLog, session, user } from "@/server/db/schema";
@@ -75,11 +81,13 @@ afterAll(() => {
 
 describe("helpers", () => {
   test("shortUserAgent", () => {
-    expect(shortUserAgent(CHROME_ANDROID)).toBe("Chrome on Android");
-    expect(shortUserAgent("Mozilla/5.0 (Windows NT 10.0) Chrome/131 Safari/537 Edg/131")).toBe("Edge on Windows");
+    expect(shortUserAgent(CHROME_ANDROID)).toBe("Chrome di Android");
+    expect(shortUserAgent("Mozilla/5.0 (Windows NT 10.0) Chrome/131 Safari/537 Edg/131")).toBe("Edge di Windows");
     expect(shortUserAgent("Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) Version/18 Safari/604")).toBe(
-      "Safari on iOS",
+      "Safari di iOS",
     );
+    expect(shortUserAgent("curl/8.7.1")).toBe("curl (baris perintah)");
+    expect(shortUserAgent("SomeBot/1.0")).toBe(UNKNOWN_DEVICE);
     expect(shortUserAgent(null)).toBeNull();
   });
 
@@ -113,7 +121,7 @@ describe("/api/me/sessions", () => {
       current: false,
       createdAt: expect.any(String),
       lastActiveAt: expect.any(String),
-      userAgent: "Chrome on Android",
+      userAgent: "Chrome di Android",
       ipMasked: "203.0.113.x",
     });
     const tokens = db.select({ t: session.token }).from(session).all();
@@ -200,7 +208,7 @@ describe("revokeUserSessions / revokeAllSessions", () => {
     expect(row).toMatchObject({
       actorId: actor,
       action: "session.revoke",
-      meta: { scope: "user", userId: envBoss, revoked: 2 },
+      meta: { scope: "user", userId: envBoss, revoked: 2, targetEmail: SUPER[0] },
     });
   });
 

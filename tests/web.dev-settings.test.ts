@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import type { BackupVerify } from "@/shared/backup.types";
 import { type DevSetting, SETTING_KEYS } from "@/shared/dev.types";
+import { codeSegments } from "@/web/components/code-text";
 import { CONNECTION_KEYS, fieldDef, GROUP_ANCHOR, groupKeys, SETTING_GROUPS } from "@/web/dev/settings.registry";
 import {
   changedValues,
@@ -222,5 +223,15 @@ describe("test result rendering", () => {
     expect(testFailure(e(409, "telegram_webhook_set")).text).toContain("webhook");
     expect(testFailure(e(429, "too_soon")).tone).toBe("warning");
     expect(testFailure(new ApiError("client", 400, "weird", "server said no")).text).toBe("server said no");
+  });
+});
+
+describe("field copy with `code`", () => {
+  // CodeText renders unbalanced backticks as plain text, so every backtick in help/invalid copy must pair up.
+  test("help and invalid strings render backticked parts as code, never raw backticks", () => {
+    const copies = Object.values(idSettings.fields).flatMap((f) => [f.help, f.invalid]);
+    const withCode = copies.filter((c) => c.includes("`"));
+    expect(withCode.length).toBeGreaterThan(3);
+    for (const c of withCode) expect(codeSegments(c).some((seg) => seg.code)).toBe(true);
   });
 });

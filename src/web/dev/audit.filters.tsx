@@ -23,12 +23,12 @@ function DateFilter({
 }) {
   const inputId = useId();
   return (
-    <div className="flex items-center gap-1.5 text-sm text-muted-foreground">
+    <div className="flex flex-col gap-1 text-sm text-muted-foreground sm:flex-row sm:items-center sm:gap-1.5">
       <label htmlFor={inputId}>{label}</label>
       <Input
         id={inputId}
         type="date"
-        className="h-8 w-38 pointer-coarse:h-11"
+        className="h-8 w-full pointer-coarse:h-11 sm:w-38"
         value={value}
         aria-invalid={invalid || undefined}
         onChange={(ev) => onChange(ev.target.value || null)}
@@ -55,7 +55,7 @@ export function AuditFilters({
   return (
     <div className="mb-3 flex flex-wrap items-center gap-2">
       <Select value={params.get("action") ?? ALL} onValueChange={(v) => setFilter("action", v === ALL ? null : v)}>
-        <SelectTrigger size="sm" className="w-40 pointer-coarse:h-11" aria-label={t.actionFilter}>
+        <SelectTrigger size="sm" className="w-40" aria-label={t.actionFilter}>
           <SelectValue />
         </SelectTrigger>
         <SelectContent>
@@ -67,15 +67,18 @@ export function AuditFilters({
           ))}
         </SelectContent>
       </Select>
-      {(["from", "to"] as const).map((key) => (
-        <DateFilter
-          key={key}
-          label={t[key]}
-          value={params.get(key) ?? ""}
-          invalid={badRange}
-          onChange={(v) => setFilter(key, v)}
-        />
-      ))}
+      {/* phones: the two dates share one row, label above input, so "Sampai" never wraps alone (QA m7) */}
+      <div className="grid w-full grid-cols-2 gap-2 sm:flex sm:w-auto">
+        {(["from", "to"] as const).map((key) => (
+          <DateFilter
+            key={key}
+            label={t[key]}
+            value={params.get(key) ?? ""}
+            invalid={badRange}
+            onChange={(v) => setFilter(key, v)}
+          />
+        ))}
+      </div>
       {actorId && (
         <Button variant="secondary" size="sm" onClick={() => setFilter("actorId", null)} aria-label={t.removeActor}>
           {t.actorChip(actorName ?? actorId)}

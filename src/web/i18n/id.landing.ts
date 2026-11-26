@@ -283,6 +283,11 @@ export const idLanding = {
     title: "Laci kosong, server menyala.",
     body: "Ambil HP lama itu, colok ke charger, dan jalankan aplikasimu sendiri.",
   },
+  accountDeleted: {
+    title: "Akunmu sudah dihapus.",
+    body: "Semua sesimu sudah berakhir. Kamu bisa masuk lagi kapan saja sebagai Pengguna baru.",
+    close: "Tutup pemberitahuan",
+  },
   footer: {
     tagline: "Panel web untuk menjadikan HP Android (Termux) sebagai server.",
     label: "Tautan proyek",

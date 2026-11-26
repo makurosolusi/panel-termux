@@ -81,7 +81,13 @@ export function AuditPage() {
     });
 
   const columns: DataColumn<DevAuditEntry>[] = [
-    { key: "text", header: t.action, mobile: "title", cell: (e) => describeAudit(e).text },
+    {
+      key: "text",
+      header: t.action,
+      mobile: "title",
+      // the sentence is the row's content: wrap it instead of the card title's ellipsis (QA m7)
+      cell: (e) => <span className="whitespace-normal">{describeAudit(e).text}</span>,
+    },
     {
       key: "actor",
       header: t.actor,
@@ -89,7 +95,7 @@ export function AuditPage() {
         e.actor && e.actor.id !== actorId ? (
           <button
             type="button"
-            className="underline-offset-2 hover:underline focus-visible:underline pointer-coarse:py-2"
+            className="underline-offset-2 hover:underline focus-visible:underline inline-flex items-center pointer-coarse:min-h-11"
             title={t.filterActor(auditActor(e))}
             onClick={() => setFilter("actorId", e.actor?.id ?? null)}
           >

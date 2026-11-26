@@ -85,13 +85,6 @@ export function itemAction(item: SetupItem): ItemAction | null {
   }
 }
 
-/** Splits copy on backticks: odd segments are code (`data/secret` → InlineCode). */
-export const codeSegments = (text: string): { text: string; code: boolean }[] =>
-  text
-    .split("`")
-    .map((s, i) => ({ text: s, code: i % 2 === 1 }))
-    .filter((s) => s.text !== "");
-
 /** GET /api/dev/setup (super_admin). */
 export const SETUP_URL = apiUrl("/api/dev", "/setup");
 

@@ -67,7 +67,7 @@ export function LoginPage() {
           {t.own}{" "}
           <a
             href={idAccount.noAccess.ownServerHref}
-            className="font-medium text-foreground underline underline-offset-4"
+            className="font-medium text-foreground underline underline-offset-4 relative pointer-coarse:after:absolute pointer-coarse:after:inset-x-0 pointer-coarse:after:-inset-y-3 pointer-coarse:after:content-['']"
           >
             {t.ownLink}
           </a>

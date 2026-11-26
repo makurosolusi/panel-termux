@@ -8,7 +8,7 @@ const FOOTER_LINKS = [
   { href: t.links.releases, label: t.footer.releases },
 ] as const;
 
-/** Closing CTA band in signal orange. */
+/** Closing CTA band in signal orange; body text stays full-opacity ink (4.5:1 on --lp-signal, QA M5). */
 export function FinalSection() {
   return (
     <section aria-labelledby="final-title" className="px-4 pb-16 sm:px-6">
@@ -25,7 +25,7 @@ export function FinalSection() {
         >
           {t.final.title}
         </h2>
-        <p className="relative mt-4 max-w-xl text-lg opacity-85">{t.final.body}</p>
+        <p className="relative mt-4 max-w-xl text-lg">{t.final.body}</p>
         <div className="relative mt-8">
           <InstallCta inverted />
         </div>

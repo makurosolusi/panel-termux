@@ -4,6 +4,7 @@ import { join } from "node:path";
 import { OG_TEXT } from "@/server/http/seo";
 import type { Role } from "@/shared/roles";
 import { idLanding } from "@/web/i18n/id.landing";
+import { ACCOUNT_DELETED_HREF, isAccountDeletedSearch } from "@/web/landing/account.deleted";
 import { landingCta } from "@/web/landing/landing.cta";
 import { GALLERY, imgLoading, SHOTS } from "@/web/landing/landing.shots";
 import type { MeResult } from "@/web/session/session.api";
@@ -89,5 +90,17 @@ describe("landing chunk isolation", () => {
   test.each(sources)("%s imports no panel code and not the aggregate i18n", (_file, src) => {
     expect(src).not.toMatch(/from "@\/web\/(panel|dev|site|backup|deploy|pages)\//);
     expect(src).not.toMatch(/from "@\/web\/i18n\/id"/);
+  });
+});
+
+describe("account-deleted notice", () => {
+  test("self-delete lands on / with the marker the landing recognises", () => {
+    const url = new URL(ACCOUNT_DELETED_HREF, "https://panel.example");
+    expect(url.pathname).toBe("/");
+    expect(isAccountDeletedSearch(url.search)).toBe(true);
+  });
+  test("other or missing query → no notice", () => {
+    expect(isAccountDeletedSearch("")).toBe(false);
+    expect(isAccountDeletedSearch("?akun=lain")).toBe(false);
   });
 });

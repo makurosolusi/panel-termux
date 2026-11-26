@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import type { DevHealth, DevSetup, PanelCheck, SetupItem } from "../src/shared/dev.types";
 import type { Problem } from "../src/shared/panel.types";
+import { codeSegments } from "../src/web/components/code-text";
 import {
   checkRow,
   HEALTH_STATUS_KEY,
@@ -14,7 +15,6 @@ import {
   ACCESS_GUIDE_URL,
   bannerVisible,
   cardVisible,
-  codeSegments,
   isComplete,
   itemAction,
   manualToggle,
