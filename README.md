@@ -1,6 +1,6 @@
 # panel-termux
 
-Panel web untuk mengelola server HP Android (Termux): layanan runit, aplikasi pm2, domain Cloudflare Tunnel, database Postgres, site, deploy binary, dan backup. Akses lewat login Google, khusus undangan.
+Panel web untuk mengelola server HP Android (Termux): layanan runit, aplikasi pm2, domain Cloudflare Tunnel, database Postgres, site, deploy binary, dan backup. Akses lewat login Google.
 
 ## Layar dan peran
 
@@ -8,7 +8,7 @@ Panel web untuk mengelola server HP Android (Termux): layanan runit, aplikasi pm
 | ------------- | ------------ | ------------------------------------------------------------------------------------------------------------------------ |
 | `user`        | `/profile`   | Profil sendiri                                                                                                           |
 | `admin`       | `/panel`     | Ringkasan perangkat, layanan runit, aplikasi pm2, domain, database, site (buat/adopsi/deploy/hapus), riwayat job, backup |
-| `super_admin` | `/dev`       | Kesehatan panel, pengguna dan peran, undangan, audit log, log, pengaturan                                                |
+| `super_admin` | `/dev`       | Kesehatan panel, pengguna dan peran, audit log, log, pengaturan                                                          |
 
 Peran lebih tinggi bisa membuka semua halaman peran di bawahnya.
 
@@ -76,7 +76,7 @@ cp .env.example .env   # isi: APP_BASE_URL=http://localhost:3200, client Google,
 bun run dev            # hot reload, adapter mode fake (bukan Termux)
 ```
 
-Buka `http://localhost:3200`. Di mode fake, data layanan/aplikasi/domain adalah data demo.
+Buka `APP_BASE_URL` (alamat yang dicetak setelah `open` di log start, mis. `http://localhost:3200`); membuka lewat alamat lain (mis. `127.0.0.1`) otomatis diarahkan ke sana. Di mode fake, data layanan/aplikasi/domain adalah data demo.
 
 ## Test, lint, typecheck
 
@@ -126,10 +126,10 @@ Binary Android jalan langsung di Termux tanpa `grun` (sekitar 65 MB RSS).
 
 4. Lindungi hostname itu dengan **Cloudflare Access** (Zero Trust → Access → Applications, kebijakan email yang diizinkan). Login Google panel tetap berlaku di belakangnya. `APP_BASE_URL` = `https://panel.<domain>`.
 
-## Login pertama, undangan, admin
+## Login dan peran
 
-- Email di `SUPER_ADMIN_EMAILS` bisa langsung login dan menjadi `super_admin`.
-- Orang lain harus diundang dulu di **/dev → Undangan**; tanpa undangan login ditolak (`/login?error=not_invited`). Pengguna undangan masuk sebagai `user`.
+- Siapa pun yang punya akun Google bisa login. Akun baru masuk sebagai `user` (hanya `/profile`).
+- Email di `SUPER_ADMIN_EMAILS` menjadi `super_admin` saat login.
 - Jadikan admin di **/dev → Pengguna** (ubah peran ke `admin`). Peran `super_admin` hanya dari env.
 
 ## Integrasi pm2 (`apps.json`)
@@ -189,7 +189,8 @@ sv up panel
 
 ## Keamanan
 
-- Login hanya untuk undangan; super admin dari env disinkronkan ulang setiap boot dan login (email yang dihapus dari env turun ke `user`, atau kehilangan akses bila tidak diundang).
+- Login terbuka untuk semua akun Google, tetapi akun baru hanya mendapat peran `user` (cuma `/profile`). Karena siapa pun bisa login, tetap pasang **Cloudflare Access** di depan panel agar hanya email yang kamu izinkan yang sampai ke halaman login.
+- Super admin dari env disinkronkan ulang setiap boot dan login (email yang dihapus dari env turun ke `user`).
 - Nilai rahasia di pengaturan dienkripsi dengan data secret (`PANEL_DATA_DIR/secret`, dibuat otomatis, mode 600). Backup file ini terpisah (lihat di atas).
 - Panel hanya listen di `127.0.0.1`. Jangan pernah membuka port panel ke publik/LAN; akses lewat tunnel + Cloudflare Access.
 - `.env` panel dan `.env` site disimpan mode 600.
