@@ -1,5 +1,6 @@
 import { and, count, desc, eq, type SQL } from "drizzle-orm";
 import type { DevAuditEntry, Page } from "../shared/dev.types";
+import type { ControlAction } from "../shared/panel.types";
 import type { Db } from "./db/client";
 import { auditLog, user } from "./db/schema";
 import type { Paging } from "./routes/http.error";
@@ -12,7 +13,9 @@ export type AuditAction =
   | "user.delete"
   | "invite.create"
   | "invite.delete"
-  | "settings.update";
+  | "settings.update"
+  | `service.${ControlAction}`
+  | `app.${ControlAction}`;
 
 /** One audit event. `meta` must never carry secrets or setting values. */
 export type AuditEvent = {
