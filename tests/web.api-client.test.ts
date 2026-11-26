@@ -1,9 +1,11 @@
-import { describe, expect, test } from "bun:test";
+import { afterEach, describe, expect, mock, test } from "bun:test";
 import { id } from "@/web/i18n/id";
 import {
   AJAX_HEADERS,
+  ApiError,
   type ApiErrorKind,
   apiErrorMessage,
+  apiFetch,
   errorFromResponse,
   isAccessChallenge,
   redirectFor,
@@ -58,5 +60,37 @@ describe("error copy", () => {
     expect(apiErrorMessage(conflict)).toBe("Name taken");
     expect(apiErrorMessage(errorFromResponse(503, null))).toBe(id.common.errors.server);
     expect(apiErrorMessage(new Error("x"))).toBe(id.common.errors.generic);
+  });
+});
+
+describe("403 reauth_required stays on the page", () => {
+  const realFetch = globalThis.fetch;
+  const g = globalThis as { window?: unknown };
+  afterEach(() => {
+    globalThis.fetch = realFetch;
+    delete g.window;
+  });
+
+  /** apiFetch against a stubbed fetch answering `status` + JSON `body`; returns the error and the navigations. */
+  async function call(status: number, body: unknown) {
+    const assign = mock((_to: string) => {});
+    g.window = { location: { assign } };
+    globalThis.fetch = (async () => Response.json(body, { status })) as unknown as typeof fetch;
+    const err = await apiFetch("PATCH", "/api/dev/settings", { include_secrets: true }).catch((e: unknown) => e);
+    return { err, to: assign.mock.calls.map((c) => c[0]) };
+  }
+
+  test("reauth_required: ApiError with the code, no redirect", async () => {
+    const { err, to } = await call(403, { error: "reauth_required", message: "sign in again" });
+    expect(err).toBeInstanceOf(ApiError);
+    expect((err as ApiError).kind).toBe("forbidden");
+    expect((err as ApiError).code).toBe("reauth_required");
+    expect(to).toEqual([]);
+    expect(redirectFor(errorFromResponse(403, { error: "reauth_required" }))).toBeNull();
+  });
+
+  test("other 403 and panel 401 still navigate to /login", async () => {
+    expect((await call(403, { error: "forbidden" })).to).toEqual(["/login"]);
+    expect((await call(401, { error: "unauthorized" })).to).toEqual(["/login"]);
   });
 });

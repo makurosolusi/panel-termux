@@ -1,6 +1,6 @@
 import { CircleCheckIcon, InfoIcon, Loader2Icon, OctagonXIcon, TriangleAlertIcon } from "lucide-react";
 import { Toaster as Sonner, type ToasterProps } from "sonner";
-import { id } from "@/web/i18n/id";
+import { idShell } from "@/web/i18n/id.shell";
 import { useTheme } from "@/web/theme/theme.store";
 
 /** Phones: stack toasts above the bottom nav and the ActionBar (heights come from styles.css). */
@@ -19,9 +19,9 @@ const Toaster = ({ ...props }: ToasterProps) => {
       mobileOffset={MOBILE_OFFSET}
       visibleToasts={3}
       closeButton
-      containerAriaLabel={id.shell.toaster.region}
+      containerAriaLabel={idShell.toaster.region}
       toastOptions={{
-        closeButtonAriaLabel: id.shell.toaster.close,
+        closeButtonAriaLabel: idShell.toaster.close,
         classNames: {
           success: "[&_[data-icon]]:text-success",
           error: "[&_[data-icon]]:text-danger",

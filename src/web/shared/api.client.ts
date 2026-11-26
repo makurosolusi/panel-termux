@@ -1,5 +1,5 @@
 import type { ApiErrorBody } from "@/shared/dev.types";
-import { id } from "@/web/i18n/id";
+import { idCommon } from "@/web/i18n/id.common";
 import { LOGIN_PATH } from "@/web/session/session.redirect";
 import { reloadOnce } from "./chunk.error";
 
@@ -55,10 +55,18 @@ export function errorFromResponse(status: number, body: unknown): ApiError {
 }
 
 /**
+ * Server code of a 403 on sensitive actions when the session is older than 15 minutes: the user still has the role
+ * and must sign in again, so the page shows "Masuk ulang" instead of being sent to `/login`.
+ */
+export const REAUTH_REQUIRED = "reauth_required";
+
+/**
  * Where the browser must go after this error, or null. 401 and 403 both go to `/login`, which sends a signed-in
  * user on to `homeFor(role)` with the current role (DECISIONS B20); `/` is the public landing and would strand them.
+ * A 403 `reauth_required` stays on the page (see REAUTH_REQUIRED).
  */
 export function redirectFor(err: ApiError): string | null {
+  if (err.code === REAUTH_REQUIRED) return null;
   return err.kind === "unauthorized" || err.kind === "forbidden" ? LOGIN_PATH : null;
 }
 
@@ -77,11 +85,11 @@ export function failedResponse(status: number, body: unknown): ApiError {
 
 /** User-facing Indonesian message: known error code first, then server message for 4xx, then per kind. */
 export function apiErrorMessage(err: unknown, codes: ErrorCodes = {}): string {
-  if (!(err instanceof ApiError)) return id.common.errors.generic;
+  if (!(err instanceof ApiError)) return idCommon.errors.generic;
   const known = err.code ? codes[err.code] : undefined;
   if (known) return known;
-  if (err.kind === "client") return err.serverMessage ?? id.common.errors.generic;
-  return id.common.errors[err.kind];
+  if (err.kind === "client") return err.serverMessage ?? idCommon.errors.generic;
+  return idCommon.errors[err.kind];
 }
 
 /** Query value; empty strings, null and undefined are dropped. */
@@ -97,8 +105,8 @@ export function apiUrl(base: string, path: string, query: Record<string, QueryVa
 
 /**
  * Calls the API and returns the parsed JSON (undefined for 204). Throws ApiError; an aborted request
- * rethrows the AbortError untouched. 401/403 also navigate to `/login` (full load so the session and role are re-checked);
- * an Access 401 reloads the current URL (see `failedResponse`).
+ * rethrows the AbortError untouched. 401/403 (except 403 `reauth_required`) also navigate to `/login` (full load
+ * so the session and role are re-checked); an Access 401 reloads the current URL (see `failedResponse`).
  */
 export async function apiFetch<T>(
   method: "GET" | "POST" | "PATCH" | "PUT" | "DELETE",

@@ -5,7 +5,8 @@ import { homeFor } from "@/shared/roles";
 import { ShellPageContext } from "@/web/components/page-header";
 import { Toaster } from "@/web/components/ui/sonner";
 import { TooltipProvider } from "@/web/components/ui/tooltip";
-import { id } from "@/web/i18n/id";
+import { idShell } from "@/web/i18n/id.shell";
+import { NavBadgeProvider } from "@/web/panel/nav.badge.provider";
 import { useMe } from "@/web/session/use-me";
 import { AppSidebar } from "./app.sidebar";
 import { Breadcrumbs } from "./breadcrumbs";
@@ -63,8 +64,8 @@ function useRouteFocus(pathname: string, main: RefObject<HTMLElement | null>): s
 /**
  * Shell for signed-in pages: skip link, desktop sidebar (collapsible) + breadcrumb header, phone top bar + bottom
  * bar ("Lainnya" sheet; hidden on task routes and for roles with one destination), route focus, the tab title, and
- * the app's single Toaster + TooltipProvider (PLAN/01 §3.6; here rather than SessionGate to keep them off `/`).
- * `children` replaces the route outlet (signed-in 404 under the root splat route).
+ * the app's single Toaster + TooltipProvider + NavBadgeProvider (PLAN/01 §3.6; here rather than SessionGate to keep
+ * them off `/`). `children` replaces the route outlet (signed-in 404 under the root splat route).
  */
 export function AppLayout({ children }: { children?: ReactNode }) {
   const me = useMe();
@@ -82,7 +83,7 @@ export function AppLayout({ children }: { children?: ReactNode }) {
   const title = shell.title;
 
   useEffect(() => {
-    document.title = documentTitle(title ?? id.shell.notFound.title);
+    document.title = documentTitle(title ?? idShell.notFound.title);
   }, [title]);
 
   const toggle = () =>
@@ -94,56 +95,58 @@ export function AppLayout({ children }: { children?: ReactNode }) {
   return (
     <ShellPageContext.Provider value={shell.register}>
       <TaskModeContext.Provider value={changeTask}>
-        <TooltipProvider>
-          <a
-            href={`#${MAIN_ID}`}
-            className="sr-only z-50 rounded-md bg-brand px-3 py-2 text-sm font-medium text-brand-foreground focus:not-sr-only focus:fixed focus:top-2 focus:left-2"
-          >
-            {id.shell.skipToContent}
-          </a>
-          <div className="flex min-h-svh">
-            <AppSidebar
-              me={me}
-              groups={navGroupsFor(me.role)}
-              home={homeFor(me.role)}
-              collapsed={collapsed}
-              onToggle={toggle}
-            />
-            <div className="flex min-w-0 flex-1 flex-col">
-              <MobileTopBar title={title} back={shell.back} me={me} withMenu={mobile.primary.length === 0} />
-              <div className="sticky top-0 z-30 hidden h-14 items-center border-b bg-background/90 px-8 backdrop-blur md:flex">
-                <Breadcrumbs crumbs={breadcrumbsFor(pathname, title)} />
-              </div>
-              <div className="relative h-0">
-                {navigating && (
-                  <div
-                    role="progressbar"
-                    aria-label={id.shell.navigating}
-                    className="absolute inset-x-0 top-0 h-0.5 animate-in bg-foreground/40 fade-in fill-mode-backwards delay-150 duration-0"
-                  />
-                )}
-              </div>
-              <main
-                ref={mainRef}
-                id={MAIN_ID}
-                tabIndex={-1}
-                className={cn(
-                  "flex-1 px-4 py-6 outline-none md:px-8 md:py-8",
-                  bottomBar && "max-md:pb-[calc(var(--bottom-nav-h,0px)+env(safe-area-inset-bottom)+1.5rem)]",
-                )}
-              >
-                <div className={cn("mx-auto w-full", width === "narrow" ? "max-w-3xl" : "max-w-7xl")}>
-                  {children ?? <Outlet />}
+        <NavBadgeProvider>
+          <TooltipProvider>
+            <a
+              href={`#${MAIN_ID}`}
+              className="sr-only z-50 rounded-md bg-brand px-3 py-2 text-sm font-medium text-brand-foreground focus:not-sr-only focus:fixed focus:top-2 focus:left-2"
+            >
+              {idShell.skipToContent}
+            </a>
+            <div className="flex min-h-svh">
+              <AppSidebar
+                me={me}
+                groups={navGroupsFor(me.role)}
+                home={homeFor(me.role)}
+                collapsed={collapsed}
+                onToggle={toggle}
+              />
+              <div className="flex min-w-0 flex-1 flex-col">
+                <MobileTopBar title={title} back={shell.back} me={me} withMenu={mobile.primary.length === 0} />
+                <div className="sticky top-0 z-30 hidden h-14 items-center border-b bg-background/90 px-8 backdrop-blur md:flex">
+                  <Breadcrumbs crumbs={breadcrumbsFor(pathname, title)} />
                 </div>
-              </main>
-              <p aria-live="polite" className="sr-only">
-                {announcement}
-              </p>
+                <div className="relative h-0">
+                  {navigating && (
+                    <div
+                      role="progressbar"
+                      aria-label={idShell.navigating}
+                      className="absolute inset-x-0 top-0 h-0.5 animate-in bg-foreground/40 fade-in fill-mode-backwards delay-150 duration-0"
+                    />
+                  )}
+                </div>
+                <main
+                  ref={mainRef}
+                  id={MAIN_ID}
+                  tabIndex={-1}
+                  className={cn(
+                    "flex-1 px-4 py-6 outline-none md:px-8 md:py-8",
+                    bottomBar && "max-md:pb-[calc(var(--bottom-nav-h,0px)+env(safe-area-inset-bottom)+1.5rem)]",
+                  )}
+                >
+                  <div className={cn("mx-auto w-full", width === "narrow" ? "max-w-3xl" : "max-w-7xl")}>
+                    {children ?? <Outlet />}
+                  </div>
+                </main>
+                <p aria-live="polite" className="sr-only">
+                  {announcement}
+                </p>
+              </div>
             </div>
-          </div>
-          {bottomBar && <MobileNav primary={mobile.primary} more={mobile.more} me={me} />}
-          <Toaster />
-        </TooltipProvider>
+            {bottomBar && <MobileNav primary={mobile.primary} more={mobile.more} me={me} />}
+            <Toaster />
+          </TooltipProvider>
+        </NavBadgeProvider>
       </TaskModeContext.Provider>
     </ShellPageContext.Provider>
   );
