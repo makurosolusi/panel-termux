@@ -5,8 +5,8 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/web/components/ui/avatar"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/web/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/web/components/ui/table";
 import { id } from "@/web/i18n/id";
-import { ConfirmDelete } from "./confirm.dialog";
-import { formatDateTime } from "./dev.format";
+import { ConfirmDelete } from "@/web/shared/confirm.dialog";
+import { formatDateTime } from "@/web/shared/format";
 
 const t = id.dev.users;
 const ASSIGNABLE: readonly AssignableRole[] = ["user", "admin"];

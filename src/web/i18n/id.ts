@@ -1,5 +1,7 @@
 import type { Role } from "@/shared/roles";
+import { idCommon } from "./id.common";
 import { idDev } from "./id.dev";
+import { idPanel } from "./id.panel";
 
 /** All Indonesian UI strings of the SPA, grouped by screen. */
 export const id = {
@@ -25,7 +27,7 @@ export const id = {
   },
   menu: { account: "Menu akun", signOut: "Keluar", signOutFailed: "Gagal keluar. Silakan coba lagi." },
   profile: { title: "Profil", role: "Peran", email: "Email" },
-  panel: { title: "Panel", subtitle: "Kelola server dan aplikasi." },
+  common: idCommon,
+  panel: idPanel,
   dev: idDev,
-  empty: "Belum ada isi — fitur menyusul",
 } as const;

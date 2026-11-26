@@ -6,11 +6,16 @@ import { InvitesPage } from "@/web/dev/invites.page";
 import { LogsPage } from "@/web/dev/logs.page";
 import { SettingsPage } from "@/web/dev/settings.page";
 import { UsersPage } from "@/web/dev/users.page";
-import { id } from "@/web/i18n/id";
 import { AppLayout } from "@/web/layout/app.layout";
-import { EmptySectionPage } from "@/web/pages/empty-section.page";
 import { LoginPage } from "@/web/pages/login.page";
 import { ProfilePage } from "@/web/pages/profile.page";
+import { AppsPage } from "@/web/panel/apps.page";
+import { DatabasesPage } from "@/web/panel/databases.page";
+import { DomainsPage } from "@/web/panel/domains.page";
+import { LogPage } from "@/web/panel/log.page";
+import { OverviewPage } from "@/web/panel/overview.page";
+import { PanelLayout } from "@/web/panel/panel.layout";
+import { ServicesPage } from "@/web/panel/services.page";
 import { fetchMe } from "@/web/session/session.api";
 import { SessionError } from "@/web/session/session.error";
 import { SessionFallback } from "@/web/session/session.fallback";
@@ -36,7 +41,19 @@ export const router = createBrowserRouter([
         Component: AppLayout,
         children: [
           { path: "profile", Component: ProfilePage },
-          { path: "panel", element: <EmptySectionPage title={id.panel.title} subtitle={id.panel.subtitle} /> },
+          {
+            path: "panel",
+            Component: PanelLayout,
+            children: [
+              { index: true, Component: OverviewPage },
+              { path: "services", Component: ServicesPage },
+              { path: "services/:name/log", element: <LogPage kind="services" /> },
+              { path: "apps", Component: AppsPage },
+              { path: "apps/:name/log", element: <LogPage kind="apps" /> },
+              { path: "domains", Component: DomainsPage },
+              { path: "databases", Component: DatabasesPage },
+            ],
+          },
           {
             path: "dev",
             Component: DevLayout,

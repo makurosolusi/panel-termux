@@ -1,6 +1,6 @@
+import { cn } from "cn";
 import { Avatar as AvatarPrimitive } from "radix-ui";
 import type * as React from "react";
-import { cn } from "@/web/lib/cn";
 
 function Avatar({
   className,

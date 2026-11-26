@@ -4,15 +4,14 @@ import type { DevInvite, Page } from "@/shared/dev.types";
 import { Badge } from "@/web/components/ui/badge";
 import { Card, CardContent } from "@/web/components/ui/card";
 import { id } from "@/web/i18n/id";
-import { ConfirmDelete } from "./confirm.dialog";
-import { runDevAction } from "./dev.action";
-import { devFetch, devUrl } from "./dev.api";
-import { formatDateTime } from "./dev.format";
+import { ConfirmDelete } from "@/web/shared/confirm.dialog";
+import { formatDateTime } from "@/web/shared/format";
+import { QueryView } from "@/web/shared/query.state";
+import { useApiQuery } from "@/web/shared/use-api-query";
+import { devFetch, devUrl, runDevAction } from "./dev.api";
 import { DEV_PAGE_SIZE, parsePageParam } from "./dev.pagination";
 import { InviteForm } from "./invite.form";
 import { Pager } from "./pager";
-import { QueryView } from "./query.state";
-import { useDevQuery } from "./use-dev-query";
 
 const t = id.dev.invites;
 
@@ -48,7 +47,7 @@ function InviteRow({ inv, busy, onDelete }: { inv: DevInvite; busy: boolean; onD
 export function InvitesPage() {
   const [params] = useSearchParams();
   const page = parsePageParam(params.get("page"));
-  const query = useDevQuery<Page<DevInvite>>(devUrl("/invites", { page, pageSize: DEV_PAGE_SIZE }));
+  const query = useApiQuery<Page<DevInvite>>(devUrl("/invites", { page, pageSize: DEV_PAGE_SIZE }));
   const [busy, setBusy] = useState<string | null>(null);
 
   const remove = async (email: string) => {
@@ -65,7 +64,7 @@ export function InvitesPage() {
           <InviteForm onAdded={query.reload} />
         </CardContent>
       </Card>
-      <QueryView query={query} isEmpty={(d) => d.items.length === 0}>
+      <QueryView query={query} codes={id.dev.errorCodes} isEmpty={(d) => d.items.length === 0}>
         {(d) => (
           <>
             <ul className="divide-y">

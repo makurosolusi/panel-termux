@@ -2,13 +2,13 @@ import { useSearchParams } from "react-router";
 import type { DevAuditEntry, Page } from "@/shared/dev.types";
 import { Badge } from "@/web/components/ui/badge";
 import { id } from "@/web/i18n/id";
+import { formatDateTime } from "@/web/shared/format";
+import { QueryView } from "@/web/shared/query.state";
+import { useApiQuery } from "@/web/shared/use-api-query";
 import { devUrl } from "./dev.api";
-import { formatDateTime } from "./dev.format";
 import { DEV_PAGE_SIZE, parsePageParam, withFilter } from "./dev.pagination";
 import { Pager } from "./pager";
-import { QueryView } from "./query.state";
 import { SearchBox } from "./search.box";
-import { useDevQuery } from "./use-dev-query";
 
 const t = id.dev.audit;
 
@@ -49,7 +49,7 @@ export function AuditPage() {
   const [params, setParams] = useSearchParams();
   const action = params.get("action") ?? "";
   const page = parsePageParam(params.get("page"));
-  const query = useDevQuery<Page<DevAuditEntry>>(devUrl("/audit", { page, pageSize: DEV_PAGE_SIZE, action }));
+  const query = useApiQuery<Page<DevAuditEntry>>(devUrl("/audit", { page, pageSize: DEV_PAGE_SIZE, action }));
   return (
     <section className="flex flex-col gap-4">
       <SearchBox
@@ -64,7 +64,7 @@ export function AuditPage() {
           <option key={a} value={a} />
         ))}
       </datalist>
-      <QueryView query={query} isEmpty={(d) => d.items.length === 0}>
+      <QueryView query={query} codes={id.dev.errorCodes} isEmpty={(d) => d.items.length === 0}>
         {(d) => (
           <>
             <ul className="divide-y">

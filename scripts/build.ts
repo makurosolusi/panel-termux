@@ -4,7 +4,7 @@ import tailwind from "bun-plugin-tailwind";
 
 const [target, outfile] = process.argv.slice(2);
 if (!target || !outfile) {
-  console.error("usage: bun scripts/build.ts <bun-linux-arm64|local> <outfile>");
+  console.error("usage: bun scripts/build.ts <bun-linux-arm64-android|local> <outfile>");
   process.exit(2);
 }
 

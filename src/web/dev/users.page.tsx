@@ -3,13 +3,12 @@ import { useSearchParams } from "react-router";
 import type { AssignableRole, DevUser, DevUserPatch, Page } from "@/shared/dev.types";
 import { id } from "@/web/i18n/id";
 import { useMe } from "@/web/session/use-me";
-import { runDevAction } from "./dev.action";
-import { devFetch, devUrl } from "./dev.api";
+import { QueryView } from "@/web/shared/query.state";
+import { useApiQuery } from "@/web/shared/use-api-query";
+import { devFetch, devUrl, runDevAction } from "./dev.api";
 import { DEV_PAGE_SIZE, parsePageParam, withFilter } from "./dev.pagination";
 import { Pager } from "./pager";
-import { QueryView } from "./query.state";
 import { SearchBox } from "./search.box";
-import { useDevQuery } from "./use-dev-query";
 import { UsersList } from "./users.list";
 
 const t = id.dev.users;
@@ -20,7 +19,7 @@ export function UsersPage() {
   const [params, setParams] = useSearchParams();
   const q = params.get("q") ?? "";
   const page = parsePageParam(params.get("page"));
-  const query = useDevQuery<Page<DevUser>>(devUrl("/users", { page, pageSize: DEV_PAGE_SIZE, q }));
+  const query = useApiQuery<Page<DevUser>>(devUrl("/users", { page, pageSize: DEV_PAGE_SIZE, q }));
   const [busyId, setBusyId] = useState<string | null>(null);
 
   const mutate = async (userId: string, mutation: () => Promise<unknown>, success: string) => {
@@ -51,7 +50,7 @@ export function UsersPage() {
         label={t.searchPlaceholder}
         onSearch={(next) => setParams(withFilter(params, "q", next))}
       />
-      <QueryView query={query} isEmpty={(d) => d.items.length === 0}>
+      <QueryView query={query} codes={id.dev.errorCodes} isEmpty={(d) => d.items.length === 0}>
         {(d) => (
           <>
             <UsersList items={d.items} actions={actions} />

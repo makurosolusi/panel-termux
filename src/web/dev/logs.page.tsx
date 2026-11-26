@@ -1,15 +1,15 @@
+import { cn } from "cn";
 import { useState } from "react";
 import { type DevLogs, LOG_LEVELS, type LogLevel } from "@/shared/dev.types";
 import { Label } from "@/web/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/web/components/ui/select";
 import { Switch } from "@/web/components/ui/switch";
 import { id } from "@/web/i18n/id";
-import { cn } from "@/web/lib/cn";
+import { formatDateTime } from "@/web/shared/format";
+import { QueryView } from "@/web/shared/query.state";
+import { useApiQuery } from "@/web/shared/use-api-query";
 import { devUrl } from "./dev.api";
-import { formatDateTime } from "./dev.format";
-import { QueryView } from "./query.state";
 import { SearchBox } from "./search.box";
-import { useDevQuery } from "./use-dev-query";
 
 const LOGS_REFRESH_MS = 5_000;
 const t = id.dev.logs;
@@ -26,7 +26,7 @@ export function LogsPage() {
   const [level, setLevel] = useState<LogLevel>("info");
   const [q, setQ] = useState("");
   const [auto, setAuto] = useState(true);
-  const query = useDevQuery<DevLogs>(devUrl("/logs", { level, q }), auto ? LOGS_REFRESH_MS : undefined);
+  const query = useApiQuery<DevLogs>(devUrl("/logs", { level, q }), auto ? LOGS_REFRESH_MS : undefined);
 
   return (
     <section className="flex flex-col gap-4">
@@ -51,7 +51,7 @@ export function LogsPage() {
           </Label>
         </div>
       </div>
-      <QueryView query={query} isEmpty={(d) => d.items.length === 0}>
+      <QueryView query={query} codes={id.dev.errorCodes} isEmpty={(d) => d.items.length === 0}>
         {(d) => (
           <ol className="max-h-[70svh] overflow-auto rounded-lg border bg-muted/40 p-2 font-mono text-xs">
             {d.items.map((e, i) => (

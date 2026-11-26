@@ -1,6 +1,6 @@
+import { cn } from "cn";
 import { NavLink, Outlet } from "react-router";
 import { id } from "@/web/i18n/id";
-import { cn } from "@/web/lib/cn";
 import { useMe } from "@/web/session/use-me";
 import { navItemsFor } from "./nav.items";
 import { UserMenu } from "./user.menu";

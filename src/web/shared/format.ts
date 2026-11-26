@@ -44,3 +44,7 @@ export function formatDateTime(iso: string | null, seconds = false): string {
   if (Number.isNaN(d.getTime())) return "–";
   return d.toLocaleString("id-ID", { dateStyle: "medium", timeStyle: seconds ? "medium" : "short" });
 }
+
+/** Load averages with Indonesian decimals, e.g. [0.5, 1, 1.25] → "0,50 · 1,00 · 1,25". */
+export const formatLoad = (load: readonly number[]): string =>
+  load.map((n) => n.toLocaleString("id-ID", { minimumFractionDigits: 2, maximumFractionDigits: 2 })).join(" · ");

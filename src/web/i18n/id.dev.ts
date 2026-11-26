@@ -14,11 +14,8 @@ export const idDev = {
     settings: "Pengaturan",
   },
   common: {
-    retry: "Coba lagi",
-    cancel: "Batal",
     delete: "Hapus",
     search: "Cari",
-    empty: "Belum ada data.",
     prev: "Sebelumnya",
     next: "Berikutnya",
     pageOf: (page: number, pages: number, total: number) => `Halaman ${page} dari ${pages} · ${total} data`,
@@ -26,19 +23,12 @@ export const idDev = {
     system: "Sistem",
     deletedUser: "Pengguna terhapus",
   },
-  errors: {
-    network: "Tidak bisa terhubung ke server. Periksa koneksi lalu coba lagi.",
-    unauthorized: "Sesi berakhir. Mengalihkan ke halaman masuk…",
-    forbidden: "Kamu tidak punya akses ke halaman ini.",
-    server: "Server mengalami gangguan. Coba lagi nanti.",
-    generic: "Permintaan gagal.",
-    codes: {
-      invalid_email: "Format email tidak valid.",
-      exists: "Email ini sudah diundang.",
-      protected: "Akun ini dilindungi dan tidak bisa diubah.",
-      not_found: "Data tidak ditemukan (mungkin sudah dihapus).",
-    } as Record<string, string>,
-  },
+  errorCodes: {
+    invalid_email: "Format email tidak valid.",
+    exists: "Email ini sudah diundang.",
+    protected: "Akun ini dilindungi dan tidak bisa diubah.",
+    not_found: "Data tidak ditemukan (mungkin sudah dihapus).",
+  } as Record<string, string>,
   health: {
     refreshing: "Diperbarui otomatis tiap 15 detik",
     version: "Versi",

@@ -6,9 +6,8 @@ import { Button } from "@/web/components/ui/button";
 import { Input } from "@/web/components/ui/input";
 import { Label } from "@/web/components/ui/label";
 import { id } from "@/web/i18n/id";
-import { runDevAction } from "./dev.action";
-import { devFetch, devUrl } from "./dev.api";
-import { formatDateTime } from "./dev.format";
+import { formatDateTime } from "@/web/shared/format";
+import { devFetch, devUrl, runDevAction } from "./dev.api";
 import { canReset, initialDraft, RESET_BODY, saveBody, settingStatus } from "./settings.state";
 
 const t = id.dev.settings;
