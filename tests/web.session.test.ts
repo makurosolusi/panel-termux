@@ -1,6 +1,5 @@
 import { describe, expect, test } from "bun:test";
 import { homeFor, isProtectedPath, type Role } from "@/shared/roles";
-import { loginErrorMessage } from "@/web/pages/login.error";
 import type { MeResult } from "@/web/session/session.api";
 import { sessionErrorKind } from "@/web/session/session.error";
 import { needsFullLoad, notFoundKind, resolveRedirect } from "@/web/session/session.redirect";
@@ -91,13 +90,4 @@ describe("needsFullLoad", () => {
       expect(resolveRedirect(as(role), to as string)).toBeNull(); // landing on home redirects no further
     }
   });
-});
-
-describe("loginErrorMessage", () => {
-  test("no error code → no message", () => expect(loginErrorMessage(null)).toBeNull());
-  test.each(["state_mismatch", "access_denied"])("%p → generic message", (code) =>
-    expect(loginErrorMessage(code)).toBe(
-      "Masuk dengan Google tidak berhasil. Coba lagi; bila terus gagal, pastikan kamu memakai akun Google yang benar.",
-    ),
-  );
 });

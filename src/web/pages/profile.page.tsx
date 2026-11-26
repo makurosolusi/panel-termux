@@ -1,45 +1,73 @@
 import { LogOutIcon } from "lucide-react";
 import { useSignOut } from "@/web/auth/use-sign-out";
+import { KeyValue } from "@/web/components/key-value";
 import { PageHeader } from "@/web/components/page-header";
 import { RoleBadge } from "@/web/components/role-badge";
+import { Section } from "@/web/components/section";
 import { Button } from "@/web/components/ui/button";
-import { Card, CardContent } from "@/web/components/ui/card";
 import { UserAvatar } from "@/web/components/user-avatar";
-import { id } from "@/web/i18n/id";
+import { idAccount } from "@/web/i18n/id.account";
+import type { Me } from "@/web/session/session.api";
 import { useMe } from "@/web/session/use-me";
+import { canSelfDelete, ProfileDelete } from "./profile.delete";
+import { needsAccess, ProfileNoAccess } from "./profile.no-access";
+import { ProfileSessions } from "./profile.sessions";
+import { ProfileTheme } from "./profile.theme";
 
-/** /profile: identity of the signed-in account and sign-out. */
+const t = idAccount.profile;
+
+/** /profile: [no-access card for `user`] → account → sessions → theme → [self-delete for `user`] (PLAN/05 §5.6, F8). */
 export function ProfilePage() {
   const me = useMe();
-  const { signOut, pending, error } = useSignOut();
   return (
     <>
-      <PageHeader title={id.profile.title} />
-      <Card className="max-w-md">
-        <CardContent className="flex flex-col items-center gap-4 text-center">
-          <UserAvatar me={me} className="size-20 text-xl" />
-          <div className="min-w-0 max-w-full">
-            <p className="truncate text-lg font-medium">{me.name}</p>
-            <p className="truncate text-sm text-muted-foreground">
-              <span className="sr-only">{id.profile.email}: </span>
-              {me.email}
-            </p>
+      <PageHeader title={t.title} />
+      <div className="flex flex-col gap-8">
+        {needsAccess(me.role) && <ProfileNoAccess email={me.email} />}
+        <AccountCard me={me} />
+        <ProfileSessions />
+        <ProfileTheme />
+        {canSelfDelete(me.role) && <ProfileDelete email={me.email} />}
+      </div>
+    </>
+  );
+}
+
+/** Join date as "26 November 2026" (local calendar). */
+const memberSince = (iso: string): string => new Date(iso).toLocaleDateString("id-ID", { dateStyle: "long" });
+
+function AccountCard({ me }: { me: Me }) {
+  const { signOut, pending, error } = useSignOut();
+  // GET /api/me sends createdAt; the web `Me` type (session.api.ts) does not declare it yet
+  const createdAt = (me as Me & { createdAt?: string }).createdAt;
+  return (
+    <Section title={t.account}>
+      <div className="flex flex-col gap-4 rounded-lg border bg-card p-4 sm:flex-row sm:items-start sm:p-5">
+        <UserAvatar me={me} className="size-14 text-lg" />
+        <div className="flex min-w-0 flex-1 flex-col gap-3">
+          <div className="min-w-0">
+            <p className="truncate text-base font-semibold">{me.name}</p>
+            <p className="truncate text-sm text-muted-foreground">{me.email}</p>
           </div>
-          <div className="flex items-center gap-2 text-sm">
-            <span className="text-muted-foreground">{id.profile.role}</span>
-            <RoleBadge role={me.role} />
-          </div>
-          <Button variant="outline" className="w-full" disabled={pending} onClick={() => void signOut()}>
-            <LogOutIcon />
-            {id.menu.signOut}
-          </Button>
+          <KeyValue
+            items={[
+              { label: t.role, value: <RoleBadge role={me.role} /> },
+              ...(createdAt
+                ? [{ label: t.memberSince, value: <time dateTime={createdAt}>{memberSince(createdAt)}</time> }]
+                : []),
+            ]}
+          />
           {error && (
-            <p role="alert" className="text-sm text-destructive">
+            <p role="alert" className="text-sm text-danger">
               {error}
             </p>
           )}
-        </CardContent>
-      </Card>
-    </>
+        </div>
+        <Button variant="outline" className="shrink-0" disabled={pending} onClick={() => void signOut()}>
+          <LogOutIcon aria-hidden />
+          {t.signOut}
+        </Button>
+      </div>
+    </Section>
   );
 }
