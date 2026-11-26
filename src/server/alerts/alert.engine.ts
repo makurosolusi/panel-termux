@@ -4,7 +4,7 @@ import type { AlertErrorCode, AlertStatus, Problem, ProblemSeverity } from "../.
 import type { problemEvent } from "../db/schema/monitor.schema";
 import { log } from "../log.service";
 import type { ProblemResult } from "../monitor/monitor.contract";
-import { alertDelayMs, severityRank } from "../panel/overview.problems";
+import { alertDelayMs, severityRank } from "../panel/overview.rules";
 import { buildDigest, type DigestItem, OVERFLOW_TEXT } from "./alert.messages";
 import { TelegramError } from "./telegram.client";
 

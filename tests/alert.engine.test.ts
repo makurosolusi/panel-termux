@@ -7,7 +7,8 @@ import {
   type EventRow,
 } from "@/server/alerts/alert.engine";
 import { TelegramError } from "@/server/alerts/telegram.client";
-import { alertDelayMs, bootNotices, problem } from "@/server/panel/overview.problems";
+import { bootNotices } from "@/server/monitor/monitor.state";
+import { alertDelayMs, problem } from "@/server/panel/overview.rules";
 import type { Problem, ProblemKind } from "@/shared/monitor.types";
 
 const T0 = Date.parse("2026-11-26T00:00:00Z"); // test-only fixed clock

@@ -161,30 +161,6 @@ describe("coded steps", () => {
     await jobs.idle();
     expect(jobs.get(id2).error).toEqual({ code: "unexpected", params: {}, detail: "boom" });
   });
-
-  test("0.2.x step defs keep label/message and '<label>: <msg>' detail (until W2 moves them)", async () => {
-    const jobs = createJobRunner(freshDb());
-    const id = jobs.start(
-      spec({
-        steps: [
-          {
-            key: "restart",
-            label: "Restart app",
-            run: throws(new Error("pm2 said no")),
-          },
-        ],
-      }),
-    );
-    await jobs.idle();
-    const j = jobs.get(id);
-    expect(j.error).toEqual({ code: "unexpected", params: {}, detail: "Restart app: pm2 said no" });
-    expect(j.steps[0]).toMatchObject({
-      key: "restart",
-      label: "Restart app",
-      message: "pm2 said no",
-      code: "unexpected",
-    });
-  });
 });
 
 describe("lock", () => {
@@ -209,7 +185,7 @@ describe("lock", () => {
     expect(jobs.isLocked({ kind: "service", name: "pm2" })).toBe(false);
   });
 
-  test("monitor is told about app_restart (incl. undo and legacy 'restart') and tunnel_restart", async () => {
+  test("monitor is told about app_restart (incl. undo) and tunnel_restart", async () => {
     const notes: string[] = [];
     const monitor = {
       noteIntentionalRestart: (r: { kind: string; name: string }) => void notes.push(`${r.kind}:${r.name}`),
@@ -220,7 +196,6 @@ describe("lock", () => {
         kind: "site.deploy",
         steps: [
           { key: "app_restart", run: async () => ({ code: "app_restarted" }), undo: async () => {} },
-          { key: "restart", label: "Restart app", run: async () => "ok" },
           {
             key: "health",
             run: throws(new StepError("app_no_pid")),
@@ -236,8 +211,8 @@ describe("lock", () => {
       }),
     );
     await jobs.idle();
-    // run, run (legacy key), undo of the first (the legacy one has no undo), then the tunnel
-    expect(notes).toEqual(["app:blog-app", "app:blog-app", "app:blog-app", "service:cloudflared"]);
+    // run, undo of the restart, then the tunnel
+    expect(notes).toEqual(["app:blog-app", "app:blog-app", "service:cloudflared"]);
   });
 });
 

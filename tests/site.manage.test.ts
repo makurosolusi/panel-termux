@@ -34,7 +34,7 @@ beforeAll(async () => {
   writeFileSync(join(solusiDir, "app"), fakeElf({ interp: GLIBC_LINKER }));
   writeFileSync(join(solusiDir, ".env"), "PORT=3005\nOLD_SECRET=keepme123\n");
   await json(
-    await call("POST", "/sites/adopt", { hostname: "solusi.example.test", app: "makuro-solusi", name: "solusi" }),
+    await call("POST", "/sites/adopt", { hostname: "solusi.contoh.test", app: "makuro-solusi", name: "solusi" }),
     201,
   );
 });
@@ -176,7 +176,7 @@ describe("restart, settings, health", () => {
     } finally {
       Object.assign(system.net, realNet);
     }
-    expect(seen).toEqual([[3005, "/api/health", 5000, "solusi.example.test"]]);
+    expect(seen).toEqual([[3005, "/api/health", 5000, "solusi.contoh.test"]]);
   });
 });
 
@@ -205,17 +205,29 @@ describe("hostnames", () => {
     expect(codes(j)).toEqual(["ingress:ingress_removed", "tunnel_restart:tunnel_restarted", "dns:dns_deleted"]);
     expect(read(cfg)).not.toContain("c.shop.example.test");
     expect(fakeDns.records.has("c.shop.example.test")).toBe(false);
-    expect(await json(await call("DELETE", "/sites/solusi/hostnames/solusi.example.test"), 409)).toMatchObject({
+    expect(await json(await call("DELETE", "/sites/solusi/hostnames/solusi.contoh.test"), 409)).toMatchObject({
       error: "hand_written",
     });
     expect((await startJob("DELETE", "/sites/solusi/hostnames/two.example.test")).status).toBe("succeeded");
-    expect(await json(await call("DELETE", "/sites/solusi/hostnames/solusi.example.test"), 400)).toMatchObject({
+    expect(await json(await call("DELETE", "/sites/solusi/hostnames/solusi.contoh.test"), 400)).toMatchObject({
       error: "last_hostname",
     });
   });
 });
 
 describe("delete", () => {
+  test("dropping a site database while a backup runs → 409 busy_backup; keeping it is allowed through", async () => {
+    const backup = h.api.decorator.backup;
+    const realBusy = backup.busy;
+    backup.busy = () => true;
+    try {
+      expect(await json(await call("DELETE", "/sites/shop?confirm=shop"), 409)).toMatchObject({ error: "busy_backup" });
+      expect(h.db.select().from(job).where(eq(job.kind, "site.delete")).all()).toEqual([]);
+    } finally {
+      backup.busy = realBusy;
+    }
+  });
+
   test("managed: typed confirm; apps.json entry first; DNS failure non-fatal → dns_left", async () => {
     expect(await json(await call("DELETE", "/sites/shop"), 400)).toMatchObject({ error: "confirm_mismatch" });
     writeFileSync(appsJson, JSON.stringify([{ name: "keep" }, { name: "shop", script: "./run" }]));
@@ -223,6 +235,14 @@ describe("delete", () => {
     fakeDns.deleteManaged = async () => {
       throw new Error("cloudflare delete record: HTTP 502");
     };
+    const sites = h.api.decorator.sites;
+    const realIntegration = sites.getIntegration;
+    sites.getIntegration = async () => ({ ...(await realIntegration()), checks: [] }); // let the upload start
+    const upload = await json<{ uploadId: string }>(
+      await call("POST", "/sites/shop/uploads", { sizeBytes: 10, fileName: "app" }),
+      201,
+    );
+    sites.getIntegration = realIntegration;
     let j: Job;
     try {
       j = await startJob("DELETE", "/sites/shop?keepData=1&confirm=shop");
@@ -246,13 +266,17 @@ describe("delete", () => {
     expect(existsSync(join(home, "sites", "shop"))).toBe(true); // keepData
     expect(await dbs()).not.toContain("shop");
     expect(read(cfg)).not.toContain("shop.example.test");
+    // onSiteDeleted: the site's pending upload went with it.
+    expect(await json(await call("GET", `/uploads/${upload.uploadId}`), 404)).toMatchObject({
+      error: "upload_expired",
+    });
   });
 
   test("adopted: no typed confirm; hand-written rule, pm2 app and folder untouched", async () => {
     const j = await startJob("DELETE", "/sites/solusi");
     expect(j.status).toBe("succeeded");
     expect(stepStatus(j)).toMatchObject({ apps_remove: "skipped", app_remove: "skipped", folder_remove: "skipped" });
-    expect(read(cfg)).toContain("solusi.example.test");
+    expect(read(cfg)).toContain("solusi.contoh.test");
     expect(existsSync(join(solusiDir, "app"))).toBe(true);
     expect((await system.pm2.list()).some((a) => a.name === "makuro-solusi")).toBe(true);
   });

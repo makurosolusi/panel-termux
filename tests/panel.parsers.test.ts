@@ -211,7 +211,7 @@ describe("device parsers", () => {
       charging: false,
       status: "not_charging",
       plugged: "usb",
-      temperatureC: 0, // missing temperature: 0 until the shared type allows null (W7)
+      temperatureC: null,
       health: null,
     });
     expect(parseBattery('{"percentage":40,"status":"WEIRD","plugged":"PLUGGED_DOCK"}')).toMatchObject({

@@ -6,7 +6,7 @@ import { createAlertEngine, type NewEventRow } from "@/server/alerts/alert.engin
 import { type Db, openDb } from "@/server/db/client";
 import { runMigrations } from "@/server/db/migrate";
 import * as h from "@/server/monitor/monitor.history";
-import { problem } from "@/server/panel/overview.problems";
+import { problem } from "@/server/panel/overview.rules";
 
 const root = mkdtempSync(join(tmpdir(), "panel-monitor-history-"));
 afterAll(() => rmSync(root, { recursive: true, force: true }));

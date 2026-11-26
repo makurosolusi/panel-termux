@@ -70,16 +70,13 @@ export function unreadableSecretSettings({ db, secret }: SettingsDeps): SettingK
 
 /**
  * Public view of one setting; secret values are never included. `readable` comes from the caller (listSettings
- * computes it once per request). `label`/`description` are 0.2.x compatibility fields until DevSetting drops them
- * in W7 (B8: labels live only in the web), so they carry the key and nothing else.
+ * computes it once per request). Labels live only in the web (B8).
  */
 export function describeSetting(db: Db, key: SettingKey, readable = true): DevSetting {
   const def = defOf(key);
   const row = rowOf(db, key);
   return {
     key,
-    label: key,
-    description: "",
     secret: def.secret,
     value: def.secret ? null : (row?.value ?? def.default),
     default: def.default,

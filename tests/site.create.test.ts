@@ -55,7 +55,7 @@ describe("check + suggest-port", () => {
     const r = await check({ name: "Bad_Name", hostname: "nope", port: 80 });
     expect(issues(r)).toEqual(["name:name_invalid", "hostname:hostname_invalid", "port:port_out_of_range"]);
     expect(r.issues[2]).toMatchObject({ params: { from: 3001, to: 3999 }, message: expect.any(String) });
-    expect(issues(await check({ name: "adminneo", hostname: "solusi.example.test", port: 3005 }))).toEqual([
+    expect(issues(await check({ name: "adminneo", hostname: "solusi.contoh.test", port: 3005 }))).toEqual([
       "name:name_taken",
       "hostname:hostname_in_use",
       "port:port_in_use",

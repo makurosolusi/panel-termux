@@ -1,7 +1,7 @@
 // Domain list of GET /panel/domains and the overview: ingress rules + pm2 apps + the sampler's stored checks.
 import type { Domain } from "../../shared/panel.types";
+import { isProbeFailure } from "../monitor/monitor.state";
 import type { IngressRule, Pm2Proc } from "../system/system.types";
-import { isProbeFailure } from "./overview.problems";
 
 /** Checks shown per domain in the heartbeat strip (PLAN/02 §3.2 `recent`). */
 export const RECENT_CHECKS = 30;

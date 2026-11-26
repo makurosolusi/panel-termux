@@ -54,6 +54,9 @@ export type BackupItem = {
   restoreHint: string;
 };
 
+/** Why a whole run failed; `interrupted` = cut off by a panel restart ("Terputus", not a failure). */
+export type BackupRunErrorCode = "interrupted";
+
 /** Item of GET /api/panel/backups (paged). */
 export type BackupRun = {
   id: string;
@@ -63,6 +66,8 @@ export type BackupRun = {
   finishedAt: string | null;
   items: BackupItem[];
   error: string | null;
+  /** Coded reason next to `error`; null for other failures (read `error`). */
+  errorCode: BackupRunErrorCode | null;
   /** 0.3.0 */
   includesSecrets?: boolean;
   /** 0.3.0 */
@@ -80,6 +85,8 @@ export type BackupLastGood = {
   at: string;
   sizeBytes: number | null;
   checked: boolean | null;
+  /** Same as the item's BackupItem.restoreHint. */
+  restoreHint: string;
 };
 
 /** Plain-words reason something is never backed up. */
@@ -193,7 +200,8 @@ export type BackupRestore = {
   targetDb: string;
   status: BackupRestoreStatus;
   error: string | null;
-  errorCode: "checksum_mismatch" | "insufficient_space" | "download_failed" | "restore_failed" | null;
+  /** `interrupted` = cut off by a panel restart. */
+  errorCode: "checksum_mismatch" | "insufficient_space" | "download_failed" | "restore_failed" | "interrupted" | null;
   tableCount: number | null;
   startedAt: string;
   finishedAt: string | null;

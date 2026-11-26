@@ -2,11 +2,13 @@ import { afterAll, beforeAll, beforeEach, describe, expect, test } from "bun:tes
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { eq } from "drizzle-orm";
+import { requestUserIds } from "@/server/auth/role.guard";
 import { createCloudflareDevRoutes } from "@/server/cloudflare/cloudflare.routes";
 import { createDnsProvider, createFakeDnsProvider } from "@/server/cloudflare/dns.provider";
 import { type Db, openDb } from "@/server/db/client";
 import { runMigrations } from "@/server/db/migrate";
-import { user } from "@/server/db/schema";
+import { auditLog, user } from "@/server/db/schema";
 import { readLogs } from "@/server/log.service";
 import { setSetting } from "@/server/settings.service";
 import type { CloudflareVerify } from "@/shared/dev.types";
@@ -62,13 +64,17 @@ let db: Db;
 let dns: ReturnType<typeof createDnsProvider>;
 const deps = () => ({ baseUrl: `${server.url.origin}/client/v4`, retryDelayMs: 5, timeoutMs: 100 });
 const save = (v: string | null) => setSetting({ db, secret: SECRET }, "cloudflare.api_token", v, "u1");
-const post = async (body?: unknown, provider: Parameters<typeof createCloudflareDevRoutes>[0]["dns"] = dns) => {
-  const res = await createCloudflareDevRoutes({ dns: provider }).handle(
-    new Request("http://localhost/cloudflare/verify", {
-      method: "POST",
-      ...(body === undefined ? {} : { body: typeof body === "string" ? body : JSON.stringify(body) }),
-    }),
-  );
+const post = async (
+  body?: unknown,
+  provider: Parameters<typeof createCloudflareDevRoutes>[0]["dns"] = dns,
+  actorId?: string,
+) => {
+  const req = new Request("http://localhost/cloudflare/verify", {
+    method: "POST",
+    ...(body === undefined ? {} : { body: typeof body === "string" ? body : JSON.stringify(body) }),
+  });
+  if (actorId) requestUserIds.set(req.headers, actorId); // what the /dev role guard does for a signed-in user
+  const res = await createCloudflareDevRoutes({ dns: provider, db }).handle(req);
   const text = await res.text();
   return { status: res.status, text, json: JSON.parse(text) as CloudflareVerify & { error?: string } };
 };
@@ -144,6 +150,28 @@ describe("transport", () => {
     expect(r.json).toMatchObject({ ok: false, code: "api_error" });
     expect(r.json.detail).toContain("verify token");
     expect(r.text).not.toContain(SLOW);
+  });
+});
+
+describe("audit", () => {
+  const rows = () => db.select().from(auditLog).where(eq(auditLog.action, "cloudflare.verify")).all();
+  test("every test that ran → cloudflare.verify with { ok, code } and the actor; never the token", async () => {
+    const before = rows().length;
+    save(TOKEN);
+    await post(undefined, dns, "u1");
+    await post({ token: DRAFT }, dns, "u1");
+    const added = rows().slice(before);
+    expect(added.map((r) => [r.actorId, r.meta])).toEqual([
+      ["u1", { ok: true, code: "ok" }],
+      ["u1", { ok: true, code: "ok" }],
+    ]);
+    expect(JSON.stringify(added)).not.toContain(DRAFT);
+    expect(JSON.stringify(added)).not.toContain(TOKEN);
+  });
+  test("refused body (400) is not audited", async () => {
+    const before = rows().length;
+    expect((await post({ token: "short" }, dns, "u1")).status).toBe(400);
+    expect(rows()).toHaveLength(before);
   });
 });
 

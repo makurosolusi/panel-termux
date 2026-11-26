@@ -26,8 +26,8 @@ export type ShutdownDeps = {
   /** Resolve when background work (site jobs, backup run) is finished. */
   idle: (() => Promise<unknown>)[];
   closeDb: () => void;
-  /** Panel data dir for the clean-shutdown marker. Optional only until boot.ts passes it (wkr-boot-03, W3). */
-  dataDir?: string;
+  /** Panel data dir for the clean-shutdown marker. */
+  dataDir: string;
   exit?: (code: number) => void;
   timeoutMs?: number;
 };
@@ -70,12 +70,10 @@ export function createShutdown({
     }
     // The stop was asked for (signal), so it is not "unexpected" even after the timeout: a cut-off job shows up
     // on its own as interrupted.
-    if (dataDir) {
-      try {
-        writeFileSync(join(dataDir, CLEAN_SHUTDOWN_MARKER), `${new Date().toISOString()} ${signal}\n`);
-      } catch (e) {
-        log.error(`[panel] writing the clean-shutdown marker failed: ${(e as Error).message}`);
-      }
+    try {
+      writeFileSync(join(dataDir, CLEAN_SHUTDOWN_MARKER), `${new Date().toISOString()} ${signal}\n`);
+    } catch (e) {
+      log.error(`[panel] writing the clean-shutdown marker failed: ${(e as Error).message}`);
     }
     log.info("[panel] stopped");
     exit(0);

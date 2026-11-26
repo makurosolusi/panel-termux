@@ -1,5 +1,8 @@
 import { Elysia } from "elysia";
 import type { CloudflareVerify } from "../../shared/dev.types";
+import { recordAudit } from "../audit.service";
+import { requestUserIds } from "../auth/role.guard";
+import type { Db } from "../db/client";
 import { SETTINGS } from "../settings.registry";
 import type { CloudflareVerifier } from "./dns.provider";
 import type { DnsProvider } from "./dns.types";
@@ -15,9 +18,10 @@ async function plainVerify(dns: DnsProvider): Promise<CloudflareVerify> {
 
 /**
  * /cloudflare/* endpoints for /dev (mount under the super_admin guard). POST /cloudflare/verify takes an optional
- * JSON body `{ token }` to test a draft token before saving; without it the saved token is tested.
+ * JSON body `{ token }` to test a draft token before saving; without it the saved token is tested. Every test that
+ * ran is audited as `cloudflare.verify` (meta `{ ok, code }`, never the token).
  */
-export function createCloudflareDevRoutes({ dns }: { dns: DnsProvider & Partial<CloudflareVerifier> }) {
+export function createCloudflareDevRoutes({ dns, db }: { dns: DnsProvider & Partial<CloudflareVerifier>; db: Db }) {
   return new Elysia().post(
     "/cloudflare/verify",
     async ({ request, status }) => {
@@ -42,7 +46,13 @@ export function createCloudflareDevRoutes({ dns }: { dns: DnsProvider & Partial<
           token = (raw as string).trim();
         }
       }
-      return dns.verifyToken ? dns.verifyToken(token) : plainVerify(dns);
+      const out = await (dns.verifyToken ? dns.verifyToken(token) : plainVerify(dns));
+      recordAudit(db, {
+        actorId: requestUserIds.get(request.headers) ?? null,
+        action: "cloudflare.verify",
+        meta: { ok: out.ok, code: out.code },
+      });
+      return out;
     },
     { parse: "none" },
   );

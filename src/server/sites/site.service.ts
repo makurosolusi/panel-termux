@@ -1,11 +1,10 @@
 // Site management behind /api/panel/sites, /jobs and /integration (PLAN/03 §3.5).
 import { existsSync } from "node:fs";
 import { join } from "node:path";
-import { desc, eq } from "drizzle-orm";
+import { eq } from "drizzle-orm";
 import type { HealthProbe, Site, SiteCheckResult, SiteDetail } from "../../shared/site.types";
 import { recordAudit } from "../audit.service";
-import type { SiteDnsProvider } from "../cloudflare/dns.provider";
-import { deploy, site, siteHostname, user } from "../db/schema";
+import { site, siteHostname } from "../db/schema";
 import { siteBinaries } from "../deploy/binary.identity";
 import { appName } from "../deploy/deploy.steps";
 import { scriptRuntimeOf } from "../deploy/run.script";
@@ -28,14 +27,19 @@ import {
   type SiteCtx,
   suggestPort,
 } from "./site.checks";
+import { deleteSiteJob } from "./site.delete.job";
 import { envInput, lockedEnvKeys, restartPending, saveEnv } from "./site.env.service";
 import { readTextOrNull } from "./site.files";
-import { addHostnamesJob, createSiteJob, deleteSiteJob, removeHostnameJob, restartSiteJob } from "./site.jobs";
+import { addHostnamesJob, createSiteJob, type JobCtx, removeHostnameJob, restartSiteJob } from "./site.jobs";
 import { siteSecretsFor } from "./site.secrets";
 import { probeHealth } from "./site.steps";
+import { toSites, troubled } from "./site.view";
 
-/** Deps of the site service. `panel` defaults to APP_BASE_URL/PORT of the process env. */
-export type SiteDeps = Omit<SiteCtx, "panel"> & { dns: SiteDnsProvider; panel?: PanelSelf } & JobRunnerDeps;
+/**
+ * Deps of the site service. `panel` defaults to APP_BASE_URL/PORT of the process env; `backupBusy`/`onSiteDeleted`
+ * are the backup lock and the after-delete hook (see JobCtx).
+ */
+export type SiteDeps = Omit<SiteCtx, "panel"> & { panel?: PanelSelf } & Omit<JobCtx, keyof SiteCtx> & JobRunnerDeps;
 
 const MAX_HOSTNAMES = 5;
 
@@ -84,39 +88,10 @@ export function createSiteService(deps: SiteDeps) {
     if ((await procsOrNull()) === null) throw new ApiError(409, "pm2_not_running", "pm2 is not running");
   };
 
-  function toSites(rows: (typeof site.$inferSelect)[], procs: Pm2Proc[] | null): Site[] {
-    const hosts = db.select().from(siteHostname).all();
-    return rows.map((s) => {
-      const p = procs?.find((a) => a.name === appName(s));
-      const d = db
-        .select({ at: deploy.at, kind: deploy.kind, status: deploy.status, actorName: user.name })
-        .from(deploy)
-        .leftJoin(user, eq(user.id, deploy.actorId))
-        .where(eq(deploy.siteName, s.name))
-        .orderBy(desc(deploy.at))
-        .get();
-      return {
-        name: s.name,
-        port: s.port,
-        hostnames: hosts.filter((h) => h.siteName === s.name).map((h) => h.hostname),
-        database: s.database,
-        runtime: s.runtime,
-        managed: s.managed,
-        app: appName(s),
-        appStatus: procs === null ? "unknown" : (p?.status ?? "not_deployed"),
-        restarts: p?.restarts ?? null,
-        lastDeploy: d ? { ...d, at: d.at.toISOString(), actorName: d.actorName ?? null } : null,
-        createdAt: s.createdAt.toISOString(),
-      };
-    });
-  }
-  const troubled = (s: Site) =>
-    s.appStatus === "errored" || ["failed", "interrupted"].includes(s.lastDeploy?.status ?? "");
-
   async function detail(name: string): Promise<SiteDetail> {
     const s = siteRow(name);
     const procs = await procsOrNull();
-    const [base] = toSites([s], procs) as [Site];
+    const [base] = toSites(db, [s], procs) as [Site];
     const proc = procs?.find((p) => p.name === appName(s));
     const ready = s.managed && !existsSync(join(s.dir, "app")) ? (await integ.get()).ready : true;
     return {
@@ -146,7 +121,7 @@ export function createSiteService(deps: SiteDeps) {
     detail,
 
     list: async () =>
-      toSites(db.select().from(site).orderBy(site.name).all(), await procsOrNull()).sort(
+      toSites(db, db.select().from(site).orderBy(site.name).all(), await procsOrNull()).sort(
         (a, b) => Number(troubled(b)) - Number(troubled(a)),
       ),
 
@@ -255,11 +230,16 @@ export function createSiteService(deps: SiteDeps) {
       return { jobId };
     },
 
-    /** DELETE /sites/:name: a managed site needs `confirm=<name>` (typed confirmation, D24). */
+    /**
+     * DELETE /sites/:name: a managed site needs `confirm=<name>` (typed confirmation, D24); dropping its database
+     * while a backup runs is 409 `busy_backup`.
+     */
     remove(actorId: string, name: string, keep: { data: boolean; database: boolean }, confirm?: string) {
       jobs.assertIdle();
       const s = siteRow(name);
       if (s.managed && confirm !== name) throw bad("confirm_mismatch", `confirm must be the site name ${name}`);
+      if (s.managed && s.database && !keep.database && deps.backupBusy?.())
+        throw new ApiError(409, "busy_backup", "a backup run or restore is in progress");
       const jobId = jobs.start(deleteSiteJob(ctx, actorId, s, hostsOf(name), keep));
       recordAudit(db, {
         actorId,

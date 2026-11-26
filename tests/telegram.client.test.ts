@@ -1,7 +1,7 @@
 import { afterAll, describe, expect, test } from "bun:test";
 import { buildDigest, DIGEST_MAX_CHARS, escapeHtml } from "@/server/alerts/alert.messages";
 import { createTelegramClient, redactToken, splitText, TelegramError } from "@/server/alerts/telegram.client";
-import { problem } from "@/server/panel/overview.problems";
+import { problem } from "@/server/panel/overview.rules";
 import type { ProblemCode } from "@/shared/monitor.types";
 import { detail, title } from "@/shared/problem.copy";
 

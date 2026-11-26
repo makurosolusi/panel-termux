@@ -9,13 +9,7 @@ import { recordAudit } from "../audit.service";
 import type { Db } from "../db/client";
 import { setting } from "../db/schema";
 import { log } from "../log.service";
-import {
-  bootNotices,
-  INTENTIONAL_RESTART_GRACE_MS,
-  isProbeFailure,
-  type ProblemContext,
-  recordProbe,
-} from "../panel/overview.problems";
+import { INTENTIONAL_RESTART_GRACE_MS, type ProblemContext } from "../panel/overview.problems";
 import { ApiError } from "../routes/http.error";
 import { getSetting, KeyMismatchError, SETTINGS, type SettingsDeps } from "../settings.service";
 import type { SystemAdapters } from "../system/system.types";
@@ -23,6 +17,7 @@ import type { Monitor, MonitorState, ProblemResult } from "./monitor.contract";
 import * as history from "./monitor.history";
 import { createSampler, httpReachable, type TickResult, type Timers } from "./monitor.sampler";
 import { createSnapshotCache } from "./monitor.snapshot";
+import { bootNotices, isProbeFailure, recordProbe } from "./monitor.state";
 
 const HOUR = 3_600_000;
 /** K18 default; boot passes `PANEL_CONNECTIVITY_URL` when set. */

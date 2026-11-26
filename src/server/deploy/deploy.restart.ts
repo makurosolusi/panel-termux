@@ -3,13 +3,11 @@
 
 import { existsSync } from "node:fs";
 import { asc, eq } from "drizzle-orm";
-import { decodeEnvValue, findEnvLine } from "../../shared/env.codec";
 import { siteHostname } from "../db/schema";
 import { log } from "../log.service";
-import { envKeys } from "../sites/env.file";
 import { errMsg, type StepDef, StepError, type StepOutcome } from "../sites/job.step";
 import { type SiteCtx, sitePaths } from "../sites/site.checks";
-import { readTextOrNull } from "../sites/site.files";
+import { siteSecretsFor } from "../sites/site.secrets";
 import { redactLines } from "../system/log.redact";
 import { Pm2UnavailableError, SystemError } from "../system/system.types";
 import { appName, binsOf, type DeployState, type SiteRow } from "./deploy.steps";
@@ -71,21 +69,12 @@ export async function revertApp(ctx: SiteCtx, s: SiteRow, st: DeployState): Prom
   return (await pm2Call(() => ctx.system.pm2.control(name, "stop"))) ? "app_stopped" : null;
 }
 
-/** Values of the site's .env (masked in the stderr tail besides the generic patterns). */
-function envSecrets(dir: string): string[] {
-  const text = readTextOrNull(`${dir}/.env`) ?? "";
-  return envKeys(text).flatMap((k) => {
-    const raw = findEnvLine(text, k);
-    return raw === null ? [] : [decodeEnvValue(raw)];
-  });
-}
-
 /** Writes the last stderr lines of the app (redacted) to the panel log, so a failed health check can be diagnosed. */
 async function logStderrTail(ctx: SiteCtx, s: SiteRow): Promise<void> {
   try {
     const lines = await ctx.system.pm2.readLog(appName(s), "err", STDERR_TAIL_LINES);
     if (!lines?.length) return;
-    const r = redactLines(lines, envSecrets(s.dir));
+    const r = redactLines(lines, siteSecretsFor(ctx.db, appName(s)));
     log.warn(`[deploy] ${s.name}: stderr of ${appName(s)} (${r.redacted} masked):\n${r.lines.join("\n")}`);
   } catch (e) {
     log.warn(`[deploy] ${s.name}: stderr of ${appName(s)} unavailable: ${errMsg(e)}`);

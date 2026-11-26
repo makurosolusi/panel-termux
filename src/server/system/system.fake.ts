@@ -30,11 +30,11 @@ const FAKE_CONFIG = `tunnel: ${FAKE_TUNNEL_ID}
 credentials-file: /fake/.cloudflared/${FAKE_TUNNEL_ID}.json
 
 ingress:
-  - hostname: db.example.test
+  - hostname: db.contoh.test
     service: http://localhost:3006
-  - hostname: old.example.test
+  - hostname: old.contoh.test
     service: http://localhost:3999
-  - hostname: solusi.example.test
+  - hostname: solusi.contoh.test
     service: http://localhost:3005
   - service: http_status:404
 `;

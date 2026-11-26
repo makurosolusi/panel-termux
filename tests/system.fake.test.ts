@@ -36,7 +36,7 @@ describe("default fake (Android-like data)", () => {
   test("device load is Android-like, a domain fails, postgres up", async () => {
     const sys = fake();
     expect((await sys.device.read()).load).toEqual([20.87, 20.73, 20.01]);
-    expect((await sys.cloudflared.probe("old.example.test")).status).toBe(502);
+    expect((await sys.cloudflared.probe("old.contoh.test")).status).toBe(502);
     expect(await sys.postgres.serverVersion()).toBe("18.7");
   });
 

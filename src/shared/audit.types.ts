@@ -36,6 +36,7 @@ export type AuditAction =
   | "secret.reset"
   | "panel.start"
   | "backup.verify"
+  | "cloudflare.verify"
   | "backup.prune"
   | "session.revoke_all"
   | "backup.restore"

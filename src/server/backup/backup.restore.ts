@@ -15,6 +15,8 @@ import type { RunDeps } from "./backup.run";
 
 /** Restoring needs room for the download plus the restored database (PLAN/04 F10.4). */
 const RESTORE_SPACE_FACTOR = 3;
+/** `error` text of a run or restore cut off by a panel restart (its code is `interrupted`). */
+export const INTERRUPTED_ERROR = "interrupted by panel restart";
 const MAX_IDENT = 63;
 
 type ErrorCode = NonNullable<BackupRestore["errorCode"]>;
@@ -50,7 +52,7 @@ export function createRestoreService(deps: RunDeps, runBusy: () => boolean, conf
 
   // Restores still "running" were cut off by a restart (F6.8); the half-made database stays droppable.
   db.update(backupRestore)
-    .set({ status: "failed", error: "interrupted by panel restart", finishedAt: new Date() })
+    .set({ status: "failed", error: INTERRUPTED_ERROR, errorCode: "interrupted", finishedAt: new Date() })
     .where(eq(backupRestore.status, "running"))
     .run();
 

@@ -26,8 +26,7 @@ const PLUG: Record<string, BatteryPlug> = {
 };
 
 /**
- * Parses termux-battery-status JSON; null when the shape is unexpected. A missing temperature is 0 until the
- * shared Battery type makes it nullable (W7).
+ * Parses termux-battery-status JSON; null when the shape is unexpected. A missing temperature is null.
  */
 export function parseBattery(stdout: string): Battery | null {
   let j: { percentage?: unknown; status?: unknown; temperature?: unknown; plugged?: unknown; health?: unknown };
@@ -44,7 +43,7 @@ export function parseBattery(stdout: string): Battery | null {
     charging: status === "charging" || status === "full",
     status,
     plugged: PLUG[String(j.plugged)] ?? "unknown",
-    temperatureC: typeof j.temperature === "number" ? Math.round(j.temperature * 10) / 10 : 0,
+    temperatureC: typeof j.temperature === "number" ? Math.round(j.temperature * 10) / 10 : null,
     health: typeof j.health === "string" && j.health !== "" ? j.health : null,
   };
 }

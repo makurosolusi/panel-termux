@@ -1,17 +1,11 @@
 // The one set of problem rules (PLAN/02 §3.1, B2–B4) behind Ringkasan, nav badge, /dev/health and Telegram.
 import type { BackupStatus } from "../../shared/backup.types";
 import type { Job } from "../../shared/job.types";
-import type {
-  AlertErrorCode,
-  Problem,
-  ProblemCode,
-  ProblemKind,
-  ProblemParams,
-  ProblemSeverity,
-} from "../../shared/monitor.types";
-import type { DeviceInfo, DomainHealth } from "../../shared/panel.types";
+import type { AlertErrorCode, Problem, ProblemCode, ProblemKind } from "../../shared/monitor.types";
+import type { DeviceInfo } from "../../shared/panel.types";
 import type { SecurityStatus } from "../../shared/security.types";
 import type { MonitorSnapshot, MonitorState, ProblemResult, SnapshotSection } from "../monitor/monitor.contract";
+import { CODE_ORDER, problem, severityRank } from "./overview.rules";
 
 const MIN = 60_000;
 const HOUR = 60 * MIN;
@@ -53,112 +47,7 @@ export type ProblemContext = {
   adminSeenSinceBoot: boolean;
 };
 
-type Delay = number | "tick" | null; // null = never sent to Telegram
-type Rule = { kind: ProblemKind; href: (target: string) => string; delay: Delay };
-const rule = (kind: ProblemKind, href: string | ((t: string) => string), delay: Delay): Rule => ({
-  kind,
-  href: typeof href === "string" ? () => href : href,
-  delay,
-});
-const enc = encodeURIComponent;
-
-// Key order = display order within a severity (PLAN/02 §3.1 table).
-const RULES: Record<ProblemCode, Rule> = {
-  service_down: rule("service", "/panel/services", 2 * MIN),
-  service_crash_loop: rule("service", (t) => `/panel/services/${enc(t)}/log`, 0),
-  pm2_unavailable: rule("service", "/panel/services", 2 * MIN),
-  app_errored: rule("app", (t) => `/panel/apps/${enc(t)}/log?stream=err`, MIN),
-  app_crash_loop: rule("app", (t) => `/panel/apps/${enc(t)}/log?stream=err`, "tick"),
-  domain_unreachable: rule("domain", "/panel/domains", 0),
-  domain_http_error: rule("domain", "/panel/domains", 0),
-  internet_down: rule("network", "/panel/domains", 0),
-  backup_not_configured: rule("backup", "/panel/backups", null),
-  backup_failed: rule("backup", "/panel/backups", 0),
-  backup_partial: rule("backup", "/panel/backups", 0),
-  backup_stale: rule("backup", "/panel/backups", 0),
-  backup_item_stale: rule("backup", "/panel/backups", 0),
-  backup_status_error: rule("backup", "/dev/health", 0),
-  backup_secrets_included: rule("security", "/panel/backups", 0),
-  key_mismatch: rule("security", "/dev/health#kunci-data", 0),
-  access_not_seen: rule("security", "/dev/health#access", null),
-  disk_low: rule("disk", "/panel", 0),
-  battery_low: rule("battery", "/panel", 2 * MIN),
-  battery_hot: rule("battery", "/panel", 2 * MIN),
-  alerts_failing: rule("alerts", "/dev/settings", null),
-  site_job_failed: rule("site", (t) => `/panel/jobs/${enc(t)}`, 0),
-  host_rebooted: rule("host", "/panel", 0),
-  panel_restarted_unexpectedly: rule("host", "/panel", 0),
-};
-const CODE_ORDER = Object.keys(RULES) as ProblemCode[];
-const SEVERITY_RANK: Record<ProblemSeverity, number> = { info: 0, warning: 1, danger: 2 };
-
-/** info < warning < danger, for comparisons by the alert engine. */
-export const severityRank = (s: ProblemSeverity): number => SEVERITY_RANK[s];
-
-/** How long a problem must stay open before it is sent; null = never sent (info, alerts_failing). */
-export function alertDelayMs(code: ProblemCode, intervalSec: number): number | null {
-  const d = RULES[code].delay;
-  return d === "tick" ? intervalSec * 1000 : d;
-}
-
-/** Builds one Problem; `hrefTarget` (e.g. a job id) fills the link when it differs from `target`. */
-export function problem(
-  code: ProblemCode,
-  target: string,
-  severity: ProblemSeverity,
-  params: ProblemParams = {},
-  hrefTarget = target,
-): Problem {
-  const r = RULES[code];
-  const id = `${code}:${target}`;
-  return { id, code, kind: r.kind, target, severity, params, since: null, href: r.href(hrefTarget) };
-}
-
-/** A probe that counts towards a domain's failure streak: no answer or a 5xx. */
-export const isProbeFailure = (status: number | null): boolean => status === null || status >= HTTP_SERVER_ERROR;
-
-/** Sampler: stores one probe result and advances the domain's failure streak. */
-export function recordProbe(state: MonitorState, hostname: string, last: DomainHealth): void {
-  const prev = state.domains.get(hostname)?.failures ?? 0;
-  state.domains.set(hostname, { failures: isProbeFailure(last.status) ? prev + 1 : 0, last });
-}
-
 const sectionValue = <T>(s: SnapshotSection<T>): T | null => (s.ok ? s.value : s.stale);
-const intentional = (state: MonitorState, key: string, now: number) => (state.intentional.get(key) ?? 0) > now;
-
-/** Sampler, once per tick before computeProblems: advances the runit and pm2 restart rings. */
-export function observe(state: MonitorState, snap: MonitorSnapshot, now: number, intervalSec: number): void {
-  for (const [k, until] of state.intentional) if (until <= now) state.intentional.delete(k);
-  if (snap.services.ok) {
-    for (const s of snap.services.value) {
-      const ring = state.serviceRuns.get(s.name) ?? [];
-      const restarted = s.state === "run" && s.pid !== null && (s.uptimeSec ?? Infinity) < intervalSec;
-      if (!s.wantUp || intentional(state, `service:${s.name}`, now) || (s.state === "run" && !restarted)) {
-        state.serviceRuns.delete(s.name);
-      } else if (restarted && s.pid !== null && ring.at(-1)?.pid !== s.pid) {
-        state.serviceRuns.set(s.name, [...ring, { pid: s.pid, at: now }].slice(-SERVICE_LOOP_TICKS));
-      }
-    }
-  }
-  if (snap.apps.ok) {
-    for (const a of snap.apps.value) {
-      const ring = (state.appRestarts.get(a.name) ?? []).filter((e) => now - e.at <= CRASH_LOOP_WINDOW_MS);
-      const last = ring.at(-1);
-      const reset = intentional(state, `app:${a.name}`, now) || (last !== undefined && a.restarts < last.restarts);
-      state.appRestarts.set(
-        a.name,
-        reset ? [{ at: now, restarts: a.restarts }] : [...ring, { at: now, restarts: a.restarts }],
-      );
-    }
-  }
-}
-
-/** Boot notices (stored closed, sent once): host reboot by uptime, else a missing clean-shutdown marker. */
-export function bootNotices({ cleanShutdown, uptimeSec }: { cleanShutdown: boolean; uptimeSec: number }): Problem[] {
-  if (uptimeSec * 1000 < REBOOT_UPTIME_MS)
-    return [problem("host_rebooted", "host", "warning", { uptimeMin: Math.floor(uptimeSec / 60) })];
-  return cleanShutdown ? [] : [problem("panel_restarted_unexpectedly", "panel", "warning")];
-}
 
 function deviceProblems(d: DeviceInfo, ctx: ProblemContext, out: Problem[]): void {
   const { freeBytes, totalBytes } = d.disk;
@@ -175,7 +64,7 @@ function deviceProblems(d: DeviceInfo, ctx: ProblemContext, out: Problem[]): voi
   const low = b.percent < BATTERY_DANGER_PERCENT ? "danger" : warn !== null && b.percent < warn ? "warning" : null;
   if (!charging && low)
     out.push(problem("battery_low", "battery", low, { percent: b.percent, plugged: b.plugged ?? "unknown" }));
-  const t = b.temperatureC as number | null;
+  const t = b.temperatureC;
   if (t !== null && Number.isFinite(t) && t >= BATTERY_HOT_C)
     out.push(problem("battery_hot", "battery", t >= BATTERY_DANGER_C ? "danger" : "warning", { temperatureC: t }));
 }

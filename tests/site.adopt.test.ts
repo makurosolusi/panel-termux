@@ -11,9 +11,9 @@ import type { Discovered, SiteDetail } from "@/shared/site.types";
 import { ANDROID_LINKER, fakeElf, GLIBC_LINKER } from "./deploy.fixture";
 import { siteHarness } from "./site.harness";
 
-// test-only: the panel serves old.example.test and listens on 3006 (db.example.test's port) → both are `self`
+// test-only: the panel serves old.contoh.test and listens on 3006 (db.contoh.test's port) → both are `self`
 const savedEnv = { APP_BASE_URL: process.env.APP_BASE_URL, PORT: process.env.PORT };
-process.env.APP_BASE_URL = "https://old.example.test";
+process.env.APP_BASE_URL = "https://old.contoh.test";
 process.env.PORT = "3006";
 afterAll(() => Object.assign(process.env, savedEnv));
 
@@ -27,10 +27,10 @@ describe("discovered", () => {
   test("ingress: panel host/port flagged self; apps: modules and pm2-guard hidden", async () => {
     const d = await json<Discovered>(await call("GET", "/sites/discovered"));
     expect(d.ingress).toEqual([
-      { hostname: "db.example.test", port: 3006, app: null, self: true, match: null, blockers: ["self"] },
-      { hostname: "old.example.test", port: 3999, app: null, self: true, match: null, blockers: ["self"] },
+      { hostname: "db.contoh.test", port: 3006, app: null, self: true, match: null, blockers: ["self"] },
+      { hostname: "old.contoh.test", port: 3999, app: null, self: true, match: null, blockers: ["self"] },
       {
-        hostname: "solusi.example.test",
+        hostname: "solusi.contoh.test",
         port: 3005,
         app: "makuro-solusi",
         self: false,
@@ -69,7 +69,7 @@ describe("discovered", () => {
         reason: "service_down",
       });
       expect(
-        await json(await call("POST", "/sites/adopt", { hostname: "solusi.example.test", app: "makuro-solusi" }), 409),
+        await json(await call("POST", "/sites/adopt", { hostname: "solusi.contoh.test", app: "makuro-solusi" }), 409),
       ).toMatchObject({ error: "pm2_not_running" });
     } finally {
       await system.runit.control("pm2", "start");
@@ -81,21 +81,21 @@ describe("adopt", () => {
   const adopt = (body: object) => call("POST", "/sites/adopt", body);
 
   test("refusals: self, guard, reserved name, unknown app, blocked app, hostname without rule", async () => {
-    expect(await json(await adopt({ hostname: "old.example.test", app: "makuro-solusi" }), 409)).toMatchObject({
+    expect(await json(await adopt({ hostname: "old.contoh.test", app: "makuro-solusi" }), 409)).toMatchObject({
       error: "self_hostname",
     });
     expect(
-      await json(await adopt({ hostname: "solusi.example.test", app: "pm2-guard", name: "guarded" }), 404),
+      await json(await adopt({ hostname: "solusi.contoh.test", app: "pm2-guard", name: "guarded" }), 404),
     ).toMatchObject({
       error: "app_not_found",
     });
     expect(
-      await json(await adopt({ hostname: "solusi.example.test", app: "makuro-solusi", name: "pm2-guard" }), 400),
+      await json(await adopt({ hostname: "solusi.contoh.test", app: "makuro-solusi", name: "pm2-guard" }), 400),
     ).toMatchObject({ error: "name_reserved" });
-    expect(await json(await adopt({ hostname: "solusi.example.test", app: "nope" }), 404)).toMatchObject({
+    expect(await json(await adopt({ hostname: "solusi.contoh.test", app: "nope" }), 404)).toMatchObject({
       error: "app_not_found",
     });
-    expect(await json(await adopt({ hostname: "solusi.example.test", app: "adminneo" }), 409)).toMatchObject({
+    expect(await json(await adopt({ hostname: "solusi.contoh.test", app: "adminneo" }), 409)).toMatchObject({
       error: "adopt_blocked",
       blockers: ["no_binary"],
     });
@@ -105,7 +105,7 @@ describe("adopt", () => {
   });
 
   test("success: data from pm2 (dir = real cwd, runtime from ELF, port from ingress); name defaults to the app", async () => {
-    const d = await json<SiteDetail>(await adopt({ hostname: "Solusi.Example.Test", app: "makuro-solusi" }), 201);
+    const d = await json<SiteDetail>(await adopt({ hostname: "Solusi.Contoh.Test", app: "makuro-solusi" }), 201);
     expect(d).toMatchObject({
       name: "makuro-solusi",
       app: "makuro-solusi",
@@ -113,20 +113,20 @@ describe("adopt", () => {
       runtime: "grun",
       port: 3005,
       dir: realpathSync(join(sites, "makuro-solusi")),
-      hostnames: ["solusi.example.test"],
+      hostnames: ["solusi.contoh.test"],
       health: { path: "/", expect: "lt500", timeoutSec: 60 },
       appStatus: "online",
     });
     expect(h.db.select().from(auditLog).where(eq(auditLog.action, "site.adopt")).all()).toHaveLength(1);
     expect(
-      await json(await adopt({ hostname: "solusi.example.test", app: "makuro-solusi", name: "again" }), 409),
+      await json(await adopt({ hostname: "solusi.contoh.test", app: "makuro-solusi", name: "again" }), 409),
     ).toMatchObject({
       error: "app_in_use",
       site: "makuro-solusi",
     });
     const d2 = await json<Discovered>(await call("GET", "/sites/discovered"));
     expect(d2.apps.map((a) => a.name)).not.toContain("makuro-solusi");
-    expect(d2.ingress.map((i) => i.hostname)).not.toContain("solusi.example.test");
+    expect(d2.ingress.map((i) => i.hostname)).not.toContain("solusi.contoh.test");
   });
 });
 

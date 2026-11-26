@@ -75,7 +75,17 @@ export function createApiRoutes(
   });
   // Without boot's values the site service reads APP_BASE_URL/PORT itself (tests set them per file).
   const panel = dev.appBaseUrl ? { hostname: new URL(dev.appBaseUrl).hostname, port: panelPort } : undefined;
-  const sites = createSiteService({ db, secret, system, dns, panel, monitor });
+  const sites = createSiteService({
+    db,
+    secret,
+    system,
+    dns,
+    panel,
+    monitor,
+    backupBusy: () => backup.busy(),
+    // `deploys` is created below; the hook only runs after a delete job, long after this function returned.
+    onSiteDeleted: (name) => deploys.dropUploadsFor(name),
+  });
   const jobs = sites.jobs;
   const deploys = createDeployService({
     db,
@@ -118,7 +128,7 @@ export function createApiRoutes(
       .use(
         roleGuard(auth, "/dev", "super_admin")
           .onError(panelOnError as never)
-          .use(createCloudflareDevRoutes({ dns })),
+          .use(createCloudflareDevRoutes({ dns, db })),
       )
   );
 }

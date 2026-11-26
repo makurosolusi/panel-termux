@@ -95,7 +95,7 @@ export type DatabaseInfo = {
   sizeBytes: number;
   /** 0.3.0 */
   site?: string | null;
-  /** 0.3.0. From PLAN/04 `lastGoodItem(db, "database", name)`. */
+  /** 0.3.0. `at` of the database's BackupLastGood. */
   lastBackupAt?: string | null;
 };
 
@@ -106,7 +106,7 @@ export type BatteryStatus = "charging" | "discharging" | "full" | "not_charging"
 
 /**
  * Battery reading; null in DeviceInfo when termux-battery-status is unavailable or hangs. `charging` = status
- * charging|full. `temperatureC` becomes `number | null` (never a fake 0) in W7, when the web formats null.
+ * charging|full. `temperatureC` is null when the sensor gives no reading (never a fake 0).
  */
 export type Battery = {
   percent: number;
@@ -115,7 +115,7 @@ export type Battery = {
   status?: BatteryStatus;
   /** 0.3.0 */
   plugged?: BatteryPlug;
-  temperatureC: number;
+  temperatureC: number | null;
   /** 0.3.0 */
   health?: string | null;
 };
@@ -130,12 +130,8 @@ export type DeviceInfo = {
   uptimeSec: number;
 };
 
-/**
- * Something an admin should look at. Transitional (W0–W7): the 0.2.x shape (`message`) still compiles while the
- * monitor (`monitor.types.ts` Problem, all fields) replaces it; W7 makes this an alias of that type.
- */
-export type Problem = Pick<MonitorProblem, "kind" | "target" | "severity"> &
-  Partial<Omit<MonitorProblem, "kind" | "target" | "severity">> & { message?: string };
+/** Something an admin should look at (the monitor's Problem; the web renders it with problem.copy). */
+export type Problem = MonitorProblem;
 
 /** Backup summary in GET /overview. `lastRunAt` = start time of the newest run. */
 export type OverviewBackup = {
@@ -146,13 +142,13 @@ export type OverviewBackup = {
 };
 
 /**
- * GET /overview. Failed sections are empty (null in W7) and listed in `unavailable`; `dataAt` = oldest section time
+ * GET /overview. Failed sections are empty (`device`/`backup` null) and listed in `unavailable`; `dataAt` = oldest section time
  * shown. `problems` excludes suppressed ones and notices, includes `info`. `recentActivity` = 5 newest without
  * `auth.`/`session.` actions.
  */
 export type PanelOverview = {
   mode: PanelMode;
-  device: DeviceInfo;
+  device: DeviceInfo | null;
   /** 0.3.0 */
   loadBaseline?: LoadBaseline | null;
   services: Service[];
@@ -162,7 +158,7 @@ export type PanelOverview = {
   /** 0.3.0 */
   unavailable?: OverviewSection[];
   recentActivity: DevAuditEntry[];
-  backup: OverviewBackup;
+  backup: OverviewBackup | null;
   sites: { total: number; deployed: number };
   /** 0.3.0 */
   alerts?: Pick<AlertStatus, "state" | "lastError">;
@@ -186,6 +182,3 @@ export type ControlBody = { confirm?: string };
 
 /** Log stream of a pm2 app. */
 export type LogStream = "out" | "err";
-
-/** 0.2.x body of GET /services/:name/log and /apps/:name/log, oldest line first; replaced by LogChunk in W7. */
-export type LogLines = { lines: string[] };

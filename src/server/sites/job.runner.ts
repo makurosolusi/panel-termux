@@ -6,11 +6,11 @@ import { deploy, job, site, user } from "../db/schema";
 import { log } from "../log.service";
 import type { Monitor } from "../monitor/monitor.contract";
 import { ApiError, type Paging } from "../routes/http.error";
-import { encodeJobError, legacyStepKey } from "./job.legacy";
+import { encodeJobError } from "./job.legacy";
 import { errMsg, failStep, type JobSpec, pendingStep, record, type StepDef, stepContext } from "./job.step";
 import { type JobRow, NEEDS_ATTENTION, toJob } from "./job.view";
 
-export type { JobSpec, StepContext, StepDef, StepOutcome, StepResult } from "./job.step";
+export type { JobSpec, StepContext, StepDef, StepOutcome } from "./job.step";
 export { StepError } from "./job.step";
 
 /** Optional runner deps: the monitor is told about restarts the runner causes (not counted as crashes). */
@@ -67,7 +67,7 @@ export function createJobRunner(db: Db, deps: JobRunnerDeps = {}) {
   }
 
   function noteRestart(cur: Current, def: StepDef): void {
-    const key = legacyStepKey(def.key, cur.spec.kind);
+    const { key } = def;
     if (key === "app_restart") deps.monitor?.noteIntentionalRestart({ kind: "app", name: cur.app });
     if (key === "tunnel_restart") deps.monitor?.noteIntentionalRestart({ kind: "service", name: "cloudflared" });
   }
@@ -84,10 +84,10 @@ export function createJobRunner(db: Db, deps: JobRunnerDeps = {}) {
       persist("running");
       try {
         noteRestart(cur, def);
-        record(st, def, await def.run(stepContext(st)));
+        record(st, await def.run(stepContext(st)));
         if (st.status === "done") done.push(i);
       } catch (e) {
-        failure = failStep(st, def, e);
+        failure = failStep(st, e);
       }
       st.finishedAt = nowIso();
       if (failure) break;
@@ -119,7 +119,6 @@ export function createJobRunner(db: Db, deps: JobRunnerDeps = {}) {
       } catch (e) {
         clean = false;
         st.detail = `undo failed: ${errMsg(e)}`;
-        if (def.label !== undefined) st.message = st.detail;
         log.error(`[sites] job ${id} undo of ${def.key} failed: ${errMsg(e)}`);
       }
       persist("running", failure);

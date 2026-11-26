@@ -1,12 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import type { MonitorSnapshot, MonitorState, SnapshotSection } from "@/server/monitor/monitor.contract";
-import {
-  BACKUP_STALE_MS,
-  computeProblems,
-  observe,
-  type ProblemContext,
-  recordProbe,
-} from "@/server/panel/overview.problems";
+import { observe, recordProbe } from "@/server/monitor/monitor.state";
+import { BACKUP_STALE_MS, computeProblems, type ProblemContext } from "@/server/panel/overview.problems";
 import type { Pm2Proc } from "@/server/system/pm2.termux";
 import type { IngressRule } from "@/server/system/system.types";
 import type { BackupRun, BackupStatus } from "@/shared/backup.types";
@@ -41,7 +36,7 @@ const svc = (name: string, o: Partial<Service> = {}): Service => ({ name, ...SVC
 const APP = { status: "online", pid: 1, memoryMb: 10, cpu: null, restarts: 0, uptimeSec: 100, port: null } as const;
 const PM2 = { outLog: null, errLog: null, cwd: null, execPath: null, args: [], startedAtMs: null, module: false };
 const app = (name: string, o: Partial<Pm2Proc> = {}): Pm2Proc => ({ name, ...APP, ...PM2, ...o });
-const RUN = { id: "r1", trigger: "schedule", finishedAt: null, error: null } as const;
+const RUN = { id: "r1", trigger: "schedule", finishedAt: null, error: null, errorCode: null } as const;
 const run = (status: BackupRun["status"], ageMs = 0, items: BackupRun["items"] = []): BackupRun => ({
   ...RUN,
   status,
@@ -297,6 +292,7 @@ describe("computeProblems", () => {
         at: new Date(NOW - ageMs).toISOString(),
         sizeBytes: 1,
         checked: true,
+        restoreHint: "",
       });
       const lastGood = [good("panel", HOUR), good("sites", -HOUR)];
       const r = compute({ backup: ok(backup({ lastRun: run("partial", 0, items), lastGood })) });

@@ -161,7 +161,7 @@ describe("access control", () => {
     ["GET", "/apps/adminneo/log"],
     ["GET", "/apps/adminneo/log/download"],
     ["GET", "/domains"],
-    ["POST", "/domains/db.example.test/check"],
+    ["POST", "/domains/db.contoh.test/check"],
     ["GET", "/databases"],
   ];
   test.each(endpoints)("%s %s → 401 anon, 403 user", async (method, path) => {
@@ -174,7 +174,7 @@ describe("monitoring reads", () => {
   test("overview: problem-first data from the monitor, Android-like battery, public app fields only", async () => {
     const o = await json<PanelOverview>(await call("GET", "/overview"));
     expect(o.mode).toBe("fake");
-    expect(o.device.battery).toEqual({
+    expect(o.device?.battery).toEqual({
       percent: 81,
       charging: false,
       status: "discharging",
@@ -227,7 +227,7 @@ describe("monitoring reads", () => {
 
   test("domains: health from stored checks, target and recent strip; manual check validation + 429 extra", async () => {
     const d = await json<Domain[]>(await call("GET", "/domains"));
-    const solusi = d.find((x) => x.hostname === "solusi.example.test");
+    const solusi = d.find((x) => x.hostname === "solusi.contoh.test");
     expect(solusi).toMatchObject({
       port: 3005,
       app: "makuro-solusi",
@@ -235,7 +235,7 @@ describe("monitoring reads", () => {
       health: { status: 200, failures: 0 },
     });
     expect(solusi?.recent?.length).toBeGreaterThan(0);
-    expect(d.find((x) => x.hostname === "old.example.test")).toMatchObject({
+    expect(d.find((x) => x.hostname === "old.contoh.test")).toMatchObject({
       target: "other",
       health: { status: 502, failures: 1 },
     });
@@ -245,11 +245,11 @@ describe("monitoring reads", () => {
     expect(await json(await call("POST", "/domains/nope.example.test/check"), 404)).toMatchObject({
       error: "not_found",
     });
-    expect(await json<Domain>(await call("POST", "/domains/db.example.test/check"))).toMatchObject({
-      hostname: "db.example.test",
+    expect(await json<Domain>(await call("POST", "/domains/db.contoh.test/check"))).toMatchObject({
+      hostname: "db.contoh.test",
       health: { status: 200 },
     });
-    const again = await json(await call("POST", "/domains/db.example.test/check"), 429);
+    const again = await json(await call("POST", "/domains/db.contoh.test/check"), 429);
     expect(again).toMatchObject({ error: "too_soon", retryAfterSec: expect.any(Number) });
   });
 

@@ -174,8 +174,32 @@ describe("restore into a new database", () => {
     try {
       backupServiceFor({ db: db2, secret: SECRET, dataDir: dir, system });
       const row = db.select().from(backupRestore).where(eq(backupRestore.id, "stuck")).get();
-      expect(row).toMatchObject({ status: "failed", error: "interrupted by panel restart" });
+      expect(row).toMatchObject({ status: "failed", error: "interrupted by panel restart", errorCode: "interrupted" });
     } finally {
+      db2.$client.close();
+    }
+  });
+
+  test("a run left running by a restart reads back as failed with errorCode interrupted; other failures null", () => {
+    const at = new Date();
+    db.insert(backupRun)
+      .values([
+        { id: "cut", trigger: "schedule", status: "running", items: [], startedAt: at },
+        { id: "boom", trigger: "manual", status: "failed", items: [], error: "s3 said no", startedAt: at },
+      ])
+      .run();
+    const db2 = openDb(dir); // fresh service = boot sweep
+    try {
+      const runs = backupServiceFor({ db: db2, secret: SECRET, dataDir: dir, system }).list({
+        page: 1,
+        pageSize: 50,
+        offset: 0,
+      }).items;
+      expect(runs.find((r) => r.id === "cut")).toMatchObject({ status: "failed", errorCode: "interrupted" });
+      expect(runs.find((r) => r.id === "boom")).toMatchObject({ status: "failed", errorCode: null });
+    } finally {
+      db.delete(backupRun).where(eq(backupRun.id, "cut")).run();
+      db.delete(backupRun).where(eq(backupRun.id, "boom")).run();
       db2.$client.close();
     }
   });

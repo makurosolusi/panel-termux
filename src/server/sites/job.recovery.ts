@@ -11,9 +11,10 @@ import { log } from "../log.service";
 import { ingressHostnames, removeIngressRule } from "./ingress.editor";
 import type { JobRunner, JobSpec, StepDef, StepOutcome } from "./job.runner";
 import { dbNameFor, sitePaths } from "./site.checks";
+import { deleteSiteJob } from "./site.delete.job";
 import { ENV_PREV, envRestoreStep } from "./site.env.service";
 import { readTextOrNull } from "./site.files";
-import { deleteSiteJob, type JobCtx, removeHostnameJob, type SiteRow } from "./site.jobs";
+import { type JobCtx, removeHostnameJob, type SiteRow } from "./site.jobs";
 import { appsRemoveStep, dnsDeleteStep, ingressStep, restartSteps, tunnelRestartStep, tunnelState } from "./site.steps";
 
 /** Folder entries a cut-off create may leave that are safe to delete (anything else = someone's files). */

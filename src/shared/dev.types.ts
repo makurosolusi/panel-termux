@@ -159,17 +159,13 @@ export type SettingKey = (typeof SETTING_KEYS)[number];
 export type DevSetting = {
   /** A SettingKey; typed `string` until W7 because 0.2.x test fixtures use free keys. */
   key: string;
-  /** 0.2.x English label; 0.3.0 labels live only in the web (B8). */
-  label: string;
-  /** 0.2.x, like `label`. */
-  description: string;
   secret: boolean;
   value: string | null;
-  /** 0.3.0. Built-in default, for the "Bawaan" state. */
-  default?: string | null;
+  /** Built-in default, for the "Bawaan" state. */
+  default: string | null;
   isSet: boolean;
-  /** 0.3.0. false = secret stored but not decryptable with the current data key. */
-  readable?: boolean;
+  /** false = secret stored but not decryptable with the current data key. */
+  readable: boolean;
   updatedAt: string | null;
 };
 

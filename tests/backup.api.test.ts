@@ -6,7 +6,7 @@ import { eq } from "drizzle-orm";
 import { Elysia } from "elysia";
 import { createAuth } from "@/server/auth/auth.service";
 import { createBackupDevRoutes, createBackupRoutes } from "@/server/backup/backup.routes";
-import { backupServiceFor, lastGoodItem } from "@/server/backup/backup.service";
+import { backupServiceFor } from "@/server/backup/backup.service";
 import { encryptSecret } from "@/server/crypto.service";
 import { type Db, openDb } from "@/server/db/client";
 import { runMigrations } from "@/server/db/migrate";
@@ -226,8 +226,9 @@ describe("configured", () => {
     const st = await json<BackupStatus>(await call("GET", "/status"));
     expect(st).toMatchObject({ configured: true, running: false, lastRun: { id: run.id } });
     expect(st.lastGood?.map((g) => `${g.kind}:${g.name}`)).toHaveLength(6);
-    expect(lastGoodItem(db, "database", "solusi")).toMatchObject({ runId: run.id, itemIndex: 2, checked: true });
-    expect(lastGoodItem(db, "database", "nope")).toBeNull();
+    const good = st.lastGood?.find((g) => g.kind === "database" && g.name === "solusi");
+    expect(good).toMatchObject({ runId: run.id, itemIndex: 2, checked: true });
+    expect(good?.restoreHint).toBe(item(run, "database", "solusi").restoreHint);
   });
 
   test("failures per item: produce, check, size cap, space, upload, stat mismatch; all failing = failed", async () => {

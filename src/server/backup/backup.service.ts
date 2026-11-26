@@ -22,8 +22,8 @@ import { ApiError, type Paging } from "../routes/http.error";
 import { getSetting } from "../settings.service";
 import { type BackupConfig, describeS3Error, isDue, localDay, nextRunAt, readBackupConfig } from "./backup.config";
 import { freeBytesIn } from "./backup.items";
-import { restoreHint } from "./backup.manifest";
-import { createRestoreService } from "./backup.restore";
+import { type BackupPaths, restoreHint } from "./backup.manifest";
+import { createRestoreService, INTERRUPTED_ERROR } from "./backup.restore";
 import { backupPaths, executeRun, type RunDeps } from "./backup.run";
 import { verifyBackupTarget } from "./backup.verify";
 
@@ -41,7 +41,7 @@ const liveRunsNewestFirst = (db: Db): RunRow[] =>
   db.select().from(backupRun).where(isNull(backupRun.prunedAt)).orderBy(desc(sql`rowid`)).all();
 
 /** Newest ok, non-pruned item per (kind, name), newest = insert order; checksums/manifest excluded. */
-function lastGoodAll(db: Db): BackupLastGood[] {
+function lastGoodAll(db: Db, paths: BackupPaths): BackupLastGood[] {
   const out = new Map<string, BackupLastGood>();
   for (const r of liveRunsNewestFirst(db))
     r.items.forEach((i, itemIndex) => {
@@ -55,14 +55,10 @@ function lastGoodAll(db: Db): BackupLastGood[] {
         at: r.startedAt.toISOString(),
         sizeBytes: i.sizeBytes,
         checked: i.checked ?? null,
+        restoreHint: restoreHint(i, paths),
       });
     });
   return [...out.values()];
-}
-
-/** Newest good copy of one item (02 DatabaseInfo.lastBackupAt, 03 delete-site dialog); null if none. */
-export function lastGoodItem(db: Db, kind: BackupLastGood["kind"], name: string): BackupLastGood | null {
-  return lastGoodAll(db).find((g) => g.kind === kind && g.name === name) ?? null;
 }
 
 let lastTick: Date | null = null;
@@ -76,7 +72,7 @@ function createBackupService(input: BackupDeps) {
 
   // Runs still "running" were cut off by a restart; their temp files are leftovers.
   db.update(backupRun)
-    .set({ status: "failed", error: "interrupted by panel restart", finishedAt: new Date() })
+    .set({ status: "failed", error: INTERRUPTED_ERROR, finishedAt: new Date() })
     .where(eq(backupRun.status, "running"))
     .run();
   rmSync(join(dataDir, "backup-tmp"), { recursive: true, force: true });
@@ -95,6 +91,8 @@ function createBackupService(input: BackupDeps) {
       finishedAt: r.finishedAt ? r.finishedAt.toISOString() : null,
       items: r.items.map((i) => ({ ...i, pruned: i.pruned ?? false, restoreHint: restoreHint(i, paths) })),
       error: r.error,
+      // No column for it: the boot sweep above is the only writer of INTERRUPTED_ERROR.
+      errorCode: r.status === "failed" && r.error === INTERRUPTED_ERROR ? "interrupted" : null,
       includesSecrets: r.includesSecrets,
       panelVersion: r.panelVersion,
       prunedAt: r.prunedAt ? r.prunedAt.toISOString() : null,
@@ -172,7 +170,7 @@ function createBackupService(input: BackupDeps) {
         running: running !== null,
         restoring: restores.running(),
         lastRun: last ? toRun(last) : null,
-        lastGood: lastGoodAll(db),
+        lastGood: lastGoodAll(db, backupPaths(deps)),
         excluded,
         lastRestoreTest: restores.lastSucceeded(),
       };

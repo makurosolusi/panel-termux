@@ -192,8 +192,7 @@ export function createPanelService(deps: PanelDeps) {
       const alerts = monitor.alertStatus();
       return {
         mode: system.mode,
-        // Failed sections are null (PLAN/02 §3.2); the shared type is tightened to `| null` in W7 (schedule §1.4).
-        device: (snap.device.ok ? snap.device.value : null) as PanelOverview["device"],
+        device: snap.device.ok ? snap.device.value : null,
         loadBaseline: monitor.loadBaseline(),
         services: snap.services.ok ? snap.services.value : [],
         apps,
@@ -201,12 +200,12 @@ export function createPanelService(deps: PanelDeps) {
         problems: monitor.problems().problems.filter((p) => p.kind !== "host"),
         unavailable,
         recentActivity,
-        backup: (b && {
+        backup: b && {
           configured: b.configured,
           lastRunAt: b.lastRun?.startedAt ?? null,
           lastStatus: b.lastRun?.status ?? null,
           nextRunAt: b.nextRunAt,
-        }) as PanelOverview["backup"],
+        },
         sites: {
           total: list.length,
           deployed: list.filter((s) => apps.some((a) => a.name === (s.app ?? s.name))).length,

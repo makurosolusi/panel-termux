@@ -2,10 +2,11 @@
 // domains, advances the rule state and hands each tick's result to the monitor service (DB write + alerts).
 import type { DomainHealth } from "../../shared/panel.types";
 import { log } from "../log.service";
-import { computeProblems, isProbeFailure, observe, type ProblemContext, recordProbe } from "../panel/overview.problems";
+import { computeProblems, type ProblemContext } from "../panel/overview.problems";
 import type { ProbeResult } from "../system/system.types";
 import type { MonitorSnapshot, MonitorState, MonitorStatus, ProblemResult } from "./monitor.contract";
 import type { SnapshotCache } from "./monitor.snapshot";
+import { isProbeFailure, observe, recordProbe } from "./monitor.state";
 
 /** First tick after start (gives boot a moment). */
 export const FIRST_TICK_DELAY_MS = 10_000;

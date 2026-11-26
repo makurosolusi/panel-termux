@@ -106,16 +106,4 @@ describe("clean-shutdown marker", () => {
     expect(existsSync(marker)).toBe(false);
     expect(consumeCleanShutdownMarker(dir)).toBe(false);
   });
-
-  test("no data dir → no marker written (boot not wired yet)", async () => {
-    rmSync(marker, { force: true });
-    await createShutdown({
-      server: { stop: () => {} },
-      stopScheduler: () => {},
-      idle: [],
-      closeDb: () => {},
-      exit: () => {},
-    })("SIGTERM");
-    expect(existsSync(marker)).toBe(false);
-  });
 });
