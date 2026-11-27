@@ -8,7 +8,7 @@ import { setThemePreference, useTheme } from "@/web/theme/theme.store";
 const t = tAccount.theme;
 const ICON: Record<ThemePreference, typeof SunIcon> = { system: MonitorIcon, light: SunIcon, dark: MoonIcon };
 
-/** "Tema" card: system/light/dark segmented control on the shell theme store. */
+/** "Theme" card: system/light/dark segmented control on the shell theme store. */
 export function ProfileTheme() {
   const { preference } = useTheme();
   return (

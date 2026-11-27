@@ -73,6 +73,11 @@ export const idAccount: Messages<typeof tAccount> = {
     dark: "Gelap",
     system: "Sistem",
   },
+  language: {
+    title: "Bahasa",
+    description: "Disimpan di akunmu, jadi perangkat lain ikut memakainya. Halaman dimuat ulang untuk menerapkannya.",
+    device: "Ikuti bahasa perangkat",
+  },
   deleteAccount: {
     title: "Hapus akun saya",
     body: "Akun, sesi, dan profilmu dihapus dari panel ini. Catatan aktivitas (audit) tetap menyimpan nama dan email yang kamu pakai sampai masa simpannya habis (bawaan 365 hari), lalu terhapus otomatis. Kamu bisa masuk lagi kapan saja sebagai Pengguna baru.",
