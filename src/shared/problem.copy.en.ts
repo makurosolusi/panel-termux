@@ -80,11 +80,11 @@ export const tProblem = msg("problem", {
     },
     backup_failed: {
       title: () => "The last backup failed",
-      detail: () => "See the details on the Backup page.",
+      detail: () => "See the details on the Backups page.",
     },
     backup_partial: {
       title: () => "The last backup only partly succeeded",
-      detail: () => "See the failed items on the Backup page.",
+      detail: () => "See the failed items on the Backups page.",
     },
     backup_stale: {
       title: (_target: string, params: ProblemParams) => `No backup in the last ${n0(params.hours)} hours`,
@@ -98,7 +98,7 @@ export const tProblem = msg("problem", {
           ? `Backup of ${name} has never succeeded`
           : `Backup of ${name} hasn't succeeded for ${formatNumber(hours, 0, "en")} hours`;
       },
-      detail: () => "This item failed in the last backup. See the Backup page.",
+      detail: () => "This item failed in the last backup. See the Backups page.",
     },
     backup_status_error: {
       title: () => "Can't read the backup status",
@@ -143,7 +143,7 @@ export const tProblem = msg("problem", {
     host_rebooted: {
       title: () => "The phone just restarted",
       detail: (_target: string, params: ProblemParams) =>
-        `Up ${n0(params.uptimeMin)} min. Check that every service is running.`,
+        `The phone has been up for ${n0(params.uptimeMin)} min. Check that every service is running.`,
     },
     panel_restarted_unexpectedly: {
       title: () => "The panel stopped unexpectedly",

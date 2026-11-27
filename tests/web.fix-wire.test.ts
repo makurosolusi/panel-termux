@@ -54,7 +54,7 @@ describe("apps.json rebuild", () => {
 
   test("undo of apps.json names the sites pm2 skips after a reboot", () => {
     expect(undoDescription(backup({ affectedSites: ["blog"] }))).toBe(
-      "`apps.json` goes back to its old, broken content, so pm2 does not run blog after the phone restarts. Nothing stops right now.",
+      "`apps.json` goes back to its old, broken content, so pm2 doesn't run blog after the phone restarts. Nothing stops right now.",
     );
     expect(undoDescription(backup({ changedSince: true }))).toBe(
       `${tSite.setup.undoBody.apps_json} ${tSite.setup.undoChanged}`,
@@ -99,7 +99,7 @@ describe("sites_dir_create: folder + files, or only the ecosystem file", () => {
   });
 
   test("a linked ecosystem names why in plain words", () => {
-    expect(tSite.setup.unfixable.ecosystem_linked).toContain("does not change or overwrite it");
+    expect(tSite.setup.unfixable.ecosystem_linked).toContain("doesn't change or overwrite it");
   });
 });
 

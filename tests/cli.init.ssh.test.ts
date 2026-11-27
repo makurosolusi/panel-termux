@@ -150,8 +150,8 @@ describe("ssh step (K22, C26)", () => {
     const lines = sshStep.plan(ctx, await sshStep.detect(ctx));
     expect(snapshot(h.paths.home)).toEqual(before); // detect + plan write nothing
     expect(lines.filter((l) => l.kind === "action").map((l) => l.text)).toEqual([
-      `Add 2 SSH key(s) to ~/.ssh/authorized_keys: ${ED_FP}, ${RSA_FP}`,
-      "Turn off SSH sign-in with a password (keys only)",
+      `Add 2 SSH keys to ~/.ssh/authorized_keys: ${ED_FP}, ${RSA_FP}`,
+      "Turn off SSH password login (keys only)",
       "Start SSH (port 8022)",
     ]);
     await run(ctx);
@@ -213,7 +213,7 @@ describe("ssh step (K22, C26)", () => {
     mkdirSync(p.sshDir, { recursive: true });
     writeFileSync(p.authorizedKeys, `no-pty ${ED.replace("a@mac", "lama")}`);
     const lines = await run(ctx);
-    expect(lines[0]?.text).toBe(`Add 1 SSH key(s) to ~/.ssh/authorized_keys: ${RSA_FP}`);
+    expect(lines[0]?.text).toBe(`Add 1 SSH key to ~/.ssh/authorized_keys: ${RSA_FP}`);
     expect(readFileSync(p.authorizedKeys, "utf8")).toBe(`no-pty ${ED.replace("a@mac", "lama")}\n${RSA}\n`);
     expect(ctx.state.changed).not.toContain(p.sshDir); // folder existed
   });

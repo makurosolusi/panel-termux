@@ -55,8 +55,8 @@ export const ENV_VARS = [
     example: "you@example.org",
     placeholders: ["you@example.com"],
     description: {
-      en: "Google emails that become super admin, separated by commas.",
-      id: "Email Google yang menjadi super admin, pisahkan dengan koma.",
+      en: "Google emails that become Super Admin, separated by commas.",
+      id: "Email Google yang menjadi Super Admin, pisahkan dengan koma.",
     },
     secret: false,
   },
@@ -127,7 +127,7 @@ const COPY = {
   en: {
     header: [
       "# Panel Termux — minimal .env. Fill in the empty values, save as ~/panel/.env (chmod 600).",
-      "# Other settings (Cloudflare, backup, Telegram, sites, monitor) are in /dev → Settings. Guide: panel docs google",
+      "# Other settings (Cloudflare, backup, Telegram, sites, monitor) are in Administration → Settings. Guide: panel docs google",
     ],
     example: "Example:",
     optional: "# --- Optional: remove the # to change the default ---",
@@ -135,7 +135,7 @@ const COPY = {
   id: {
     header: [
       "# Panel Termux — .env minimal. Isi nilai yang kosong, simpan sebagai ~/panel/.env (chmod 600).",
-      "# Pengaturan lain (Cloudflare, backup, Telegram, situs, monitor) ada di /dev → Pengaturan. Panduan: panel docs google",
+      "# Pengaturan lain (Cloudflare, backup, Telegram, situs, monitor) ada di Administrasi → Pengaturan. Panduan: panel docs google",
     ],
     example: "Contoh:",
     optional: "# --- Opsional: hapus tanda # untuk mengubah nilai bawaan ---",

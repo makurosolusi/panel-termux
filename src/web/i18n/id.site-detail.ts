@@ -122,9 +122,9 @@ export const idSiteDetail: Messages<typeof tSiteDetail> = {
     badges: {
       locked: "Diatur panel",
       pm2: "Diatur oleh pm2",
-      replace: "akan diganti",
-      new: "baru",
-      unset: "akan dihapus",
+      replace: "Akan diganti",
+      new: "Baru",
+      unset: "Akan dihapus",
     },
     lockedHelp: "Ditulis panel sendiri dan tidak bisa diubah di sini.",
     pm2Help: "Nilai di ecosystem.config.js menang; mengubahnya di sini tidak berpengaruh.",

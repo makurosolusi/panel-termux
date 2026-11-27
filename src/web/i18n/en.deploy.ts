@@ -9,7 +9,7 @@ type InvalidReason = "not_elf" | "not_64le" | "not_aarch64" | "interp" | "trunca
 export const tDeploy = msg("deploy", {
   title: "Deploy",
   adoptedNote:
-    "This site was adopted: its pm2 entry is written by hand in ecosystem.config.js. The panel only replaces the binary and restarts the app; the runtime (native/grun) is not changed.",
+    "This site was adopted: its pm2 entry is written by hand in ecosystem.config.js. The panel only replaces the binary and restarts the app; the runtime (native/grun) isn't changed.",
   live: {
     title: "Running version",
     none: "No binary yet. Upload the first binary to run this site.",
@@ -42,7 +42,7 @@ export const tDeploy = msg("deploy", {
     tooLarge: (max: string) => `The file is larger than the ${max} limit. Choose a smaller binary.`,
     empty: "This file is empty (0 bytes). Choose the compiled binary again.",
     hashFailed:
-      "The checksum cannot be computed because the browser needs an HTTPS connection. Open the panel through its https address, then try again.",
+      "The checksum can't be computed because the browser needs an HTTPS connection. Open the panel through its https address, then try again.",
     preparing: "Preparing the upload…",
     hashing: (n: number, total: number) => `Computing the checksum of chunk ${n} of ${total}…`,
     progress: (pct: number, sent: string, total: string) => `${pct}% · ${sent} of ${total}`,
@@ -60,18 +60,18 @@ export const tDeploy = msg("deploy", {
     pending: (file: string, size: string, done: number, total: number) =>
       `Unfinished upload: ${file} · ${size} · ${done} of ${total} chunks`,
     expiresAt: (at: string) => `expires ${at}`,
-    pendingHelp: "Choose the same file to resume; chunks already sent are not uploaded again.",
+    pendingHelp: "Choose the same file to resume; chunks already sent aren't uploaded again.",
     differentTitle: "This file differs from the previous upload. Start a new upload?",
     differentBody: (oldFile: string) =>
       `The unfinished upload of ${oldFile} is discarded, and this file is uploaded from the start.`,
     differentConfirm: "Start a new upload",
     expired:
       "This upload is no longer on the server (more than 1 hour without a new chunk, or another admin started a new upload). Upload the file again.",
-    failed: "The upload did not succeed.",
+    failed: "The upload didn't succeed.",
   },
   invalidBinary: {
-    not_elf: "This file is not a Linux binary. Choose the output of `bun build --compile`, not an archive or a script.",
-    not_64le: "This binary is not 64-bit. Build it again with an arm64 target below.",
+    not_elf: "This file isn't a Linux binary. Choose the output of `bun build --compile`, not an archive or a script.",
+    not_64le: "This binary isn't 64-bit. Build it again with an arm64 target below.",
     not_aarch64: "This binary is for another processor (not arm64). Build it again with an arm64 target below.",
     interp: "This binary uses an unrecognized loader. Build it again with one of the targets below.",
     truncated: "This binary is truncated. Build it again, then upload it again.",
@@ -84,25 +84,25 @@ export const tDeploy = msg("deploy", {
   noFolder: {
     database: "This site's folder is gone. Delete the site and create it again, or restore it from a backup.",
     adopted:
-      "This site's app folder is gone from the phone. An adopted site was not created by the panel, so the panel does not create its folder. Restore it from a backup, or delete this site from the panel.",
+      "This site's app folder is gone from the phone. An adopted site wasn't created by the panel, so the panel doesn't create its folder. Restore it from a backup, or delete this site from the panel.",
   },
   errorCodes: {
     too_large: "The file exceeds the server's size limit. Choose a smaller binary.",
     invalid_size: "Invalid file size. Choose the file again.",
     invalid_file_name: "Invalid file name. Rename the file (letters, digits, dots, hyphens), then try again.",
-    incomplete: "Part of the file did not reach the server. Choose the same file to resume.",
+    incomplete: "Part of the file didn't reach the server. Choose the same file to resume.",
     upload_expired:
       "This upload is no longer on the server (more than 1 hour without a new chunk, or another admin started a new upload). Upload the file again.",
     chunk_sha_mismatch: "A chunk was corrupted on the way. Resume the upload to send it again.",
     no_folder:
-      "This site's folder is no longer on the phone, so the binary cannot be installed. Delete this site, then create it again with the same name.",
-    integration_required: "pm2 is not ready to run sites created by the panel. Finish setup on the Sites page.",
+      "This site's folder is no longer on the phone, so the binary can't be installed. Delete this site, then create it again with the same name.",
+    integration_required: "pm2 isn't ready to run sites created by the panel. Finish setup on the Sites page.",
     pm2_not_running:
-      "The pm2 service is not running, so every site has stopped too. Press Start pm2 above, then try again.",
+      "The pm2 service isn't running, so every site has stopped too. Press Start pm2 above, then try again.",
     no_previous: "There is no previous version yet. Rollback is available after the second deploy.",
     no_current: "No binary is running, so there is nothing to restore.",
-    invalid_binary: "The previous version's binary cannot run on this phone.",
-    runtime_mismatch: "The binary's runtime does not match how pm2 runs this site.",
+    invalid_binary: "The previous version's binary can't run on this phone.",
+    runtime_mismatch: "The binary's runtime doesn't match how pm2 runs this site.",
     no_space: "Not enough storage on the phone. Free up space, then try again.",
   },
   rollback: {

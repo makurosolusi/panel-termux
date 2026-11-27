@@ -99,7 +99,7 @@ export const tDevAudit = msg("dev.audit", {
     sessionAll: (a: string, n: number) => `${a} signed out every user (${n} ${n === 1 ? "session" : "sessions"})`,
     secretMismatch: (n: number) => `Data key mismatch: ${n} stored ${n === 1 ? "secret" : "secrets"} can't be read`,
     secretExport: (a: string) => `${a} downloaded the data key`,
-    secretReset: (a: string) => `${a} reset the data key`,
+    secretReset: (a: string) => `${a} deleted the secret settings that could not be read`,
     panelStart: (version: string) => `Panel started, version ${version}`,
     auditPrune: (n: number) => `The system deleted ${n} old audit ${n === 1 ? "entry" : "entries"}`,
     auditExport: (a: string) => `${a} downloaded the audit log as CSV`,

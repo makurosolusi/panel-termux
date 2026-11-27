@@ -185,7 +185,7 @@ export function bootstrapChecks(p: DoctorProbe): DoctorCheck[] {
     group("boot")(
       "termux_boot_script",
       p.bootScript,
-      tr("Termux:Boot starts the services when the phone turns on", "Termux:Boot menyalakan layanan saat HP hidup"),
+      tr("Termux:Boot starts the services when the phone boots", "Termux:Boot menyalakan layanan saat HP hidup"),
       [
         "warning",
         tr("No Termux:Boot script starts the services yet", "Belum ada skrip Termux:Boot yang menyalakan layanan"),

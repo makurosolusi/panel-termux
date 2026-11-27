@@ -123,7 +123,7 @@ const plan = (ctx: InitContext, s: SshState): PlanLine[] => {
     lines.push({
       kind: "action",
       text: tr(
-        `Add ${s.add.length} SSH key(s) to ~/.ssh/authorized_keys: ${fps}`,
+        `Add ${s.add.length} SSH ${s.add.length === 1 ? "key" : "keys"} to ~/.ssh/authorized_keys: ${fps}`,
         `Tambah ${s.add.length} kunci SSH ke ~/.ssh/authorized_keys: ${fps}`,
       ),
     });
@@ -135,7 +135,7 @@ const plan = (ctx: InitContext, s: SshState): PlanLine[] => {
   if (s.dropIn === "write" || s.dropIn === "no-config")
     lines.push({
       kind: "action",
-      text: tr("Turn off SSH sign-in with a password (keys only)", "Matikan masuk SSH dengan kata sandi (hanya kunci)"),
+      text: tr("Turn off SSH password login (keys only)", "Matikan masuk SSH dengan kata sandi (hanya kunci)"),
     });
   if (s.manual !== null)
     lines.push({
@@ -145,7 +145,7 @@ const plan = (ctx: InitContext, s: SshState): PlanLine[] => {
         `SSH sudah dinyalakan manual (pid ${s.manual}), bukan lewat runit; dibiarkan`,
       ),
       hint: tr(
-        `to have it start by itself after the phone restarts: kill ${s.manual}, then sv up sshd`,
+        `to have it start automatically when the phone boots: kill ${s.manual}, then sv up sshd`,
         `agar menyala sendiri setelah HP restart: kill ${s.manual}, lalu sv up sshd`,
       ),
     });
@@ -181,7 +181,10 @@ const apply = async (ctx: InitContext, s: SshState, timing: InitTiming): Promise
   if (s.add.length > 0) {
     for (const k of s.add) out.line(`  ${k.fingerprint} (${k.type})`);
     const n = s.add.length;
-    if (ctx.tty && !(await ctx.prompt.confirm(tr(`Add these ${n} key(s)?`, `Tambahkan ${n} kunci ini?`), true))) {
+    if (
+      ctx.tty &&
+      !(await ctx.prompt.confirm(tr(`Add these ${n} ${n === 1 ? "key" : "keys"}?`, `Tambahkan ${n} kunci ini?`), true))
+    ) {
       out.line(tr("  SSH skipped: the keys were not added.", "  SSH dilewati: kunci tidak ditambahkan."));
       state.manual.push(
         tr(
@@ -200,7 +203,7 @@ const apply = async (ctx: InitContext, s: SshState, timing: InitTiming): Promise
     if (s.running || s.manual !== null)
       state.manual.push(
         tr(
-          "SSH: key-only sign-in applies after sshd restarts (sv restart sshd)",
+          "SSH: key-only login applies after sshd restarts (sv restart sshd)",
           "SSH: masuk hanya dengan kunci berlaku setelah sshd dinyalakan ulang (sv restart sshd)",
         ),
       );
@@ -247,7 +250,7 @@ const apply = async (ctx: InitContext, s: SshState, timing: InitTiming): Promise
   const user = userInfo().username;
   out.line(
     tr(
-      `  Sign in from a computer: ssh -p ${SSHD_PORT} ${user}@<phone IP: see Tailscale/Wi-Fi>`,
+      `  Connect from a computer: ssh -p ${SSHD_PORT} ${user}@<phone IP: see Tailscale/Wi-Fi>`,
       `  Masuk dari komputer: ssh -p ${SSHD_PORT} ${user}@<IP HP: lihat Tailscale/Wi-Fi>`,
     ),
   );

@@ -111,12 +111,12 @@ describe("checklist rows", () => {
     expect(manualOpen(i)).toBe(false);
   });
 
-  test("panel cannot fix the file → plain reason, no button, Manual steps opens", () => {
+  test("panel can't fix the file → plain reason, no button, Manual steps opens", () => {
     const i = integration(POCO_CHECKS, [{ ...BLOCK, available: false, reason: "unknown_apps_json_use" }, RUN]);
     expect(applicableFixes(i)).toEqual(["pm2_auto_exit"]);
     expect(rowBlocked(i, chk("ecosystem_spreads_apps_json", "error"))).toBe("unknown_apps_json_use");
     expect(manualOpen(i)).toBe(true);
-    expect(t.unfixable.unknown_apps_json_use).toContain("in a way the panel does not recognize");
+    expect(t.unfixable.unknown_apps_json_use).toContain("in a way the panel doesn't recognize");
     expect(t.manual.title).toBe("Manual steps (for technical users)");
   });
 
@@ -132,7 +132,7 @@ describe("checklist rows", () => {
   test("copy: no-sites variant, pm2 down without a Termux command", () => {
     expect(checkText(chk("ecosystem_spreads_apps_json", "error", { noSites: 1 }))).toContain("first site");
     expect(checkText(chk("pm2_runtime", "error"))).toBe(
-      "The pm2 service is not running, so every site has stopped too.",
+      "The pm2 service isn't running, so every site has stopped too.",
     );
     expect(checkText(chk("pm2_runtime", "error"))).not.toContain("sv up");
   });
@@ -157,7 +157,7 @@ describe("fix dialog", () => {
         },
       }),
     );
-    expect(lines[0]).toContain("are not restarted: makuro-solusi and adminneo");
+    expect(lines[0]).toContain("aren't restarted: makuro-solusi and adminneo");
     expect(lines).toContain(t.dialog.ecosystem_block.oldSpread);
     expect(lines).toContain(t.dialog.ecosystem_block.guard);
     expect(lines.join(" ")).toContain("pm2 keeps running blog"); // old spread: blog already ran
@@ -233,7 +233,7 @@ describe("apply run", () => {
     );
   });
 
-  test("pm2 down error toast carries a 'Start pm2' action; other errors do not", () => {
+  test("pm2 down error toast carries a 'Start pm2' action; other errors don't", () => {
     toastSiteError(new ApiError("client", 409, "pm2_not_running", null));
     const opts = (n: number) => error.mock.calls[n]?.[1] as { action?: { label: string } } | undefined;
     expect(opts(0)?.action?.label).toBe("Start pm2");

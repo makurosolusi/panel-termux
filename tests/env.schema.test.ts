@@ -102,7 +102,7 @@ test("PANEL_LANG: optional, default en; parseEnv never fails on it (the server d
 describe("renderEnvTemplate", () => {
   const minimal = [
     "# Panel Termux — minimal .env. Fill in the empty values, save as ~/panel/.env (chmod 600).",
-    "# Other settings (Cloudflare, backup, Telegram, sites, monitor) are in /dev → Settings. Guide: panel docs google",
+    "# Other settings (Cloudflare, backup, Telegram, sites, monitor) are in Administration → Settings. Guide: panel docs google",
     "",
     "# Public address of the panel (https://domain, or http://localhost:<port> when local). Example: https://panel.example.org",
     "APP_BASE_URL=",
@@ -110,7 +110,7 @@ describe("renderEnvTemplate", () => {
     "GOOGLE_CLIENT_ID=",
     "# Google OAuth Client secret. Secret: never share or commit it.",
     "GOOGLE_CLIENT_SECRET=",
-    "# Google emails that become super admin, separated by commas. Example: you@example.org",
+    "# Google emails that become Super Admin, separated by commas. Example: you@example.org",
     "SUPER_ADMIN_EMAILS=",
   ];
   const optional = [
@@ -129,7 +129,7 @@ describe("renderEnvTemplate", () => {
   ];
   const minimalId = [
     "# Panel Termux — .env minimal. Isi nilai yang kosong, simpan sebagai ~/panel/.env (chmod 600).",
-    "# Pengaturan lain (Cloudflare, backup, Telegram, situs, monitor) ada di /dev → Pengaturan. Panduan: panel docs google",
+    "# Pengaturan lain (Cloudflare, backup, Telegram, situs, monitor) ada di Administrasi → Pengaturan. Panduan: panel docs google",
     "",
     "# Alamat publik panel (https://domain, atau http://localhost:<port> saat lokal). Contoh: https://panel.example.org",
     "APP_BASE_URL=",
@@ -137,7 +137,7 @@ describe("renderEnvTemplate", () => {
     "GOOGLE_CLIENT_ID=",
     "# Client secret OAuth Google. Rahasia: jangan dibagikan atau di-commit.",
     "GOOGLE_CLIENT_SECRET=",
-    "# Email Google yang menjadi super admin, pisahkan dengan koma. Contoh: you@example.org",
+    "# Email Google yang menjadi Super Admin, pisahkan dengan koma. Contoh: you@example.org",
     "SUPER_ADMIN_EMAILS=",
   ];
   const optionalId = [

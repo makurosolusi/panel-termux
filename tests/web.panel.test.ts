@@ -307,7 +307,7 @@ describe("Overview state", () => {
       temperatureC: 33,
       health: null,
     };
-    expect(batteryView(b, [])).toEqual({ value: "80%", hint: "Not charging", tone: undefined });
+    expect(batteryView(b, [])).toEqual({ value: "80%", hint: "On battery", tone: undefined });
     expect(batteryView({ ...b, status: "not_charging", plugged: "usb" }, []).hint).toBe("Plugged in, not charging");
     expect(batteryView({ ...b, status: "charging", charging: true }, []).hint).toBe("Charging");
     const low = problem({ code: "battery_low", kind: "battery", severity: "warning" });

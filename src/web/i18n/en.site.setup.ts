@@ -38,53 +38,54 @@ export const tSiteSetup = msg("site.setup", {
   adoptTitle: "Sites already running",
   adoptBody: (n: number) =>
     n === 1
-      ? "1 domain already points to an app on this phone but is not recorded yet. Adopt it to deploy from the panel."
-      : `${n} domains already point to apps on this phone but are not recorded yet. Adopt them to deploy from the panel.`,
+      ? "1 domain already points to an app on this phone but isn't recorded yet. Adopt it to deploy from the panel."
+      : `${n} domains already point to apps on this phone but aren't recorded yet. Adopt them to deploy from the panel.`,
   adoptLink: "See domains not managed yet",
   checks: {
     sites_dir: {
       ok: "Sites folder exists",
       error: (p) =>
-        `The folder ${s(p.path)} does not exist yet. Press Fix to let the panel create it, or change the sites folder in Settings.`,
+        `The folder ${s(p.path)} doesn't exist yet. Press Fix to let the panel create it, or change the sites folder in Settings.`,
     },
     apps_json: {
       ok: "apps.json can be read",
       error: (p) =>
         p.reason === "invalid"
           ? "apps.json is broken (not a JSON list). Press Fix to let the panel rebuild it from the panel's site list."
-          : "apps.json does not exist yet. Press Check again and the panel creates it.",
+          : "apps.json doesn't exist yet. Press Check again and the panel creates it.",
     },
     ecosystem_file: {
       ok: "ecosystem.config.js exists",
       error: (p) =>
-        `The file ${s(p.path)} does not exist, so pm2 does not know which apps to run. Press Fix to let the panel create it.`,
+        `The file ${s(p.path)} doesn't exist, so pm2 doesn't know which apps to run. Press Fix to let the panel create it.`,
     },
     ecosystem_loads: {
       ok: "pm2 can load ecosystem.config.js",
       error:
-        "pm2 cannot load ecosystem.config.js. Running sites are fine for now, but no app will start after the phone restarts. Fix the file, then check again.",
+        "pm2 can't load ecosystem.config.js. Running sites are fine for now, but no app will start after the phone restarts. Fix the file, then check again.",
     },
     ecosystem_spreads_apps_json: {
       ok: "pm2 also runs the sites created by the panel",
       error: (p) =>
         p.noSites
           ? "Before the first site is created, the panel needs to connect it to pm2."
-          : "pm2 does not run the sites created by the panel yet, so they will not come back after the phone restarts.",
+          : "pm2 doesn't run the sites created by the panel yet, so they won't come back after the phone restarts.",
     },
     snippet_current: {
       ok: "Panel sites are loaded the current way",
-      warning: "The panel block in ecosystem.config.js is from an older version. Press Fix to replace it; your apps are not changed.",
+      warning:
+        "The panel block in ecosystem.config.js is from an older version. Press Fix to replace it; your apps aren't changed.",
       error: "pm2 loads the panel's sites the old way: if one site is broken, every app can stop.",
     },
     apps_entries_runnable: {
       ok: "Every site in apps.json has a binary",
       warning: (p) => `Sites in apps.json without a binary yet: ${s(p.count)}. pm2 skips them until they are deployed.`,
       error: (p) =>
-        `Sites in apps.json without a binary yet: ${s(p.count)}. pm2 loads them the old way, which does not skip them.`,
+        `Sites in apps.json without a binary yet: ${s(p.count)}. pm2 loads them the old way, which doesn't skip them.`,
     },
     pm2_runtime: {
       ok: "The pm2 service is running",
-      error: "The pm2 service is not running, so every site has stopped too.",
+      error: "The pm2 service isn't running, so every site has stopped too.",
     },
     pm2_auto_exit: {
       ok: (p) =>
@@ -106,7 +107,7 @@ export const tSiteSetup = msg("site.setup", {
       warning: "No Cloudflare API token set (optional). Without a token, create DNS records for new domains by hand.",
     },
   } satisfies Record<IntegrationCheckKey, CheckCopy>,
-  notReady: "pm2 is not ready to run sites created by the panel.",
+  notReady: "pm2 isn't ready to run sites created by the panel.",
   notReadyLink: "Finish setup on the Sites page",
   fix: "Fix",
   fixAll: (n: number) => `Fix all (${n})`,
@@ -117,8 +118,8 @@ export const tSiteSetup = msg("site.setup", {
       titleUpdate: "Update how pm2 loads the panel's sites?",
       body: (keep: readonly string[]) =>
         keep.length
-          ? `The panel adds one block at the end of \`ecosystem.config.js\`. Existing apps stay the same and are not restarted: ${joinNames(keep)}. Running sites are not affected.`
-          : "The panel adds one block at the end of `ecosystem.config.js`. Running sites are not affected.",
+          ? `The panel adds one block at the end of \`ecosystem.config.js\`. Existing apps stay the same and aren't restarted: ${joinNames(keep)}. Running sites aren't affected.`
+          : "The panel adds one block at the end of `ecosystem.config.js`. Running sites aren't affected.",
       addApps: (apps: readonly string[]) => `The next time pm2 starts, it also runs ${joinNames(apps)}.`,
       keptApps: (apps: readonly string[]) => `pm2 keeps running ${joinNames(apps)}, now through the panel's block.`,
       oldSpread:
@@ -127,7 +128,7 @@ export const tSiteSetup = msg("site.setup", {
     },
     pm2_auto_exit: {
       title: "Install the pm2 safeguard?",
-      body: "The panel changes the pm2 service settings so pm2 does not exit on its own when every app is stopped. This takes effect the next time pm2 restarts; apps are not affected now.",
+      body: "The panel changes the pm2 service settings so pm2 doesn't exit on its own when every app is stopped. This takes effect the next time pm2 restarts; apps aren't affected now.",
     },
     sites_dir_create: {
       title: "Create the sites folder?",
@@ -138,9 +139,9 @@ export const tSiteSetup = msg("site.setup", {
           : `The panel creates the folder \`${dir}\` for your sites, along with \`apps.json\`.`,
       ecosystemOnly: (path: string) =>
         `The panel creates \`${path}\`, the file that tells pm2 which apps to run, including the sites created by the panel.`,
-      runningSafe: "Running apps are not affected now.",
+      runningSafe: "Running apps aren't affected now.",
       stopApps: (apps: readonly string[]) =>
-        `Running but not in this new file: ${appNamesText(apps)}. They stop when pm2 restarts and do not start again; for now they keep running. To keep them, add their entries to that file before you restart pm2.`,
+        `Running but not in this new file: ${appNamesText(apps)}. They stop when pm2 restarts and don't start again; for now they keep running. To keep them, add their entries to that file before you restart pm2.`,
     },
     apps_json_rebuild: {
       title: "Rebuild apps.json?",
@@ -150,7 +151,7 @@ export const tSiteSetup = msg("site.setup", {
           : "`apps.json` is broken, so the panel rewrites it from the panel's site list. No site is ready to run yet, so the list is empty.",
     },
     restartNote:
-      "pm2 picks up this change the next time it starts. Afterwards press Restart pm2 now, or Start pm2 if pm2 is not running.",
+      "pm2 picks up this change the next time it starts. Afterwards press Restart pm2 now, or Start pm2 if pm2 isn't running.",
     backupNote: "A copy of the old file is kept, so you can undo this change.",
     showDiff: "Show the file changes",
     loading: "Preparing the preview…",
@@ -166,7 +167,7 @@ export const tSiteSetup = msg("site.setup", {
   },
   done: "Fixed. The checks ran again.",
   doneAll: (n: number) => `${n} ${n === 1 ? "item" : "items"} fixed. The checks ran again.`,
-  notApplied: "Not applied: pm2 could not load the result. The old file is still in use.",
+  notApplied: "Not applied: pm2 couldn't load the result. The old file is still in use.",
   more: "Changes by the panel",
   lastFix: {
     ecosystem: (ago: string) => `The panel changed the ecosystem file ${ago}.`,
@@ -188,7 +189,7 @@ export const tSiteSetup = msg("site.setup", {
     pm2_run: "pm2 can exit on its own again when every app is stopped.",
     apps_json: "`apps.json` goes back to its old, broken content.",
     appsJsonSites: (sites: readonly string[]) =>
-      `\`apps.json\` goes back to its old, broken content, so pm2 does not run ${joinNames(sites)} after the phone restarts. Nothing stops right now.`,
+      `\`apps.json\` goes back to its old, broken content, so pm2 doesn't run ${joinNames(sites)} after the phone restarts. Nothing stops right now.`,
   },
   undoChanged: "The file was changed again after the fix. Restoring the old version discards that change.",
   undoForce: "Restore anyway",
@@ -200,16 +201,16 @@ export const tSiteSetup = msg("site.setup", {
       ? `Every app stops for a few seconds and then runs again: ${appNamesText(apps)}. Visitors may be cut off briefly.`
       : "pm2 stops for a few seconds and then runs again.",
   restartPm2Stops: (apps: readonly string[]) =>
-    `Running now but not in \`ecosystem.config.js\`, so they stop and do not start again: ${appNamesText(apps)}.`,
+    `Running now but not in \`ecosystem.config.js\`, so they stop and don't start again: ${appNamesText(apps)}.`,
   restartTyped: "pm2",
   restartWaiting: "Waiting for the apps to run again…",
   restartPm2FileNote: "The panel's changes to `ecosystem.config.js` take effect now.",
-  restartNotFound: "The pm2 service is not registered in this phone's runit, so pm2 was not restarted.",
+  restartNotFound: "The pm2 service isn't registered in this phone's runit, so pm2 wasn't restarted.",
   restartOk: "pm2 restarted. Every app is running again.",
   restartCheckFailed: (apps: readonly string[]) => `Not running again after pm2 restarted: ${appNamesText(apps)}.`,
   restartNotListed: (apps: readonly string[]) =>
-    `Not in \`ecosystem.config.js\`, so pm2 does not run them again: ${appNamesText(apps)}. Add their entries back to that file, then restart pm2.`,
-  restartListedHint: "Check the app log to see why it is not running yet.",
+    `Not in \`ecosystem.config.js\`, so pm2 doesn't run them again: ${appNamesText(apps)}. Add their entries back to that file, then restart pm2.`,
+  restartListedHint: "Check the app log to see why it isn't running yet.",
   restartAppsLink: "Open Apps",
   restartFailedHint: "Restoring the ecosystem file to its version before the fix usually brings them back.",
   restoreAndRestart: "Restore the ecosystem file and restart pm2",
@@ -221,7 +222,7 @@ export const tSiteSetup = msg("site.setup", {
     step1Create: "Create a new ecosystem file in Termux:",
     step2Create: "Fill the file with this text:",
     stepRepair: "First fix the error named in the Failed line above (usually a missing bracket or comma).",
-    step3: "Save. pm2 does not need a restart.",
+    step3: "Save. pm2 doesn't need a restart.",
     step4: "Press Check again.",
     copyBlock: "Copy block",
     runScript: "Add `--no-auto-exit` after `pm2-runtime` in this file, then restart the pm2 service when it is safe:",
@@ -232,30 +233,30 @@ export const tSiteSetup = msg("site.setup", {
     changed: "The file changed since the preview was made. Review the changes again.",
     changed_during_fix: "The file is being edited on the phone. Close the editor, then try again.",
     changed_since: "The file was changed again after the fix. Restoring the old version discards that change.",
-    validation_failed: "Not applied: pm2 could not load the result. The old file is still in use.",
-    not_fixable: "The panel cannot fix this automatically. Follow Manual steps on the Setup card.",
-    disk_full: "The phone's storage is full, so the file was not changed.",
-    not_writable: "The panel has no permission to change this file, so it was not changed.",
-    not_found: "The copy of the old file is gone, so the change cannot be undone.",
+    validation_failed: "Not applied: pm2 couldn't load the result. The old file is still in use.",
+    not_fixable: "The panel can't fix this automatically. Follow Manual steps on the Setup card.",
+    disk_full: "The phone's storage is full, so the file wasn't changed.",
+    not_writable: "The panel has no permission to change this file, so it wasn't changed.",
+    not_found: "The copy of the old file is gone, so the change can't be undone.",
   } satisfies Record<FixErrorCode, string>,
   unfixable: {
     ecosystem_missing:
-      "The file `ecosystem.config.js` does not exist, so the panel does not know how pm2 runs on this phone.",
+      "The file `ecosystem.config.js` doesn't exist, so the panel doesn't know how pm2 runs on this phone.",
     ecosystem_unloadable:
-      "pm2 cannot load `ecosystem.config.js` right now, so the panel does not change it. Fix the error first, then check again.",
+      "pm2 can't load `ecosystem.config.js` right now, so the panel doesn't change it. Fix the error first, then check again.",
     ecosystem_linked:
-      "`ecosystem.config.js` is a link to another file (possibly one that no longer exists), so the panel does not change or overwrite it.",
+      "`ecosystem.config.js` is a link to another file (possibly one that no longer exists), so the panel doesn't change or overwrite it.",
     not_config_js: "The ecosystem file name must end in `.config.js` for pm2 to read it as an app list.",
     too_large: "The ecosystem file is too large to change automatically.",
     not_utf8:
-      "The ecosystem file uses a text encoding other than UTF-8, so the panel does not change it to avoid corrupting it.",
+      "The ecosystem file uses a text encoding other than UTF-8, so the panel doesn't change it to avoid corrupting it.",
     markers_broken:
-      "The panel's block markers in `ecosystem.config.js` are broken or duplicated, so the panel does not change it.",
+      "The panel's block markers in `ecosystem.config.js` are broken or duplicated, so the panel doesn't change it.",
     unknown_apps_json_use:
-      "`ecosystem.config.js` loads `apps.json` in a way the panel does not recognize, so the panel does not change it.",
-    run_script_missing: "The pm2 service run script was not found.",
-    run_script_unknown: "The pm2 service run script is written in a way the panel does not recognize.",
-    sites_dir_outside_home: "The sites folder is outside the Termux home folder, so the panel does not create it.",
+      "`ecosystem.config.js` loads `apps.json` in a way the panel doesn't recognize, so the panel doesn't change it.",
+    run_script_missing: "The pm2 service run script wasn't found.",
+    run_script_unknown: "The pm2 service run script is written in a way the panel doesn't recognize.",
+    sites_dir_outside_home: "The sites folder is outside the Termux home folder, so the panel doesn't create it.",
   } satisfies Record<FixBlockReason, string>,
   unfixableSuffix: "Follow Manual steps below.",
   unfixableElsewhere: "Follow Manual steps on the Setup card.",

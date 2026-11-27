@@ -74,7 +74,7 @@ export function planService(ctx: InitContext, s: ServiceState): PlanLine[] {
     lines.push({
       kind: "action",
       text: tr(
-        "Starting the cloudflared service (also by itself after the phone turns on)",
+        "Starting the cloudflared service (also automatically when the phone boots)",
         "Menyalakan layanan cloudflared (juga otomatis setelah HP menyala)",
       ),
     });

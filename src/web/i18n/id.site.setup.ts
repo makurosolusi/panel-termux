@@ -72,7 +72,8 @@ export const idSiteSetup: Messages<typeof tSiteSetup> = {
     },
     snippet_current: {
       ok: "Situs panel dimuat dengan cara terbaru",
-      warning: "Blok panel di ecosystem.config.js versi lama. Tekan Perbaiki untuk menggantinya; aplikasi Anda tidak diubah.",
+      warning:
+        "Blok panel di ecosystem.config.js versi lama. Tekan Perbaiki untuk menggantinya; aplikasimu tidak diubah.",
       error: "pm2 memuat situs panel dengan cara lama: bila satu situs rusak, semua aplikasi bisa berhenti.",
     },
     apps_entries_runnable: {

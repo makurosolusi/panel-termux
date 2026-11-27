@@ -156,7 +156,7 @@ describe("fresh phone", () => {
     const { h, cfDir, svdir } = setup("fresh", { tty: true, answers: [true, ""], files: ENV_FILE });
     const r = await init(h);
     expect(r.code).toBe(0);
-    expect(r.text).toContain("If the browser does not open by itself, open: https://dash.cloudflare.com/");
+    expect(r.text).toContain("If the browser does not open automatically, open: https://dash.cloudflare.com/");
     const all = argvs(h);
     expect(all).toContain("cloudflared tunnel login");
     expect(all).toContain("cloudflared tunnel create panel-contoh-com");

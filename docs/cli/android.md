@@ -6,14 +6,14 @@ your sites running while the screen is off and after the phone restarts.
 ## 1. Install Termux from the right source
 
 Install Termux (`com.termux`) from F-Droid or GitHub (github.com/termux/termux-app/releases).
-The Play Store version is different and does not work. Termux:Boot and Termux:API must come from
+The Play Store version is outdated and not supported. Termux:Boot and Termux:API must come from
 the same source as Termux, because their signatures must match. Do not mix F-Droid and GitHub.
 
-## 2. Termux:Boot (starts the services when the phone turns on)
+## 2. Termux:Boot (starts the services when the phone boots)
 
 1. Install the Termux:Boot app (`com.termux.boot`).
-2. Open Termux:Boot once from the app drawer. Unless it was opened once, Android does not
-   run it when the phone starts.
+2. Open Termux:Boot once from the app drawer. Android does not run it after a restart until it
+   has been opened once.
 3. `panel init` writes the script `~/.termux/boot/panel-termux`, which runs every time the
    phone starts: it calls `termux-wake-lock` and starts the runit services (`termux-services`).
 

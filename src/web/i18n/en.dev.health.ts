@@ -34,7 +34,7 @@ export const tDevHealth = msg("dev.health", {
   },
   info: {
     title: "Information",
-    description: "These don't lower the health status, but you should take care of them.",
+    description: "These don't affect the health status, but they're worth fixing.",
     backup_not_configured: "Backups aren't set up yet. Set them up in the setup guide.",
     access_not_seen: "Cloudflare Access not detected yet. Anyone with a Google account can sign in as a User.",
     open: "Open the setup guide",

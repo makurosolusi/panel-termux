@@ -51,7 +51,10 @@ export async function login(ctx: InitContext, cfDir: string): Promise<void> {
       opened = true;
       // one-time login URL, not a secret (D14)
       ctx.out.line(
-        tr(`If the browser does not open by itself, open: ${url}`, `Bila browser tidak terbuka sendiri, buka: ${url}`),
+        tr(
+          `If the browser does not open automatically, open: ${url}`,
+          `Bila browser tidak terbuka sendiri, buka: ${url}`,
+        ),
       );
       ctx.host.exec("termux-open-url", [url]).catch(() => {
         ctx.out.note(

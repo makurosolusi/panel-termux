@@ -108,7 +108,7 @@ export const createStartStep = (timing: InitTiming = INIT_TIMING) =>
           {
             kind: "action",
             text: tr(
-              "Making the panel start by itself after the phone turns on",
+              "Making the panel start automatically when the phone boots",
               "Membuat panel menyala otomatis setelah HP hidup",
             ),
           },

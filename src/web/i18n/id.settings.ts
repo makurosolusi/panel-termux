@@ -91,7 +91,7 @@ export const idSettings: Messages<typeof tSettings> = {
     },
     "backup.retention_days": {
       label: "Simpan cadangan (hari)",
-      help: "Cadangan lebih tua dari ini dihapus setelah pencadangan yang tidak gagal. Tiga cadangan berhasil terakhir dan cadangan valid terakhir tiap item selalu disimpan.",
+      help: "Cadangan lebih tua dari ini dihapus setelah pencadangan yang tidak gagal. Cadangan berhasil terbaru (lihat Cadangan berhasil minimal) dan cadangan valid terakhir tiap item selalu disimpan.",
       placeholder: "14",
       invalid: "Isi angka 1–365.",
     },
@@ -148,7 +148,7 @@ export const idSettings: Messages<typeof tSettings> = {
     "sites.port_range": {
       label: "Rentang port situs",
       help: "Port untuk aplikasi situs baru dipilih dari rentang ini. Tulis `awal-akhir`, mis. `3001-3999`.",
-      placeholder: "Dari 3001, sampai 3999",
+      placeholder: "3001-3999",
       invalid: "Port awal harus di atas 1024 dan lebih kecil dari port akhir (maks 65535).",
     },
     "monitor.sample_interval_sec": {

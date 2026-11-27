@@ -27,7 +27,7 @@ Options:
   --lang <en|id>          Output language (default: PANEL_LANG, then LANG, then en).
 
 To install or update the panel: run the install line again (README), or <new binary> init.
-Exit codes: 0 success, 1 failed, 2 wrong usage, 3 action needed then run again, 4 cancelled.`,
+Exit codes: 0 success, 1 failed, 2 wrong usage, 3 action needed, then run again, 4 cancelled.`,
   id: `Panel Termux — panel admin untuk server di HP Android (Termux).
 
 Pemakaian: panel <perintah> [opsi]
@@ -81,13 +81,13 @@ Options:
   -y, --yes                Answer yes to the plan (also restarts the panel on upgrade, without a terminal).
   --dry-run                Only print the plan; nothing is changed.
   --hostname <domain>      Panel domain, e.g. panel.example.com (not asked again).
-  --admin-email <email>    Google email of a super admin; may be repeated.
+  --admin-email <email>    Google email of a Super Admin; may be repeated.
   --skip <part>            Skip postgres, tunnel or boot; may be repeated.
   --ssh-key <source>       Add an SSH key from an https:// URL, a file or - (stdin), then start sshd.
   --skip-verify            Skip checking the binary against the release SHA256SUMS (terminal only, asks first).
   --lang <en|id>           Language of the output; on a terminal, init asks once and saves PANEL_LANG.
 
-Exit codes: 0 done, 1 failed, 2 wrong usage, 3 action needed then run again, 4 cancelled, 130 Ctrl-C.`,
+Exit codes: 0 done, 1 failed, 2 wrong usage, 3 action needed, then run again, 4 cancelled, 130 Ctrl-C.`,
     doctor: `Usage: panel doctor [--json]
 
 Checks the phone without changing anything: Termux, packages, runit services, ~/panel/.env, the sites Setup card,
@@ -110,7 +110,7 @@ Options:
   --full   Include the optional variables (commented out, with their defaults).`,
     rollback: `Usage: panel rollback [--db] [-y]
 
-Swaps ~/panel/panel with ~/panel/panel.prev, then restarts the panel service. Rolling back twice = back again.
+Swaps ~/panel/panel with ~/panel/panel.prev, then restarts the panel service. Running it twice returns to the current binary.
 
 Options:
   --db        Also restore panel.db from the newest snapshot (data written after the snapshot is lost).
@@ -134,7 +134,7 @@ Opsi:
   -y, --yes                Jawab ya untuk rencana (juga restart panel saat upgrade, tanpa terminal).
   --dry-run                Hanya cetak rencana; tidak ada yang diubah.
   --hostname <domain>      Domain panel, mis. panel.contoh.com (tidak ditanya lagi).
-  --admin-email <email>    Email Google super admin; boleh diulang.
+  --admin-email <email>    Email Google Super Admin; boleh diulang.
   --skip <bagian>          Lewati postgres, tunnel, atau boot; boleh diulang.
   --ssh-key <sumber>       Tambah kunci SSH dari URL https://, file, atau - (stdin), lalu nyalakan sshd.
   --skip-verify            Lewati cek binary terhadap SHA256SUMS rilis (hanya di terminal, dengan konfirmasi).

@@ -183,7 +183,7 @@ describe("site detail decisions", () => {
       text: "Healthy: HTTP 200 from /api/health in 85 ms.",
     });
     expect(healthToast({ ...p, ok: false, status: 502, ms: 9 }).text).toContain("answered 502");
-    expect(healthToast({ ...p, ok: false, status: null, ms: null }).text).toContain("did not answer");
+    expect(healthToast({ ...p, ok: false, status: null, ms: null }).text).toContain("didn't answer");
   });
 
   test("domains dialog: normalize, check request, blinking hosts, per-domain feedback", () => {
@@ -259,7 +259,7 @@ describe("DNS record card without a token (PLAN/06 §6.4 A)", () => {
     expect(manualDnsHosts([step("dns_no_token", {})])).toEqual([]); // 0.3.0 job rows carry no hostnames
   });
 
-  test("site detail: unmanaged domains that do not answer yet", () => {
+  test("site detail: unmanaged domains that don't answer yet", () => {
     const dns = [
       { hostname: "own.contoh.com", managed: true },
       { hostname: "ok.contoh.com", managed: false },

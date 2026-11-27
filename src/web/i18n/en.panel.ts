@@ -123,7 +123,8 @@ export const tPanel = msg("panel", {
   },
   domains: {
     title: "Domains",
-    description: "Hostnames on the cloudflared tunnel, where they point on the phone, and checks from the internet.",
+    description:
+      "Domains routed through the cloudflared tunnel, where they point on the phone, and checks from the internet.",
     label: "Domain list",
     cols: {
       domain: "Domain",

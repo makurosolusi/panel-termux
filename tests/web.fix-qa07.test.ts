@@ -50,15 +50,15 @@ describe("new ecosystem from the template while hand-written apps run (MAJOR-N2)
     const i = integration({ wouldStop: ["makuro-solusi", "adminneo"] });
     const text = restartDescription(i);
     expect(text.startsWith(t.restartPm2Stops(["makuro-solusi", "adminneo"]))).toBe(true);
-    expect(text).toContain("so they stop and do not start again: makuro-solusi and adminneo");
+    expect(text).toContain("so they stop and don't start again: makuro-solusi and adminneo");
     expect(restartTier(i)).toEqual({ tier: "typed", typedValue: "pm2", destructive: true });
     expect(restartTier(integration({ wouldStop: [] }))).toEqual({ tier: "confirm" });
-    expect(restartDescription(integration({}))).not.toContain("do not start again");
+    expect(restartDescription(integration({}))).not.toContain("don't start again");
   });
 
-  test("a missing app the file does not list gets the way back, not a restore hint", () => {
+  test("a missing app the file doesn't list gets the way back, not a restore hint", () => {
     expect(t.restartNotListed(["adminneo"])).toBe(
-      "Not in `ecosystem.config.js`, so pm2 does not run them again: adminneo. Add their entries back to that file, then restart pm2.",
+      "Not in `ecosystem.config.js`, so pm2 doesn't run them again: adminneo. Add their entries back to that file, then restart pm2.",
     );
   });
 });
@@ -77,7 +77,7 @@ describe("'Check again' count matches 'Fix all (n)' (MAJOR-N1)", () => {
     { key: "ecosystem_block" as const, checks: ["snippet_current" as const], available: true as const },
     { key: "pm2_auto_exit" as const, checks: ["pm2_auto_exit" as const], available: true as const },
   ];
-  test("a warning with a fix counts, an optional warning without one does not", () => {
+  test("a warning with a fix counts, an optional warning without one doesn't", () => {
     const i = integration({
       checks: [
         check("snippet_current", "error"),

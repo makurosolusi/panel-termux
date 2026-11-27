@@ -22,7 +22,7 @@ const docsHint = () => tr("see: panel docs android", "lihat: panel docs android"
  */
 export const bootScript = (p: CliPaths) =>
   `#!${p.prefix}/bin/sh
-# Written by panel init: when the phone turns on, Termux is kept awake and runit starts every service.
+# Written by panel init: when the phone boots, Termux is kept awake and runit starts every service.
 ${p.prefix}/bin/termux-wake-lock
 export SVDIR="${p.svdir}" LOGDIR="${p.logdir}"
 exec ${p.prefix}/bin/service-daemon start
@@ -58,7 +58,7 @@ export const bootStep = defineStep<BootState>({
       lines.push({
         kind: "action",
         text: tr(
-          "Starting everything by itself after the phone turns on (Termux:Boot); the phone will ask about battery use: choose Allow",
+          "Starting everything automatically when the phone boots (Termux:Boot); the phone will ask about battery use: choose Allow",
           "Menyalakan semua otomatis setelah HP menyala (Termux:Boot); HP akan menanyakan izin baterai: pilih Izinkan",
         ),
       });

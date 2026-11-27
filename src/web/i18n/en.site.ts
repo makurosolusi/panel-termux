@@ -18,14 +18,14 @@ export const tSite = msg("site", {
   errorCodes: {
     busy: "Another change is running. Wait until it finishes, then try again.",
     not_found: "This site no longer exists; it may have just been deleted. Open the site list to see the ones left.",
-    integration_required: "pm2 is not ready to run sites created by the panel. Finish setup on the Sites page.",
-    pm2_unavailable: "The pm2 service is not running, so every site has stopped too. Start pm2, then try again.",
-    pm2_not_running: "The pm2 service is not running, so every site has stopped too. Start pm2, then try again.",
+    integration_required: "pm2 isn't ready to run sites created by the panel. Finish setup on the Sites page.",
+    pm2_unavailable: "The pm2 service isn't running, so every site has stopped too. Start pm2, then try again.",
+    pm2_not_running: "The pm2 service isn't running, so every site has stopped too. Start pm2, then try again.",
     no_free_port: "Every port in the site range is taken. Enter another port by hand.",
     app_not_found: "This pm2 app no longer exists. Reload the list, then pick again.",
     app_in_use: "Another site already uses this pm2 app. Pick a different app.",
-    self_hostname: "This domain is Panel Termux's own address, so it cannot be adopted.",
-    adopt_blocked: "The panel cannot manage this app. See the reason in the app list.",
+    self_hostname: "This domain is Panel Termux's own address, so it can't be adopted.",
+    adopt_blocked: "The panel can't manage this app. See the reason in the app list.",
     exists: "Another site already uses this name, domain or port. Rename the site, then try again.",
     invalid_name: "Invalid site name. Use lowercase letters, digits and hyphens, starting with a letter.",
     name_reserved: "The panel uses this name. Pick another one.",
@@ -53,26 +53,26 @@ export const tSite = msg("site", {
     deploy: "Deploy",
     restart: "Restart",
     restartTitle: (name: string) => `Restart the ${name} app?`,
-    restartBody: "This site cannot be opened for a few seconds while its app restarts. Other sites are not affected.",
+    restartBody: "This site can't be opened for a few seconds while its app restarts. Other sites aren't affected.",
     appLog: "App log",
-    running: (kind: string, target: string) => `Change ${kind} · ${target} is running.`,
+    running: (kind: string, target: string) => `Change in progress: ${kind} · ${target}.`,
     interrupted: (kind: string, target: string) =>
-      `Change ${kind} · ${target} was interrupted. Recover it so nothing is left half done.`,
+      `Change interrupted: ${kind} · ${target}. Recover it so nothing is left half done.`,
     viewJob: "View",
   },
   setup: tSiteSetup,
   discovered: {
     title: "Not managed yet",
-    description: "Domains in the cloudflared config that are not recorded as sites. Adopt them to manage them here.",
+    description: "Domains in the cloudflared config that aren't recorded as sites. Adopt them to manage them here.",
     label: "Domains not managed yet",
     cols: { hostname: "Domain", target: "Points to" },
     self: "Panel Termux (this domain)",
     noPort: "unknown port",
     noApp: "no matching pm2 app yet",
-    wildcard: "Wildcard domains cannot be adopted.",
+    wildcard: "Wildcard domains can't be adopted.",
     adopt: "Adopt",
     adoptLabel: (host: string) => `Adopt ${host}`,
-    unavailable: "The pm2 app list cannot be read, so domains not managed yet are not shown.",
+    unavailable: "The pm2 app list can't be read, so domains not managed yet aren't shown.",
     noCandidates: "No matching pm2 app. Make sure the app runs from a folder in ~/sites.",
   },
   adopt: {
@@ -97,17 +97,17 @@ export const tSite = msg("site", {
     cancel: "Cancel",
     done: (name: string) => `Site ${name} adopted.`,
     blockers: {
-      outside_sites_dir: "This app runs from a folder outside ~/sites, so the panel cannot manage it.",
+      outside_sites_dir: "This app runs from a folder outside ~/sites, so the panel can't manage it.",
       no_binary: "This app's folder has no `app` file.",
-      invalid_binary: "The `app` file in this folder is not a runnable binary.",
+      invalid_binary: "The `app` file in this folder isn't a runnable binary.",
       pm2_module: "This is a pm2 module, not an app.",
-      name_invalid: "This app's name cannot be used as a site name.",
+      name_invalid: "This app's name can't be used as a site name.",
     } satisfies Record<AdoptCandidateApp["blockers"][number], string>,
     warnings: {
       runtime_script_mismatch:
-        "The binary's runtime does not match how pm2 runs it. Check ecosystem.config.js before you deploy.",
+        "The binary's runtime doesn't match how pm2 runs it. Check ecosystem.config.js before you deploy.",
       script_other:
-        "The panel does not know how pm2 runs this binary. The health check after a deploy will show the result.",
+        "The panel doesn't know how pm2 runs this binary. The health check after a deploy will show the result.",
       port_unknown:
         "No app port found in the pm2 env, arguments or `.env`. The panel uses the port from the cloudflared config.",
       port_mismatch: "The app's port differs from this domain's port in the cloudflared config.",
@@ -157,7 +157,7 @@ export const tSite = msg("site", {
           : p.dns === "cert"
             ? `Create the DNS records for ${s(p.hosts)} through this phone's cloudflared login; domains outside that login's zone get a copy-ready record`
             : p.dns === "manual"
-              ? `The DNS records for ${s(p.hosts)} are not created automatically: the panel shows copy-ready records after the site is created`
+              ? `The DNS records for ${s(p.hosts)} aren't created automatically: the panel shows copy-ready records after the site is created`
               : `Create the DNS records for ${s(p.hosts)} through the cloudflared login if there is one; otherwise the panel shows copy-ready records`,
       tunnel_restart: "Restart cloudflared",
       domain_probe: "Check that the domain is reachable",
@@ -179,7 +179,7 @@ export const tSite = msg("site", {
     hostname_zone_missing: (p) =>
       `This token's account has no Cloudflare zone for ${s(p.hostname)}. Add the domain to Cloudflare first.`,
     hostname_dns_conflict: (p) =>
-      `A DNS record for ${s(p.hostname)} already exists that the panel did not create. Delete or change it in the Cloudflare dashboard, then try again.`,
+      `A DNS record for ${s(p.hostname)} already exists that the panel didn't create. Delete or change it in the Cloudflare dashboard, then try again.`,
     port_invalid: "Enter a port from 1 to 65535.",
     port_out_of_range: (p) => `Use a port in the site range ${s(p.from)}–${s(p.to)}.`,
     port_in_use: (p) => `Another app already uses port ${s(p.port)}.`,
@@ -189,9 +189,9 @@ export const tSite = msg("site", {
     dns_same_tunnel: "The DNS record already points to this phone's tunnel, so it is used as is.",
     dns_owned: "The panel created this DNS record earlier and will reuse it.",
     dns_token_missing:
-      "No Cloudflare token is set, so the panel does not create this domain's DNS record. Create it by hand in the Cloudflare dashboard.",
+      "No Cloudflare token is set, so the panel doesn't create this domain's DNS record. Create it by hand in the Cloudflare dashboard.",
     dns_check_failed:
-      "DNS cannot be checked right now. You can still create the site; the panel tries again when it creates the record.",
+      "DNS can't be checked right now. You can still create the site; the panel tries again when it creates the record.",
   } satisfies Record<SiteNoteCode, Copy>,
   // Change kind names for the running-change banner on /panel/sites (the change pages read tJob).
   job: {

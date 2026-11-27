@@ -4,7 +4,7 @@ The panel only listens on `127.0.0.1`. From outside, it is reached through Cloud
 phone connects out to Cloudflare, so you need no public IP and no open router port.
 You need a domain that already uses Cloudflare.
 
-## What the panel does by itself
+## What the panel does for you
 
 Once the tunnel exists and the panel is open, you never touch the tunnel for sites again.
 Create a site in the panel: it adds a route to `~/.cloudflared/config.yml` (checked first with
@@ -52,7 +52,8 @@ exec cloudflared tunnel --no-autoupdate run <name> 2>&1
 In the Cloudflare dashboard: Zero Trust → Access controls → Applications → Self-hosted.
 One application, one public hostname per path: `panel`, `dev`, `api/panel`, `api/dev`
 (no `/*`). Policy Allow → Emails with the owner's email. Never leave Path empty:
-the landing page and Google sign-in must stay public. Details: README, section Install on the phone.
+the landing page and Google sign-in must stay public.
+Details: README, section "Install on your phone".
 
 ## Secrets
 

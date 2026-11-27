@@ -18,7 +18,7 @@ export const tDevSetup = msg("dev.setup", {
   >,
   done: "Done",
   markUndone: "Mark as not done",
-  manual: "ticked by hand",
+  manual: "marked manually",
   markedDone: "Step marked as done.",
   markedUndone: "Step marked as not done.",
   banner: {

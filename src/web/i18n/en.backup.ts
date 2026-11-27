@@ -10,22 +10,22 @@ import type {
 import { msg } from "@/shared/i18n";
 import type { RunBlock } from "@/web/backup/backup.state";
 
-/** UI strings of the /panel/backups page (PLAN/04 §5.3; Indonesian overlay in `id.backup`). Term: "Backup". */
+/** UI strings of the /panel/backups page (PLAN/04 §5.3; Indonesian overlay in `id.backup`). Term: "Backup" (page: "Backups"). */
 export const tBackup = msg("backup", {
   section: "Backup",
-  title: "Backup",
+  title: "Backups",
   subtitle: "Daily backup of databases, the panel, and site files to R2/S3 storage.",
   errorCodes: {
     busy: "Another backup is running. Wait for it to finish and try again.",
-    not_configured: "Backup is not set up yet. Fill in the R2/S3 storage settings in Administration → Settings.",
+    not_configured: "Backup isn't set up yet. Fill in the R2/S3 storage settings in Administration → Settings.",
     key_mismatch:
-      "The panel's data key does not match, so the storage key cannot be read. Check the Data key in Administration → System health.",
+      "The panel's data key doesn't match, so the storage key can't be read. Check the Data key in Administration → System health.",
     pruned: "This file was already deleted by retention.",
     reauth_required: "This action requires signing in again (session older than 15 minutes).",
     not_database: "Only database items can be restored to a new database.",
     insufficient_space: "Not enough storage on the phone for this restore. Free up space and try again.",
-    confirm_mismatch: "The name you typed does not match the database name. Type it again exactly.",
-    in_use: "A site uses this database now, so it cannot be deleted here.",
+    confirm_mismatch: "The name you typed doesn't match the database name. Type it again exactly.",
+    in_use: "A site uses this database now, so it can't be deleted here.",
     already_dropped: "This test database was already deleted. Reload the page to see the latest list.",
     restore_running: "This restore is still running. Wait for it to finish, then delete it.",
     not_found: "This backup or restore test no longer exists. Reload the page to see the latest list.",
@@ -38,7 +38,7 @@ export const tBackup = msg("backup", {
   banner: {
     keyMismatchAdmin: "Ask a Super Admin to fix the Data key in Administration → System health.",
     keyLink: "Open Data key",
-    notConfigured: "Backup is not set up yet. Settings still empty:",
+    notConfigured: "Backup isn't set up yet. Missing settings:",
     settingsLink: "Open Administration → Settings",
     askSuperAdmin: "Ask a Super Admin to fill in these settings in Administration → Settings.",
   },
@@ -58,11 +58,11 @@ export const tBackup = msg("backup", {
     lastRun: "Last",
     never: "Never",
     none: "–",
-    keyMismatch: "The data key does not match. Backups are paused until the key is fixed.",
+    keyMismatch: "The data key doesn't match. Backups are paused until the key is fixed.",
     secretsIncluded:
       "Backups include the panel's secret keys (data key, panel .env, tunnel credentials). Anyone who can read the bucket can take over this panel. Restrict access to the bucket.",
     noKeyCopy:
-      "Secret keys are not backed up and the data key was never downloaded. Without a copy, the Cloudflare token, storage keys, and Telegram token must be entered again after moving to a new phone.",
+      "Secret keys aren't backed up and the data key was never downloaded. Without a copy, the Cloudflare token, storage keys, and Telegram token must be entered again after moving to a new phone.",
   },
   excluded: {
     site_binaries:
@@ -84,8 +84,8 @@ export const tBackup = msg("backup", {
     button: "Back up now",
     started: "Backup started.",
     blocked: {
-      not_configured: "Backup is not set up yet.",
-      key_mismatch: "The data key does not match.",
+      not_configured: "Backup isn't set up yet.",
+      key_mismatch: "The data key doesn't match.",
       running: "A backup is running.",
       restoring: "A restore is running.",
     } satisfies Record<RunBlock, string>,
@@ -109,23 +109,23 @@ export const tBackup = msg("backup", {
     restoreCommand: "Restore command",
     restoreCommandAria: (name: string) => `Restore command for ${name}`,
     restoreCommandHelp:
-      "Run it in Termux on the target phone, in the folder that holds the backup file. It does not overwrite existing data. The full steps are in the README, under Restore to a new phone.",
+      'Run it in Termux on the target phone, in the folder that holds the backup file. It doesn\'t overwrite existing data. The full steps are in the README, section "Restore to a new phone".',
   },
   itemErrors: {
-    produce_failed: "The backup file could not be created.",
-    check_failed: "The backup file was damaged when checked, so it was not uploaded.",
+    produce_failed: "The backup file couldn't be created.",
+    check_failed: "The backup file was damaged when checked, so it wasn't uploaded.",
     too_large: "The file is larger than the size limit per file.",
     insufficient_space: "Not enough storage on the phone to create this file.",
     upload_failed: "Upload to storage failed.",
-    upload_mismatch: "The file size in storage does not match the original.",
-    key_mismatch: "The data key does not match.",
+    upload_mismatch: "The file size in storage doesn't match the original.",
+    key_mismatch: "The data key doesn't match.",
   } satisfies Record<BackupItemErrorCode, string>,
   itemFailed: "This file failed to back up.",
   itemWarnings: {
     file_changed:
       "Copied while it was changing. If the app was writing to its SQLite database, this copy may be incomplete.",
-    outside_sites_dir: "Some sites are outside the sites folder. That folder is not backed up.",
-    retention_denied: "The storage token cannot delete, so retention is left to the bucket's lifecycle rule.",
+    outside_sites_dir: "Some sites are outside the sites folder. That folder isn't backed up.",
+    retention_denied: "The storage token can't delete, so retention is left to the bucket's lifecycle rule.",
   } satisfies Record<BackupItemWarning, string>,
   runs: {
     title: "Backup history",
@@ -149,7 +149,7 @@ export const tBackup = msg("backup", {
     button: "Restore to a new database",
     title: (name: string) => `Restore ${name} to a new database?`,
     body: (target: string, at: string, size: string) =>
-      `The panel creates a new database ${target} from the backup of ${at}. The original database and its site are not changed. This uses CPU and about ${size} of storage on the phone.`,
+      `The panel creates a new database ${target} from the backup of ${at}. The original database and its site aren't changed. This uses CPU and about ${size} of storage on the phone.`,
     /** The server names the copy `<name>_r<yyyymmddHHMM>` (restoreTargetName); the exact name is in the toast. */
     newTarget: (name: string) => `${name}_r<date-time>`,
     started: (target: string) => `Restore to ${target} started.`,
@@ -165,7 +165,7 @@ export const tBackup = msg("backup", {
     tables: "Tables",
     done: (n: number) => `Ready: ${n} ${n === 1 ? "table" : "tables"}`,
     droppedAt: "Test database deleted",
-    useHint: "To use it for a site, connect it on the site page. A database a site uses cannot be deleted here.",
+    useHint: "To use it for a site, connect it on the site page. A database a site uses can't be deleted here.",
     inUse: "Used by a site",
     drop: "Delete test database",
     dropTitle: (db: string) => `Delete database ${db}?`,
@@ -173,9 +173,9 @@ export const tBackup = msg("backup", {
     dropConfirm: "Delete database",
     dropped: "Test database deleted.",
     errors: {
-      checksum_mismatch: "The backup file's content differs from when it was made. Do not use this backup.",
+      checksum_mismatch: "The backup file's content differs from when it was made. Don't use this backup.",
       insufficient_space: "Not enough storage on the phone.",
-      download_failed: "The backup file could not be downloaded from storage.",
+      download_failed: "The backup file couldn't be downloaded from storage.",
       restore_failed: "pg_restore failed. See the details below.",
       interrupted: "The restore was interrupted because the panel restarted. Try again.",
     } satisfies Record<NonNullable<BackupRestore["errorCode"]>, string>,

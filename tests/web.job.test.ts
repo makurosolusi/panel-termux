@@ -41,7 +41,7 @@ describe("interrupted job steps (QA M4)", () => {
     expect(stepEndMs({ finishedAt: null }, later)).toBe(later);
   });
 
-  test("interrupted copy is not repeated word for word", () => {
+  test("interrupted copy isn't repeated word for word", () => {
     expect(tJob.outcomes.interrupted()).not.toBe(tJob.final.interrupted);
     expect<string>(tJob.recover.cleanup).toBe(tJob.next.recover);
   });
@@ -79,7 +79,7 @@ describe("site missing from pm2 (D-W9-3, QA M7)", () => {
 });
 
 describe("deployOutcomeSuffix", () => {
-  test("a failed or interrupted last deploy is labelled, a successful one is not", () => {
+  test("a failed or interrupted last deploy is labelled, a successful one isn't", () => {
     expect(deployOutcomeSuffix("interrupted")).toBe(" · Interrupted");
     expect(deployOutcomeSuffix("failed")).toBe(" · Failed");
     expect(deployOutcomeSuffix("rolled_back")).toBe(" · Rolled back");
@@ -89,7 +89,7 @@ describe("deployOutcomeSuffix", () => {
 
 describe("finalReason (QA N7)", () => {
   const error: Job["error"] = { code: "health_timeout", params: { seconds: 60, last: 502 }, detail: null };
-  test("a reason a step already shows is not repeated under the banner", () => {
+  test("a reason a step already shows isn't repeated under the banner", () => {
     expect(finalReason({ error, steps: [step("health", "failed", { code: "health_timeout" })] })).toBeNull();
     expect(finalReason({ error, steps: [step("health", "failed")] })).toContain("60 s");
     expect(finalReason({ error: { code: "interrupted", params: {}, detail: null }, steps: [] })).toBeNull();
@@ -123,7 +123,7 @@ describe("in-UI start of pm2/postgres instead of manual commands (PLAN/06 §6.1,
     );
     for (const text of texts) expect(text).not.toContain("sv up");
     expect(tJob.outcomes.pm2_not_running()).toBe(
-      "The pm2 service is not running, so every site has stopped too. Start pm2, then try again.",
+      "The pm2 service isn't running, so every site has stopped too. Start pm2, then try again.",
     );
     const site = JSON.stringify(tSiteDetail.header);
     expect(site).not.toContain("ssh");

@@ -27,9 +27,9 @@ export const idOverview: Messages<typeof tOverview> = {
     charge: {
       charging: "Sedang dicas",
       full: "Penuh",
-      discharging: "Tidak mengisi",
+      discharging: "Memakai baterai",
       not_charging: "Dicolok, tidak mengisi",
-      unknown: "Tidak mengisi",
+      unknown: "Tidak diketahui",
     } satisfies Record<BatteryStatus, string>,
     temperature: "Suhu baterai",
     temperatureNone: "Tidak tersedia",

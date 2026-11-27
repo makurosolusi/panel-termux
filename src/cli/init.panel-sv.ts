@@ -86,7 +86,7 @@ export const panelSvStep = defineStep<PanelSvState>({
       {
         kind: "action",
         text: tr(
-          "Installing the panel service in runit (starts by itself after the phone turns on)",
+          "Installing the panel service in runit (starts automatically when the phone boots)",
           "Memasang layanan panel di runit (menyala otomatis setelah HP hidup)",
         ),
       },

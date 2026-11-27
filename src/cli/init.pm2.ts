@@ -101,7 +101,7 @@ function integrationLines(ctx: InitContext, s: Pm2State): PlanLine[] {
     lines.push({
       kind: "warning",
       text: tr(
-        "The pm2 service can stop by itself when no site is running",
+        "The pm2 service can stop on its own when no site is running",
         "Layanan pm2 bisa berhenti sendiri saat tidak ada situs berjalan",
       ),
       hint: setupHint(),

@@ -96,7 +96,7 @@ export const tSettings = msg("settings", {
     },
     "backup.retention_days": {
       label: "Keep backups (days)",
-      help: "Backups older than this are deleted after a run that did not fail. The last three successful backups and the last valid copy of each item are always kept.",
+      help: "Backups older than this are deleted after a run that didn't fail. The newest successful backups (see Minimum successful backups) and the last valid copy of each item are always kept.",
       placeholder: "14",
       invalid: "Enter a number from 1 to 365.",
     },
@@ -108,7 +108,7 @@ export const tSettings = msg("settings", {
     },
     "backup.max_item_mb": {
       label: "Size limit per file (MB)",
-      help: "Backup files larger than this are not uploaded and are flagged in the backup history.",
+      help: "Backup files larger than this aren't uploaded and are flagged in the backup history.",
       placeholder: "2048",
       invalid: "Enter a number from 1 to 65536.",
     },
@@ -140,20 +140,20 @@ export const tSettings = msg("settings", {
       invalid: "Choose English or Bahasa Indonesia.",
     },
     "alerts.min_severity": {
-      label: "Send from",
+      label: "Alert level",
       help: "Warning = every problem (warnings arrive silently). Critical = critical problems only.",
       invalid: "Choose Warning or Critical.",
     },
     "sites.dir": {
       label: "Sites folder",
-      help: "Folder where new sites are created. Existing sites are not moved when you change it.",
+      help: "Folder where new sites are created. Existing sites aren't moved when you change it.",
       placeholder: "~/sites",
       invalid: "Enter an absolute path or a path starting with `~/`.",
     },
     "sites.port_range": {
       label: "Site port range",
       help: "Ports for new site apps are picked from this range. Write `start-end`, e.g. `3001-3999`.",
-      placeholder: "From 3001 to 3999",
+      placeholder: "3001-3999",
       invalid: "The start port must be above 1024 and lower than the end port (max 65535).",
     },
     "monitor.sample_interval_sec": {
@@ -164,7 +164,7 @@ export const tSettings = msg("settings", {
     },
     "monitor.battery_warn_percent": {
       label: "Battery warning below (%)",
-      help: "Warn when the phone is not charging and the battery is below this. Below 15% is always critical. Unplugging the charger yourself is not a problem.",
+      help: "Warn when the phone isn't charging and the battery is below this. Below 15% is always critical. Unplugging the charger yourself isn't a problem.",
       placeholder: "25",
       invalid: "Enter a number from 16 to 100, or Off.",
     },
@@ -194,7 +194,7 @@ export const tSettings = msg("settings", {
   dirty: "Unsaved changes",
   saved: (group: string) => `${group} settings saved.`,
   saveFailed:
-    "Settings were not saved. Check your internet connection and try again. Your changes are still in the form.",
+    "Settings weren't saved. Check your internet connection and try again. Your changes are still in the form.",
   leaveWarning: "You have unsaved changes. Leave this page?",
   secret: {
     stored: (ago: string) => `Stored · changed ${ago}`,
@@ -216,7 +216,7 @@ export const tSettings = msg("settings", {
       "The data key, the panel `.env`, and tunnel credentials will be stored in the bucket too. Anyone who can read the bucket can take over this panel. Restrict access to the bucket before turning this on.",
     includeSecretsButton: "Turn on",
     sitesDirTitle: "Change the sites folder?",
-    sitesDirBody: "Existing sites stay in the old folder and are not moved.",
+    sitesDirBody: "Existing sites stay in the old folder and aren't moved.",
     sitesDirButton: "Change folder",
   },
   test: {
@@ -228,22 +228,22 @@ export const tSettings = msg("settings", {
     cloudflare: {
       ok: "The token is active and can access Cloudflare zones.",
       not_set: "No token yet.",
-      inactive: "The token is not active. Create a new token in the Cloudflare dashboard.",
-      no_zones: "The token is active but cannot see any zones. Add the Zone:Read permission.",
+      inactive: "The token isn't active. Create a new token in the Cloudflare dashboard.",
+      no_zones: "The token is active but can't see any zones. Add the Zone:Read permission.",
       api_error: "Cloudflare rejected the request. Check the token and account ID.",
-      key_mismatch: "The stored value cannot be read because the data key changed. Enter it again.",
+      key_mismatch: "The stored value can't be read because the data key changed. Enter it again.",
     } satisfies Record<CloudflareVerifyCode, string>,
     cloudflareZones: (n: number) => `The token is active and can access ${n} ${n === 1 ? "zone" : "zones"}.`,
     s3: {
       ok: "Connected: the panel can write, read, and delete in the bucket.",
       not_configured: "Fill in the required Backup fields first.",
-      unreadable: "The stored value cannot be read because the data key changed. Enter it again.",
-      unreachable: "Cannot reach the endpoint. Check the endpoint address and the phone's internet connection.",
+      unreadable: "The stored value can't be read because the data key changed. Enter it again.",
+      unreachable: "Can't reach the endpoint. Check the endpoint address and the phone's internet connection.",
       bucket_not_found: "Bucket not found. Check the bucket name.",
-      write_denied: "The key is not allowed to write to the bucket.",
-      read_failed: "The test object was written but could not be read back.",
-      delete_denied: "Writing works but deleting does not, so backup retention will not run.",
-      timeout: "The bucket did not answer within 15 seconds. Check the endpoint and try again.",
+      write_denied: "The key isn't allowed to write to the bucket.",
+      read_failed: "The test object was written but couldn't be read back.",
+      delete_denied: "Writing works but deleting doesn't, so backup retention won't run.",
+      timeout: "The bucket didn't answer within 15 seconds. Check the endpoint and try again.",
       s3_error: "S3 rejected the request. See the details below.",
     } satisfies Record<BackupVerifyCode, string>,
     s3Ms: (ms: number) => `${ms} ms`,
@@ -256,11 +256,11 @@ export const tSettings = msg("settings", {
       telegram_chat_not_found: 'Chat not found. Send a message to the bot first, then use "Find chats".',
       telegram_chat_migrated: "This group became a supergroup. The new chat ID is saved; send the test message again.",
       telegram_forbidden: "The bot is blocked or not in the group. Unblock it or add it to the group.",
-      telegram_conflict: "This bot uses a webhook, so its chats cannot be listed. Enter the chat ID manually.",
+      telegram_conflict: "This bot uses a webhook, so its chats can't be listed. Enter the chat ID manually.",
       telegram_rate_limited: "Telegram is limiting messages. Try again later.",
       telegram_bad_request: "Telegram rejected the message. Check the chat ID.",
-      telegram_unreachable: "The phone cannot reach Telegram. Check the phone's internet connection.",
-      telegram_webhook_set: "This bot uses a webhook, so its chats cannot be listed. Enter the chat ID manually.",
+      telegram_unreachable: "The phone can't reach Telegram. Check the phone's internet connection.",
+      telegram_webhook_set: "This bot uses a webhook, so its chats can't be listed. Enter the chat ID manually.",
     } satisfies Record<
       AlertErrorCode | "alerts_not_configured" | "alerts_token_missing" | "too_soon" | "telegram_webhook_set",
       string
@@ -286,22 +286,22 @@ export const tSettings = msg("settings", {
   saving: "Saving…",
   reset: "Reset to default",
   incomplete: "Incomplete",
-  unknownKey: "The server does not know this setting. Reload the page.",
+  unknownKey: "The server doesn't know this setting. Reload the page.",
   emptyPage: "There are no settings to change yet. Reload the page, or check the panel version.",
   toc: "Settings sections",
   removed: (label: string) => `${label} removed.`,
-  fieldErrors: "Some values are not valid yet. Check the marked fields and save again.",
+  fieldErrors: "Some values aren't valid yet. Check the marked fields and save again.",
   reauth:
     "Changing the backup destination or backing up secret keys requires signing in again (session older than 15 minutes). Unsaved changes will be lost, so enter them again after signing in.",
   keyMismatch: {
-    body: "Settings were not saved because the panel's data key does not match the stored secret values. Fix the data key first, then save again.",
+    body: "Settings weren't saved because the panel's data key doesn't match the stored secret values. Fix the data key first, then save again.",
     link: "Open Data key",
   },
   /** PATCH / test errors that are not a field problem. */
   errorCodes: {
-    invalid_value: "Some values are not valid yet. Check the marked fields and save again.",
+    invalid_value: "Some values aren't valid yet. Check the marked fields and save again.",
     invalid_body: "The request to the server was incomplete. Reload the page and try again.",
-    key_mismatch: "The stored value cannot be read because the data key changed. Enter it again.",
+    key_mismatch: "The stored value can't be read because the data key changed. Enter it again.",
     reauth_required: "This change requires signing in again (session older than 15 minutes).",
   },
 } as const);

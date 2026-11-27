@@ -282,7 +282,7 @@ describe("pm2 (step 7)", () => {
     expect(actions(lines)).toEqual([]);
     expect(lines.map((l) => l.text)).toEqual([
       "ecosystem.config.js does not load the sites made by the panel yet (apps.json)",
-      "The pm2 service can stop by itself when no site is running",
+      "The pm2 service can stop on its own when no site is running",
     ]);
     const h = host("fresh"); // own ecosystem without a pm2 service → reported, nothing written
     mkdirSync(join(h.paths.home, "sites"), { recursive: true });

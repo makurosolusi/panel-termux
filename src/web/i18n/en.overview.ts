@@ -27,9 +27,9 @@ export const tOverview = msg("overview", {
     charge: {
       charging: "Charging",
       full: "Full",
-      discharging: "Not charging",
+      discharging: "On battery",
       not_charging: "Plugged in, not charging",
-      unknown: "Not charging",
+      unknown: "Unknown",
     } satisfies Record<BatteryStatus, string>,
     temperature: "Battery temperature",
     temperatureNone: "Not available",
@@ -63,7 +63,7 @@ export const tOverview = msg("overview", {
     nextRun: "Next",
     never: "Never",
     notScheduled: "Not scheduled",
-    open: "Open Backup",
+    open: "Open Backups",
   },
   alerts: {
     title: "Alerts",
