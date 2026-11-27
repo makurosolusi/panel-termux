@@ -2,7 +2,7 @@
 // `-v`/`--help` evaluate nothing of the server; commands and CliHost load on demand (lab L5).
 import { type ParseArgsConfig, parseArgs } from "node:util";
 import pkg from "../../package.json" with { type: "json" };
-import { COMMAND_HELP, COMMAND_NAMES, type CommandName, GENERAL_HELP, INSTALL_HINT, SERVE_HINT } from "./cli.help";
+import { COMMAND_HELP, COMMAND_NAMES, type CommandName, GENERAL_HELP, SERVE_HINT, UPGRADE_HINT } from "./cli.help";
 import type { CliHost } from "./cli.host";
 import { CliExit, type CliOut, createCliOut } from "./cli.output";
 
@@ -22,8 +22,8 @@ const HELP = { help: { type: "boolean", short: "h" } } as const;
 const GLOBAL = { options: { ...HELP, version: { type: "boolean", short: "v" } }, maxPositionals: 0 } as const;
 const USAGE = 2;
 const FAILED = 1;
-/** Names that are not commands in 0.5.0 but get the install.sh hint (init = 0.5.1, upgrade = C14). */
-const LATER = new Set(["init", "upgrade"]);
+/** Names that are not commands but get the UPGRADE_HINT (upgrade waits for signed releases, C14). */
+const LATER = new Set(["upgrade"]);
 
 const COMMANDS: Record<CommandName, Spec> = {
   // Reached only via runCli(["serve"]) directly: main.ts routes `serve` to boot before the CLI scrubs the env.
@@ -50,6 +50,20 @@ const COMMANDS: Record<CommandName, Spec> = {
     options: { db: { type: "boolean" }, yes: { type: "boolean", short: "y" } },
     maxPositionals: 0,
     load: async () => (await import("./rollback.command")).rollbackCommand,
+  },
+  // PLAN/07 §2.1 (0.5.1): no --downgrade/--port/--tunnel (C27)
+  init: {
+    options: {
+      yes: { type: "boolean", short: "y" },
+      "dry-run": { type: "boolean" },
+      hostname: { type: "string" },
+      "admin-email": { type: "string", multiple: true },
+      skip: { type: "string", multiple: true },
+      "ssh-key": { type: "string" },
+      "skip-verify": { type: "boolean" },
+    },
+    maxPositionals: 0,
+    load: async () => (await import("./init.command")).initCommand,
   },
 };
 
@@ -112,7 +126,7 @@ async function dispatch(argv: string[], out: CliOut, host: () => Promise<CliHost
   }
   if (!(COMMAND_NAMES as readonly string[]).includes(first)) {
     out.fail(`Perintah tidak dikenal: ${first}`, "lihat: panel --help");
-    if (LATER.has(first)) out.note(INSTALL_HINT);
+    if (LATER.has(first)) out.note(UPGRADE_HINT);
     return USAGE;
   }
   const name = first as CommandName;
