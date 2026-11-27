@@ -14,8 +14,10 @@ const SAMPLES: unknown[] = [1, "x", new Date(0), ["x"]];
 async function englishByDomain(): Promise<Map<string, unknown>> {
   const byExport = new Map(Object.keys(idPack).map((d) => [`t${pascal(d)}`, d]));
   const found = new Map<string, unknown>();
-  for (const file of new Bun.Glob("en.*.ts").scanSync(I18N)) {
-    const mod: Record<string, unknown> = await import(`@/web/i18n/${file.slice(0, -3)}`);
+  // problem.copy.en.ts lives in src/shared because the server speaks the same words (domain "problem").
+  const files = [...new Bun.Glob("en.*.ts").scanSync(I18N)].map((f) => `@/web/i18n/${f.slice(0, -3)}`);
+  for (const file of [...files, "@/shared/problem.copy.en"]) {
+    const mod: Record<string, unknown> = await import(file);
     for (const [name, value] of Object.entries(mod)) {
       if (!/^t[A-Z]/.test(name) || typeof value !== "object") continue;
       const domain = byExport.get(name);
@@ -112,8 +114,10 @@ describe("i18n import rules", () => {
     const importsId = /(?:from\s+|import\(\s*)["'](?:[^"']*i18n\/|\.\/)id\.[^"']+["']/;
     const offenders = ["src/**/*.{ts,tsx}", "tests/**/*.{ts,tsx}", "scripts/**/*.ts"]
       .flatMap((g) => [...new Bun.Glob(g).scanSync(".")])
-      .filter((f) => !allowed(f) && importsId.test(readFileSync(f, "utf8")));
-    expect(offenders).toEqual(["src/web/main.tsx"]);
+      .filter((f) => !allowed(f) && importsId.test(readFileSync(f, "utf8")))
+      .sort();
+    // main.tsx loads the pack lazily; the CLI doctor reads idSiteSetup directly (PLAN/08 §6: the CLI has no overlay).
+    expect(offenders).toEqual(["src/cli/doctor.command.ts", "src/web/main.tsx"]);
     expect(readFileSync("src/web/main.tsx", "utf8")).toContain('await import("@/web/i18n/id.pack")');
   });
 

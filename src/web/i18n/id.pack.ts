@@ -1,6 +1,8 @@
 // Indonesian overlay pack (PLAN/08 §4.1, DECISIONS E5): the only importer of `id.*` dictionaries in the web bundle,
 // loaded lazily by the bootstrap when the locale is `id`. Keys are the `msg()` domains of the English dictionaries.
 import type { Messages } from "@/shared/i18n";
+import type { tProblem } from "@/shared/problem.copy.en";
+import { idProblem } from "@/shared/problem.copy.id";
 import type { tAccount } from "./en.account";
 import type { tApp } from "./en.app";
 import type { tBackup } from "./en.backup";
@@ -15,6 +17,7 @@ import type { tDevUsers } from "./en.dev.users";
 import type { tHistory } from "./en.history";
 import type { tJob } from "./en.job";
 import type { tLanding } from "./en.landing";
+import type { tLayout } from "./en.layout";
 import type { tOverview } from "./en.overview";
 import type { tPanel } from "./en.panel";
 import type { tSecurity } from "./en.security";
@@ -40,6 +43,7 @@ import { idDevUsers } from "./id.dev.users";
 import { idHistory } from "./id.history";
 import { idJob } from "./id.job";
 import { idLanding } from "./id.landing";
+import { idLayout } from "./id.layout";
 import { idOverview } from "./id.overview";
 import { idPanel } from "./id.panel";
 import { idSecurity } from "./id.security";
@@ -68,8 +72,10 @@ export type Domains = {
   history: typeof tHistory;
   job: typeof tJob;
   landing: typeof tLanding;
+  layout: typeof tLayout;
   overview: typeof tOverview;
   panel: typeof tPanel;
+  problem: typeof tProblem;
   security: typeof tSecurity;
   "service-start": typeof tServiceStart;
   session: typeof tSession;
@@ -101,8 +107,10 @@ const idPack: OverlayPack = {
   history: idHistory,
   job: idJob,
   landing: idLanding,
+  layout: idLayout,
   overview: idOverview,
   panel: idPanel,
+  problem: idProblem,
   security: idSecurity,
   "service-start": idServiceStart,
   session: idSession,
