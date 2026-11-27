@@ -77,10 +77,11 @@ describe("validateRunScript", () => {
   const prefix = join(root, "usr");
   const log = join(root, "shell.log");
   mkdirSync(join(prefix, "bin"), { recursive: true });
-  // test-only: $PREFIX/bin/bash records argv and whether the candidate is executable, then runs the host shell
+  // test-only: $PREFIX/bin/bash records argv and whether the candidate is executable, then runs the host shell.
+  // printf, not echo: dash's echo (Ubuntu /bin/sh) would eat the leading `-n` as its own option.
   writeFileSync(
     join(prefix, "bin", "bash"),
-    `#!/bin/sh\necho "$@" > "${log}"\n[ -x "$2" ] && echo exec >> "${log}"\nexec /bin/sh "$@"\n`,
+    `#!/bin/sh\nprintf '%s\\n' "$*" > "${log}"\n[ -x "$2" ] && echo exec >> "${log}"\nexec /bin/sh "$@"\n`,
   );
   chmodSync(join(prefix, "bin", "bash"), 0o755);
   const svc = join(root, "svc");
