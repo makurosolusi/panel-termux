@@ -1,355 +1,361 @@
 # panel-termux
 
-Jadikan HP Android bekas server untuk aplikasi Bun: panel web untuk mengelola layanan runit, aplikasi pm2, domain Cloudflare Tunnel, database Postgres, situs, deploy binary, dan cadangan. Akses lewat login Google, tanpa root dan tanpa Docker.
+**English** · [Bahasa Indonesia](README.id.md)
 
-![Ringkasan panel: kesehatan HP, layanan, dan masalah terbuka dalam satu layar](README_ASSETS/01-ringkasan.png)
+Turn a spare Android phone into a server for Bun apps: a web panel to manage runit services, pm2 apps, Cloudflare Tunnel domains, Postgres databases, sites, binary deploys, and backups. Access it with Google sign-in, no root and no Docker.
 
-- [Fitur unggulan](#fitur-unggulan)
-- [Masalah yang diselesaikan](#masalah-yang-diselesaikan)
-- [Instal di HP](#instal-di-hp)
-- [Kebutuhan dan konfigurasi](#kebutuhan-dan-konfigurasi)
-- [Perintah CLI](#perintah-cli)
+> The panel's interface is in Indonesian. UI labels below are quoted as they appear in the app, with an English gloss in parentheses the first time, e.g. **Perbaiki** (Fix).
+
+![Panel overview: phone health, services, and open problems on one screen](README_ASSETS/01-ringkasan.png)
+
+- [Highlights](#highlights)
+- [Problems it solves](#problems-it-solves)
+- [Install on your phone](#install-on-your-phone)
+- [Requirements and configuration](#requirements-and-configuration)
+- [CLI commands](#cli-commands)
 - [Troubleshooting](#troubleshooting)
-- [Cadangan dan pemulihan](#cadangan-dan-pemulihan) · [Rollback](#rollback) · [Keamanan](#keamanan) · [Development](#development-lokal)
+- [Backup and restore](#backup-and-restore) · [Rollback](#rollback) · [Security](#security) · [Development](#local-development)
 
-## Fitur unggulan
+## Highlights
 
-**Dibuat untuk layar HP.** Semua halaman nyaman dipakai dari HP, dengan bar navigasi bawah dan mode gelap. Ringkasan menampilkan masalah lebih dulu, atau "Semua sehat".
+**Built for phone screens.** Every page is comfortable to use from a phone, with a bottom navigation bar and dark mode. The overview shows problems first, or "Semua sehat" (All healthy).
 
-![Ringkasan di layar HP dalam mode gelap](README_ASSETS/02-ringkasan-hp.png)
+![Overview on a phone screen in dark mode](README_ASSETS/02-ringkasan-hp.png)
 
-**Panel memperbaiki sendiri.** **Situs → Persiapan** memeriksa integrasi pm2 dan menampilkan satu baris per masalah. Tombol **Perbaiki** atau **Perbaiki semua** menjelaskan dulu perubahannya dalam bahasa awam, dengan diff di **Lihat perubahan pada file**. Salinan file lama disimpan, dan **Batalkan perubahan** mengembalikannya. Tidak perlu membuka `nano` di Termux. Rinciannya di [Integrasi pm2](#integrasi-pm2-appsjson).
+**The panel fixes things itself.** **Situs → Persiapan** (Sites → Setup) checks the pm2 integration and shows one row per problem. The **Perbaiki** (Fix) or **Perbaiki semua** (Fix all) button first explains the change in plain language, with a diff under **Lihat perubahan pada file** (View file changes). A copy of the old file is kept, and **Batalkan perubahan** (Undo changes) restores it. No need to open `nano` in Termux. Details in [pm2 integration](#pm2-integration-appsjson).
 
-![Kartu Persiapan dengan tombol Perbaiki](README_ASSETS/03-persiapan-perbaiki.png)
-![Pratinjau perbaikan sebelum diterapkan](README_ASSETS/04-perbaiki-pratinjau.png)
+![Setup card with the Fix button](README_ASSETS/03-persiapan-perbaiki.png)
+![Fix preview before applying](README_ASSETS/04-perbaiki-pratinjau.png)
 
-**Deploy binary yang aman.** Unggah binary Bun dari browser. Unggahan terputus bisa dilanjutkan (**Lanjutkan unggahan**). Panel menunggu sampai aplikasi sehat, dan bila tidak sehat dalam batas waktu, deploy dikembalikan otomatis. **Kembalikan versi sebelumnya** tersedia kapan saja. Lihat [Deploy binary](#deploy-binary).
+**Safe binary deploys.** Upload a Bun binary from the browser. An interrupted upload can be resumed (**Lanjutkan unggahan**, Resume upload). The panel waits until the app is healthy, and if it is not healthy within the time limit, the deploy is rolled back automatically. **Kembalikan versi sebelumnya** (Restore previous version) is available at any time. See [Deploying binaries](#deploying-binaries).
 
-![Halaman deploy situs](README_ASSETS/05-situs-deploy.png)
+![Site deploy page](README_ASSETS/05-situs-deploy.png)
 
-**Wizard situs baru dengan DNS otomatis.** Isi nama, hostname, port, dan database opsional. Panel membuat folder, database, `.env`, entri pm2, ingress tunnel, dan CNAME DNS sekaligus, dan meng-undo langkah sebelumnya bila satu langkah gagal. Lihat [Membuat situs](#membuat-situs).
+**New-site wizard with automatic DNS.** Fill in the name, hostname, port, and an optional database. The panel creates the folder, database, `.env`, pm2 entry, tunnel ingress, and DNS CNAME in one go, and undoes earlier steps if one step fails. See [Creating a site](#creating-a-site).
 
-![Wizard buat situs](README_ASSETS/06-situs-baru.png)
+![Create site wizard](README_ASSETS/06-situs-baru.png)
 
-**Cadangan harian ke S3/R2 dengan uji pemulihan.** Database Postgres, folder situs, konfigurasi tunnel, dan `panel.db` diunggah tiap hari dengan checksum dan retensi. **Pulihkan ke database baru** membuktikan cadangan bisa dipulihkan tanpa menyentuh database asli. Lihat [Cadangan dan pemulihan](#cadangan-dan-pemulihan).
+**Daily backups to S3/R2 with restore tests.** Postgres databases, site folders, tunnel configuration, and `panel.db` are uploaded every day with checksums and retention. **Pulihkan ke database baru** (Restore to a new database) proves a backup can be restored without touching the original database. See [Backup and restore](#backup-and-restore).
 
-![Halaman Cadangan](README_ASSETS/07-cadangan.png)
+![Backups page](README_ASSETS/07-cadangan.png)
 
-**Pemantauan dan notifikasi Telegram.** Sampler membaca baterai, memori, penyimpanan, layanan, aplikasi, dan domain tiap 60 detik (bisa diatur). Masalah baru, yang makin gawat, dan yang sudah pulih dikirim ke Telegram. Lihat [Pemantauan dan notifikasi](#pemantauan-dan-notifikasi).
+**Monitoring and Telegram notifications.** A sampler reads battery, memory, storage, services, apps, and domains every 60 seconds (configurable). New problems, problems that get worse, and problems that recover are sent to Telegram. See [Monitoring and notifications](#monitoring-and-notifications).
 
-**Kesehatan sistem dan penyiapan.** Super admin melihat kartu penyiapan (Cloudflare Access, kunci data, cadangan, token Cloudflare, situs pertama, admin) beserta kemajuannya, dan keadaan panel di satu halaman.
+**System health and setup.** The super admin sees setup cards (Cloudflare Access, data key, backups, Cloudflare token, first site, admin) with their progress, and the state of the panel, on one page.
 
-![Kesehatan sistem](README_ASSETS/08-kesehatan.png)
+![System health](README_ASSETS/08-kesehatan.png)
 
-**Audit yang bisa dibaca.** Setiap perubahan tercatat: siapa, kapan, dari perangkat apa, dalam kalimat biasa. Bisa difilter dan diekspor CSV.
+**A readable audit log.** Every change is recorded: who, when, from which device, in plain sentences. It can be filtered and exported as CSV.
 
-![Halaman Audit](README_ASSETS/09-audit.png)
+![Audit page](README_ASSETS/09-audit.png)
 
-**Pengaturan dari browser.** Token Cloudflare, kunci S3/R2, dan bot Telegram diisi di Pengaturan, dengan tombol uji koneksi. Nilai rahasia disimpan terenkripsi dan tidak pernah ditampilkan lagi.
+**Settings from the browser.** The Cloudflare token, S3/R2 keys, and Telegram bot are entered under Pengaturan (Settings), with connection test buttons. Secret values are stored encrypted and never shown again.
 
-![Pengaturan dengan uji koneksi](README_ASSETS/10-pengaturan.png)
+![Settings with connection tests](README_ASSETS/10-pengaturan.png)
 
-**Aman secara bawaan.** Panel hanya listen di `127.0.0.1` dan diakses lewat Cloudflare Tunnel. Path privat dilindungi Cloudflare Access, permintaan yang mengubah data dijaga dari CSRF, dan peran (`user`, `admin`, `super_admin`) dicek di server. Lihat [Keamanan](#keamanan).
+**Secure by default.** The panel only listens on `127.0.0.1` and is reached through Cloudflare Tunnel. Private paths are protected by Cloudflare Access, requests that change data are guarded against CSRF, and roles (`user`, `admin`, `super_admin`) are checked on the server. See [Security](#security).
 
-**Halaman produk publik.** `/` menjelaskan panel kepada tamu, lengkap dengan baris pasang, dan tombol "Masuk dengan Google".
+**Public product page.** `/` introduces the panel to visitors, complete with the install line and a "Masuk dengan Google" (Sign in with Google) button.
 
 ![Landing page](README_ASSETS/11-landing.png)
 
-**Satu baris pasang, satu perintah periksa.** `panel init` menyiapkan Termux kosong sampai panel menyala. `panel doctor` memeriksa HP tanpa mengubah apa pun dan menyebut langkah berikutnya untuk tiap masalah.
+**One install line, one check command.** `panel init` takes an empty Termux all the way to a running panel. `panel doctor` checks the phone without changing anything and names the next step for each problem.
 
-![panel init di Termux kosong](README_ASSETS/12-cli-init.png)
+![panel init on an empty Termux](README_ASSETS/12-cli-init.png)
 ![panel doctor](README_ASSETS/13-cli-doctor.png)
 
-## Masalah yang diselesaikan
+## Problems it solves
 
-- **HP bekas jadi server tanpa root dan tanpa Docker.** Aplikasi Bun di-compile jadi satu binary dan dijalankan pm2 di Termux; domain publik lewat Cloudflare Tunnel, tanpa IP publik atau port forwarding.
-- **Tidak perlu menghafal perintah Termux.** Pemasangan satu baris; sesudahnya layanan, situs, domain, dan database dikelola dari browser. Masalah setup diperbaiki dengan tombol **Perbaiki**, bukan dengan mengedit file.
-- **Deploy tidak membuat situs mati.** Binary lama disimpan, kesehatan aplikasi dicek, dan versi yang gagal dikembalikan otomatis.
-- **Data tidak hilang bila HP rusak atau dicuri.** Cadangan harian ke S3/R2 dengan runbook [Pulihkan ke HP baru](#pulihkan-ke-hp-baru).
-- **Tahu saat ada yang rusak.** Ringkasan, riwayat masalah, dan notifikasi Telegram untuk baterai, layanan mati, aplikasi crash, domain tidak menjawab, dan cadangan basi.
-- **Upgrade tanpa merusak HP.** `pkg upgrade` tidak pernah dijalankan saat data PostgreSQL ada, `cloudflared` dan `postgresql` ditahan, dan panel bisa di-[rollback](#rollback).
+- **A spare phone becomes a server without root or Docker.** Bun apps are compiled to a single binary and run by pm2 in Termux; public domains go through Cloudflare Tunnel, with no public IP or port forwarding.
+- **No Termux commands to memorize.** Installation is one line; after that, services, sites, domains, and databases are managed from the browser. Setup problems are fixed with the **Perbaiki** (Fix) button, not by editing files.
+- **Deploys do not take sites down.** The old binary is kept, app health is checked, and a failed version is rolled back automatically.
+- **No data loss if the phone breaks or is stolen.** Daily backups to S3/R2 with a [Restore to a new phone](#restore-to-a-new-phone) runbook.
+- **Know when something breaks.** Overview, problem history, and Telegram notifications for battery, stopped services, crashing apps, unresponsive domains, and stale backups.
+- **Upgrades without breaking the phone.** `pkg upgrade` is never run while PostgreSQL data exists, `cloudflared` and `postgresql` are held, and the panel can be [rolled back](#rollback).
 
-## Instal di HP
+<a id="instal-di-hp"></a>
 
-Ringkasnya: siapkan aplikasi Android, buat Google OAuth client, jalankan satu baris di Termux, lalu lindungi path privat dengan Cloudflare Access.
+## Install on your phone
 
-1. **Aplikasi Android.** Pasang Termux, Termux:Boot, dan Termux:API dari sumber yang sama (F-Droid atau GitHub, bukan Play Store). Buka Termux:Boot sekali. Rincian dan pengaturan baterai: `panel docs android` atau [docs/cli/android.md](docs/cli/android.md).
+In short: set up the Android apps, create a Google OAuth client, run one line in Termux, then protect the private paths with Cloudflare Access.
 
-2. **Google OAuth client.** Buat client tipe Web application dengan redirect URI `https://<alamat panel>/api/auth/callback/google`. Langkahnya di [Google OAuth client](#google-oauth-client).
+1. **Android apps.** Install Termux, Termux:Boot, and Termux:API from the same source (F-Droid or GitHub, not the Play Store). Open Termux:Boot once. Details and battery settings: `panel docs android` or [docs/cli/android.md](docs/cli/android.md).
 
-3. **Jalankan satu baris ini di Termux.** Baris yang sama dipakai untuk memasang di HP baru, memperbarui, dan memperbaiki:
+2. **Google OAuth client.** Create a client of type Web application with the redirect URI `https://<panel address>/api/auth/callback/google`. Steps in [Google OAuth client](#google-oauth-client).
+
+3. **Run this one line in Termux.** The same line installs on a new phone, upgrades, and repairs:
 
    ```sh
    cd && curl -fL --retry 3 -o panel-termux https://github.com/makurosolusi/panel-termux/releases/latest/download/panel && chmod +x panel-termux && ./panel-termux init
    ```
 
-   Baris ini baru jalan setelah v0.5.1 dirilis (aset `panel` belum ada di rilis sebelumnya). Untuk versi tertentu, ganti `latest/download` dengan `download/<tag>`. Mau melihat rencananya dulu tanpa mengubah apa pun: `./panel-termux init --dry-run`.
+   This line only works from v0.5.1 on (earlier releases have no `panel` asset). For a specific version, replace `latest/download` with `download/<tag>`. To see the plan first without changing anything: `./panel-termux init --dry-run`.
 
-   `panel init` memasang binary ke `~/panel/panel`, lalu menyiapkan paket, runit, PostgreSQL, `~/panel/.env`, layanan panel, pm2, tunnel cloudflared, Termux:Boot, dan menyalakan panel. Sebelum mengubah apa pun, init mencetak rencananya dan meminta persetujuan. Aman dijalankan ulang: yang sudah ada tidak ditimpa. Yang ditanyakan (hanya yang masih kosong):
-   - **alamat panel**, mis. `panel.contoh.com` (menjadi `APP_BASE_URL`);
-   - **email Google admin** (`SUPER_ADMIN_EMAILS`);
-   - **Google Client ID dan secret**. Init mencetak redirect URI yang harus ditempel di "Authorized redirect URIs" OAuth client, yaitu `https://<alamat>/api/auth/callback/google`;
-   - **login Cloudflare**: init mencetak tautan login cloudflared; buka, klik, dan pilih domain. Init lalu membuat atau memakai ulang tunnel, menambah hostname panel ke `~/.cloudflared/config.yml`, dan membuat DNS-nya.
+   `panel init` installs the binary to `~/panel/panel`, then sets up packages, runit, PostgreSQL, `~/panel/.env`, the panel service, pm2, the cloudflared tunnel, Termux:Boot, and starts the panel. Before changing anything, init prints its plan and asks for approval. It is safe to run again: what already exists is not overwritten. It asks for (only what is still empty):
+   - **panel address**, e.g. `panel.contoh.com` (becomes `APP_BASE_URL`);
+   - **admin Google email** (`SUPER_ADMIN_EMAILS`);
+   - **Google Client ID and secret**. Init prints the redirect URI to paste into the OAuth client's "Authorized redirect URIs", namely `https://<address>/api/auth/callback/google`;
+   - **Cloudflare login**: init prints a cloudflared login link; open it, click, and choose the domain. Init then creates or reuses a tunnel, adds the panel hostname to `~/.cloudflared/config.yml`, and creates its DNS.
 
-   Jawaban `.env` langsung disimpan (mode 600) dan nilainya tidak pernah dicetak. Bila terputus di tengah, jalankan baris yang sama lagi: init melanjutkan dari yang belum ada. Ikuti catatan yang dicetak di akhir (izin baterai, buka Termux:Boot sekali).
+   `.env` answers are saved immediately (mode 600) and their values are never printed. If interrupted midway, run the same line again: init continues with what is still missing. Follow the notes printed at the end (battery permission, open Termux:Boot once).
 
-   **Memperbarui** = jalankan baris yang sama lagi. Hanya binary yang ditukar (versi lama disimpan sebagai `panel.prev`) dan layanan panel di-restart. Setelah itu buka **Situs → Persiapan**: bila ada yang perlu disesuaikan, tekan **Perbaiki semua** di sana.
+   **Upgrading** = running the same line again. Only the binary is swapped (the old version is kept as `panel.prev`) and the panel service is restarted. Afterwards open **Situs → Persiapan** (Sites → Setup): if anything needs adjusting, press **Perbaiki semua** (Fix all) there.
 
-   Opsi `panel init`:
+   `panel init` options:
 
-   | Opsi                              | Fungsi                                                                                                |
-   | --------------------------------- | ----------------------------------------------------------------------------------------------------- |
-   | `-y`, `--yes`                     | Jawab ya untuk rencana, termasuk restart panel saat upgrade (untuk skrip tanpa terminal).             |
-   | `--dry-run`                       | Hanya mencetak rencana; tidak ada yang diubah.                                                        |
-   | `--hostname <domain>`             | Alamat panel, tidak ditanya lagi.                                                                     |
-   | `--admin-email <email>`           | Email Google super admin; boleh diulang.                                                              |
-   | `--skip <postgres\|tunnel\|boot>` | Lewati satu bagian; boleh diulang.                                                                    |
-   | `--ssh-key <https-url\|file\|->`  | Tambah kunci SSH dari URL `https://`, file, atau `-` (tempel), lalu nyalakan sshd hanya dengan kunci. |
-   | `--skip-verify`                   | Lewati cek diri terhadap `SHA256SUMS` rilis. Hanya di terminal, dengan konfirmasi.                    |
+   | Option                            | Purpose                                                                                              |
+   | --------------------------------- | ---------------------------------------------------------------------------------------------------- |
+   | `-y`, `--yes`                     | Answer yes to the plan, including restarting the panel on upgrade (for scripts without a terminal).  |
+   | `--dry-run`                       | Only print the plan; nothing is changed.                                                             |
+   | `--hostname <domain>`             | Panel address, not asked again.                                                                      |
+   | `--admin-email <email>`           | Super admin Google email; may be repeated.                                                           |
+   | `--skip <postgres\|tunnel\|boot>` | Skip one part; may be repeated.                                                                      |
+   | `--ssh-key <https-url\|file\|->`  | Add an SSH key from an `https://` URL, a file, or `-` (paste), then enable sshd with key-only login. |
+   | `--skip-verify`                   | Skip the self-check against the release's `SHA256SUMS`. Terminal only, with confirmation.            |
 
    <details>
-   <summary>Mode init, yang dijaga init, dan cek diri</summary>
+   <summary>Init modes, what init protects, and the self-check</summary>
 
-   Mode dipilih sendiri dari keadaan HP:
-   - **HP baru** (belum ada PostgreSQL, `~/.cloudflared`, `~/.pm2`, `~/sites`, atau `panel.db`): semua langkah.
-   - **Upgrade** (binary ini lebih baru dari yang terpasang): hanya binary ditukar dan layanan panel di-restart.
-   - **Perbaiki** (versi sama): hanya melengkapi yang belum ada. Paket, PostgreSQL, dan Termux:Boot butuh terminal.
+   The mode is chosen from the phone's state:
+   - **New phone** (no PostgreSQL, `~/.cloudflared`, `~/.pm2`, `~/sites`, or `panel.db` yet): all steps.
+   - **Upgrade** (this binary is newer than the installed one): only the binary is swapped and the panel service restarted.
+   - **Repair** (same version): only completes what is missing. Packages, PostgreSQL, and Termux:Boot need a terminal.
 
-   Binary yang lebih lama dari yang terpasang ditolak; untuk kembali pakai [`panel rollback`](#rollback).
+   A binary older than the installed one is refused; to go back use [`panel rollback`](#rollback).
 
-   Yang dijaga init:
-   - `pkg upgrade` hanya di HP baru tanpa PostgreSQL. Bila data PostgreSQL ada, tidak pernah ada `pkg upgrade`, dan pemasangan paket yang akan mengganti `cloudflared`, `postgresql`, atau `nodejs` ditolak. `cloudflared` dan `postgresql` ditahan (hold) dari `pkg upgrade`, lihat `panel docs paket`.
-   - `ecosystem.config.js` tulisan tangan dan setup pm2 yang sudah ada tidak disentuh. Yang perlu disesuaikan dikerjakan lewat **Situs → Persiapan → Perbaiki**.
-   - Record DNS yang mengarah ke tunnel lain hanya dipindah setelah kamu menjawab ya di terminal.
-   - pm2 tidak pernah di-restart. Panel hanya di-restart saat upgrade; di mode lain panel yang sedang jalan dibiarkan.
+   What init protects:
+   - `pkg upgrade` only on a new phone without PostgreSQL. If PostgreSQL data exists, there is never a `pkg upgrade`, and installing packages that would replace `cloudflared`, `postgresql`, or `nodejs` is refused. `cloudflared` and `postgresql` are held from `pkg upgrade`, see `panel docs paket`.
+   - A hand-written `ecosystem.config.js` and an existing pm2 setup are not touched. Anything that needs adjusting is done through **Situs → Persiapan → Perbaiki** (Sites → Setup → Fix).
+   - DNS records pointing to another tunnel are only moved after you answer yes in the terminal.
+   - pm2 is never restarted. The panel is only restarted on upgrade; in other modes a running panel is left alone.
 
-   Bila ada perubahan situs yang sedang berjalan (deploy, buat situs, dll.), restart panel saat upgrade menunggu perubahan itu selesai, **sampai 2 menit**. Selama itu panel tidak terjangkau. Perubahan yang belum selesai setelah 2 menit terputus dan tampil sebagai "Terputus" di Riwayat perubahan, dengan tombol **Pulihkan** untuk membereskannya.
+   If a site change is in progress (deploy, create site, etc.), the panel restart during an upgrade waits for it to finish, **up to 2 minutes**. During that time the panel is unreachable. Changes not finished after 2 minutes are interrupted and shown as "Terputus" (Interrupted) in Riwayat perubahan (Change history), with a **Pulihkan** (Recover) button to clean them up.
 
-   **Cek diri**: sebelum memasang, init mencocokkan dirinya dengan baris `panel` di `SHA256SUMS` rilisnya (diunduh lewat HTTPS). Ini membuktikan unduhan utuh, bukan asal rilis. Untuk memastikan asal rilis (opsional, di komputer): `gh attestation verify panel --repo makurosolusi/panel-termux`.
+   **Self-check**: before installing, init matches itself against the `panel` line in its release's `SHA256SUMS` (downloaded over HTTPS). This proves the download is intact, not where the release came from. To verify the release's origin (optional, on a computer): `gh attestation verify panel --repo makurosolusi/panel-termux`.
 
-   `install.sh` dari rilis lama masih ada satu rilis lagi sebagai shim: ia mengunduh `panel`, mencocokkannya dengan `SHA256SUMS`, lalu menjalankan `panel init` (dihapus di 0.6.0). `scripts/install-phone.sh` sudah dihapus.
+   `install.sh` from older releases remains for one more release as a shim: it downloads `panel`, checks it against `SHA256SUMS`, then runs `panel init` (removed in 0.6.0). `scripts/install-phone.sh` has been removed.
 
    </details>
 
-4. **Lindungi path privat panel dengan Cloudflare Access.** Landing page `/`, alur login Google, dan `/profile` sengaja tetap publik.
+4. **Protect the panel's private paths with Cloudflare Access.** The landing page `/`, the Google sign-in flow, and `/profile` deliberately stay public.
 
-   Di Cloudflare dashboard: **Zero Trust → Access controls → Applications → Create new application → Self-hosted and private**. Buat **satu** aplikasi, lalu **Add public hostname** sekali per path (domain `panel.<domain>` sama semua):
+   In the Cloudflare dashboard: **Zero Trust → Access controls → Applications → Create new application → Self-hosted and private**. Create **one** application, then **Add public hostname** once per path (the domain `panel.<domain>` is the same for all):
 
-   | Path (kolom **Path**) | Melindungi                                    |
-   | --------------------- | --------------------------------------------- |
-   | `panel`               | halaman `/panel` dan `/panel/...`             |
-   | `dev`                 | halaman `/dev` dan `/dev/...`                 |
-   | `api/panel`           | API `/api/panel/...` (termasuk upload deploy) |
-   | `api/dev`             | API `/api/dev/...`                            |
+   | Path (**Path** field) | Protects                                        |
+   | --------------------- | ----------------------------------------------- |
+   | `panel`               | pages `/panel` and `/panel/...`                 |
+   | `dev`                 | pages `/dev` and `/dev/...`                     |
+   | `api/panel`           | API `/api/panel/...` (including deploy uploads) |
+   | `api/dev`             | API `/api/dev/...`                              |
 
-   Tulis path **tanpa** `/*`: menurut dokumentasi Access, `panel/*` hanya mencakup `/panel/<sesuatu>` dan **tidak** mencakup `/panel` itu sendiri, sedangkan `panel` mencakup path itu beserta sub-path-nya. Kosongkan kolom Path berarti seluruh hostname terlindungi, termasuk landing page, jadi jangan lakukan itu. Query string tidak didukung di path Access (tidak masalah, panel tidak memakainya untuk routing).
+   Write paths **without** `/*`: according to the Access documentation, `panel/*` only covers `/panel/<something>` and does **not** cover `/panel` itself, while `panel` covers the path and its sub-paths. Leaving the Path field empty protects the whole hostname, including the landing page, so do not do that. Query strings are not supported in Access paths (not a problem, the panel does not use them for routing).
 
-   Tambahkan satu policy **Allow** dengan selector **Emails** berisi email pemilik panel (boleh lebih dari satu), lalu **Create**. Saat menjadikan seseorang Admin, tambahkan juga emailnya ke policy Access.
+   Add one **Allow** policy with the **Emails** selector containing the panel owner's email (more than one is fine), then **Create**. When you make someone an Admin, add their email to the Access policy too.
 
-   Access hanya lapisan di depan. Di belakangnya login Google panel dan peran tetap berlaku, dan `/api/panel/*` serta `/api/dev/*` tetap dijaga peran di server walaupun Access salah konfigurasi. Kesehatan sistem menampilkan "Cloudflare Access belum terdeteksi" sampai panel melihat permintaan `/api/panel` atau `/api/dev` yang membawa token Access.
+   Access is only the front layer. Behind it the panel's Google sign-in and roles still apply, and `/api/panel/*` and `/api/dev/*` are still guarded by roles on the server even if Access is misconfigured. System health shows "Cloudflare Access belum terdeteksi" (Cloudflare Access not detected yet) until the panel sees a request to `/api/panel` or `/api/dev` carrying an Access token.
 
    <details>
-   <summary>Yang sengaja tidak dilindungi Access, dan perilaku login Access di SPA</summary>
+   <summary>What is deliberately not protected by Access, and how Access sign-in behaves in the SPA</summary>
 
-   Yang sengaja **tidak** dilindungi Access, dan alasannya:
-   - `/` (landing page) dan `/login`: harus bisa dibuka siapa pun.
-   - `/profile`: hanya menampilkan akunmu sendiri dari `/api/me`, dan akun Google lain yang login perlu melihat penjelasan "belum punya akses" di sana.
-   - `/api/auth/...`: sign-in Google dan callback Better Auth; bila dilindungi, login dari landing page tidak jalan untuk tamu.
-   - `/api/me`: dipanggil landing page untuk tamu (jawab 401 bila belum login); bila dilindungi, fetch-nya dialihkan ke halaman login Access dan landing page gagal memuat.
-   - `/api/health` dan aset bundle di root (`/chunk-*.js`, `/chunk-*.css`): tidak berisi data, dan landing page memerlukannya.
+   What is deliberately **not** protected by Access, and why:
+   - `/` (landing page) and `/login`: must be open to anyone.
+   - `/profile`: only shows your own account from `/api/me`, and a different Google account that signs in needs to see the "belum punya akses" (no access yet) explanation there.
+   - `/api/auth/...`: Google sign-in and the Better Auth callback; if protected, signing in from the landing page does not work for visitors.
+   - `/api/me`: called by the landing page for visitors (answers 401 when not signed in); if protected, its fetch is redirected to the Access login page and the landing page fails to load.
+   - `/api/health` and the bundle assets at the root (`/chunk-*.js`, `/chunk-*.css`): contain no data, and the landing page needs them.
 
-   Efek praktis karena panel adalah SPA: Access hanya bisa menampilkan halaman loginnya saat browser memuat halaman penuh di path yang dilindungi. Karena itu perpindahan dari halaman publik ke area privat (tombol "Buka panel" di `/`, dan pengalihan dari `/login` ke halaman awal peran setelah login Google) sengaja dilakukan dengan memuat halaman penuh, sehingga Access sempat meminta login; navigasi di dalam `/panel`, `/dev`, `/profile` tetap di sisi klien. Untuk sesi Access yang kedaluwarsa (bawaan 24 jam) ketika panel sedang terbuka, setiap panggilan API panel mengirim header `X-Requested-With: XMLHttpRequest`, sehingga Access menjawab `401` (bukan mengalihkan ke domain login-nya); panel lalu memuat ulang halaman sekali secara otomatis dan Access menampilkan login-nya. Bila setelah muat ulang Access masih menolak dalam 30 detik, panel berhenti memuat ulang dan menampilkan pesan: buka `https://panel.<domain>/panel` (atau `/dev`) langsung di address bar, dan periksa apakah email kamu diizinkan di kebijakan Access. Setelah login Access, cookie `CF_Authorization` berlaku untuk hostname itu dan navigasi di dalam panel berjalan normal sampai sesi Access habis.
+   Practical effect because the panel is an SPA: Access can only show its login page when the browser loads a full page on a protected path. That is why moving from a public page to the private area (the "Buka panel" (Open panel) button on `/`, and the redirect from `/login` to the role's home page after Google sign-in) deliberately does a full page load, so Access gets a chance to ask for login; navigation inside `/panel`, `/dev`, `/profile` stays client-side. For an Access session that expires (24 hours by default) while the panel is open, every panel API call sends the header `X-Requested-With: XMLHttpRequest`, so Access answers `401` (instead of redirecting to its login domain); the panel then reloads the page once automatically and Access shows its login. If Access still refuses within 30 seconds after the reload, the panel stops reloading and shows a message: open `https://panel.<domain>/panel` (or `/dev`) directly in the address bar, and check whether your email is allowed in the Access policy. After the Access login, the `CF_Authorization` cookie applies to that hostname and navigation inside the panel works normally until the Access session ends.
 
    </details>
 
-### Instal dari source
+### Install from source
 
-Tanpa rilis (mis. untuk menguji build sendiri), salin binary ke HP lalu jalankan `init` dari sana:
+Without a release (e.g. to test your own build), copy the binary to the phone and run `init` from there:
 
 ```sh
 bun run build
 rsync --partial dist/panel-android-arm64 poco: && ssh poco 'PANEL_DEV_INSTALL=1 ./panel-android-arm64 init --yes'
 ```
 
-Build lokal tidak punya tag rilis sehingga tidak bisa dicek dengan `SHA256SUMS`, jadi `init` menolaknya kecuali `PANEL_DEV_INSTALL=1` diset. `--yes` menyetujui rencana dan restart panel tanpa terminal; pertanyaan `.env` yang belum terisi tetap kosong dan panel ditahan dengan file `down` sampai kamu menjalankan `init` di terminal.
+A local build has no release tag, so it cannot be checked against `SHA256SUMS`, and `init` refuses it unless `PANEL_DEV_INSTALL=1` is set. `--yes` approves the plan and the panel restart without a terminal; `.env` questions that are still unanswered stay empty and the panel is held with a `down` file until you run `init` in a terminal.
 
-## Kebutuhan dan konfigurasi
+## Requirements and configuration
 
-### Kebutuhan
+### Requirements
 
-- **HP**: Android 64-bit (arm64). Termux dari F-Droid/GitHub, plus Termux:Boot dan Termux:API dari sumber yang sama. `panel init` memasang sisanya: `termux-services` (runit), `pm2` yang dijalankan runit dan membaca `~/sites/ecosystem.config.js` (lihat [Integrasi pm2](#integrasi-pm2-appsjson)), `cloudflared` sebagai service runit dengan `~/.cloudflared/config.yml`, PostgreSQL lokal (role `postgres`, atau set `PGUSER`), dan `curl`. `grun` hanya perlu untuk site dengan binary glibc. Repo [server-termux](https://github.com/makurosolusi/server-termux) juga bisa menyiapkan HP.
-- **Domain di Cloudflare** (untuk tunnel, DNS, dan Access).
-- **Akun Google Cloud** untuk OAuth client.
-- **Development**: [Bun](https://bun.sh) (versi yang ada di `bun.lock`/`@types/bun`), macOS/Linux.
+- **Phone**: 64-bit Android (arm64). Termux from F-Droid/GitHub, plus Termux:Boot and Termux:API from the same source. `panel init` installs the rest: `termux-services` (runit), `pm2` run by runit and reading `~/sites/ecosystem.config.js` (see [pm2 integration](#pm2-integration-appsjson)), `cloudflared` as a runit service with `~/.cloudflared/config.yml`, local PostgreSQL (role `postgres`, or set `PGUSER`), and `curl`. `grun` is only needed for sites with a glibc binary. The [server-termux](https://github.com/makurosolusi/server-termux) repo can also prepare the phone.
+- **A domain on Cloudflare** (for the tunnel, DNS, and Access).
+- **A Google Cloud account** for the OAuth client.
+- **Development**: [Bun](https://bun.sh) (the version in `bun.lock`/`@types/bun`), macOS/Linux.
 
 ### Google OAuth client
 
-1. console.cloud.google.com → APIs & Services → Credentials → Create credentials → OAuth client ID, tipe **Web application**.
+1. console.cloud.google.com → APIs & Services → Credentials → Create credentials → OAuth client ID, type **Web application**.
 2. Authorized redirect URIs:
-   - `${APP_BASE_URL}/api/auth/callback/google`, mis. `https://panel.contoh.com/api/auth/callback/google`
-   - untuk development lokal: `http://localhost:3200/api/auth/callback/google` (sesuaikan port)
-3. Salin Client ID dan Client secret ke `.env` (atau jawab pertanyaan `panel init`).
+   - `${APP_BASE_URL}/api/auth/callback/google`, e.g. `https://panel.contoh.com/api/auth/callback/google`
+   - for local development: `http://localhost:3200/api/auth/callback/google` (adjust the port)
+3. Copy the Client ID and Client secret into `.env` (or answer the `panel init` questions).
 
-Google hanya menerima domain https publik atau `localhost`; IP Tailscale/LAN tidak bisa dipakai sebagai `APP_BASE_URL`. Panduan offline: `panel docs google`.
+Google only accepts public https domains or `localhost`; a Tailscale/LAN IP cannot be used as `APP_BASE_URL`. Offline guide: `panel docs google`.
 
-### Konfigurasi (env)
+### Configuration (env)
 
-`~/panel/.env` di HP (dibuat `panel init`, mode 600). Cetak template kosong dengan `panel env`; `panel env --full` menambah variabel opsional yang dikomentari. Lihat juga `.env.example`.
+`~/panel/.env` on the phone (created by `panel init`, mode 600). Print an empty template with `panel env`; `panel env --full` adds the optional variables, commented out. See also `.env.example`.
 
-| Variabel                 | Wajib | Bawaan                                 | Arti                                                                                                                                                                             |
-| ------------------------ | ----- | -------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `APP_BASE_URL`           | ya    | –                                      | Alamat publik panel (`https://domain`, atau `http://localhost:<port>` saat lokal). Dipakai untuk redirect OAuth.                                                                 |
-| `GOOGLE_CLIENT_ID`       | ya    | –                                      | Client ID OAuth Google (tipe Web application).                                                                                                                                   |
-| `GOOGLE_CLIENT_SECRET`   | ya    | –                                      | Client secret OAuth Google. Rahasia.                                                                                                                                             |
-| `SUPER_ADMIN_EMAILS`     | ya    | –                                      | Email Google yang menjadi super admin, dipisah koma.                                                                                                                             |
-| `PORT`                   | tidak | `3200`                                 | Port panel (selalu listen di `127.0.0.1` saja).                                                                                                                                  |
-| `PANEL_DATA_DIR`         | tidak | `./data`                               | Relatif ke working dir. Berisi `panel.db`, `secret` (kunci data), `snapshots/`, `fix-backups/` (salinan file sebelum perbaikan Persiapan), dan upload deploy yang belum selesai. |
-| `PANEL_CONNECTIVITY_URL` | tidak | `https://www.gstatic.com/generate_204` | URL yang dicek sampler untuk membedakan "tidak ada internet" dari "situs mati". Ganti bila alamat itu diblokir di jaringanmu.                                                    |
-| `PANEL_SKIP_SNAPSHOT`    | tidak | `0`                                    | `1` = tetap migrasi walau snapshot pra-migrasi gagal (mis. penyimpanan penuh). Hanya untuk satu kali start; hapus lagi setelahnya. Lihat [Rollback](#rollback).                  |
+| Variable                 | Required | Default                                | Meaning                                                                                                                                                                 |
+| ------------------------ | -------- | -------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `APP_BASE_URL`           | yes      | –                                      | Public address of the panel (`https://domain`, or `http://localhost:<port>` locally). Used for the OAuth redirect.                                                      |
+| `GOOGLE_CLIENT_ID`       | yes      | –                                      | Google OAuth Client ID (type Web application).                                                                                                                          |
+| `GOOGLE_CLIENT_SECRET`   | yes      | –                                      | Google OAuth client secret. Secret.                                                                                                                                     |
+| `SUPER_ADMIN_EMAILS`     | yes      | –                                      | Google emails that become super admin, comma-separated.                                                                                                                 |
+| `PORT`                   | no       | `3200`                                 | Panel port (always listens on `127.0.0.1` only).                                                                                                                        |
+| `PANEL_DATA_DIR`         | no       | `./data`                               | Relative to the working dir. Holds `panel.db`, `secret` (data key), `snapshots/`, `fix-backups/` (file copies taken before Setup fixes), and unfinished deploy uploads. |
+| `PANEL_CONNECTIVITY_URL` | no       | `https://www.gstatic.com/generate_204` | URL the sampler checks to tell "no internet" from "site down". Change it if that address is blocked on your network.                                                    |
+| `PANEL_SKIP_SNAPSHOT`    | no       | `0`                                    | `1` = migrate anyway when the pre-migration snapshot fails (e.g. storage full). For one start only; remove it afterwards. See [Rollback](#rollback).                    |
 
-Bun memuat `.env` otomatis dari working directory. Panel menolak start dan menyebut nama variabel (bukan nilainya) bila ada yang kosong atau tidak valid. `PANEL_DEV_INSTALL=1` bukan variabel `.env`: hanya diset saat menjalankan `init` dengan build lokal ([Instal dari source](#instal-dari-source)).
+Bun loads `.env` automatically from the working directory. The panel refuses to start and names the variable (not its value) if one is empty or invalid. `PANEL_DEV_INSTALL=1` is not a `.env` variable: it is only set when running `init` with a local build ([Install from source](#install-from-source)).
 
-### Pengaturan di panel
+### Settings in the panel
 
-Semua pengaturan lain diisi di **Administrasi → Pengaturan** (`/dev/settings`), dalam enam grup. Tiap grup disimpan sekaligus; nilai rahasia disimpan terenkripsi dengan kunci data dan tidak pernah ditampilkan lagi. Grup Cloudflare, Cadangan, dan Notifikasi Telegram punya tombol uji koneksi.
+All other settings are entered under **Administrasi → Pengaturan** (Administration → Settings, `/dev/settings`), in six groups. Each group is saved at once; secret values are stored encrypted with the data key and never shown again. The Cloudflare, Cadangan (Backups), and Notifikasi Telegram (Telegram notifications) groups have connection test buttons.
 
 <details>
-<summary>Daftar lengkap pengaturan</summary>
+<summary>Full list of settings</summary>
 
-| Grup                | Key                            | Label di panel                  | Default                               | Keterangan                                                                                                                                                                             |
-| ------------------- | ------------------------------ | ------------------------------- | ------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Cloudflare          | `cloudflare.api_token`         | Token API Cloudflare            | –                                     | Rahasia. Izin **Zone:Read** dan **DNS:Edit** (mencari zone dan membuat CNAME site ke tunnel). Tanpa token, langkah DNS dilewati dan record dibuat manual. Bisa diuji sebelum disimpan. |
-| Cloudflare          | `cloudflare.account_id`        | ID akun Cloudflare              | –                                     | 32 hex. Perlu untuk memverifikasi token milik akun (account-owned token).                                                                                                              |
-| Cadangan            | `backup.s3_endpoint`           | Endpoint S3                     | –                                     | Path-style, mis. `https://<account>.r2.cloudflarestorage.com`.                                                                                                                         |
-| Cadangan            | `backup.s3_bucket`             | Nama bucket                     | –                                     | Bucket tujuan.                                                                                                                                                                         |
-| Cadangan            | `backup.s3_region`             | Region                          | `auto`                                | R2 memakai `auto`.                                                                                                                                                                     |
-| Cadangan            | `backup.s3_access_key_id`      | Access key ID                   | –                                     | Rahasia.                                                                                                                                                                               |
-| Cadangan            | `backup.s3_secret_access_key`  | Secret access key               | –                                     | Rahasia.                                                                                                                                                                               |
-| Cadangan            | `backup.prefix`                | Awalan folder                   | `panel-termux/`                       | Retensi hanya menghapus di bawah awalan ini. Harus diakhiri `/`. Pakai awalan berbeda bila satu bucket dipakai beberapa HP.                                                            |
-| Cadangan            | `backup.hour`                  | Jam cadangan harian             | `3`                                   | Jam lokal (0-23), atau `off` untuk manual saja.                                                                                                                                        |
-| Cadangan            | `backup.retention_days`        | Simpan cadangan (hari)          | `14`                                  | 1-365. Lihat [Retensi](#cadangan-dan-pemulihan).                                                                                                                                       |
-| Cadangan            | `backup.keep_min_runs`         | Cadangan berhasil minimal       | `3`                                   | 1-50. Jumlah run berhasil terbaru yang tidak pernah dihapus retensi.                                                                                                                   |
-| Cadangan            | `backup.max_item_mb`           | Batas per file (MB)             | `2048`                                | File cadangan yang lebih besar tidak diunggah dan ditandai di riwayat.                                                                                                                 |
-| Cadangan            | `backup.include_secrets`       | Ikut cadangkan kunci rahasia    | `off`                                 | `on` = kunci data, `.env` panel, dan kredensial tunnel ikut ke bucket. Siapa pun yang bisa membaca bucket bisa mengambil alih panel. Menyalakannya butuh sesi segar.                   |
-| Notifikasi Telegram | `alerts.enabled`               | Notifikasi Telegram             | `on`                                  | Matikan sementara tanpa menghapus token.                                                                                                                                               |
-| Notifikasi Telegram | `alerts.telegram_bot_token`    | Token bot Telegram              | –                                     | Rahasia. Dari @BotFather.                                                                                                                                                              |
-| Notifikasi Telegram | `alerts.telegram_chat_id`      | ID chat Telegram                | –                                     | ID angka atau `@kanal`. Tombol "Cari chat" mengisinya setelah kamu mengirim pesan ke bot.                                                                                              |
-| Notifikasi Telegram | `alerts.min_severity`          | Kirim mulai dari                | `warning`                             | `warning` (semua masalah, peringatan dikirim senyap) atau `danger` (hanya yang gawat).                                                                                                 |
-| Situs               | `sites.dir`                    | Folder situs                    | `~/sites`                             | `apps.json` dan `ecosystem.config.js` ada di sini.                                                                                                                                     |
-| Situs               | `sites.port_range`             | Rentang port situs              | `3001-3999`                           | Port lokal untuk site baru.                                                                                                                                                            |
-| Pemantauan          | `monitor.sample_interval_sec`  | Interval pemantauan (detik)     | `60`                                  | 30-600. Lebih besar = lebih hemat baterai dan tulis flash.                                                                                                                             |
-| Pemantauan          | `monitor.battery_warn_percent` | Peringatan baterai di bawah (%) | `25`                                  | 16-100 atau `off`. Hanya saat HP tidak mengisi; di bawah 15% selalu gawat.                                                                                                             |
-| Keamanan            | `panel.protected_services`     | Layanan inti                    | `sshd,cloudflared,panel,pm2,postgres` | Hanya bisa dihentikan dengan mengetik namanya. `panel` dan `cloudflared` tidak pernah bisa dihentikan dari panel, walau dilepas dari daftar.                                           |
-| Keamanan            | `audit.retention_days`         | Simpan log audit (hari)         | `365`                                 | 90-3650. Entri lebih tua dihapus otomatis (saat boot dan tiap hari).                                                                                                                   |
+| Group                                        | Key                            | Label in the panel                                         | Default                               | Notes                                                                                                                                                                                                                    |
+| -------------------------------------------- | ------------------------------ | ---------------------------------------------------------- | ------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Cloudflare                                   | `cloudflare.api_token`         | Token API Cloudflare (Cloudflare API token)                | –                                     | Secret. Permissions **Zone:Read** and **DNS:Edit** (look up the zone and create the site CNAME to the tunnel). Without a token, the DNS step is skipped and the record is created manually. Can be tested before saving. |
+| Cloudflare                                   | `cloudflare.account_id`        | ID akun Cloudflare (Cloudflare account ID)                 | –                                     | 32 hex. Needed to verify account-owned tokens.                                                                                                                                                                           |
+| Cadangan (Backups)                           | `backup.s3_endpoint`           | Endpoint S3 (S3 endpoint)                                  | –                                     | Path-style, e.g. `https://<account>.r2.cloudflarestorage.com`.                                                                                                                                                           |
+| Cadangan (Backups)                           | `backup.s3_bucket`             | Nama bucket (Bucket name)                                  | –                                     | Target bucket.                                                                                                                                                                                                           |
+| Cadangan (Backups)                           | `backup.s3_region`             | Region                                                     | `auto`                                | R2 uses `auto`.                                                                                                                                                                                                          |
+| Cadangan (Backups)                           | `backup.s3_access_key_id`      | Access key ID                                              | –                                     | Secret.                                                                                                                                                                                                                  |
+| Cadangan (Backups)                           | `backup.s3_secret_access_key`  | Secret access key                                          | –                                     | Secret.                                                                                                                                                                                                                  |
+| Cadangan (Backups)                           | `backup.prefix`                | Awalan folder (Folder prefix)                              | `panel-termux/`                       | Retention only deletes under this prefix. Must end with `/`. Use a different prefix if several phones share one bucket.                                                                                                  |
+| Cadangan (Backups)                           | `backup.hour`                  | Jam cadangan harian (Daily backup hour)                    | `3`                                   | Local hour (0-23), or `off` for manual only.                                                                                                                                                                             |
+| Cadangan (Backups)                           | `backup.retention_days`        | Simpan cadangan (hari) (Keep backups, days)                | `14`                                  | 1-365. See [Retention](#backup-and-restore).                                                                                                                                                                             |
+| Cadangan (Backups)                           | `backup.keep_min_runs`         | Cadangan berhasil minimal (Minimum successful backups)     | `3`                                   | 1-50. Number of latest successful runs that retention never deletes.                                                                                                                                                     |
+| Cadangan (Backups)                           | `backup.max_item_mb`           | Batas per file (MB) (Per-file limit, MB)                   | `2048`                                | Larger backup files are not uploaded and are flagged in the history.                                                                                                                                                     |
+| Cadangan (Backups)                           | `backup.include_secrets`       | Ikut cadangkan kunci rahasia (Also back up secret keys)    | `off`                                 | `on` = the data key, panel `.env`, and tunnel credentials go to the bucket too. Anyone who can read the bucket can take over the panel. Turning it on needs a fresh session.                                             |
+| Notifikasi Telegram (Telegram notifications) | `alerts.enabled`               | Notifikasi Telegram (Telegram notifications)               | `on`                                  | Turn off temporarily without deleting the token.                                                                                                                                                                         |
+| Notifikasi Telegram (Telegram notifications) | `alerts.telegram_bot_token`    | Token bot Telegram (Telegram bot token)                    | –                                     | Secret. From @BotFather.                                                                                                                                                                                                 |
+| Notifikasi Telegram (Telegram notifications) | `alerts.telegram_chat_id`      | ID chat Telegram (Telegram chat ID)                        | –                                     | Numeric ID or `@channel`. The "Cari chat" (Find chat) button fills it in after you send a message to the bot.                                                                                                            |
+| Notifikasi Telegram (Telegram notifications) | `alerts.min_severity`          | Kirim mulai dari (Send from)                               | `warning`                             | `warning` (all problems, warnings sent silently) or `danger` (only severe ones).                                                                                                                                         |
+| Situs (Sites)                                | `sites.dir`                    | Folder situs (Sites folder)                                | `~/sites`                             | `apps.json` and `ecosystem.config.js` live here.                                                                                                                                                                         |
+| Situs (Sites)                                | `sites.port_range`             | Rentang port situs (Site port range)                       | `3001-3999`                           | Local ports for new sites.                                                                                                                                                                                               |
+| Pemantauan (Monitoring)                      | `monitor.sample_interval_sec`  | Interval pemantauan (detik) (Monitoring interval, seconds) | `60`                                  | 30-600. Larger = less battery and fewer flash writes.                                                                                                                                                                    |
+| Pemantauan (Monitoring)                      | `monitor.battery_warn_percent` | Peringatan baterai di bawah (%) (Battery warning below, %) | `25`                                  | 16-100 or `off`. Only while the phone is not charging; below 15% is always severe.                                                                                                                                       |
+| Keamanan (Security)                          | `panel.protected_services`     | Layanan inti (Core services)                               | `sshd,cloudflared,panel,pm2,postgres` | Can only be stopped by typing their name. `panel` and `cloudflared` can never be stopped from the panel, even if removed from the list.                                                                                  |
+| Keamanan (Security)                          | `audit.retention_days`         | Simpan log audit (hari) (Keep audit log, days)             | `365`                                 | 90-3650. Older entries are deleted automatically (at boot and daily).                                                                                                                                                    |
 
 </details>
 
-Cloudflare Access melindungi path `panel`, `dev`, `api/panel`, dan `api/dev` (langkah 4 di [Instal di HP](#instal-di-hp)).
+Cloudflare Access protects the paths `panel`, `dev`, `api/panel`, and `api/dev` (step 4 in [Install on your phone](#install-on-your-phone)).
 
-## Perintah CLI
+## CLI commands
 
-Binary yang sama juga punya perintah untuk terminal. Jalankan dari `~/panel` (`cd ~/panel && ./panel <perintah>`):
+The same binary also has commands for the terminal. Run them from `~/panel` (`cd ~/panel && ./panel <command>`):
 
-| Perintah                        | Fungsi                                                                                                                                                                                                 |
-| ------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `panel -h`, `--help`, `--h`     | Bantuan; `panel <perintah> --help` untuk satu perintah.                                                                                                                                                |
-| `panel -v`, `--version`, `--v`  | Versi, mis. `panel-termux 0.5.1 (android-arm64, bun 1.x)`.                                                                                                                                             |
-| `panel init [opsi]`             | Pasang, perbarui, atau perbaiki panel di HP ini, lihat [Instal di HP](#instal-di-hp). Coba dulu `--dry-run`.                                                                                           |
-| `panel serve`                   | Menjalankan server. runit tetap menjalankan `panel` tanpa argumen; di terminal, `panel` tanpa argumen hanya mencetak bantuan.                                                                          |
-| `panel doctor [--json]`         | Memeriksa HP tanpa mengubah apa pun: paket dan hold, Termux:Boot/API, runit, `.env`, panel ganda, kartu Persiapan (dengan pesan yang sama), tunnel, versi PostgreSQL. Kode keluar 1 hanya bila ada ❌. |
-| `panel env [--full]`            | Mencetak template `.env` kosong ke stdout (juga `panel --env`). Tulis ke file baru (`panel env > .env.new`); menambah ke `.env` yang sudah berisi (`>>`) ditolak.                                      |
-| `panel docs [topik]`            | Panduan offline: `google`, `cloudflare`, `android`, `paket` (kenapa `cloudflared` dan `postgresql` ditahan dari `pkg upgrade`, dan cara upgrade-nya dengan aman). Sumbernya di [docs/cli](docs/cli).   |
-| `panel rollback [--db] [--yes]` | Kembali ke binary sebelumnya, lihat [Rollback](#rollback).                                                                                                                                             |
+| Command                         | Purpose                                                                                                                                                                                                                     |
+| ------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `panel -h`, `--help`, `--h`     | Help; `panel <command> --help` for a single command.                                                                                                                                                                        |
+| `panel -v`, `--version`, `--v`  | Version, e.g. `panel-termux 0.5.1 (android-arm64, bun 1.x)`.                                                                                                                                                                |
+| `panel init [options]`          | Install, upgrade, or repair the panel on this phone, see [Install on your phone](#install-on-your-phone). Try `--dry-run` first.                                                                                            |
+| `panel serve`                   | Runs the server. runit still runs `panel` without arguments; in a terminal, `panel` without arguments only prints help.                                                                                                     |
+| `panel doctor [--json]`         | Checks the phone without changing anything: packages and holds, Termux:Boot/API, runit, `.env`, duplicate panels, Setup cards (with the same messages), tunnel, PostgreSQL version. Exit code 1 only if there is a ❌.      |
+| `panel env [--full]`            | Prints an empty `.env` template to stdout (also `panel --env`). Write it to a new file (`panel env > .env.new`); appending to a `.env` that already has content (`>>`) is refused.                                          |
+| `panel docs [topic]`            | Offline guides: `google`, `cloudflare`, `android`, `paket` (why `cloudflared` and `postgresql` are held from `pkg upgrade`, and how to upgrade them safely). Sources in [docs/cli](docs/cli). The guides are in Indonesian. |
+| `panel rollback [--db] [--yes]` | Go back to the previous binary, see [Rollback](#rollback).                                                                                                                                                                  |
 
-Kode keluar: 0 berhasil, 1 gagal, 2 salah pakai, 3 butuh tindakan lalu ulangi, 4 dibatalkan (`init` juga 130 untuk Ctrl-C). Perintah CLI tidak meneruskan isi `.env` panel ke program yang dijalankannya.
+Exit codes: 0 success, 1 failure, 2 usage error, 3 action needed then retry, 4 cancelled (`init` also 130 for Ctrl-C). CLI commands do not pass the panel's `.env` contents to the programs they run.
 
 ## Troubleshooting
 
-Langkah pertama untuk masalah apa pun: `cd ~/panel && ./panel doctor`. Setiap ❌/⚠️ diikuti langkah berikutnya (→). Lewat ssh, set dulu `export SVDIR=$PREFIX/var/service` sebelum memakai `sv`.
+First step for any problem: `cd ~/panel && ./panel doctor`. Every ❌/⚠️ is followed by the next step (→). Over ssh, first set `export SVDIR=$PREFIX/var/service` before using `sv`.
 
-| Gejala                                                             | Penyebab                                                                                                                                                                     | Perbaikan                                                                                                                                                                                                                                         |
-| ------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Panel tidak bisa dibuka dari luar (error 1033/502 dari Cloudflare) | Tunnel `cloudflared` atau layanan panel mati, atau hostname belum ada di `~/.cloudflared/config.yml`.                                                                        | `sv status cloudflared panel` (harus `run:`). `panel doctor` memeriksa tunnel; jalankan lagi baris pasang untuk melengkapi hostname dan DNS. Panduan: `panel docs cloudflare`.                                                                    |
-| `/panel` terus diminta login Access, atau ditolak                  | Email belum diizinkan di policy Access, atau sesi Access habis (bawaan 24 jam).                                                                                              | Tambahkan email ke policy Access. Buka `https://panel.<domain>/panel` langsung di address bar. Cek path Access ditulis tanpa `/*` ([langkah 4](#instal-di-hp)).                                                                                   |
-| Landing page `/` meminta login Access                              | Kolom Path aplikasi Access dikosongkan, sehingga seluruh hostname terlindungi.                                                                                               | Isi Path per hostname: `panel`, `dev`, `api/panel`, `api/dev`.                                                                                                                                                                                    |
-| Login Google gagal (`redirect_uri_mismatch`)                       | Redirect URI di OAuth client tidak persis sama dengan `APP_BASE_URL`.                                                                                                        | Tambahkan `<APP_BASE_URL>/api/auth/callback/google` di Authorized redirect URIs ([Google OAuth client](#google-oauth-client)). Skema, domain, dan port harus sama. IP LAN/Tailscale tidak diterima Google.                                        |
-| Login berhasil tapi hanya melihat "belum punya akses"              | Akun baru masuk sebagai `user`.                                                                                                                                              | Super admin mengubah peran di **Administrasi → Pengguna**, atau tambahkan email ke `SUPER_ADMIN_EMAILS` lalu `sv restart panel`.                                                                                                                  |
-| Panel tidak menyala, log menyebut variabel env                     | Variabel wajib kosong atau tidak valid.                                                                                                                                      | Jalankan lagi baris pasang: init menanyakan yang kosong. Bandingkan dengan `panel env --full`.                                                                                                                                                    |
-| `panel serve` keluar kode 1: panel lain sudah menjawab di port     | Panel yang dijalankan runit sedang hidup; panel kedua menolak start sebelum menyentuh data.                                                                                  | Pakai `sv restart panel`, bukan `panel serve`.                                                                                                                                                                                                    |
-| Kartu **Situs → Persiapan** merah                                  | `ecosystem.config.js`, `apps.json`, run script pm2, atau folder situs belum sesuai (mis. snippet 0.2.x).                                                                     | Tekan **Perbaiki** atau **Perbaiki semua**. Bila file tidak bisa diubah dengan aman, baris itu membuka **Cara manual**. Lihat [Integrasi pm2](#integrasi-pm2-appsjson).                                                                           |
-| pm2 berhenti dan semua aplikasi ikut mati                          | Run script pm2 tanpa `--no-auto-exit`, snippet `apps.json` 0.2.x (satu binary hilang menghentikan semua aplikasi), atau ecosystem tanpa aplikasi karena `pm2-guard` dihapus. | **Perbaiki** di Persiapan menambah `--no-auto-exit` dan blok panel; jangan hapus `pm2-guard`. Halaman yang butuh pm2 menawarkan **Jalankan pm2**.                                                                                                 |
-| `pkg upgrade` melewati `cloudflared`/`postgresql`                  | Keduanya sengaja ditahan (hold) karena upgrade-nya mematikan tunnel atau membuat database tidak bisa dibuka.                                                                 | Ikuti `panel docs paket` untuk upgrade aman. Jangan `pkg upgrade` untuk memperbaiki paket "terpasang tidak lengkap"; pakai `dpkg --configure -a`.                                                                                                 |
-| Server mati saat layar mati atau setelah HP dinyalakan ulang       | Optimasi baterai Android, Termux:Boot belum pernah dibuka, wake-lock tidak aktif, atau pembatas proses anak.                                                                 | Ikuti `panel docs android`: baterai "Tanpa batasan" untuk Termux, Termux:Boot, Termux:API (Xiaomi/POCO: Autostart), buka Termux:Boot sekali, izinkan wake-lock, matikan pembatas proses anak (Android 12+). Setelah reboot, buka kunci HP sekali. |
-| Deploy dibatalkan: aplikasi tidak sehat                            | Aplikasi tidak menjawab cek kesehatan dalam batas waktu, atau pm2 me-restart-nya.                                                                                            | Deploy sudah dikembalikan otomatis ke `app.prev`. Lihat log di **Riwayat perubahan**, cek path/status/batas waktu cek kesehatan di detail situs, lalu deploy ulang. Lihat [Deploy binary](#deploy-binary).                                        |
-| Unggahan deploy terputus                                           | Jaringan putus atau halaman dimuat ulang.                                                                                                                                    | **Lanjutkan unggahan** dalam 1 jam. Butuh ruang kosong sebesar ukuran file + 200 MB.                                                                                                                                                              |
-| Cadangan gagal                                                     | Endpoint, bucket, atau kunci S3/R2 salah, atau token tanpa izin yang dibutuhkan.                                                                                             | **Pengaturan → Cadangan → Uji koneksi**, lalu **Cadangkan sekarang**. Retensi ditolak oleh token tanpa izin hapus itu wajar ([Cadangan dan pemulihan](#cadangan-dan-pemulihan)).                                                                  |
-| "Kunci data tidak cocok"                                           | `PANEL_DATA_DIR/secret` hilang atau tertukar.                                                                                                                                | Kembalikan file lama, atau pilih "Hapus pengaturan rahasia lama" lalu isi ulang ([Kunci data](#kunci-data)).                                                                                                                                      |
-| `panel init` keluar dengan kode 3                                  | Ada langkah yang butuh tindakan di terminal (login Cloudflare, memindah DNS, restart cloudflared, persetujuan rencana).                                                      | Jalankan baris yang sama di aplikasi Termux (bukan ssh tanpa `-t`) dan ikuti pesannya.                                                                                                                                                            |
-| `panel init` keluar dengan kode 1                                  | Masih ada masalah di akhir; init mencetak daftar beserta petunjuknya.                                                                                                        | Ikuti petunjuk itu, lalu jalankan baris yang sama lagi. Bila panel baru gagal menyala: [`panel rollback`](#rollback).                                                                                                                             |
-| Panel tidak menyala setelah upgrade, log menyebut snapshot gagal   | Snapshot pra-migrasi gagal, biasanya penyimpanan penuh.                                                                                                                      | Kosongkan ruang, atau `PANEL_SKIP_SNAPSHOT=1` di `~/panel/.env` untuk satu kali start lalu hapus lagi. Atau `panel rollback`.                                                                                                                     |
-| Upgrade ditolak: binary lebih lama                                 | Binary yang dijalankan lebih tua dari yang terpasang.                                                                                                                        | Untuk kembali ke versi lama pakai `panel rollback`.                                                                                                                                                                                               |
+| Symptom                                                                       | Cause                                                                                                                                                                   | Fix                                                                                                                                                                                                                                                  |
+| ----------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| The panel cannot be opened from outside (error 1033/502 from Cloudflare)      | The `cloudflared` tunnel or the panel service is down, or the hostname is not in `~/.cloudflared/config.yml` yet.                                                       | `sv status cloudflared panel` (must be `run:`). `panel doctor` checks the tunnel; run the install line again to complete the hostname and DNS. Guide: `panel docs cloudflare`.                                                                       |
+| `/panel` keeps asking for the Access login, or is refused                     | The email is not allowed in the Access policy, or the Access session expired (24 hours by default).                                                                     | Add the email to the Access policy. Open `https://panel.<domain>/panel` directly in the address bar. Check that Access paths are written without `/*` ([step 4](#install-on-your-phone)).                                                            |
+| The landing page `/` asks for the Access login                                | The Access application's Path field was left empty, so the whole hostname is protected.                                                                                 | Fill in a Path per hostname: `panel`, `dev`, `api/panel`, `api/dev`.                                                                                                                                                                                 |
+| Google sign-in fails (`redirect_uri_mismatch`)                                | The redirect URI in the OAuth client does not exactly match `APP_BASE_URL`.                                                                                             | Add `<APP_BASE_URL>/api/auth/callback/google` to Authorized redirect URIs ([Google OAuth client](#google-oauth-client)). Scheme, domain, and port must match. Google does not accept LAN/Tailscale IPs.                                              |
+| Sign-in works but you only see "belum punya akses" (no access yet)            | New accounts start as `user`.                                                                                                                                           | The super admin changes the role under **Administrasi → Pengguna** (Administration → Users), or add the email to `SUPER_ADMIN_EMAILS` then `sv restart panel`.                                                                                       |
+| The panel does not start, the log names an env variable                       | A required variable is empty or invalid.                                                                                                                                | Run the install line again: init asks for what is empty. Compare with `panel env --full`.                                                                                                                                                            |
+| `panel serve` exits with code 1: another panel already answers on the port    | The panel run by runit is alive; a second panel refuses to start before touching any data.                                                                              | Use `sv restart panel`, not `panel serve`.                                                                                                                                                                                                           |
+| The **Situs → Persiapan** (Sites → Setup) card is red                         | `ecosystem.config.js`, `apps.json`, the pm2 run script, or the site folder is not right yet (e.g. a 0.2.x snippet).                                                     | Press **Perbaiki** (Fix) or **Perbaiki semua** (Fix all). If the file cannot be changed safely, that row opens **Cara manual** (Manual steps). See [pm2 integration](#pm2-integration-appsjson).                                                     |
+| pm2 stops and takes all apps down with it                                     | pm2 run script without `--no-auto-exit`, a 0.2.x `apps.json` snippet (one missing binary stops all apps), or an ecosystem with no apps because `pm2-guard` was removed. | **Perbaiki** (Fix) in Setup adds `--no-auto-exit` and the panel block; do not remove `pm2-guard`. Pages that need pm2 offer **Jalankan pm2** (Start pm2).                                                                                            |
+| `pkg upgrade` skips `cloudflared`/`postgresql`                                | Both are deliberately held because upgrading them kills the tunnel or makes the database unreadable.                                                                    | Follow `panel docs paket` for a safe upgrade. Do not `pkg upgrade` to fix "installed incomplete" packages; use `dpkg --configure -a`.                                                                                                                |
+| The server dies when the screen is off or after the phone restarts            | Android battery optimization, Termux:Boot never opened, wake-lock not active, or the phantom process killer.                                                            | Follow `panel docs android`: battery "Unrestricted" for Termux, Termux:Boot, Termux:API (Xiaomi/POCO: Autostart), open Termux:Boot once, allow wake-lock, disable the phantom process killer (Android 12+). After a reboot, unlock the phone once.   |
+| Deploy cancelled: app not healthy                                             | The app did not answer the health check within the time limit, or pm2 restarted it.                                                                                     | The deploy has already been rolled back to `app.prev`. Check the log in **Riwayat perubahan** (Change history), check the health check path/status/time limit in the site details, then deploy again. See [Deploying binaries](#deploying-binaries). |
+| Deploy upload interrupted                                                     | The network dropped or the page was reloaded.                                                                                                                           | **Lanjutkan unggahan** (Resume upload) within 1 hour. Needs free space equal to the file size + 200 MB.                                                                                                                                              |
+| Backup fails                                                                  | The S3/R2 endpoint, bucket, or keys are wrong, or the token lacks a needed permission.                                                                                  | **Pengaturan → Cadangan → Uji koneksi** (Settings → Backups → Test connection), then **Cadangkan sekarang** (Back up now). Retention being refused by a token without delete permission is expected ([Backup and restore](#backup-and-restore)).     |
+| "Kunci data tidak cocok" (Data key mismatch)                                  | `PANEL_DATA_DIR/secret` is missing or swapped.                                                                                                                          | Restore the old file, or choose "Hapus pengaturan rahasia lama" (Delete old secret settings) and re-enter them ([Data key](#data-key)).                                                                                                              |
+| `panel init` exits with code 3                                                | A step needs action in the terminal (Cloudflare login, moving DNS, restarting cloudflared, approving the plan).                                                         | Run the same line in the Termux app (not ssh without `-t`) and follow its messages.                                                                                                                                                                  |
+| `panel init` exits with code 1                                                | Problems remain at the end; init prints the list with hints.                                                                                                            | Follow those hints, then run the same line again. If the new panel fails to start: [`panel rollback`](#rollback).                                                                                                                                    |
+| The panel does not start after an upgrade, the log mentions a failed snapshot | The pre-migration snapshot failed, usually because storage is full.                                                                                                     | Free up space, or set `PANEL_SKIP_SNAPSHOT=1` in `~/panel/.env` for one start and then remove it. Or `panel rollback`.                                                                                                                               |
+| Upgrade refused: binary is older                                              | The binary being run is older than the installed one.                                                                                                                   | To go back to an older version use `panel rollback`.                                                                                                                                                                                                 |
 
 ### Rollback
 
-`panel init` mencetak petunjuk ini bila panel baru gagal menyala:
+`panel init` prints these instructions if the new panel fails to start:
 
 ```sh
-~/panel/panel rollback        # tukar panel <-> panel.prev, lalu restart layanan panel
-~/panel/panel rollback --db   # juga pulihkan panel.db dari snapshot terbaru
+~/panel/panel rollback        # swap panel <-> panel.prev, then restart the panel service
+~/panel/panel rollback --db   # also restore panel.db from the latest snapshot
 ```
 
-Penukaran tidak pernah membuat `~/panel/panel` hilang, walau HP mati di tengah jalan, dan `panel.prev` tidak pernah dieksekusi. Rollback dua kali = kembali ke versi baru. Bila database sudah dimigrasi versi baru, `panel rollback` memperingatkannya; `--db` menyalin snapshot terbaru ke `panel.db` (perubahan data setelah waktu snapshot hilang), setelah lebih dulu menyimpan `panel.db` sekarang sebagai `snapshots/panel.db.before-rollback.<waktu>`. Salinan `before-rollback` tidak ikut dihapus rotasi snapshot; hapus sendiri bila tidak perlu. Tanpa terminal (skrip), tambahkan `--yes`. Setelah kembali ke 0.4.0 atau lebih lama, jangan jalankan `~/panel/panel` dengan argumen apa pun: binary lama mengabaikannya dan menyalakan panel kedua. Untuk naik lagi, jalankan lagi baris pasang di [Instal di HP](#instal-di-hp).
+The swap never makes `~/panel/panel` disappear, even if the phone dies midway, and `panel.prev` is never executed. Rolling back twice = back to the new version. If the database has already been migrated by the new version, `panel rollback` warns about it; `--db` copies the latest snapshot to `panel.db` (data changes after the snapshot time are lost), after first saving the current `panel.db` as `snapshots/panel.db.before-rollback.<time>`. `before-rollback` copies are not removed by snapshot rotation; delete them yourself when no longer needed. Without a terminal (scripts), add `--yes`. After going back to 0.4.0 or older, do not run `~/panel/panel` with any arguments: the old binary ignores them and starts a second panel. To move up again, run the install line in [Install on your phone](#install-on-your-phone) again.
 
-Panel membuat snapshot `panel.db.<versi lama>.<waktu>` di `<PANEL_DATA_DIR>/snapshots/` (mode 600) setiap kali boot menemukan migrasi baru untuk database yang sudah ada, dan menyimpan 3 yang terbaru. Bila snapshot gagal (biasanya penyimpanan penuh), migrasi tidak dijalankan, log menyebut penyebabnya, dan panel keluar setelah 60 detik agar runit tidak berputar cepat. Kosongkan ruang, atau tambahkan `PANEL_SKIP_SNAPSHOT=1` ke `~/panel/.env` untuk satu kali start tanpa snapshot, lalu hapus lagi.
+The panel creates a snapshot `panel.db.<old version>.<time>` in `<PANEL_DATA_DIR>/snapshots/` (mode 600) every time boot finds new migrations for an existing database, and keeps the latest 3. If the snapshot fails (usually storage full), migrations are not run, the log names the cause, and the panel exits after 60 seconds so runit does not spin quickly. Free up space, or add `PANEL_SKIP_SNAPSHOT=1` to `~/panel/.env` for one start without a snapshot, then remove it again.
 
-## Layar dan peran
+## Screens and roles
 
-| Peran         | Halaman awal | Isi                                                                                                                                      |
-| ------------- | ------------ | ---------------------------------------------------------------------------------------------------------------------------------------- |
-| `user`        | `/profile`   | Profil sendiri: sesi aktif, tema, hapus akun                                                                                             |
-| `admin`       | `/panel`     | Ringkasan, Situs (buat/adopsi/deploy/hapus), Layanan runit, Aplikasi pm2, Domain, Database, Cadangan, Riwayat perubahan, Riwayat masalah |
-| `super_admin` | `/panel`     | Semua isi `admin`, plus Administrasi di `/dev`: Kesehatan sistem, Pengguna, Audit, Log, Pengaturan                                       |
+| Role          | Home page  | Contents                                                                                                                             |
+| ------------- | ---------- | ------------------------------------------------------------------------------------------------------------------------------------ |
+| `user`        | `/profile` | Own profile: active sessions, theme, delete account                                                                                  |
+| `admin`       | `/panel`   | Overview, Sites (create/adopt/deploy/delete), runit Services, pm2 Apps, Domains, Databases, Backups, Change history, Problem history |
+| `super_admin` | `/panel`   | Everything in `admin`, plus Administration at `/dev`: System health, Users, Audit, Logs, Settings                                    |
 
-Peran lebih tinggi bisa membuka semua halaman peran di bawahnya. Super admin juga mendarat di `/panel`; Administrasi ada di menu samping (di HP: menu **Lainnya** di bar bawah).
+Higher roles can open all pages of the roles below them. The super admin also lands on `/panel`; Administration is in the side menu (on a phone: the **Lainnya** (More) menu in the bottom bar).
 
-`/` adalah halaman perkenalan publik (tanpa login); tombolnya "Masuk dengan Google" untuk tamu atau "Buka panel" ke halaman awal peran bila sudah login. Setelah login Google, pengguna kembali ke `/login` lalu diteruskan ke halaman awal perannya. Alamat yang tidak dikenal menjawab 404: tamu melihat halaman "tidak ditemukan" publik dengan tautan ke `/`, pengguna yang sudah login melihat 404 di dalam panel.
+`/` is the public introduction page (no sign-in); its button is "Masuk dengan Google" (Sign in with Google) for visitors or "Buka panel" (Open panel) to the role's home page when signed in. After Google sign-in, users return to `/login` and are forwarded to their role's home page. Unknown addresses answer 404: visitors see a public "tidak ditemukan" (not found) page with a link to `/`, signed-in users see a 404 inside the panel.
 
-### Login dan peran
+### Sign-in and roles
 
-- Siapa pun yang punya akun Google bisa login. Akun baru masuk sebagai `user` (hanya `/profile`, dengan penjelasan "belum punya akses").
-- Email di `SUPER_ADMIN_EMAILS` menjadi `super_admin` saat login.
-- Jadikan admin di **Administrasi → Pengguna** (ubah peran ke `admin`). Peran `super_admin` hanya dari env. Bila panel memakai Cloudflare Access, tambahkan juga email itu ke policy Access.
-- **Admin punya kendali penuh atas HP.** Admin bisa deploy program yang berjalan dengan akses yang sama seperti panel, sehingga bisa membaca semua file, database, dan kunci data, lalu menjadikan dirinya super admin. Berikan peran Admin hanya ke orang yang kamu percayai seperti pemilik HP.
-- Sesi login berlaku paling lama 30 hari. Di **Profil** kamu bisa melihat dan mencabut sesi aktif; super admin bisa mencabut sesi pengguna lain dan "Keluarkan semua pengguna" di Kesehatan sistem.
-- Pengguna dengan peran `user` bisa menghapus akunnya sendiri dari Profil. Catatan audit tentang akun itu tetap disimpan sampai melewati `audit.retention_days` (default 365 hari).
+- Anyone with a Google account can sign in. New accounts start as `user` (only `/profile`, with a "belum punya akses" (no access yet) explanation).
+- Emails in `SUPER_ADMIN_EMAILS` become `super_admin` on sign-in.
+- Make someone admin under **Administrasi → Pengguna** (Administration → Users) (change the role to `admin`). The `super_admin` role only comes from env. If the panel uses Cloudflare Access, add that email to the Access policy too.
+- **Admins have full control of the phone.** An admin can deploy programs that run with the same access as the panel, so they can read all files, databases, and the data key, and then make themselves super admin. Only give the Admin role to people you trust like the phone's owner.
+- Sign-in sessions last at most 30 days. Under **Profil** (Profile) you can see and revoke active sessions; the super admin can revoke other users' sessions and use "Keluarkan semua pengguna" (Sign out all users) in System health.
+- Users with the `user` role can delete their own account from Profile. Audit records about that account are kept until they pass `audit.retention_days` (default 365 days).
 
-## Pemantauan dan notifikasi
+## Monitoring and notifications
 
-- Satu sampler membaca HP (baterai, memori, penyimpanan, beban), layanan runit, aplikasi pm2, domain, dan cadangan setiap `monitor.sample_interval_sec` (default 60 detik). **Ringkasan** (`/panel`) menampilkan masalah lebih dulu, atau "Semua sehat". Biaya CPU saat diam sekitar 1% di HP uji.
-- Histori metrik (grafik baterai/memori 24 jam dan 7 hari) dan 30 cek terakhir per domain disimpan 7 hari (±3 MB); riwayat masalah (`/panel/problems`) 30 hari. Tulis ke flash sekitar 70-100 MB per hari dengan interval default; interval yang lebih besar memotongnya.
-- Level baterai hanya dianggap masalah saat **rendah dan tidak mengisi** (`monitor.battery_warn_percent`; di bawah 15% selalu gawat); mencabut charger sendiri bukan masalah. Baterai panas dilaporkan terpisah. Suhu yang tidak terbaca ditampilkan "tidak ada data", bukan 0 °C.
-- Aplikasi yang crash berulang baru terdeteksi setelah panel berjalan beberapa menit, karena hitungannya disimpan di memori.
-- **Telegram**: buat bot di @BotFather, isi **Token bot Telegram** di Pengaturan → Notifikasi Telegram, kirim pesan apa saja ke bot, lalu tekan **Cari chat** dan **Kirim pesan uji**. Panel mengirim satu pesan ringkasan per putaran sampler: saat masalah muncul, saat makin gawat, pengingat bila masih terbuka setelah 24 jam, dan saat pulih. Masalah yang sama tidak dikirim ulang dalam 15 menit, dan jumlah pesan per jam dibatasi. "Cadangan belum diatur" dan "Access belum terdeteksi" hanya informasi dan tidak dikirim.
-- Panel **tidak bisa melaporkan dirinya sendiri mati**. Saat menyala lagi, panel melaporkan bila HP baru menyala ulang atau panel sebelumnya berhenti tidak wajar. Untuk tahu saat HP mati, pakai monitor luar (mis. cek HTTP berkala ke `https://panel.<domain>/api/health`).
-- Halaman log menyamarkan nilai rahasia yang dikenal (isi `.env` situs, token) sebelum ditampilkan atau diunduh. Penyamaran ini tidak sempurna: jangan menulis rahasia ke log aplikasimu.
+- One sampler reads the phone (battery, memory, storage, load), runit services, pm2 apps, domains, and backups every `monitor.sample_interval_sec` (default 60 seconds). **Ringkasan** (Overview, `/panel`) shows problems first, or "Semua sehat" (All healthy). Idle CPU cost is about 1% on the test phone.
+- Metric history (24-hour and 7-day battery/memory charts) and the last 30 checks per domain are kept for 7 days (±3 MB); problem history (`/panel/problems`) for 30 days. Flash writes are about 70-100 MB per day at the default interval; a larger interval cuts that.
+- Battery level only counts as a problem when it is **low and not charging** (`monitor.battery_warn_percent`; below 15% is always severe); unplugging the charger by itself is not a problem. A hot battery is reported separately. A temperature that cannot be read is shown as "tidak ada data" (no data), not 0 °C.
+- An app that crashes repeatedly is only detected after the panel has been running for a few minutes, because the count is kept in memory.
+- **Telegram**: create a bot with @BotFather, fill in **Token bot Telegram** (Telegram bot token) under Settings → Telegram notifications, send any message to the bot, then press **Cari chat** (Find chat) and **Kirim pesan uji** (Send test message). The panel sends one summary message per sampler round: when a problem appears, when it gets worse, a reminder if it is still open after 24 hours, and when it recovers. The same problem is not resent within 15 minutes, and the number of messages per hour is limited. "Cadangan belum diatur" (Backups not configured) and "Access belum terdeteksi" (Access not detected yet) are informational only and are not sent.
+- The panel **cannot report its own death**. When it comes back up, the panel reports if the phone has just rebooted or the previous panel stopped abnormally. To know when the phone is down, use an external monitor (e.g. a periodic HTTP check to `https://panel.<domain>/api/health`).
+- The log pages mask known secret values (site `.env` contents, tokens) before showing or downloading them. This masking is not perfect: do not write secrets to your app logs.
 
-## Integrasi pm2 (`apps.json`)
+## pm2 integration (`apps.json`)
 
-Panel memiliki `~/sites/apps.json` (dibuat otomatis saat start bila belum ada). Agar pm2 menjalankan situs buatan panel, `~/sites/ecosystem.config.js` harus memuat entri dari `apps.json`. Halaman **Situs → Persiapan** memeriksa ini (memuat ecosystem dengan `node` seperti pm2) dan menampilkan satu baris per masalah.
+The panel owns `~/sites/apps.json` (created automatically at start if missing). For pm2 to run sites created by the panel, `~/sites/ecosystem.config.js` must include the entries from `apps.json`. The **Situs → Persiapan** (Sites → Setup) page checks this (loading the ecosystem with `node` like pm2 does) and shows one row per problem.
 
-**Perbaiki dari panel.** Bila panel bisa memperbaikinya sendiri, baris itu punya tombol **Perbaiki**, dan kartu punya **Perbaiki semua (n)**. Panel menampilkan dulu apa artinya dalam bahasa awam (aplikasi tulisan tangan yang tetap, situs panel yang ditambahkan), dengan **Lihat perubahan pada file** untuk diff-nya, lalu **Terapkan**:
+**Fix from the panel.** When the panel can fix it itself, the row has a **Perbaiki** (Fix) button, and the card has **Perbaiki semua (n)** (Fix all). The panel first shows what it means in plain language (hand-written apps that stay, panel sites that are added), with **Lihat perubahan pada file** (View file changes) for the diff, then **Terapkan** (Apply):
 
-- Di `ecosystem.config.js` panel hanya menambahkan blok bertanda `panel-termux:apps v1` di **akhir** file (dan menghapus `...require("./apps.json")` lama bila ada). Aplikasi tulisan tangan tidak diubah dan tidak di-restart. Penjaga `pm2-guard` hanya ditambahkan bila tidak ada aplikasi tulisan tangan.
-- Di run script layanan pm2 panel hanya menambahkan `--no-auto-exit` setelah `pm2-runtime`. Ini berlaku saat pm2 start berikutnya (HP atau pm2 dinyalakan ulang). **Mulai ulang pm2 sekarang** (opsional, meminta konfirmasi yang menyebut aplikasi yang berjalan) memeriksa semua aplikasi kembali berjalan; bila tidak, panel menawarkan **Kembalikan file ecosystem dan mulai ulang pm2**. Bila restart akan menghentikan aplikasi yang tidak tercantum di `ecosystem.config.js`, konfirmasi itu menyebut namanya dan meminta kamu mengetik `pm2`.
-- Folder situs yang belum ada bisa dibuat dari kartu yang sama. `apps.json` yang rusak disusun ulang dari daftar situs panel, dan `ecosystem.config.js` yang belum ada dibuat dari template [`deploy/pm2/ecosystem.config.js`](deploy/pm2/ecosystem.config.js). Setelah perbaikan yang berlaku saat pm2 start berikutnya, kartu menawarkan **Mulai ulang pm2 sekarang**.
-- Sebelum menulis, panel memvalidasi hasilnya dengan `node`; bila gagal, file lama tetap dipakai ("Tidak diterapkan"). pm2 tidak pernah di-restart oleh perbaikan itu sendiri.
-- **Batalkan perubahan** mengembalikan tiap file yang diubah ke versi sebelum perbaikan (satu undo per file). Salinan disimpan di `<PANEL_DATA_DIR>/fix-backups/`, 10 terakhir per file, hanya di HP (tidak ikut cadangan R2/S3 karena ecosystem bisa memuat `env` rahasia).
-- File yang tidak bisa diubah dengan aman (bukan UTF-8, symlink, penanda blok rusak, `apps.json` dipakai dengan cara lain) tidak disentuh. Baris itu menyebut alasannya dan membuka **Cara manual (untuk pengguna teknis)**.
+- In `ecosystem.config.js` the panel only adds a block marked `panel-termux:apps v1` at the **end** of the file (and removes an old `...require("./apps.json")` if present). Hand-written apps are not changed or restarted. The `pm2-guard` keeper is only added when there are no hand-written apps.
+- In the pm2 service run script the panel only adds `--no-auto-exit` after `pm2-runtime`. This takes effect at the next pm2 start (phone or pm2 restarted). **Mulai ulang pm2 sekarang** (Restart pm2 now) (optional, asks for a confirmation that names the running apps) checks that all apps are running again; if not, the panel offers **Kembalikan file ecosystem dan mulai ulang pm2** (Restore the ecosystem file and restart pm2). If the restart would stop apps not listed in `ecosystem.config.js`, the confirmation names them and asks you to type `pm2`.
+- Site folders that do not exist yet can be created from the same card. A broken `apps.json` is rebuilt from the panel's site list, and a missing `ecosystem.config.js` is created from the template [`deploy/pm2/ecosystem.config.js`](deploy/pm2/ecosystem.config.js). After a fix that takes effect at the next pm2 start, the card offers **Mulai ulang pm2 sekarang** (Restart pm2 now).
+- Before writing, the panel validates the result with `node`; if that fails, the old file stays in use ("Tidak diterapkan", Not applied). pm2 is never restarted by the fix itself.
+- **Batalkan perubahan** (Undo changes) restores each changed file to its version before the fix (one undo per file). Copies are kept in `<PANEL_DATA_DIR>/fix-backups/`, the last 10 per file, only on the phone (not included in R2/S3 backups because the ecosystem can contain secret `env`).
+- Files that cannot be changed safely (not UTF-8, symlink, broken block marker, `apps.json` used in another way) are not touched. The row states the reason and opens **Cara manual (untuk pengguna teknis)** (Manual steps, for technical users).
 
 <details>
-<summary>Cara manual (untuk pengguna teknis)</summary>
+<summary>Manual steps (for technical users)</summary>
 
-HP baru memakai template [`deploy/pm2/ecosystem.config.js`](deploy/pm2/ecosystem.config.js) (salinan persis `files/sites/ecosystem.config.js` di [server-termux](https://github.com/makurosolusi/server-termux), sumbernya), yang memuat blok `panelApps` berikut dengan `...panelApps` sebagai elemen terakhir `apps`. Snippet ini tetap dianggap benar oleh Persiapan:
+New phones use the template [`deploy/pm2/ecosystem.config.js`](deploy/pm2/ecosystem.config.js) (an exact copy of `files/sites/ecosystem.config.js` in [server-termux](https://github.com/makurosolusi/server-termux), its source), which contains the following `panelApps` block with `...panelApps` as the last element of `apps`. Setup still considers this snippet correct:
 
 ```js
 // Panel Termux: situs buatan panel tercatat di apps.json (dikelola panel, jangan diedit tangan).
@@ -379,76 +385,76 @@ module.exports = {
 };
 ```
 
-Untuk file tulisan tangan, bagian Cara manual di kartu Persiapan menampilkan blok `panel-termux:apps v1` siap salin untuk ditempel di akhir file.
+(The comments in this snippet are Indonesian because it is copied verbatim from the template.) For hand-written files, the Manual steps section of the Setup card shows a ready-to-copy `panel-termux:apps v1` block to paste at the end of the file.
 
 </details>
 
-- Snippet lama `...require("./apps.json")` dari versi 0.2.x ditandai error di Persiapan. Snippet itu melempar error bila `apps.json` hilang atau rusak, dan satu entri yang binary-nya hilang membuat pm2-runtime menghentikan **semua** aplikasi. **Perbaiki** menggantinya dengan blok panel.
-- **Jangan hapus `pm2-guard`.** pm2-runtime keluar bila ecosystem tidak punya aplikasi saat start, juga dengan `--no-auto-exit`. Aplikasi penjaga `pm2-guard` (`sleep infinity`, ±1 MB) menahannya hidup di HP yang belum punya situs. Panel menyembunyikannya dari daftar Aplikasi.
-- Service runit `pm2` sebaiknya menjalankan `pm2-runtime --no-auto-exit` (lihat [`deploy/pm2/run`](deploy/pm2/run)). Panel tidak pernah memanggil CLI `pm2` saat service itu mati, agar tidak menyalakan daemon pm2 kedua; halaman yang butuh pm2 menampilkan "pm2 tidak berjalan" dengan tombol **Jalankan pm2** (tombol **Jalankan postgres** untuk postgres). Tombol itu juga menghapus file `down` layanan sehingga layanan menyala lagi setelah HP dinyalakan ulang.
-- Situs yang tercatat di panel tetapi tidak ada di pm2 ditandai "Tidak berjalan di pm2" dengan tombol **Jalankan lagi**. Situs adopsi dimuat dari `ecosystem.config.js`.
+- The old `...require("./apps.json")` snippet from 0.2.x is flagged as an error in Setup. That snippet throws if `apps.json` is missing or broken, and one entry with a missing binary makes pm2-runtime stop **all** apps. **Perbaiki** (Fix) replaces it with the panel block.
+- **Do not remove `pm2-guard`.** pm2-runtime exits if the ecosystem has no apps at start, even with `--no-auto-exit`. The `pm2-guard` keeper app (`sleep infinity`, ±1 MB) keeps it alive on phones that have no sites yet. The panel hides it from the Apps list.
+- The `pm2` runit service should run `pm2-runtime --no-auto-exit` (see [`deploy/pm2/run`](deploy/pm2/run)). The panel never calls the `pm2` CLI while that service is down, so it does not start a second pm2 daemon; pages that need pm2 show "pm2 tidak berjalan" (pm2 is not running) with a **Jalankan pm2** (Start pm2) button (**Jalankan postgres** (Start postgres) for postgres). That button also removes the service's `down` file so the service starts again after the phone restarts.
+- Sites recorded in the panel but missing from pm2 are marked "Tidak berjalan di pm2" (Not running in pm2) with a **Jalankan lagi** (Start again) button. Adopted sites are loaded from `ecosystem.config.js`.
 
-## Membuat situs
+## Creating a site
 
-**Situs → Buat situs**: isi nama, satu atau beberapa hostname, port (disarankan otomatis dari `sites.port_range`), database opsional, dan variabel `.env` tambahan. Wizard memeriksa nama, port, dan hostname saat diketik. Panel menjalankan perubahan bertahap: folder `~/sites/<nama>` → database dan role Postgres (opsional, `DATABASE_URL` ditulis ke `.env`) → `.env` (`PORT` diisi panel) → entri `apps.json` → ingress `config.yml` (divalidasi cloudflared dulu, backup `config.yml.bak`) → CNAME DNS → satu kali restart cloudflared. Bila satu langkah gagal, langkah sebelumnya di-undo. Progres per langkah, durasinya, dan log-nya terlihat di **Riwayat perubahan** (`/panel/jobs`).
+**Situs → Buat situs** (Sites → Create site): fill in the name, one or more hostnames, a port (suggested automatically from `sites.port_range`), an optional database, and extra `.env` variables. The wizard checks the name, port, and hostname as you type. The panel runs the change in stages: folder `~/sites/<name>` → Postgres database and role (optional, `DATABASE_URL` is written to `.env`) → `.env` (`PORT` filled in by the panel) → `apps.json` entry → `config.yml` ingress (validated by cloudflared first, backup `config.yml.bak`) → DNS CNAME → one cloudflared restart. If one step fails, earlier steps are undone. Per-step progress, duration, and logs are visible in **Riwayat perubahan** (Change history, `/panel/jobs`).
 
-DNS dibuat lewat token API Cloudflare bila diisi. Tanpa token, panel memakai login cloudflared HP (`~/.cloudflared/cert.pem`, `cloudflared tunnel route dns`) dan hanya menerima hasilnya bila cloudflared membuat record dengan nama yang persis sama; menghapus record itu nanti tetap butuh token. Bila keduanya tidak tersedia, atau cloudflared membuat record di zona lain, langkah DNS dilewati (situs tetap dibuat) dan panel menampilkan kartu record siap salin (tipe, nama, isi, proxy) dengan **Periksa lagi**. Ringkasan wizard menyebut cara DNS yang akan dipakai.
+DNS is created through the Cloudflare API token if set. Without a token, the panel uses the phone's cloudflared login (`~/.cloudflared/cert.pem`, `cloudflared tunnel route dns`) and only accepts the result if cloudflared creates a record with exactly the same name; deleting that record later still needs a token. If neither is available, or cloudflared creates the record in another zone, the DNS step is skipped (the site is still created) and the panel shows a ready-to-copy record card (type, name, content, proxy) with **Periksa lagi** (Check again). The wizard summary states which DNS method will be used.
 
-Di halaman detail situs: tambah/hapus domain, ubah variabel lingkungan (tempel `.env` dengan pratinjau; "Simpan" atau "Simpan dan mulai ulang" yang mengembalikan nilai lama bila aplikasi gagal sehat), mulai ulang, dan pengaturan cek kesehatan (path, status yang diharapkan, batas waktu 10-300 detik, default 60).
+On the site details page: add/remove domains, edit environment variables (paste a `.env` with a preview; "Simpan" (Save) or "Simpan dan mulai ulang" (Save and restart), which restores the old values if the app fails to become healthy), restart, and health check settings (path, expected status, time limit 10-300 seconds, default 60).
 
-Rute domain yang ditulis manual di `config.yml` juga bisa dihapus dari detail situs: ketik nama domainnya untuk konfirmasi. Panel hanya menghapus baris rute itu; bagian lain config tidak diubah.
+Domain routes written manually in `config.yml` can also be removed from the site details: type the domain name to confirm. The panel only removes that route line; the rest of the config is not changed.
 
-Bila folder situs hilang dari HP, deploy ke situs buatan panel tanpa database membuat ulang folder itu. Untuk situs dengan database atau situs adopsi, panel tidak menebak isinya dan menampilkan panduan dengan **Hapus situs** dan **Buka Cadangan**.
+If a site folder is missing from the phone, deploying to a panel-created site without a database recreates that folder. For sites with a database or adopted sites, the panel does not guess their contents and shows guidance with **Hapus situs** (Delete site) and **Buka Cadangan** (Open Backups).
 
-Perubahan yang terputus (panel di-restart di tengah jalan) tampil "Terputus" dengan tombol **Pulihkan**, yang membereskan sisa langkahnya; hapus situs atau domain yang terputus bisa diulang (**Ulangi hapus situs**, **Ulangi hapus domain**).
+Interrupted changes (panel restarted midway) show as "Terputus" (Interrupted) with a **Pulihkan** (Recover) button, which cleans up the remaining steps; an interrupted site or domain deletion can be retried (**Ulangi hapus situs** (Retry site deletion), **Ulangi hapus domain** (Retry domain deletion)).
 
-## Deploy binary
+## Deploying binaries
 
-Di halaman detail situs, unggah binary. Dua target build didukung dan dideteksi dari header ELF (file lain langsung ditolak sebelum diunggah penuh):
+On the site details page, upload a binary. Two build targets are supported and detected from the ELF header (other files are rejected before being fully uploaded):
 
 ```sh
-bun build --compile --target=bun-linux-arm64-android src/index.ts --outfile app   # jalan langsung (native)
-bun build --compile --target=bun-linux-arm64 src/index.ts --outfile app           # lewat grun (glibc)
+bun build --compile --target=bun-linux-arm64-android src/index.ts --outfile app   # runs directly (native)
+bun build --compile --target=bun-linux-arm64 src/index.ts --outfile app           # through grun (glibc)
 ```
 
-- Upload dikirim per potongan 8 MB (Cloudflare membatasi body request 100 MB), maksimal 300 MB, dan tiap potongan diperiksa SHA-256-nya. Upload yang terputus (jaringan, muat ulang halaman) bisa dilanjutkan dengan **Lanjutkan unggahan** selama 1 jam; setelah itu dibuang. Upload butuh ruang kosong di data dir sebesar ukuran file + 200 MB.
-- Panel menyimpan binary lama sebagai `app.prev` (di Termux berupa salinan, jadi tiap deploy menulis sekitar ukuran binary ke flash, ±89 MB untuk app Bun biasa), menukar `app`, menyesuaikan runtime di `apps.json`, me-restart app pm2, lalu menunggu sampai app **sehat**: port menjawab sesuai pengaturan cek kesehatan dua kali berturut-turut **dan** pm2 menunjukkan pid yang sama tanpa restart baru, masih benar setelah 5 detik. Bila tidak sehat dalam batas waktu, deploy dikembalikan otomatis.
-- **Kembalikan versi sebelumnya** memakai `app.prev`. Yang tidak ikut dikembalikan: variabel lingkungan (`.env`), isi dan struktur database, file di `data/`, dan domain.
+- Uploads are sent in 8 MB chunks (Cloudflare limits request bodies to 100 MB), up to 300 MB, and each chunk's SHA-256 is checked. An interrupted upload (network, page reload) can be continued with **Lanjutkan unggahan** (Resume upload) for 1 hour; after that it is discarded. Uploads need free space in the data dir equal to the file size + 200 MB.
+- The panel keeps the old binary as `app.prev` (on Termux this is a copy, so every deploy writes about the binary's size to flash, ±89 MB for a typical Bun app), swaps `app`, adjusts the runtime in `apps.json`, restarts the pm2 app, then waits until the app is **healthy**: the port answers according to the health check settings twice in a row **and** pm2 shows the same pid with no new restart, still true after 5 seconds. If it is not healthy within the time limit, the deploy is rolled back automatically.
+- **Kembalikan versi sebelumnya** (Restore previous version) uses `app.prev`. What is not restored: environment variables (`.env`), database contents and structure, files in `data/`, and domains.
 
-## Adopsi situs lama
+## Adopting existing sites
 
-Aplikasi pm2 yang sudah berjalan tetapi belum dikelola panel muncul di bagian **Belum dikelola** halaman Situs dan bisa diadopsi: panel mencatatnya (nama, hostname dari ingress, port, nama app pm2, runtime) tanpa mengubah file. Deploy ke situs adopsi menukar `~/sites/<nama>/app` dan me-restart app pm2-nya; `apps.json` tidak disentuh. Menghapus situs adopsi hanya menghapus ingress/DNS yang ditambahkan panel dan catatannya.
+pm2 apps that are already running but not yet managed by the panel appear under **Belum dikelola** (Not managed yet) on the Sites page and can be adopted: the panel records them (name, hostname from the ingress, port, pm2 app name, runtime) without changing any files. Deploying to an adopted site swaps `~/sites/<name>/app` and restarts its pm2 app; `apps.json` is not touched. Deleting an adopted site only removes the ingress/DNS the panel added and its record.
 
-## Cadangan dan pemulihan
+## Backup and restore
 
-Isi grup **Cadangan** di Pengaturan, tekan **Uji koneksi**, lalu cadangan berjalan tiap hari pada `backup.hour` (atau **Cadangkan sekarang** di **Cadangan**). Satu run mengunggah, di bawah `<prefix><yyyy-mm-dd>/<HHMMSS>-`:
+Fill in the **Cadangan** (Backups) group in Settings, press **Uji koneksi** (Test connection), and backups then run daily at `backup.hour` (or **Cadangkan sekarang** (Back up now) on the **Cadangan** (Backups) page). One run uploads, under `<prefix><yyyy-mm-dd>/<HHMMSS>-`:
 
-| File                 | Isi                                                                                                                        |
-| -------------------- | -------------------------------------------------------------------------------------------------------------------------- |
-| `globals.sql`        | Role Postgres (`pg_dumpall --globals-only`)                                                                                |
-| `<db>.dump`          | `pg_dump -Fc` tiap database, diperiksa dengan `pg_restore --list`                                                          |
-| `sites.tar.gz`       | Folder situs tanpa binary (`app`, `app.prev`, `app.new`), `node_modules` di level situs, dan file sementara deploy         |
-| `cloudflared.tar.gz` | `~/.cloudflared` tanpa `cert.pem`                                                                                          |
-| `secrets.tar.gz`     | Hanya bila `backup.include_secrets` = `on`: kunci data, `.env` panel, kredensial tunnel                                    |
-| `panel.db`           | Salinan konsisten database panel                                                                                           |
-| `SHA256SUMS`         | Checksum semua file run ini (`sha256sum -c`)                                                                               |
-| `manifest.json`      | Indeks run: path, `APP_BASE_URL`, tunnel, situs, versi Postgres, langkah pulih. Tanpa nilai rahasia. Diunggah paling akhir |
+| File                 | Contents                                                                                                            |
+| -------------------- | ------------------------------------------------------------------------------------------------------------------- |
+| `globals.sql`        | Postgres roles (`pg_dumpall --globals-only`)                                                                        |
+| `<db>.dump`          | `pg_dump -Fc` of each database, checked with `pg_restore --list`                                                    |
+| `sites.tar.gz`       | Site folders without binaries (`app`, `app.prev`, `app.new`), site-level `node_modules`, and temporary deploy files |
+| `cloudflared.tar.gz` | `~/.cloudflared` without `cert.pem`                                                                                 |
+| `secrets.tar.gz`     | Only if `backup.include_secrets` = `on`: data key, panel `.env`, tunnel credentials                                 |
+| `panel.db`           | A consistent copy of the panel database                                                                             |
+| `SHA256SUMS`         | Checksums of all files in this run (`sha256sum -c`)                                                                 |
+| `manifest.json`      | Run index: paths, `APP_BASE_URL`, tunnel, sites, Postgres version, restore steps. No secret values. Uploaded last   |
 
-Halaman Cadangan menampilkan cadangan valid terakhir tiap item, riwayat run, dan perintah pulih per item. Unduh lewat link sementara (15 menit); item `secrets` hanya untuk super admin dengan sesi segar.
+The Backups page shows the last valid backup of each item, the run history, and a restore command per item. Downloads go through temporary links (15 minutes); the `secrets` item is only for the super admin with a fresh session.
 
-**Retensi**: setelah run yang tidak gagal, objek lebih tua dari `backup.retention_days` dihapus, kecuali `backup.keep_min_runs` run berhasil terbaru dan cadangan valid terakhir tiap item, yang selalu disimpan. Akibatnya cadangan terakhir database situs yang sudah dihapus **disimpan selamanya**; hapus manual di bucket bila tidak perlu lagi. Retensi tidak menghapus objek yang tidak tercatat di panel.
+**Retention**: after a run that did not fail, objects older than `backup.retention_days` are deleted, except the `backup.keep_min_runs` latest successful runs and the last valid backup of each item, which are always kept. As a result, the last backup of a deleted site's database is **kept forever**; delete it manually in the bucket when no longer needed. Retention does not delete objects the panel has not recorded.
 
-**Token tanpa izin hapus** (pelindung terbaik bila HP dicuri, karena pencuri tidak bisa menghapus cadangan): beri token R2 izin baca/tulis saja. Saat retensi ditolak, panel berhenti mencoba di run itu dan menandai "retensi diserahkan ke lifecycle rule bucket". Atur lifecycle rule kedaluwarsa objek di bucket, minimal 30 hari. Lifecycle menghapus berdasarkan umur, jadi cadangan valid terakhir tiap item tidak dijamin tersimpan; perhatikan peringatan cadangan basi di Ringkasan.
+**Token without delete permission** (the best protection if the phone is stolen, because a thief cannot delete the backups): give the R2 token read/write permission only. When retention is refused, the panel stops trying for that run and marks "retensi diserahkan ke lifecycle rule bucket" (retention handed over to the bucket's lifecycle rule). Set an object expiration lifecycle rule on the bucket, at least 30 days. Lifecycle deletes by age, so the last valid backup of each item is not guaranteed to be kept; watch for stale backup warnings in the Overview.
 
-**Uji pemulihan**: di halaman Cadangan, **Pulihkan ke database baru** memulihkan dump ke database baru `<db>_r<yyyymmddHHMM>` tanpa menyentuh yang asli. Hapus database uji itu setelah dicek.
+**Restore test**: on the Backups page, **Pulihkan ke database baru** (Restore to a new database) restores a dump into a new database `<db>_r<yyyymmddHHMM>` without touching the original. Delete that test database after checking it.
 
-Menghapus situs yang punya database ditolak selama cadangan sedang berjalan.
+Deleting a site that has a database is refused while a backup is running.
 
-### Kunci data
+### Data key
 
-`PANEL_DATA_DIR/secret` mengenkripsi pengaturan rahasia (token Cloudflare, kunci S3, token Telegram). File ini **tidak** ikut cadangan kecuali `backup.include_secrets` dinyalakan. Unduh salinannya di **Kesehatan sistem → Kunci data** (butuh sesi segar) dan simpan di tempat aman. Bila file ini hilang atau tertukar, panel tetap menyala dengan kunci baru, menandai "Kunci data tidak cocok", dan menolak menyimpan pengaturan rahasia sampai file lama dikembalikan atau kamu memilih "Hapus pengaturan rahasia lama" lalu mengisinya ulang.
+`PANEL_DATA_DIR/secret` encrypts the secret settings (Cloudflare token, S3 keys, Telegram token). This file is **not** included in backups unless `backup.include_secrets` is turned on. Download a copy under **Kesehatan sistem → Kunci data** (System health → Data key) (needs a fresh session) and keep it somewhere safe. If this file is lost or swapped, the panel still starts with a new key, marks "Kunci data tidak cocok" (Data key mismatch), and refuses to save secret settings until the old file is restored or you choose "Hapus pengaturan rahasia lama" (Delete old secret settings) and re-enter them.
 
-Pulihkan `panel.db` di HP yang sama:
+Restore `panel.db` on the same phone:
 
 ```sh
 sv down panel
@@ -457,14 +463,16 @@ rm -f ~/panel/data/panel.db-wal ~/panel/data/panel.db-shm
 sv up panel
 ```
 
-### Pulihkan ke HP baru
+<a id="pulihkan-ke-hp-baru"></a>
 
-Asumsi: HP baru bersih, kamu punya akun Cloudflare (dashboard + R2), akun Google Cloud (OAuth client), satu laptop atau HP lain untuk login web, dan **tidak** punya file dari HP lama kecuali yang ada di bucket (`include_secrets=off`, tanpa file kunci data). Variabel contoh: bucket `BUCKET`, prefix `panel-termux/`. Setiap blok dijalankan di Termux HP baru kecuali disebut lain.
+### Restore to a new phone
+
+Assumptions: the new phone is clean, you have a Cloudflare account (dashboard + R2), a Google Cloud account (OAuth client), a laptop or another phone for the web sign-in, and **no** files from the old phone except what is in the bucket (`include_secrets=off`, no data key file). Example variables: bucket `BUCKET`, prefix `panel-termux/`. Every block runs in Termux on the new phone unless stated otherwise.
 
 <details>
-<summary>Runbook lengkap (langkah 0 sampai 15)</summary>
+<summary>Full runbook (steps 0 to 15)</summary>
 
-0. **HP lama masih hidup** (pindah HP, bukan hilang). Matikan konektor tunnel di sana agar trafik tidak terbagi:
+0. **The old phone is still alive** (moving phones, not lost). Stop the tunnel connector there so traffic is not split:
 
    ```sh
    export SVDIR=$PREFIX/var/service
@@ -472,18 +480,18 @@ Asumsi: HP baru bersih, kamu punya akun Cloudflare (dashboard + R2), akun Google
    touch $SVDIR/cloudflared/down $SVDIR/panel/down $SVDIR/pm2/down
    ```
 
-   Bila HP lama hilang atau dicuri, jalankan [runbook HP dicuri](#hp-hilang-atau-dicuri) lebih dulu, lalu lanjut di sini dengan **kunci data baru** (langkah 10, jalan tanpa kunci).
+   If the old phone is lost or stolen, run the [stolen phone runbook](#lost-or-stolen-phone) first, then continue here with a **new data key** (step 10, the path without a key).
 
-1. **Aplikasi Android**: pasang Termux, Termux:Boot, dan Termux:API dari F-Droid/GitHub (README server-termux langkah 1). Buka Termux.
-2. **Alat pulih**:
+1. **Android apps**: install Termux, Termux:Boot, and Termux:API from F-Droid/GitHub (server-termux README step 1). Open Termux.
+2. **Restore tools**:
 
    ```sh
    pkg upgrade -y && pkg install -y rclone cloudflared
    ```
 
-   `pkg upgrade` aman di sini karena HP ini belum punya data PostgreSQL. Setelah langkah 11, jangan jalankan `pkg upgrade` sembarangan (lihat `panel docs paket`).
+   `pkg upgrade` is safe here because this phone has no PostgreSQL data yet. After step 11, do not run `pkg upgrade` carelessly (see `panel docs paket`).
 
-3. **Token R2 baca-saja**: di dashboard Cloudflare → R2 → Manage API tokens → buat token **Object Read only** untuk bucket `BUCKET`. Catat Access Key ID, Secret Access Key, dan endpoint `https://<account>.r2.cloudflarestorage.com`. Di Termux, ketik nilainya sendiri; perintah ini tidak mencetak secret:
+3. **Read-only R2 token**: in the Cloudflare dashboard → R2 → Manage API tokens → create an **Object Read only** token for bucket `BUCKET`. Note the Access Key ID, Secret Access Key, and endpoint `https://<account>.r2.cloudflarestorage.com`. In Termux, type the values yourself; these commands do not print the secret:
 
    ```sh
    export RCLONE_CONFIG_R2_TYPE=s3 RCLONE_CONFIG_R2_PROVIDER=Cloudflare
@@ -492,44 +500,44 @@ Asumsi: HP baru bersih, kamu punya akun Cloudflare (dashboard + R2), akun Google
    export RCLONE_CONFIG_R2_ACCESS_KEY_ID RCLONE_CONFIG_R2_SECRET_ACCESS_KEY
    ```
 
-4. **Pilih run & unduh**. Folder = tanggal, dan satu run = satu awalan `HHMMSS-`. Pilih stem terbaru yang punya `manifest.json`:
+4. **Pick a run & download**. Folder = date, and one run = one `HHMMSS-` prefix. Pick the latest stem that has a `manifest.json`:
 
    ```sh
-   rclone lsf r2:BUCKET/panel-termux/ | tail -3              # mis. 2026-11-26/
-   rclone lsf r2:BUCKET/panel-termux/2026-11-26/ | grep manifest   # mis. 030012-manifest.json
+   rclone lsf r2:BUCKET/panel-termux/ | tail -3              # e.g. 2026-11-26/
+   rclone lsf r2:BUCKET/panel-termux/2026-11-26/ | grep manifest   # e.g. 030012-manifest.json
    mkdir -p ~/pulih && cd ~/pulih
    rclone copy r2:BUCKET/panel-termux/2026-11-26/ . --include '030012-*'
-   sha256sum -c 030012-SHA256SUMS      # semua harus "OK"; bila tidak, pilih run lain
-   cat 030012-manifest.json            # catat paths, appBaseUrl, tunnel, sites, postgresVersion
+   sha256sum -c 030012-SHA256SUMS      # all must be "OK"; if not, pick another run
+   cat 030012-manifest.json            # note paths, appBaseUrl, tunnel, sites, postgresVersion
    ```
 
-5. **File situs dan konfigurasi tunnel**. Ini harus dilakukan **sebelum** `panel init` (langkah 11). Bila folder ini sudah ada, init memakainya: `ecosystem.config.js` yang dipulihkan tidak ditimpa dan tunnel lama dipakai lagi. Folder tujuan harus belum ada atau kosong:
+5. **Site files and tunnel configuration**. This must be done **before** `panel init` (step 11). If these folders already exist, init uses them: the restored `ecosystem.config.js` is not overwritten and the old tunnel is reused. The target folders must not exist yet or be empty:
 
    ```sh
-   mkdir -p ~/sites && tar -xzf 030012-sites.tar.gz -C ~/sites          # paths.sitesDir dari manifest
+   mkdir -p ~/sites && tar -xzf 030012-sites.tar.gz -C ~/sites          # paths.sitesDir from the manifest
    mkdir -p ~/.cloudflared && tar -xzf 030012-cloudflared.tar.gz -C ~/.cloudflared
    ```
 
-6. **Kredensial tunnel**. Nama berkas diambil dari `tunnel.credentialsFile` di manifest. Bila run berisi item `secrets`, cukup `tar -xzf 030012-secrets.tar.gz -C ~/pulih/secrets` lalu salin `<credentialsFile>` ke `~/.cloudflared/`. Bila tidak:
+6. **Tunnel credentials**. The file name comes from `tunnel.credentialsFile` in the manifest. If the run contains the `secrets` item, just `tar -xzf 030012-secrets.tar.gz -C ~/pulih/secrets` and copy `<credentialsFile>` to `~/.cloudflared/`. If not:
 
    ```sh
-   cloudflared tunnel login                                   # buka URL, pilih domain → ~/.cloudflared/cert.pem
+   cloudflared tunnel login                                   # open the URL, choose the domain → ~/.cloudflared/cert.pem
    cloudflared tunnel token --cred-file ~/.cloudflared/<credentialsFile> <tunnel.ref>
    chmod 600 ~/.cloudflared/<credentialsFile>
-   cloudflared tunnel cleanup <tunnel.ref>                    # buang koneksi lama HP sebelumnya
+   cloudflared tunnel cleanup <tunnel.ref>                    # drop the old phone's stale connections
    ```
 
-   `tunnel token --cred-file` hanya untuk tunnel yang dibuat dengan cloudflared ≥ 2022.3.0. Untuk tunnel yang lebih tua: buat tunnel baru dengan nama lain, arahkan ulang setiap hostname (`cloudflared tunnel route dns -f <tunnel> <host>`), lalu ganti `tunnel:` dan `credentials-file:` di `config.yml`. DNS CNAME di Cloudflare tidak perlu diubah bila tunnel yang sama dipakai.
+   `tunnel token --cred-file` only works for tunnels created with cloudflared ≥ 2022.3.0. For older tunnels: create a new tunnel with a different name, re-point every hostname (`cloudflared tunnel route dns -f <tunnel> <host>`), then replace `tunnel:` and `credentials-file:` in `config.yml`. The DNS CNAMEs in Cloudflare do not need to change if the same tunnel is used.
 
-7. **Unduh panel**, tapi jangan jalankan dulu:
+7. **Download the panel**, but do not run it yet:
 
    ```sh
    cd && curl -fL --retry 3 -o panel-termux https://github.com/makurosolusi/panel-termux/releases/latest/download/panel && chmod +x panel-termux
    ```
 
-   Data panel dipulihkan dulu (langkah 8 sampai 10), supaya init melihat data lama dan hanya melengkapi yang kurang.
+   The panel data is restored first (steps 8 to 10), so init sees the old data and only completes what is missing.
 
-8. **Data panel**:
+8. **Panel data**:
 
    ```sh
    mkdir -p ~/panel/data && chmod 700 ~/panel ~/panel/data
@@ -537,112 +545,112 @@ Asumsi: HP baru bersih, kamu punya akun Cloudflare (dashboard + R2), akun Google
    rm -f ~/panel/data/panel.db-wal ~/panel/data/panel.db-shm ~/panel/data/secret
    ```
 
-9. **`.env` panel**. Bila run berisi item `secrets`: `cp ~/pulih/secrets/.env ~/panel/.env && chmod 600 ~/panel/.env`. Bila tidak, biarkan: init menanyakan yang masih kosong di langkah 11. Siapkan jawabannya:
-   - alamat panel = `appBaseUrl` di manifest, persis sama (redirect OAuth);
-   - Google Client ID = client lama (Google Cloud → Credentials);
-   - Google Client secret = secret lama bila tersimpan, kalau tidak "Add secret" di client itu lalu hapus yang lama setelah selesai;
-   - email Google admin = email kamu.
+9. **Panel `.env`**. If the run contains the `secrets` item: `cp ~/pulih/secrets/.env ~/panel/.env && chmod 600 ~/panel/.env`. If not, leave it: init asks for what is still empty in step 11. Prepare the answers:
+   - panel address = `appBaseUrl` from the manifest, exactly the same (OAuth redirect);
+   - Google Client ID = the old client (Google Cloud → Credentials);
+   - Google Client secret = the old secret if you kept it, otherwise "Add secret" on that client and delete the old one when done;
+   - admin Google email = your email.
 
-10. **Kunci data**, **salah satu** dari:
-    - (a) item `secrets` → `cp ~/pulih/secrets/secret ~/panel/data/secret`;
-    - (b) file kunci data unduhan → perintah `printf` yang ada di file itu;
-    - (c) tidak punya → biarkan `secret` tidak ada. Panel membuat kunci baru dan masuk mode tidak cocok (langkah 13).
+10. **Data key**, **one** of:
+    - (a) `secrets` item → `cp ~/pulih/secrets/secret ~/panel/data/secret`;
+    - (b) downloaded data key file → the `printf` command inside that file;
+    - (c) you have none → leave `secret` absent. The panel creates a new key and enters mismatch mode (step 13).
 
-    Bila ada, `chmod 600 ~/panel/data/secret`.
+    If present, `chmod 600 ~/panel/data/secret`.
 
-11. **Jalankan init** di aplikasi Termux (bukan lewat ssh tanpa `-t`: pemasangan paket, PostgreSQL, dan Termux:Boot butuh terminal):
+11. **Run init** in the Termux app (not over ssh without `-t`: installing packages, PostgreSQL, and Termux:Boot need a terminal):
 
     ```sh
-    cd && ./panel-termux init --hostname <alamat dari appBaseUrl> --admin-email <email kamu>
+    cd && ./panel-termux init --hostname <address from appBaseUrl> --admin-email <your email>
     ```
 
-    Karena `~/sites`, `~/.cloudflared`, dan `panel.db` sudah ada, init memilih mode **Perbaiki**: tidak ada `pkg upgrade`; paket yang kurang (termux-services, nodejs, postgresql, cloudflared, termux-api) dipasang satu per satu setelah dicek; `cloudflared` dan `postgresql` ditahan (hold) dari upgrade; PostgreSQL disiapkan kosong dengan role `postgres`; `ecosystem.config.js` dan `config.yml` yang dipulihkan dipakai apa adanya; lalu Termux:Boot dipasang dan panel dinyalakan. Jawab pertanyaan `.env` dengan nilai dari langkah 9. Bila init meminta login Cloudflare, buka tautannya dan pilih domain. Mau ssh lagi dari laptop: tambahkan `--ssh-key https://github.com/<akun>.keys`.
+    Because `~/sites`, `~/.cloudflared`, and `panel.db` already exist, init picks **Repair** mode: no `pkg upgrade`; missing packages (termux-services, nodejs, postgresql, cloudflared, termux-api) are installed one by one after a check; `cloudflared` and `postgresql` are held from upgrades; PostgreSQL is set up empty with the role `postgres`; the restored `ecosystem.config.js` and `config.yml` are used as they are; then Termux:Boot is installed and the panel started. Answer the `.env` questions with the values from step 9. If init asks for the Cloudflare login, open its link and choose the domain. Want ssh from a laptop again: add `--ssh-key https://github.com/<account>.keys`.
 
-    Ikuti catatan yang dicetak init di akhir (izin baterai, buka Termux:Boot sekali), lalu reboot dan buka kunci HP sekali. Cek dengan `SVDIR=$PREFIX/var/service sv status postgres cloudflared pm2 panel`: semua harus `run:`. Bila terputus di tengah, jalankan perintah yang sama lagi.
+    Follow the notes init prints at the end (battery permission, open Termux:Boot once), then reboot and unlock the phone once. Check with `SVDIR=$PREFIX/var/service sv status postgres cloudflared pm2 panel`: all must be `run:`. If interrupted midway, run the same command again.
 
-    Aplikasi tulisan tangan di `ecosystem.config.js` (mis. daftar `apps` buatan sendiri) tetap dijalankan pm2-runtime yang membaca file itu; init tidak mengubah atau me-restart-nya. Bila **Situs → Persiapan** meminta penyesuaian, tekan **Perbaiki** di sana. Aplikasi pm2 akan **errored** sampai langkah 14 karena binary situs tidak dicadangkan.
+    Hand-written apps in `ecosystem.config.js` (e.g. your own `apps` list) are still run by pm2-runtime, which reads that file; init does not change or restart them. If **Situs → Persiapan** (Sites → Setup) asks for adjustments, press **Perbaiki** (Fix) there. pm2 apps will be **errored** until step 14 because site binaries are not backed up.
 
-12. **Role dan database Postgres**. Cocokkan `postgresVersion` di manifest dengan `psql -V`: major HP baru harus ≥ major lama.
+12. **Postgres roles and databases**. Compare `postgresVersion` in the manifest with `psql -V`: the new phone's major version must be ≥ the old major.
 
     ```sh
     cd ~/pulih
-    psql -U postgres -d postgres -f 030012-globals.sql        # "role "postgres" already exists" wajar
+    psql -U postgres -d postgres -f 030012-globals.sql        # "role "postgres" already exists" is expected
     for f in 030012-*.dump; do pg_restore -U postgres --create --exit-on-error -d postgres "$f"; done
     ```
 
-13. **Login dan kunci**: buka `APP_BASE_URL`, login Google.
-    - Bila langkah 10 (c): Administrasi → Kesehatan sistem → Kunci data → "Hapus pengaturan rahasia lama", lalu Pengaturan → isi ulang token API Cloudflare, kunci R2 baru dengan izin baca/tulis/hapus (bukan token baca-saja dari langkah 3), dan token bot Telegram. Lalu "Uji koneksi".
-    - Hapus token baca-saja langkah 3 di dashboard R2.
-14. **Binary situs**: untuk setiap `sites[].needsBinary` di manifest, buka situs di panel → Deploy → unggah binary dari build-mu (CI/laptop). Deploy me-restart aplikasinya, dan pm2-runtime membaca `~/sites/ecosystem.config.js` sehingga `pm2 save` tidak perlu.
-15. **Cek akhir**:
-    - setiap hostname situs menjawab;
-    - Ringkasan tanpa masalah merah;
-    - dashboard Zero Trust → tunnel menampilkan **satu** konektor;
-    - `rm -rf ~/pulih`, cabut konfigurasi rclone (`unset RCLONE_CONFIG_R2_*`);
-    - jalankan "Cadangkan sekarang".
+13. **Sign-in and key**: open `APP_BASE_URL`, sign in with Google.
+    - If step 10 (c): Administrasi → Kesehatan sistem → Kunci data (Administration → System health → Data key) → "Hapus pengaturan rahasia lama" (Delete old secret settings), then Pengaturan (Settings) → re-enter the Cloudflare API token, new R2 keys with read/write/delete permission (not the read-only token from step 3), and the Telegram bot token. Then "Uji koneksi" (Test connection).
+    - Delete the read-only token from step 3 in the R2 dashboard.
+14. **Site binaries**: for every `sites[].needsBinary` in the manifest, open the site in the panel → Deploy → upload the binary from your build (CI/laptop). The deploy restarts its app, and pm2-runtime reads `~/sites/ecosystem.config.js`, so `pm2 save` is not needed.
+15. **Final check**:
+    - every site hostname answers;
+    - Overview with no red problems;
+    - Zero Trust dashboard → the tunnel shows **one** connector;
+    - `rm -rf ~/pulih`, drop the rclone configuration (`unset RCLONE_CONFIG_R2_*`);
+    - run "Cadangkan sekarang" (Back up now).
 
 </details>
 
-### HP hilang atau dicuri
+### Lost or stolen phone
 
-1. Zero Trust → hapus konektor/tunnel HP lama dan cabut sertifikat akun (`cert.pem`).
-2. Putar token API Cloudflare.
-3. R2 → buat token baru, cabut yang lama, lalu cek objek cadangan masih ada.
-4. Google Cloud → tambah client secret baru, hapus yang lama.
-5. [Pulihkan ke HP baru](#pulihkan-ke-hp-baru) dengan kunci data **baru** (langkah 10 c), lalu reset dan isi ulang token.
-6. Putar `.env` situs yang berisi rahasia pihak ketiga.
+1. Zero Trust → delete the old phone's connector/tunnel and revoke the account certificate (`cert.pem`).
+2. Rotate the Cloudflare API token.
+3. R2 → create a new token, revoke the old one, then check the backup objects are still there.
+4. Google Cloud → add a new client secret, delete the old one.
+5. [Restore to a new phone](#restore-to-a-new-phone) with a **new** data key (step 10 c), then reset and re-enter the tokens.
+6. Rotate site `.env` files that contain third-party secrets.
 
-## Keamanan
+## Security
 
-- Login terbuka untuk semua akun Google, tetapi akun baru hanya mendapat peran `user` (cuma `/profile`). Karena siapa pun bisa login, pasang **Cloudflare Access** di depan path privat (`/panel`, `/dev`, `/api/panel`, `/api/dev`) agar hanya email yang kamu izinkan yang sampai ke sana (resep di [Instal di HP](#instal-di-hp) langkah 4). Landing page `/`, `/login`, `/profile`, `/api/auth/*`, `/api/me`, `/api/health`, dan aset bundle sengaja tetap publik. `/api/panel/*` dan `/api/dev/*` tetap dijaga peran di server, jadi Access adalah lapisan tambahan, bukan satu-satunya penjaga.
-- **Model kepercayaan**: super admin dan admin sama-sama setara pemilik HP (lihat [Login dan peran](#login-dan-peran)). Program situs yang kamu deploy juga berjalan dengan akses yang sama seperti panel.
-- **Akun Google super admin adalah kunci utama.** Nyalakan 2-Step Verification atau passkey di akun itu. Bila memungkinkan, tambahkan faktor kedua di policy Access (mis. One-time PIN ke email lain).
-- Permintaan API yang mengubah data (`POST`/`PUT`/`PATCH`/`DELETE` di `/api/*`, kecuali `/api/auth/*` yang dijaga Better Auth) hanya diterima dari halaman panel sendiri: header `Origin` harus sama dengan `APP_BASE_URL`, `Sec-Fetch-Site` (bila ada) harus `same-origin`, dan header `X-Requested-With: XMLHttpRequest` wajib ada; selain itu dijawab `403 { "error": "forbidden_origin" }`. Ini menutup serangan CSRF dari site lain di domain yang sama (mis. `solusi.<domain>`), yang tetap ikut membawa cookie sesi panel. Klien non-browser (curl/skrip) cukup mengirim `X-Requested-With: XMLHttpRequest`. Permintaan dengan header `Host` asing dijawab `421`.
-- **Sesi segar**: unduh atau reset kunci data, unduh item `secrets`, menyalakan `backup.include_secrets`, dan mengubah endpoint/bucket/awalan cadangan butuh login yang berumur paling lama 15 menit; selain itu panel menawarkan "Masuk ulang". Ini melindungi dari cookie yang dicuri di perangkat lain, bukan dari akun Google yang diambil alih.
-- Super admin dari env disinkronkan ulang setiap boot dan login (email yang dihapus dari env turun ke `user`).
-- Nilai rahasia di pengaturan dienkripsi dengan kunci data (`PANEL_DATA_DIR/secret`, dibuat otomatis, mode 600). Simpan salinannya terpisah (lihat [Kunci data](#kunci-data)).
-- Audit mencatat siapa (nama, email, IP disamarkan), kapan, dan dari perangkat apa untuk setiap perubahan; bisa difilter dan diekspor CSV di Administrasi → Audit.
-- Panel hanya listen di `127.0.0.1`. Jangan pernah membuka port panel ke publik/LAN; akses lewat tunnel, dengan path privat di belakang Cloudflare Access.
-- `.env` panel dan `.env` site disimpan mode 600.
+- Sign-in is open to all Google accounts, but new accounts only get the `user` role (just `/profile`). Because anyone can sign in, put **Cloudflare Access** in front of the private paths (`/panel`, `/dev`, `/api/panel`, `/api/dev`) so only the emails you allow reach them (recipe in [Install on your phone](#install-on-your-phone) step 4). The landing page `/`, `/login`, `/profile`, `/api/auth/*`, `/api/me`, `/api/health`, and the bundle assets deliberately stay public. `/api/panel/*` and `/api/dev/*` are still guarded by roles on the server, so Access is an extra layer, not the only guard.
+- **Trust model**: the super admin and admins are both equivalent to the phone's owner (see [Sign-in and roles](#sign-in-and-roles)). Site programs you deploy also run with the same access as the panel.
+- **The super admin's Google account is the master key.** Turn on 2-Step Verification or a passkey on that account. If possible, add a second factor in the Access policy (e.g. a One-time PIN to another email).
+- API requests that change data (`POST`/`PUT`/`PATCH`/`DELETE` on `/api/*`, except `/api/auth/*`, which Better Auth guards) are only accepted from the panel's own pages: the `Origin` header must equal `APP_BASE_URL`, `Sec-Fetch-Site` (if present) must be `same-origin`, and the header `X-Requested-With: XMLHttpRequest` is required; otherwise the answer is `403 { "error": "forbidden_origin" }`. This closes CSRF attacks from other sites on the same domain (e.g. `solusi.<domain>`), which still carry the panel's session cookie. Non-browser clients (curl/scripts) just need to send `X-Requested-With: XMLHttpRequest`. Requests with an unknown `Host` header get `421`.
+- **Fresh session**: downloading or resetting the data key, downloading the `secrets` item, turning on `backup.include_secrets`, and changing the backup endpoint/bucket/prefix need a sign-in no older than 15 minutes; otherwise the panel offers "Masuk ulang" (Sign in again). This protects against cookies stolen on another device, not against a taken-over Google account.
+- Super admins from env are re-synced on every boot and sign-in (emails removed from env drop to `user`).
+- Secret values in settings are encrypted with the data key (`PANEL_DATA_DIR/secret`, created automatically, mode 600). Keep a separate copy (see [Data key](#data-key)).
+- The audit log records who (name, email, masked IP), when, and from which device for every change; it can be filtered and exported as CSV under Administration → Audit.
+- The panel only listens on `127.0.0.1`. Never expose the panel port to the public/LAN; access it through the tunnel, with private paths behind Cloudflare Access.
+- The panel `.env` and site `.env` files are stored with mode 600.
 
-## Keterbatasan
+## Limitations
 
-- CPU% per proses tidak tersedia di Android (`/proc/stat` diblokir SELinux); beberapa info `/proc` lain juga terbatas.
-- Setiap perubahan ingress me-restart cloudflared, sehingga **semua** domain di tunnel putus beberapa detik.
-- Panel tidak bisa memberi tahu saat dirinya atau HP mati (lihat [Pemantauan dan notifikasi](#pemantauan-dan-notifikasi)).
-- Panel menulis `apps.json`, `.env`, `config.yml`, dan file yang diperbaiki dengan fsync (file dan folder) sebelum rename. Di POCO, `/data` memakai f2fs `fsync_mode=nobarrier`: urutan tulis terjaga, tetapi isi file tidak dijamin selamat bila HP mati mendadak tepat saat menulis. Salinan di `fix-backups/` dan validasi Persiapan membantu memulihkannya.
-- Batas diam koneksi HTTP panel 120 detik: permintaan yang tidak dijawab selama itu diputus.
-- Upload multipart S3 belum diuji dengan dump besar.
-- Panggilan nyata ke R2 dan API Cloudflare belum diuji end-to-end (hanya dengan mock di test).
+- Per-process CPU% is not available on Android (`/proc/stat` is blocked by SELinux); some other `/proc` info is limited too.
+- Every ingress change restarts cloudflared, so **all** domains on the tunnel drop for a few seconds.
+- The panel cannot tell you when it or the phone is down (see [Monitoring and notifications](#monitoring-and-notifications)).
+- The panel writes `apps.json`, `.env`, `config.yml`, and fixed files with fsync (file and folder) before rename. On the POCO, `/data` uses f2fs `fsync_mode=nobarrier`: write ordering is preserved, but file contents are not guaranteed to survive if the phone dies exactly while writing. The copies in `fix-backups/` and the Setup validation help recover them.
+- The panel's HTTP connection idle limit is 120 seconds: requests not answered within that time are dropped.
+- S3 multipart upload has not been tested with large dumps.
+- Real calls to R2 and the Cloudflare API have not been tested end to end (only with mocks in tests).
 
-## Arsitektur singkat
+## Architecture overview
 
-- Satu binary hasil `bun build --compile`: server Elysia (`/api/*`) dan SPA React yang di-embed (`/*`).
-- SQLite (`panel.db`) di `PANEL_DATA_DIR`; migrasi Drizzle ikut di-embed dan jalan otomatis saat boot. Sebelum migrasi baru dijalankan pada database yang sudah ada, panel menyimpan snapshot `panel.db` (lihat [Rollback](#rollback)).
+- A single binary built with `bun build --compile`: an Elysia server (`/api/*`) and an embedded React SPA (`/*`).
+- SQLite (`panel.db`) in `PANEL_DATA_DIR`; Drizzle migrations are embedded and run automatically at boot. Before new migrations run on an existing database, the panel saves a snapshot of `panel.db` (see [Rollback](#rollback)).
 - Auth: Better Auth + Google OAuth.
-- Adapter sistem (runit, pm2, cloudflared, postgres, perangkat): mode `termux` dipilih otomatis bila `$PREFIX/bin/sv` ada, selain itu `fake` (HP demo yang sehat dan sepenuhnya offline, untuk development dan QA). Mode yang dipakai tercatat di log saat start.
-- Satu sampler di latar belakang membaca HP, layanan, aplikasi, dan domain secara berkala; halaman panel membaca hasil terakhirnya (lihat [Pemantauan dan notifikasi](#pemantauan-dan-notifikasi)).
-- Panel hanya listen di `127.0.0.1`. Akses dari luar lewat Cloudflare Tunnel.
+- System adapters (runit, pm2, cloudflared, postgres, device): `termux` mode is chosen automatically if `$PREFIX/bin/sv` exists, otherwise `fake` (a healthy, fully offline demo phone, for development and QA). The mode in use is logged at start.
+- One background sampler reads the phone, services, apps, and domains periodically; panel pages read its latest results (see [Monitoring and notifications](#monitoring-and-notifications)).
+- The panel only listens on `127.0.0.1`. Outside access goes through Cloudflare Tunnel.
 
-## Development lokal
+## Local development
 
 ```sh
 bun install
-cp .env.example .env   # isi: APP_BASE_URL=http://localhost:3200, client Google, email Anda
-bun run dev            # hot reload, adapter mode fake (bukan Termux)
+cp .env.example .env   # fill in: APP_BASE_URL=http://localhost:3200, Google client, your email
+bun run dev            # hot reload, fake adapter mode (not Termux)
 ```
 
-Buka `APP_BASE_URL` (alamat yang dicetak setelah `open` di log start, mis. `http://localhost:3200`); membuka lewat alamat lain (mis. `127.0.0.1`) otomatis diarahkan ke sana. Di mode fake, layanan/aplikasi/domain adalah data demo dari HP yang sehat, dan panel tidak menghubungi luar sama sekali (S3, Telegram, DNS Cloudflare, dan cek internet dijawab klien offline). File demo (folder situs, `ecosystem.config.js`, `config.yml`) ada di `<PANEL_DATA_DIR>/fake-home` dan bertahan antar-restart.
+Open `APP_BASE_URL` (the address printed after `open` in the start log, e.g. `http://localhost:3200`); opening it through another address (e.g. `127.0.0.1`) redirects there automatically. In fake mode, services/apps/domains are demo data from a healthy phone, and the panel does not contact the outside at all (S3, Telegram, Cloudflare DNS, and the internet check are answered by offline clients). Demo files (site folders, `ecosystem.config.js`, `config.yml`) live in `<PANEL_DATA_DIR>/fake-home` and persist across restarts.
 
 <details>
-<summary>Data demo untuk QA dan screenshot</summary>
+<summary>Demo data for QA and screenshots</summary>
 
 ```sh
 bun scripts/demo-seed.ts --data-dir /tmp/panel-demo --base-url http://demo.localhost:3421
 SUPER_ADMIN_EMAILS=demo@contoh.test PANEL_DATA_DIR=/tmp/panel-demo APP_BASE_URL=http://demo.localhost:3421 PORT=3421 bun run dev
 ```
 
-Seed mengisi data dir **baru** dengan data fiktif (situs, perubahan, deploy, cadangan, audit, 7 hari metrik, satu domain bermasalah, satu aplikasi yang bisa diadopsi, satu situs yang bisa dikembalikan) dan menulis cookie sesi untuk `user`, `admin`, dan `super_admin` ke `demo-cookies.json` (mode 600) di data dir itu. Seed menolak `./data` dan `~/panel`, dan hanya mau mengisi ulang data dir yang dulu dibuatnya. `SUPER_ADMIN_EMAILS` harus memuat `demo@contoh.test`, karena boot menurunkan super admin yang tidak ada di env. `--integration <skenario>` memilih keadaan kartu Persiapan: `ready` (default), `poco` (ecosystem tulisan tangan tanpa blok panel dan run script tanpa `--no-auto-exit`), `old_spread` (snippet 0.2.x), `exotic` (file bukan UTF-8), atau `broken` (ecosystem tidak bisa dimuat). Jalankan tiap instance di host sendiri (`demo1.localhost`, `demo2.localhost`): cookie browser berlaku per host, bukan per port.
+The seed fills a **new** data dir with fictional data (sites, changes, deploys, backups, audit, 7 days of metrics, one domain with a problem, one adoptable app, one site that can be rolled back) and writes session cookies for `user`, `admin`, and `super_admin` to `demo-cookies.json` (mode 600) in that data dir. The seed refuses `./data` and `~/panel`, and only refills a data dir it created itself. `SUPER_ADMIN_EMAILS` must include `demo@contoh.test`, because boot demotes super admins that are not in env. `--integration <scenario>` picks the state of the Setup card: `ready` (default), `poco` (hand-written ecosystem without the panel block and a run script without `--no-auto-exit`), `old_spread` (0.2.x snippet), `exotic` (non-UTF-8 file), or `broken` (ecosystem cannot be loaded). Run each instance on its own host (`demo1.localhost`, `demo2.localhost`): browser cookies apply per host, not per port.
 
 </details>
 
@@ -652,27 +660,27 @@ Seed mengisi data dir **baru** dengan data fiktif (situs, perubahan, deploy, cad
 bun test
 bun run lint        # biome check .
 bun run typecheck   # tsc --noEmit
-bun run bundle:check                  # anggaran ukuran bundle per halaman
-sh scripts/install-release.test.sh    # uji shim install.sh rilis
-sh scripts/cli.test.sh dist/panel     # uji CLI binary (setelah bun run build:local)
-sh scripts/package-release.test.sh    # uji pembuatan aset rilis
+bun run bundle:check                  # per-page bundle size budget
+sh scripts/install-release.test.sh    # test the release install.sh shim
+sh scripts/cli.test.sh dist/panel     # test the CLI binary (after bun run build:local)
+sh scripts/package-release.test.sh    # test release asset packaging
 ```
 
 ### Build
 
 ```sh
-bun run build         # dist/panel-android-arm64 (target bun-linux-arm64-android), untuk HP
-bun run build:local   # dist/panel, untuk mesin saat ini
+bun run build         # dist/panel-android-arm64 (target bun-linux-arm64-android), for the phone
+bun run build:local   # dist/panel, for the current machine
 ```
 
-Binary Android jalan langsung di Termux tanpa `grun` (sekitar 65 MB RSS).
+The Android binary runs directly in Termux without `grun` (about 65 MB RSS).
 
-### Rilis
+### Releases
 
-Rilis dibuat oleh `.github/workflows/release.yml` saat tag `v*` di-push: typecheck, lint, test, `bun audit`, test shell, cek bahwa tag = `v` + versi `package.json` dan `CHANGELOG.md` punya `## [<versi>]`, build Android, lalu `scripts/package-release.sh` membuat aset `panel` (binary Android mentah), `install.sh` (shim), `panel-termux-android-arm64.tar.gz`, dan `SHA256SUMS`, plus attestation asal build. Tag `v<versi>-rc.<n>` dirilis sebagai prerelease untuk uji akhir di Termux bersih.
+Releases are created by `.github/workflows/release.yml` when a `v*` tag is pushed: typecheck, lint, test, `bun audit`, shell tests, a check that tag = `v` + the `package.json` version and that `CHANGELOG.md` has `## [<version>]`, the Android build, then `scripts/package-release.sh` creates the assets `panel` (raw Android binary), `install.sh` (shim), `panel-termux-android-arm64.tar.gz`, and `SHA256SUMS`, plus a build provenance attestation. Tags `v<version>-rc.<n>` are released as prereleases for a final test on a clean Termux.
 
-Sebelum membuat tag, jalankan workflow itu sekali lewat **Actions → release → Run workflow** dengan `dry_run` = `true` (default): semua langkah jalan dengan tag `v0.0.0-dryrun` tanpa membuat rilis.
+Before creating a tag, run that workflow once through **Actions → release → Run workflow** with `dry_run` = `true` (default): every step runs with the tag `v0.0.0-dryrun` without creating a release.
 
-## Lisensi
+## License
 
 [MIT](LICENSE).

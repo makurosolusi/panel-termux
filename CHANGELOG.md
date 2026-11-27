@@ -4,194 +4,194 @@
 
 ### Added
 
-- `panel init`: satu perintah untuk memasang panel di HP baru, memperbarui, dan memperbaiki. Pasang dengan satu baris dari README: `cd && curl -fL --retry 3 -o panel-termux https://github.com/makurosolusi/panel-termux/releases/latest/download/panel && chmod +x panel-termux && ./panel-termux init`. Init memasang binary, paket, runit, PostgreSQL, `.env`, layanan panel, pm2, tunnel cloudflared, Termux:Boot, lalu menyalakan panel, setelah mencetak rencana dan meminta persetujuan.
-- Mode dipilih dari keadaan HP: HP baru (semua langkah), upgrade (jalankan baris yang sama lagi: hanya binary ditukar dan panel di-restart), atau perbaiki (hanya melengkapi yang belum ada). Binary yang lebih lama dari yang terpasang ditolak dengan petunjuk `panel rollback`.
-- Init hanya menanyakan yang masih kosong: alamat panel, email admin, Google Client ID dan secret (dengan redirect URI yang dicetak), dan login Cloudflare sekali klik. Nilai `.env` tidak pernah dicetak.
-- Opsi `--yes`, `--dry-run` (hanya rencana, tidak mengubah apa pun), `--hostname`, `--admin-email`, `--skip postgres|tunnel|boot`, `--ssh-key <https-url|file|->` (SSH hanya dengan kunci), dan `--skip-verify`.
-- Cek diri: sebelum memasang, init mencocokkan binary-nya dengan `SHA256SUMS` rilisnya. Asal rilis tetap dibuktikan dengan `gh attestation verify panel --repo makurosolusi/panel-termux` di komputer.
-- Tunnel: tunnel yang kredensialnya sudah ada dipakai ulang; record DNS yang mengarah ke tunnel lain hanya dipindah setelah konfirmasi di terminal.
-- Rilis kini punya aset `panel` (binary mentah). Tag `v<versi>-rc.<n>` dirilis sebagai prerelease.
-- Bila masih ada masalah di akhir, `panel init` keluar dengan kode 1 dan mencetak daftar masalah beserta petunjuknya, bukan melaporkan selesai.
+- `panel init`: one command to install the panel on a new phone, upgrade it, and repair it. Install with one line from the README: `cd && curl -fL --retry 3 -o panel-termux https://github.com/makurosolusi/panel-termux/releases/latest/download/panel && chmod +x panel-termux && ./panel-termux init`. Init installs the binary, packages, runit, PostgreSQL, `.env`, the panel service, pm2, the cloudflared tunnel, Termux:Boot, then starts the panel, after printing its plan and asking for approval.
+- The mode is chosen from the phone's state: new phone (all steps), upgrade (run the same line again: only the binary is swapped and the panel restarted), or repair (only completes what is missing). A binary older than the installed one is refused with a `panel rollback` hint.
+- Init only asks for what is still empty: panel address, admin email, Google Client ID and secret (with the redirect URI printed), and a one-click Cloudflare login. `.env` values are never printed.
+- Options `--yes`, `--dry-run` (plan only, changes nothing), `--hostname`, `--admin-email`, `--skip postgres|tunnel|boot`, `--ssh-key <https-url|file|->` (key-only SSH), and `--skip-verify`.
+- Self-check: before installing, init matches its binary against its release's `SHA256SUMS`. The release's origin is still proven with `gh attestation verify panel --repo makurosolusi/panel-termux` on a computer.
+- Tunnel: a tunnel whose credentials already exist is reused; DNS records pointing to another tunnel are only moved after confirmation in the terminal.
+- Releases now include a `panel` asset (raw binary). Tags `v<version>-rc.<n>` are released as prereleases.
+- If problems remain at the end, `panel init` exits with code 1 and prints the list of problems with hints, instead of reporting success.
 
 ### Changed
 
-- Instal, upgrade, dan perbaikan kini lewat `panel init`. Init tidak pernah menjalankan `pkg upgrade` bila data PostgreSQL ada, menahan `cloudflared` dan `postgresql`, tidak menyentuh `ecosystem.config.js` tulisan tangan (pakai **Situs → Persiapan → Perbaiki**), tidak pernah me-restart pm2, dan hanya me-restart panel saat upgrade.
-- `install.sh` rilis kini shim untuk satu rilis: mengunduh `panel`, memeriksa `SHA256SUMS`, lalu menjalankan `panel init`. Shim ini dihapus di 0.6.0.
-- Petunjuk di `panel doctor`, `panel docs`, bantuan CLI, dan landing page kini menunjuk ke `panel init`.
-- Build tanpa tag rilis (build lokal) hanya dipasang oleh `panel init` bila `PANEL_DEV_INSTALL=1` diset, karena tidak bisa dicek dengan `SHA256SUMS`. Runtime bun tidak pernah dipasang.
-- Pertanyaan tunnel (login Cloudflare, restart cloudflared) diajukan sebelum DNS atau `config.yml` diubah. Tanpa terminal, tunnel dilewati tanpa perubahan, langkah lain tetap jalan, dan init keluar dengan kode 3.
-- README baru dengan tangkapan layar fitur, pemecahan masalah, dan troubleshooting.
+- Install, upgrade, and repair now go through `panel init`. Init never runs `pkg upgrade` when PostgreSQL data exists, holds `cloudflared` and `postgresql`, does not touch a hand-written `ecosystem.config.js` (use **Situs → Persiapan → Perbaiki**, Sites → Setup → Fix), never restarts pm2, and only restarts the panel on upgrade.
+- The release `install.sh` is now a shim for one release: it downloads `panel`, checks `SHA256SUMS`, then runs `panel init`. The shim is removed in 0.6.0.
+- Hints in `panel doctor`, `panel docs`, the CLI help, and the landing page now point to `panel init`.
+- Builds without a release tag (local builds) are only installed by `panel init` when `PANEL_DEV_INSTALL=1` is set, because they cannot be checked against `SHA256SUMS`. The bun runtime is never installed.
+- Tunnel questions (Cloudflare login, cloudflared restart) are asked before DNS or `config.yml` is changed. Without a terminal, the tunnel is skipped with no changes, the other steps still run, and init exits with code 3.
+- New README with feature screenshots, problem solving, and troubleshooting.
 
 ### Removed
 
-- `scripts/install-phone.sh`. Untuk menguji build sendiri: `rsync --partial dist/panel-android-arm64 poco: && ssh poco 'PANEL_DEV_INSTALL=1 ./panel-android-arm64 init --yes'`.
+- `scripts/install-phone.sh`. To test your own build: `rsync --partial dist/panel-android-arm64 poco: && ssh poco 'PANEL_DEV_INSTALL=1 ./panel-android-arm64 init --yes'`.
 
 ## [0.5.0] - 2026-11-27
 
 ### Added
 
-- Perintah terminal di binary panel (jalankan dari `~/panel`): `panel -h`/`--help`/`--h` untuk bantuan (juga `panel <perintah> --help`) dan `panel -v`/`--version`/`--v` yang mencetak versi, mis. `panel-termux 0.5.0 (android-arm64, bun 1.x)`.
-- `panel doctor [--json]`: memeriksa HP tanpa mengubah apa pun (paket dan hold, Termux:Boot/API, runit, `.env`, panel ganda, file `down` cloudflared, versi PostgreSQL, dan pemeriksaan kartu Persiapan dengan pesan yang sama). Kode keluar 1 hanya bila ada error; peringatan tetap 0. `--json` mencetak laporan lengkap ke stdout.
-- `panel env [--full]`: mencetak template `.env` kosong ke stdout. Disarankan `panel env > .env.new`; menambah ke `.env` yang sudah berisi (`>>`) ditolak. `--full` menambah variabel opsional yang dikomentari dengan nilai bawaannya.
-- `panel docs [google|cloudflare|android|paket]`: panduan offline. Topik `paket` menjelaskan kenapa `cloudflared` dan `postgresql` ditahan dari `pkg upgrade` (upgrade cloudflared dapat mematikan tunnel; PostgreSQL versi mayor baru tidak bisa memakai data lama tanpa dump dan restore) beserta cara upgrade-nya dengan aman.
-- `panel rollback [--db] [--yes]`: kembali ke binary sebelumnya (`panel.prev`) lalu me-restart layanan panel. Penukaran tidak pernah membuat `~/panel/panel` hilang walau HP mati di tengah jalan. Bila database sudah dimigrasi versi baru, rollback memperingatkannya; `--db` memulihkan snapshot terbaru setelah menyimpan database sekarang sebagai `panel.db.before-rollback.<waktu>` (tidak dihapus rotasi snapshot).
+- Terminal commands in the panel binary (run from `~/panel`): `panel -h`/`--help`/`--h` for help (also `panel <command> --help`) and `panel -v`/`--version`/`--v`, which prints the version, e.g. `panel-termux 0.5.0 (android-arm64, bun 1.x)`.
+- `panel doctor [--json]`: checks the phone without changing anything (packages and holds, Termux:Boot/API, runit, `.env`, duplicate panels, the cloudflared `down` file, PostgreSQL version, and the Setup card checks with the same messages). Exit code 1 only on errors; warnings stay 0. `--json` prints the full report to stdout.
+- `panel env [--full]`: prints an empty `.env` template to stdout. `panel env > .env.new` is recommended; appending to a `.env` that already has content (`>>`) is refused. `--full` adds the optional variables, commented out with their defaults.
+- `panel docs [google|cloudflare|android|paket]`: offline guides. The `paket` topic explains why `cloudflared` and `postgresql` are held from `pkg upgrade` (a cloudflared upgrade can kill the tunnel; a new PostgreSQL major version cannot use old data without a dump and restore) and how to upgrade them safely.
+- `panel rollback [--db] [--yes]`: goes back to the previous binary (`panel.prev`) and restarts the panel service. The swap never makes `~/panel/panel` disappear, even if the phone dies midway. If the database has already been migrated by the new version, rollback warns about it; `--db` restores the latest snapshot after saving the current database as `panel.db.before-rollback.<time>` (not removed by snapshot rotation).
 
 ### Changed
 
-- `panel` tanpa argumen di terminal kini mencetak bantuan, bukan menyalakan server. Untuk menjalankan server secara manual, pakai `panel serve`. Layanan runit tidak berubah dan tetap menyalakan server.
-- `.env.example` kini dibuat dari daftar variabel yang sama dengan `panel env --full`: `APP_BASE_URL` dan `SUPER_ADMIN_EMAILS` kosong (bukan contoh isian), `PORT` dan `PANEL_DATA_DIR` dikomentari.
-- Installer hanya mengganti `panel.prev` bila panel yang terpasang sehat (atau `panel.prev` belum ada), sehingga versi terakhir yang sehat tetap tersedia untuk rollback. Petunjuk rollback dari installer kini `panel rollback [--db]`.
-- Build dan CI kini menguji runtime Bun yang sama dengan yang dikirim di binary (1.4.5); build memeriksa versi runtime yang di-embed dan gagal bila berbeda.
-- Installer dan `panel doctor` menghitung contoh isian lama dari `.env.example` (mis. `https://panel.example.com`) sebagai kosong.
+- `panel` without arguments in a terminal now prints help instead of starting the server. To run the server manually, use `panel serve`. The runit service is unchanged and still starts the server.
+- `.env.example` is now generated from the same variable list as `panel env --full`: `APP_BASE_URL` and `SUPER_ADMIN_EMAILS` are empty (not sample values), `PORT` and `PANEL_DATA_DIR` are commented out.
+- The installer only replaces `panel.prev` if the installed panel is healthy (or `panel.prev` does not exist yet), so the last healthy version stays available for rollback. The installer's rollback hint is now `panel rollback [--db]`.
+- Build and CI now test the same Bun runtime that ships in the binary (1.4.5); the build checks the embedded runtime version and fails if it differs.
+- The installer and `panel doctor` count old sample values from `.env.example` (e.g. `https://panel.example.com`) as empty.
 
 ### Fixed
 
-- Panel kedua yang dinyalakan saat panel lain sudah menjawab di port yang sama kini keluar dengan kode 1 sebelum menyentuh kunci data atau database.
-- Program yang dijalankan perintah CLI tidak lagi menerima nilai rahasia dari `.env` panel.
+- A second panel started while another panel already answers on the same port now exits with code 1 before touching the data key or database.
+- Programs run by CLI commands no longer receive secret values from the panel's `.env`.
 
 ## [0.4.0] - 2026-11-27
 
 ### Added
 
-- Tombol **Perbaiki** dan **Perbaiki semua** di kartu Persiapan (Situs): panel menyesuaikan `ecosystem.config.js` dan run script pm2 sendiri, tanpa membuka Termux. Sebelum menerapkan, panel menjelaskan artinya dalam bahasa awam (aplikasi tulisan tangan tetap, situs panel ditambahkan) dengan diff yang bisa dibuka, lalu memvalidasi hasilnya dengan `node`. Bila validasi gagal, file lama tetap dipakai.
-- Di `ecosystem.config.js` panel hanya menambahkan blok bertanda `panel-termux:apps v1` di akhir file. Aplikasi tulisan tangan tidak diubah dan tidak di-restart; penjaga `pm2-guard` hanya ditambahkan bila tidak ada aplikasi tulisan tangan.
-- **Batalkan perubahan** per file setelah perbaikan. Salinan file sebelum perbaikan disimpan di `<PANEL_DATA_DIR>/fix-backups/` (10 terakhir per file, hanya di HP, tidak ikut cadangan R2/S3).
-- **Mulai ulang pm2 sekarang** (opsional) yang memeriksa semua aplikasi kembali berjalan, dan menawarkan **Kembalikan file ecosystem dan mulai ulang pm2** bila ada yang tidak kembali.
-- Bila restart pm2 akan menghentikan aplikasi yang tidak tercantum di `ecosystem.config.js`, panel memperingatkan dengan menyebut nama aplikasinya dan meminta kamu mengetik `pm2` untuk melanjutkan.
-- Tombol **Jalankan pm2** juga tersedia di dalam dialog restart pm2.
-- Tombol **Jalankan pm2** dan **Jalankan postgres** di semua tempat yang melaporkan layanan itu mati: Persiapan, daftar dan detail situs, Riwayat perubahan, Ringkasan, halaman Aplikasi dan Database. Layanan juga menyala lagi setelah HP dinyalakan ulang.
-- **Jalankan lagi** untuk situs yang tidak ada di pm2, termasuk situs adopsi (dimuat dari `ecosystem.config.js`).
-- Folder situs yang belum ada bisa dibuat dari kartu Persiapan.
-- **Perbaiki** juga bisa menyusun ulang `apps.json` yang rusak dari daftar situs panel, dan membuat `ecosystem.config.js` yang belum ada dari template. Keduanya bisa dibatalkan dengan **Batalkan perubahan**.
-- Setelah perbaikan yang baru berlaku saat pm2 dimulai berikutnya, kartu Persiapan langsung menawarkan **Mulai ulang pm2 sekarang**.
-- Rute domain yang ditulis manual di config cloudflared kini bisa dihapus dari detail situs dengan mengetik nama domainnya, tanpa ssh.
-- Deploy ke situs buatan panel tanpa database yang foldernya hilang membuat ulang folder itu. Situs dengan database atau situs adopsi mendapat panduan yang jelas dengan tombol **Hapus situs** dan **Buka Cadangan**.
-- DNS situs baru dibuat lewat login cloudflared HP (`cert.pem`) bila token API Cloudflare belum diisi. Menghapus record itu nanti tetap butuh token.
-- Kartu record DNS siap salin (tipe, nama, isi, proxy) dengan **Periksa lagi** saat panel tidak bisa membuat DNS sendiri.
-- Langkah manual untuk pengguna teknis kini ada di bagian **Cara manual (untuk pengguna teknis)** yang bisa dibuka, bukan di pesan utama.
-- Data demo: `scripts/demo-seed.ts --integration <skenario>` (`ready`, `poco`, `old_spread`, `exotic`, `broken`) untuk mencoba kartu Persiapan.
+- **Perbaiki** (Fix) and **Perbaiki semua** (Fix all) buttons on the Setup card (Sites): the panel adjusts `ecosystem.config.js` and the pm2 run script itself, without opening Termux. Before applying, the panel explains what it means in plain language (hand-written apps stay, panel sites are added) with a diff you can open, then validates the result with `node`. If validation fails, the old file stays in use.
+- In `ecosystem.config.js` the panel only adds a block marked `panel-termux:apps v1` at the end of the file. Hand-written apps are not changed or restarted; the `pm2-guard` keeper is only added when there are no hand-written apps.
+- Per-file **Batalkan perubahan** (Undo changes) after a fix. Copies of files before the fix are kept in `<PANEL_DATA_DIR>/fix-backups/` (the last 10 per file, only on the phone, not included in R2/S3 backups).
+- **Mulai ulang pm2 sekarang** (Restart pm2 now) (optional), which checks that all apps are running again, and offers **Kembalikan file ecosystem dan mulai ulang pm2** (Restore the ecosystem file and restart pm2) if any do not come back.
+- If a pm2 restart would stop apps not listed in `ecosystem.config.js`, the panel warns by naming those apps and asks you to type `pm2` to continue.
+- The **Jalankan pm2** (Start pm2) button is also available inside the pm2 restart dialog.
+- **Jalankan pm2** (Start pm2) and **Jalankan postgres** (Start postgres) buttons everywhere that reports those services as down: Setup, the site list and details, Change history, Overview, the Apps and Databases pages. The services also start again after the phone restarts.
+- **Jalankan lagi** (Start again) for sites missing from pm2, including adopted sites (loaded from `ecosystem.config.js`).
+- Site folders that do not exist yet can be created from the Setup card.
+- **Perbaiki** (Fix) can also rebuild a broken `apps.json` from the panel's site list, and create a missing `ecosystem.config.js` from the template. Both can be undone with **Batalkan perubahan** (Undo changes).
+- After a fix that only takes effect at the next pm2 start, the Setup card immediately offers **Mulai ulang pm2 sekarang** (Restart pm2 now).
+- Domain routes written manually in the cloudflared config can now be removed from the site details by typing the domain name, without ssh.
+- Deploying to a panel-created site without a database whose folder is missing recreates that folder. Sites with a database or adopted sites get clear guidance with **Hapus situs** (Delete site) and **Buka Cadangan** (Open Backups) buttons.
+- DNS for new sites is created through the phone's cloudflared login (`cert.pem`) when the Cloudflare API token is not set. Deleting that record later still needs a token.
+- A ready-to-copy DNS record card (type, name, content, proxy) with **Periksa lagi** (Check again) when the panel cannot create the DNS itself.
+- Manual steps for technical users are now in an expandable **Cara manual (untuk pengguna teknis)** (Manual steps, for technical users) section, not in the main message.
+- Demo data: `scripts/demo-seed.ts --integration <scenario>` (`ready`, `poco`, `old_spread`, `exotic`, `broken`) to try the Setup card.
 
 ### Changed
 
-- Kartu Persiapan menampilkan satu baris per masalah, dengan alasan yang jelas bila panel tidak bisa memperbaikinya sendiri.
-- Bila cloudflared membuat record DNS di zona lain, langkah DNS dilewati dan situs tetap dibuat; panel menyebut record yang perlu dihapus di dasbor Cloudflare.
-- `--no-auto-exit` yang ditambahkan panel berlaku saat pm2 start berikutnya; pm2 tidak di-restart tanpa persetujuanmu.
-- Ringkasan wizard Buat situs menyebut cara DNS yang benar-benar dipakai: token API, login cloudflared di HP, atau kartu record siap salin.
-- Fokus pindah ke kartu Persiapan setelah perbaikan, undo, atau restart, sehingga hasilnya langsung terbaca.
-- Pemberitahuan (toast) dimuat belakangan, sehingga halaman panel sekitar 9 KB lebih ringan saat pertama dibuka.
+- The Setup card shows one row per problem, with a clear reason when the panel cannot fix it itself.
+- If cloudflared creates the DNS record in another zone, the DNS step is skipped and the site is still created; the panel names the record to delete in the Cloudflare dashboard.
+- The `--no-auto-exit` added by the panel takes effect at the next pm2 start; pm2 is not restarted without your approval.
+- The Create site wizard summary states the DNS method actually used: API token, the phone's cloudflared login, or a ready-to-copy record card.
+- Focus moves to the Setup card after a fix, undo, or restart, so the result can be read right away.
+- Notifications (toasts) are loaded lazily, making panel pages about 9 KB lighter on first load.
 
 ### Fixed
 
-- `apps.json`, `.env` situs, dan `config.yml` ditulis dengan fsync (file dan folder) sebelum rename, agar tidak kosong bila HP mati tepat setelah menyimpan.
-- Persiapan di HP dengan `ecosystem.config.js` tulisan tangan yang tidak menyebut `apps.json` kini menampilkan masalah yang sebenarnya, bukan baris yang tidak relevan.
-- Persiapan mendeteksi ecosystem yang lupa menyebar `...panelApps`, juga saat `apps.json` masih kosong.
-- Menekan **Mulai ulang pm2 sekarang** berulang kali (atau permintaan yang dikirim ulang browser) kini ikut menunggu restart yang sedang berjalan, bukan galat "sedang berjalan". Batas diam koneksi HTTP dinaikkan ke 120 detik.
-- Pemeriksaan setelah restart pm2 mencakup semua aplikasi yang seharusnya berjalan, bukan hanya yang berjalan sebelum restart.
-- **Batalkan perubahan** pada file yang sudah diubah di luar panel langsung menawarkan **Tetap kembalikan**.
-- **Kembalikan file ecosystem dan mulai ulang pm2** tetap ditawarkan setelah restart pm2 gagal berulang kali.
-- Me-restart situs yang foldernya hilang langsung gagal dengan pesan yang jelas, bukan menunggu.
-- Jumlah masalah tersisa di kartu Persiapan tetap akurat setelah **Perbaiki semua**.
-- Tombol salin dan tautan di HP kini punya area sentuh 44 px.
-- Kartu record DNS terbaca di semua lebar layar.
+- `apps.json`, site `.env`, and `config.yml` are written with fsync (file and folder) before rename, so they are not empty if the phone dies right after saving.
+- Setup on phones with a hand-written `ecosystem.config.js` that does not mention `apps.json` now shows the actual problem, not irrelevant rows.
+- Setup detects an ecosystem that forgot to spread `...panelApps`, also while `apps.json` is still empty.
+- Pressing **Mulai ulang pm2 sekarang** (Restart pm2 now) repeatedly (or a request resent by the browser) now waits for the restart in progress instead of returning an "already running" error. The HTTP connection idle limit is raised to 120 seconds.
+- The check after a pm2 restart covers all apps that should be running, not only those running before the restart.
+- **Batalkan perubahan** (Undo changes) on a file that was changed outside the panel immediately offers **Tetap kembalikan** (Restore anyway).
+- **Kembalikan file ecosystem dan mulai ulang pm2** (Restore the ecosystem file and restart pm2) is still offered after a pm2 restart fails repeatedly.
+- Restarting a site whose folder is missing fails immediately with a clear message instead of waiting.
+- The count of remaining problems on the Setup card stays accurate after **Perbaiki semua** (Fix all).
+- Copy buttons and links on phones now have a 44 px touch area.
+- The DNS record card is readable at every screen width.
 
 ## [0.3.0] - 2026-11-27
 
 ### Added
 
-- Pasang dan upgrade dari rilis GitHub dengan satu perintah di Termux (`curl -fsSLo install.sh …/releases/latest/download/install.sh && sh install.sh`). Installer memeriksa HP, ruang kosong, dan SHA-256 unduhan sebelum memasang; rilis disertai attestation asal build. Di HP yang belum punya pm2, template pm2 ikut dipasang.
-- Ringkasan yang menampilkan masalah lebih dulu (atau "Semua sehat"), dengan aktivitas terbaru sebagai kalimat, grafik baterai dan memori 24 jam/7 hari, 30 cek terakhir per domain, halaman Riwayat masalah, dan penanda jumlah masalah di menu.
-- Pemantauan di latar belakang: panel memeriksa HP, layanan, aplikasi, domain, dan cadangan secara berkala, dan memberi tahu saat HP baru menyala ulang atau panel sempat berhenti tak terduga.
-- Notifikasi Telegram: pesan saat masalah muncul, makin gawat, masih terbuka setelah 24 jam, dan pulih, dengan jeda agar tidak berulang. Tombol "Cari chat" dan "Kirim pesan uji" di Pengaturan.
-- Situs: halaman Persiapan yang memeriksa integrasi pm2, adopsi aplikasi pm2 yang sudah berjalan, wizard dengan beberapa domain sekaligus dan pemeriksaan langsung, editor variabel lingkungan dengan tempel `.env`, "Simpan dan mulai ulang" yang mengembalikan nilai lama bila aplikasi gagal, tombol mulai ulang, dan pengaturan cek kesehatan per situs.
-- Deploy yang bisa dilanjutkan: upload terputus atau halaman yang dimuat ulang bisa diteruskan dengan "Lanjutkan unggahan" selama 1 jam. File yang bukan binary yang didukung ditolak sebelum diunggah penuh.
-- Dialog rollback yang menyebut versi asal dan tujuan serta apa yang tidak ikut dikembalikan; riwayat deploy per situs.
-- Riwayat perubahan menampilkan tiap langkah dengan durasi dan log. Perubahan yang terputus karena panel di-restart tampil "Terputus" dan bisa dipulihkan.
-- Cadangan lengkap: role Postgres, setiap database, folder situs (tanpa binary), konfigurasi tunnel, `panel.db`, dan opsional kunci rahasia, beserta `SHA256SUMS` dan `manifest.json`. Halaman Cadangan menampilkan cadangan valid terakhir tiap item, riwayat, dan perintah pulih per item.
-- "Pulihkan ke database baru" untuk menguji cadangan tanpa menyentuh database asli, dan panduan "Pulihkan ke HP baru" di README.
-- Kunci data: status cocok/tidak cocok, unduh salinan kunci, dan "Hapus pengaturan rahasia lama" bila kunci hilang. Panel tidak pernah menghapus pengaturan rahasia sendiri.
-- Snapshot `panel.db` otomatis sebelum migrasi database saat upgrade (3 terakhir disimpan di `data/snapshots/`), dan petunjuk rollback di installer.
-- Kesehatan sistem dengan vonis keseluruhan, status proses latar belakang, galat terakhir, dan panduan penyiapan 7 langkah untuk super admin.
-- Pengguna: cari, filter peran, terakhir aktif, cabut sesi pengguna lain, dan "Keluarkan semua pengguna". Audit sebagai kalimat yang bisa dibaca, dengan filter aksi/pelaku/tanggal dan ekspor CSV.
-- Profil: daftar sesi aktif yang bisa dicabut, pilihan tema, dan hapus akun sendiri untuk peran `user`.
-- Navigasi HP: bar atas dengan judul halaman dan bar bawah dengan menu Lainnya. Semua tombol dan kontrol minimal 44 px di layar sentuh.
-- Halaman perkenalan dengan panduan pasang lengkap, keterbatasan, FAQ, tangkapan layar asli panel (terang dan gelap), gambar pratinjau tautan (OG) dan ikon layar utama iOS; `robots.txt` dan `sitemap.xml`.
-- Variabel env opsional `PANEL_CONNECTIVITY_URL` (alamat cek internet) dan `PANEL_SKIP_SNAPSHOT` (migrasi tanpa snapshot bila penyimpanan penuh).
-- Lisensi MIT.
+- Install and upgrade from GitHub releases with one command in Termux (`curl -fsSLo install.sh …/releases/latest/download/install.sh && sh install.sh`). The installer checks the phone, free space, and the download's SHA-256 before installing; releases come with a build provenance attestation. On phones without pm2, the pm2 template is installed too.
+- An overview that shows problems first (or "Semua sehat", All healthy), with recent activity as sentences, 24-hour/7-day battery and memory charts, the last 30 checks per domain, a Problem history page, and a problem count badge in the menu.
+- Background monitoring: the panel periodically checks the phone, services, apps, domains, and backups, and reports when the phone has just rebooted or the panel stopped unexpectedly.
+- Telegram notifications: messages when a problem appears, gets worse, is still open after 24 hours, and recovers, with a cooldown so they do not repeat. "Cari chat" (Find chat) and "Kirim pesan uji" (Send test message) buttons in Settings.
+- Sites: a Setup page that checks the pm2 integration, adoption of pm2 apps that are already running, a wizard with several domains at once and live checks, an environment variable editor with `.env` paste, "Simpan dan mulai ulang" (Save and restart), which restores the old values if the app fails, a restart button, and per-site health check settings.
+- Resumable deploys: an interrupted upload or reloaded page can be continued with "Lanjutkan unggahan" (Resume upload) for 1 hour. Files that are not a supported binary are rejected before being fully uploaded.
+- A rollback dialog that names the source and target versions and what is not restored; per-site deploy history.
+- Change history shows each step with its duration and log. Changes interrupted by a panel restart show as "Terputus" (Interrupted) and can be recovered.
+- Full backups: Postgres roles, every database, site folders (without binaries), tunnel configuration, `panel.db`, and optionally the secret keys, along with `SHA256SUMS` and `manifest.json`. The Backups page shows the last valid backup of each item, the history, and a restore command per item.
+- "Pulihkan ke database baru" (Restore to a new database) to test a backup without touching the original database, and a "Restore to a new phone" guide in the README.
+- Data key: match/mismatch status, download a copy of the key, and "Hapus pengaturan rahasia lama" (Delete old secret settings) when the key is lost. The panel never deletes secret settings by itself.
+- Automatic `panel.db` snapshot before database migrations on upgrade (the last 3 kept in `data/snapshots/`), and rollback instructions in the installer.
+- System health with an overall verdict, background process status, the last error, and a 7-step setup guide for the super admin.
+- Users: search, role filter, last active, revoke other users' sessions, and "Keluarkan semua pengguna" (Sign out all users). Audit as readable sentences, with action/actor/date filters and CSV export.
+- Profile: a list of active sessions that can be revoked, theme choice, and deleting your own account for the `user` role.
+- Phone navigation: a top bar with the page title and a bottom bar with a More menu. All buttons and controls are at least 44 px on touch screens.
+- An introduction page with a full install guide, limitations, FAQ, real panel screenshots (light and dark), a link preview image (OG) and an iOS home screen icon; `robots.txt` and `sitemap.xml`.
+- Optional env variables `PANEL_CONNECTIVITY_URL` (internet check address) and `PANEL_SKIP_SNAPSHOT` (migrate without a snapshot when storage is full).
+- MIT license.
 
 ### Changed
 
-- Super admin kini mendarat di `/panel`; Administrasi ada di menu samping.
-- Pengaturan dibagi enam grup (Cloudflare, Cadangan, Notifikasi Telegram, Situs, Pemantauan, Keamanan), disimpan per grup, dengan uji koneksi Cloudflare, S3, dan Telegram. Token Cloudflare bisa diuji sebelum disimpan.
-- Snippet `ecosystem.config.js` baru (`panelApps`) yang aman bila `apps.json` hilang atau rusak dan melewati entri yang binary-nya belum ada. Snippet lama `...require("./apps.json")` ditandai error di Persiapan; ganti dengan yang baru (README "Integrasi pm2"). `apps.json` dibuat panel saat start.
-- Deploy dianggap sehat hanya bila port menjawab dan pm2 menunjukkan proses yang sama tanpa restart baru; batas waktu cek kesehatan bisa diatur per situs (10-300 detik, default 60).
-- Retensi cadangan selalu menyimpan run berhasil terbaru (`backup.keep_min_runs`) dan cadangan valid terakhir tiap item. Token penyimpanan tanpa izin hapus didukung; retensi lalu diserahkan ke lifecycle rule bucket.
-- Aksi sensitif (unduh atau reset kunci data, unduh item rahasia, mengubah tujuan cadangan) meminta "Masuk ulang" bila login lebih dari 15 menit. Sesi berlaku paling lama 30 hari.
-- Audit mencatat pelaku, IP yang disamarkan, dan perangkat untuk setiap perubahan, termasuk akun baru, keluar, dan pencabutan sesi (dengan nama targetnya). Entri lebih tua dari `audit.retention_days` (default 365 hari) dihapus otomatis.
-- Layanan `panel` dan `cloudflared` tidak bisa dihentikan dari panel; layanan inti lain hanya dengan mengetik namanya. Restart panel ditolak selama perubahan situs atau cadangan berjalan.
-- `sv restart panel` menunggu perubahan situs yang sedang berjalan sampai 2 menit sebelum panel berhenti.
-- Waktu relatif tanpa detik ("3 mnt lalu", "dalam 5 mnt"), label perangkat dalam bahasa Indonesia, dan halaman log yang menyamarkan nilai rahasia yang dikenal.
-- Resep Cloudflare Access tidak lagi melindungi `/profile`.
-- Aplikasi penjaga `pm2-guard` disembunyikan dari daftar Aplikasi. Jangan hapus dari `ecosystem.config.js` (README "Integrasi pm2").
-- Mode fake menjadi HP demo yang sehat dan sepenuhnya offline, dengan file demo di `<PANEL_DATA_DIR>/fake-home`; `scripts/demo-seed.ts` mengisi data dir demo untuk QA dan screenshot.
+- The super admin now lands on `/panel`; Administration is in the side menu.
+- Settings are split into six groups (Cloudflare, Backups, Telegram notifications, Sites, Monitoring, Security), saved per group, with Cloudflare, S3, and Telegram connection tests. The Cloudflare token can be tested before saving.
+- A new `ecosystem.config.js` snippet (`panelApps`) that is safe if `apps.json` is missing or broken and skips entries whose binary does not exist yet. The old `...require("./apps.json")` snippet is flagged as an error in Setup; replace it with the new one (README "pm2 integration"). `apps.json` is created by the panel at start.
+- A deploy is only considered healthy if the port answers and pm2 shows the same process with no new restart; the health check time limit can be set per site (10-300 seconds, default 60).
+- Backup retention always keeps the latest successful runs (`backup.keep_min_runs`) and the last valid backup of each item. Storage tokens without delete permission are supported; retention is then handed over to the bucket's lifecycle rule.
+- Sensitive actions (downloading or resetting the data key, downloading the secrets item, changing the backup target) ask for "Masuk ulang" (Sign in again) if the sign-in is older than 15 minutes. Sessions last at most 30 days.
+- The audit log records the actor, masked IP, and device for every change, including new accounts, sign-outs, and session revocations (with the target's name). Entries older than `audit.retention_days` (default 365 days) are deleted automatically.
+- The `panel` and `cloudflared` services cannot be stopped from the panel; other core services only by typing their name. Restarting the panel is refused while a site change or backup is running.
+- `sv restart panel` waits up to 2 minutes for a running site change before the panel stops.
+- Relative times without seconds ("3 mnt lalu", "dalam 5 mnt"), device labels in Indonesian, and log pages that mask known secret values.
+- The Cloudflare Access recipe no longer protects `/profile`.
+- The `pm2-guard` keeper app is hidden from the Apps list. Do not remove it from `ecosystem.config.js` (README "pm2 integration").
+- Fake mode becomes a healthy, fully offline demo phone, with demo files in `<PANEL_DATA_DIR>/fake-home`; `scripts/demo-seed.ts` fills a demo data dir for QA and screenshots.
 
 ### Fixed
 
-- Kartu Domain di Ringkasan ikut menghitung domain yang tertahan oleh masalah lain.
-- Situs panel kini terhubung ke domain dan port-nya di daftar Aplikasi, juga setelah "Cek ulang".
-- Fokus kembali ke tombol pemicu setelah dialog konfirmasi, adopsi, dan tempel `.env` ditutup.
-- Pilihan di menu dan dropdown setinggi minimal 44 px di layar sentuh.
-- Dialog tambah domain merapikan alamat yang ditempel lengkap dengan `https://` atau path.
-- "Deploy terakhir" di daftar dan detail situs menandai deploy yang tidak berhasil, dan alasan gagal di halaman perubahan tidak lagi tampil dua kali.
-- Halaman tetap menampilkan data terakhir tanpa dimuat ulang dari awal bila penyegaran gagal.
-- Halaman yang gagal memuat bagiannya saat server tidak terjangkau kini menampilkan "Server panel tidak terjangkau" di dalam aplikasi, bukan halaman kosong.
-- Suhu baterai yang tidak terbaca tampil "tidak ada data", bukan 0 °C.
-- Menghapus situs yang punya database ditolak selama cadangan berjalan, dan upload deploy yang belum selesai ikut dihapus bersama situsnya.
-- Cadangan dan pemulihan yang terputus karena panel di-restart ditandai terputus, bukan berjalan selamanya.
-- Situs yang tercatat di panel tetapi tidak ada di pm2 ditandai "Tidak berjalan di pm2".
-- Panel tidak lagi menyalakan daemon pm2 kedua saat layanan pm2 mati; halaman menampilkan "pm2 tidak berjalan".
-- Uji pemulihan selesai tanpa perlu memuat ulang halaman, dan tabel domain muat di layar desktop.
-- Hapus akun menjelaskan bahwa catatan audit tetap disimpan, lalu kembali ke halaman awal dengan pemberitahuan.
-- Daftar situs dan pengaturan tidak lagi menjalankan satu query database per item.
+- The Domains card in the Overview also counts domains held back by other problems.
+- Panel sites are now linked to their domain and port in the Apps list, also after "Cek ulang" (Check again).
+- Focus returns to the trigger button after the confirmation, adoption, and `.env` paste dialogs close.
+- Options in menus and dropdowns are at least 44 px tall on touch screens.
+- The add domain dialog cleans up addresses pasted with `https://` or a path.
+- "Deploy terakhir" (Last deploy) in the site list and details marks unsuccessful deploys, and the failure reason on the change page is no longer shown twice.
+- Pages keep showing the last data without reloading from scratch when a refresh fails.
+- Pages that fail to load their parts while the server is unreachable now show "Server panel tidak terjangkau" (Panel server unreachable) inside the app instead of a blank page.
+- A battery temperature that cannot be read shows "tidak ada data" (no data), not 0 °C.
+- Deleting a site that has a database is refused while a backup is running, and unfinished deploy uploads are deleted along with the site.
+- Backups and restores interrupted by a panel restart are marked interrupted instead of running forever.
+- Sites recorded in the panel but missing from pm2 are marked "Tidak berjalan di pm2" (Not running in pm2).
+- The panel no longer starts a second pm2 daemon while the pm2 service is down; pages show "pm2 tidak berjalan" (pm2 is not running).
+- Restore tests finish without reloading the page, and the domain table fits on desktop screens.
+- Deleting an account explains that audit records are kept, then returns to the home page with a notice.
+- The site list and settings no longer run one database query per item.
 
-### Breaking (API admin)
+### Breaking (admin API)
 
-Hanya berpengaruh pada skrip yang memanggil API panel langsung:
+Only affects scripts that call the panel API directly:
 
-- `PUT /api/dev/settings/:key` dihapus; pakai `PATCH /api/dev/settings` per grup.
-- Log layanan/aplikasi dikembalikan sebagai `LogChunk` (`{ lines: [{ at, text, stream? }], cursor, reset, truncated, redacted }`), menggantikan `LogLines`.
-- `Problem.message` dihapus; teks masalah dibentuk dari `code` dan `params`.
+- `PUT /api/dev/settings/:key` is removed; use `PATCH /api/dev/settings` per group.
+- Service/app logs are returned as `LogChunk` (`{ lines: [{ at, text, stream? }], cursor, reset, truncated, redacted }`), replacing `LogLines`.
+- `Problem.message` is removed; problem text is built from `code` and `params`.
 
 ## [0.2.2] - 2026-11-26
 
 ### Security
 
-- Permintaan yang mengubah data (menjalankan/menghentikan layanan, membuat/menghapus site, deploy, mengubah pengguna dan pengaturan, dll.) kini hanya diterima dari halaman panel sendiri. Halaman lain, termasuk site yang di-host di subdomain yang sama, tidak bisa lagi memicu aksi atas nama kamu saat kamu sedang login.
+- Requests that change data (starting/stopping services, creating/deleting sites, deploys, changing users and settings, etc.) are now only accepted from the panel's own pages. Other pages, including sites hosted on the same subdomain, can no longer trigger actions on your behalf while you are signed in.
 
 ## [0.2.1] - 2026-11-26
 
 ### Fixed
 
-- Panel di belakang Cloudflare Access langsung menampilkan login Access saat sesi belum ada/habis, bukan galat jaringan.
+- A panel behind Cloudflare Access immediately shows the Access login when there is no session or it has expired, instead of a network error.
 
 ## [0.2.0] - 2026-11-26
 
 ### Added
 
-- Halaman perkenalan publik di `/` yang bisa dibuka tanpa login: kenapa HP bekas, fitur, langkah pemasangan, diagram tunnel, dan FAQ. Tombolnya "Masuk dengan Google" untuk tamu atau "Buka panel" ke halaman awal peran bila sudah login. Setelah login Google kamu tetap langsung masuk ke halaman awal peranmu, dan alamat yang tidak dikenal kini menampilkan halaman perkenalan.
+- A public introduction page at `/` that can be opened without signing in: why a spare phone, features, install steps, a tunnel diagram, and FAQ. Its button is "Masuk dengan Google" (Sign in with Google) for visitors or "Buka panel" (Open panel) to the role's home page when signed in. After Google sign-in you still go straight to your role's home page, and unknown addresses now show the introduction page.
 
 ### Fixed
 
-- `scripts/install-phone.sh` kini berhasil menjalankan `sv restart panel` saat dipanggil lewat ssh (sebelumnya `sv` tidak menemukan service karena `SVDIR` tidak di-set).
+- `scripts/install-phone.sh` now runs `sv restart panel` successfully when called over ssh (previously `sv` could not find the service because `SVDIR` was not set).
 
 ## [0.1.0] - 2026-11-26
 
 ### Added
 
-- Login Google untuk semua akun Google dengan tiga peran: `user` (/profile), `admin` (/panel) dan `super_admin` (/dev). Akun baru masuk sebagai `user`; super admin menjadikannya `admin` di /dev → Pengguna. Super admin diambil dari `SUPER_ADMIN_EMAILS` dan disinkronkan ulang setiap login dan setiap panel menyala.
-- Membuka panel lewat alamat lain otomatis diarahkan ke `APP_BASE_URL`, sehingga login Google selalu berjalan di alamat yang terdaftar.
-- Dev console (/dev): kesehatan panel, kelola pengguna dan peran, audit log, log panel, dan pengaturan runtime (Cloudflare, folder dan port site, layanan yang dilindungi, backup). Nilai rahasia disimpan terenkripsi dan tidak pernah ditampilkan lagi.
-- Panel (/panel): ringkasan perangkat (baterai, suhu, memori, penyimpanan, beban), layanan runit dan aplikasi pm2 beserta tombol start/stop/restart dan log-nya, daftar domain tunnel dengan cek kesehatan, dan daftar database Postgres.
-- Site: buat site baru (folder, database Postgres opsional, `.env`, entri pm2 di `apps.json`, ingress cloudflared, DNS CNAME Cloudflare) sebagai job bertahap yang otomatis di-rollback bila gagal; adopsi site lama yang ditulis tangan; tambah/hapus hostname; ubah `.env`; hapus site.
-- Deploy binary site lewat browser dengan upload bertahap (aman di balik batas 100 MB Cloudflare), deteksi otomatis binary Android (jalan langsung) atau glibc (lewat `grun`), cek kesehatan setelah restart, rollback otomatis bila gagal, dan tombol kembali ke versi sebelumnya.
-- Backup harian ke S3/Cloudflare R2: dump setiap database Postgres dan `panel.db`, retensi otomatis, jalankan manual, link unduh sementara, dan petunjuk restore per item.
-- Satu binary untuk Termux (`dist/panel-android-arm64`) yang jalan langsung tanpa `grun`, plus run script runit dan `scripts/install-phone.sh` untuk instal/upgrade di HP.
+- Google sign-in for all Google accounts with three roles: `user` (/profile), `admin` (/panel) and `super_admin` (/dev). New accounts start as `user`; the super admin makes them `admin` under /dev → Users. Super admins come from `SUPER_ADMIN_EMAILS` and are re-synced on every sign-in and every panel start.
+- Opening the panel through another address redirects to `APP_BASE_URL` automatically, so Google sign-in always runs on the registered address.
+- Dev console (/dev): panel health, user and role management, audit log, panel log, and runtime settings (Cloudflare, site folder and ports, protected services, backup). Secret values are stored encrypted and never shown again.
+- Panel (/panel): device overview (battery, temperature, memory, storage, load), runit services and pm2 apps with start/stop/restart buttons and their logs, a list of tunnel domains with health checks, and a list of Postgres databases.
+- Sites: create a new site (folder, optional Postgres database, `.env`, pm2 entry in `apps.json`, cloudflared ingress, Cloudflare DNS CNAME) as a staged job that rolls back automatically on failure; adopt hand-written existing sites; add/remove hostnames; edit `.env`; delete sites.
+- Browser binary deploys for sites with chunked uploads (safe behind Cloudflare's 100 MB limit), automatic detection of Android (runs directly) or glibc (through `grun`) binaries, a health check after restart, automatic rollback on failure, and a button to go back to the previous version.
+- Daily backups to S3/Cloudflare R2: a dump of every Postgres database and `panel.db`, automatic retention, manual runs, temporary download links, and restore instructions per item.
+- A single binary for Termux (`dist/panel-android-arm64`) that runs directly without `grun`, plus a runit run script and `scripts/install-phone.sh` to install/upgrade on the phone.
