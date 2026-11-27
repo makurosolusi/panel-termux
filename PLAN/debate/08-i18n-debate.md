@@ -136,10 +136,10 @@ copy of `id.job.ts` exporting `tJob`; `id.job.ts` annotated `export const idJob:
 function leaves, `satisfies Record<…>` clauses kept). TypeScript 7.0.2, `tsc --noEmit --extendedDiagnostics`, three
 runs each on the whole project. The spike files were removed afterwards (stage 2 creates the real ones).
 
-| Run set  | Check time (s)        | Instantiations | Types   |
-| -------- | --------------------- | -------------- | ------- |
-| baseline | 1.29 · 1.37 · 1.02    | 1,848,486      | 460,847 |
-| typed    | 1.11 · 0.99 · 1.04    | 1,864,001      | 462,282 |
+| Run set  | Check time (s)     | Instantiations | Types   |
+| -------- | ------------------ | -------------- | ------- |
+| baseline | 1.29 · 1.37 · 1.02 | 1,848,486      | 460,847 |
+| typed    | 1.11 · 0.99 · 1.04 | 1,864,001      | 462,282 |
 
 Result: no measurable check-time cost (differences are run-to-run noise; +0.8 % instantiations). Far below the 2 s
 stop threshold. Parameter types flow from English: `(p) =>` in the overlay needs no annotation.

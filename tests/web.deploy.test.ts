@@ -41,6 +41,9 @@ import {
   stepLabel,
 } from "@/web/site/job.state";
 import { JOB_STATUS_KEY, JOB_STEP_STATUS_KEY } from "@/web/site/job.status-key";
+import { formatLocaleForFile } from "./i18n.fixture";
+
+formatLocaleForFile("id"); // Indonesian literals below until wave 1 migrates this file
 
 // test-only fixtures
 const upload = (over: Partial<UploadState> = {}): UploadState => ({

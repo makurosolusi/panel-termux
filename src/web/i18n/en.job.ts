@@ -1,0 +1,246 @@
+import { formatBytes } from "@/shared/format.number";
+import { msg } from "@/shared/i18n";
+import type { JobKind, JobNextAction, JobParams, JobStepKey, JobStepStatus } from "@/shared/job.types";
+
+/** Formats an outcome sentence from its coded params. */
+type Outcome = (p: JobParams) => string;
+
+/** Param as display text; missing → "–". */
+const s = (v: JobParams[string] | undefined): string => (v === undefined || v === null ? "–" : String(v));
+/** Byte param as "89.2 MB". */
+const b = (v: JobParams[string] | undefined): string => (typeof v === "number" ? formatBytes(v, "en") : s(v));
+const runtime = (v: JobParams[string] | undefined): string =>
+  v === "native" ? "Android native" : v === "grun" ? "glibc (lewat grun)" : s(v);
+/** `health_timeout.last`: "refused", "no_answer" or an HTTP status. */
+const lastAnswer = (v: JobParams[string] | undefined): string =>
+  v === "refused" ? "port menolak koneksi" : v === "no_answer" ? "tidak menjawab" : `terakhir HTTP ${s(v)}`;
+
+/** UI copy of job progress: kinds, step labels, coded outcomes, follow-up actions, recover modes (PLAN/03 §5.8). */
+export const tJob = msg("job", {
+  title: "Progres perubahan",
+  listTitle: "Riwayat perubahan",
+  listDescription: "Semua perubahan situs yang dijalankan panel, terbaru di atas.",
+  kinds: {
+    "site.create": "Buat situs",
+    "site.delete": "Hapus situs",
+    "hostname.add": "Tambah domain",
+    "hostname.remove": "Hapus domain",
+    "site.deploy": "Deploy",
+    "site.rollback": "Rollback",
+    "site.restart": "Mulai ulang situs",
+    "site.env": "Ubah variabel lingkungan",
+    "job.cleanup": "Pulihkan perubahan terputus",
+  } satisfies Record<JobKind, string>,
+  steps: {
+    validate: "Memeriksa permintaan",
+    inspect: "Memeriksa keadaan",
+    folder: "Membuat folder situs",
+    database: "Membuat database",
+    env_write: "Menulis variabel lingkungan",
+    ingress: "Mengubah rute cloudflared",
+    dns: "Mengatur DNS",
+    tunnel_restart: "Mulai ulang cloudflared",
+    domain_probe: "Mencoba domain",
+    apps_remove: "Menghapus entri apps.json",
+    app_remove: "Menghapus aplikasi pm2",
+    database_drop: "Menghapus database",
+    folder_remove: "Menghapus folder situs",
+    stage: "Menyiapkan binary",
+    detect: "Mengenali runtime",
+    chmod: "Memberi izin jalan",
+    swap: "Menukar binary",
+    run_script: "Menulis skrip jalan",
+    apps_entry: "Mendaftarkan aplikasi di pm2",
+    app_restart: "Mulai ulang aplikasi",
+    health: "Cek kesehatan",
+  } satisfies Record<JobStepKey, string>,
+  stepStatuses: {
+    pending: "menunggu",
+    running: "sedang berjalan",
+    done: "selesai",
+    failed: "gagal",
+    rolled_back: "dikembalikan",
+    skipped: "dilewati",
+    interrupted: "terputus",
+  } satisfies Record<JobStepStatus | "interrupted", string>,
+  outcomes: {
+    validated: () => "Permintaan valid.",
+    invalid_site: (p) => `Permintaan tidak valid: ${s(p.issues)}.`,
+    busy_backup: () => "Cadangan sedang berjalan. Tunggu sampai selesai, lalu coba lagi.",
+    inspect_found: (p) => `Ditemukan ${s(p.count)} hal yang perlu dirapikan.`,
+    inspect_nothing: () => "Tidak ada yang perlu dibersihkan.",
+    folder_created: (p) => `Folder ${s(p.path)} dibuat.`,
+    folder_failed: () => "Folder situs tidak bisa dibuat atau dihapus. Lihat detail teknis.",
+    database_created: (p) => `Database ${s(p.name)} dibuat.`,
+    database_skipped: () => "Situs ini tanpa database.",
+    database_failed: () =>
+      "Perintah database gagal, biasanya karena layanan postgres tidak berjalan. Jalankan postgres, lalu coba lagi.",
+    env_written: (p) => `${s(p.count)} variabel lingkungan ditulis.`,
+    env_updated: (p) => `${s(p.set)} diatur, ${s(p.unset)} dihapus.`,
+    env_restored: () => "Nilai variabel lingkungan sebelumnya dipulihkan.",
+    env_failed: () => "File .env tidak bisa ditulis. Lihat detail teknis.",
+    ingress_added: (p) => `Rute ditambahkan untuk ${s(p.hostnames)}.`,
+    ingress_removed: (p) => `Rute dihapus untuk ${s(p.hostnames)}.`,
+    ingress_unchanged: () => "Rute cloudflared sudah sesuai.",
+    ingress_rejected: () => "cloudflared menolak konfigurasi baru. Konfigurasi lama dipakai lagi.",
+    ingress_config_missing: (p) => `File konfigurasi cloudflared ${s(p.path)} tidak ditemukan.`,
+    ingress_unsupported: () => "Format config.yml cloudflared tidak bisa diubah otomatis.",
+    dns_created: (p) => `Record DNS dibuat untuk ${s(p.hostnames)}.`,
+    dns_owned_present: () => "Record DNS milik panel sudah ada.",
+    dns_same_tunnel: (p) => `Record DNS ${s(p.hostnames)} sudah menunjuk ke tunnel ini.`,
+    dns_deleted: (p) => `Record DNS ${s(p.hostnames)} dihapus.`,
+    dns_left: (p) =>
+      `Record DNS ${s(p.hostnames)} tidak bisa dihapus dan dibiarkan. Hapus di dasbor Cloudflare bila tidak dipakai.`,
+    dns_no_token: () =>
+      "Token API Cloudflare belum diisi dan HP ini belum login ke Cloudflare, jadi record DNS dibuat di dasbor Cloudflare. Recordnya ada di bawah.",
+    dns_routed: (p) =>
+      `Record DNS ${s(p.hostnames)} dibuat lewat cloudflared. Panel hanya bisa menghapusnya bila token API diisi.`,
+    dns_route_failed: (p) =>
+      `cloudflared tidak bisa membuat record DNS ${s(p.hostname)}, mungkin karena sudah ada record lain dengan nama itu. Buat atau ubah record di bawah di dasbor Cloudflare.`,
+    dns_wrong_zone: (p) =>
+      `cloudflared membuat record di zona lain (${s(p.fqdn)}). Hapus record itu di dasbor Cloudflare, lalu tambahkan record di bawah secara manual.`,
+    dns_none_owned: () => "Tidak ada record DNS milik panel.",
+    dns_conflict: (p) =>
+      `Sudah ada record DNS untuk ${s(p.hostname)} yang tidak dibuat panel. Hapus atau ubah di dasbor Cloudflare, lalu coba lagi.`,
+    dns_zone_missing: (p) => `Zona DNS untuk ${s(p.hostname)} tidak ada di akun Cloudflare ini.`,
+    dns_api_failed: () => "API Cloudflare tidak menjawab dengan benar. Coba lagi beberapa saat lagi.",
+    dns_no_tunnel_id: () => "ID tunnel tidak terbaca dari konfigurasi cloudflared.",
+    tunnel_restarted: (p) => `cloudflared dimulai ulang (${s(p.seconds)} dtk).`,
+    tunnel_unchanged: () => "cloudflared tidak perlu dimulai ulang.",
+    tunnel_not_running: (p) =>
+      `cloudflared belum berjalan setelah ${s(p.seconds)} dtk. Periksa log layanan cloudflared.`,
+    tunnel_service_missing: () => "Layanan cloudflared tidak terpasang di runit.",
+    domain_reachable: (p) => `${s(p.hostname)} menjawab HTTP ${s(p.status)}.`,
+    domain_not_yet: (p) => `${s(p.hostname)} belum menjawab (${s(p.status)}). DNS bisa butuh beberapa menit.`,
+    apps_removed: (p) => `Entri ${s(p.name)} dihapus dari apps.json.`,
+    apps_absent: () => "Tidak ada entri di apps.json.",
+    apps_adopted_skip: () => "Situs adopsi: entri pm2 ditulis manual, tidak diubah.",
+    apps_json_invalid: () =>
+      "File apps.json rusak. Tekan Perbaiki di kartu Persiapan (halaman Situs) agar panel membangunnya ulang, lalu coba lagi.",
+    app_removed: (p) => `Aplikasi ${s(p.name)} dihapus dari pm2.`,
+    app_not_deployed: () => "Aplikasi belum pernah di-deploy.",
+    app_adopted_skip: () => "Situs adopsi: aplikasi pm2 dibiarkan.",
+    pm2_failed: () => "Perintah pm2 gagal. Lihat detail teknis.",
+    pm2_not_running: () => "Layanan pm2 tidak berjalan, jadi semua situs ikut berhenti. Jalankan pm2, lalu coba lagi.",
+    database_dropped: (p) => `Database ${s(p.name)} dihapus.`,
+    database_kept: () => "Database disimpan.",
+    database_none: () => "Situs ini tanpa database.",
+    database_adopted_skip: () => "Situs adopsi: database dibiarkan.",
+    folder_removed: (p) => `Folder ${s(p.path)} dihapus.`,
+    folder_kept: () => "Folder situs disimpan.",
+    folder_gone: () => "Folder situs sudah tidak ada.",
+    folder_adopted_skip: () => "Situs adopsi: folder dibiarkan.",
+    folder_not_empty: (p) => `Folder ${s(p.path)} dibiarkan karena berisi file lain. Hapus sendiri bila tidak dipakai.`,
+    staged: (p) => `Binary ${b(p.sizeBytes)} siap.`,
+    upload_missing: () => "File unggahan tidak ada lagi di server. Unggah ulang binary-nya.",
+    size_mismatch: (p) => `Ukuran file ${b(p.got)}, padahal seharusnya ${b(p.expected)}. Unggah ulang.`,
+    sha_mismatch: () => "Checksum file tidak cocok. Unggah ulang binary-nya.",
+    folder_missing: (p) => `Folder situs ${s(p.path)} tidak ada.`,
+    restart_no_folder: (p) =>
+      `Folder situs ${s(p.path)} tidak ada lagi, jadi aplikasinya tidak bisa dijalankan. Buka detail situs: hapus situs lalu buat ulang, atau pulihkan dari cadangan.`,
+    disk_full: () => "Penyimpanan HP penuh. Kosongkan ruang, lalu coba lagi.",
+    runtime_native: () => "Binary Android native.",
+    runtime_grun: () => "Binary glibc, dijalankan lewat grun.",
+    invalid_binary: () => "File ini bukan binary Linux arm64 yang bisa dijalankan.",
+    runtime_mismatch: (p) =>
+      `Binary ini untuk ${runtime(p.got)}, tetapi pm2 menjalankan situs ini sebagai ${runtime(p.expected)}.`,
+    chmod_done: () => "Izin jalan diberikan.",
+    chmod_failed: () => "Izin jalan tidak bisa diberikan. Lihat detail teknis.",
+    swap_first: () => "Binary pertama dipasang.",
+    swap_kept_previous: (p) => (p.linked === false ? "Versi lama disalin sebagai cadangan." : "Versi lama disimpan."),
+    swap_back: () => "Binary lama dipasang lagi.",
+    swap_nothing_live: () =>
+      "Belum ada binary yang pernah berjalan, jadi tidak ada yang dipasang lagi. Sisa unggahan dibersihkan.",
+    swap_failed: () => "Binary tidak bisa ditukar. Lihat detail teknis.",
+    run_written: (p) => `Skrip jalan ditulis (${runtime(p.runtime)}).`,
+    run_unchanged: () => "Skrip jalan sudah sesuai.",
+    run_failed: () => "Skrip jalan tidak bisa ditulis.",
+    apps_registered: () => "Aplikasi didaftarkan di apps.json.",
+    apps_unchanged: () => "Entri apps.json sudah sesuai.",
+    apps_migrated: () => "Entri lama apps.json diperbarui ke skrip jalan.",
+    integration_not_ready: () =>
+      "pm2 belum siap menjalankan situs buatan panel. Selesaikan persiapan di halaman Situs.",
+    app_restarted: (p) => `Aplikasi ${s(p.name)} dimulai ulang.`,
+    app_started: (p) => `Aplikasi ${s(p.name)} dijalankan.`,
+    app_missing: (p) => `Aplikasi ${s(p.name)} tidak ada di pm2.`,
+    app_not_loaded: (p) => `pm2 tidak memuat aplikasi ${s(p.name)} dari ecosystem.config.js.`,
+    app_not_in_ecosystem: (p) =>
+      `Entri aplikasi ${s(p.name)} tidak ada lagi di ecosystem.config.js, jadi panel tidak bisa menjalankannya. Tambahkan lagi entrinya di file itu, atau hapus situs ini dari panel.`,
+    healthy: (p) => `HTTP ${s(p.status)} dari \`${s(p.path)}\` dalam ${s(p.ms)} ms, stabil.`,
+    health_timeout: (p) =>
+      `Aplikasi tidak sehat setelah ${s(p.seconds)} dtk (${lastAnswer(p.last)}). Lihat log aplikasi di bawah.`,
+    app_errored: (p) => `pm2 melaporkan aplikasi ${s(p.name)} bermasalah. Lihat log aplikasi di bawah.`,
+    app_unstable: (p) =>
+      `Aplikasi sempat menjawab, lalu dimulai ulang ${s(p.restarts)}× oleh pm2. Biasanya karena crash saat start.`,
+    app_no_pid: () =>
+      "pm2 melaporkan aplikasi berjalan, tetapi tidak ada prosesnya. Biasanya binary tidak bisa dijalankan.",
+    unexpected: () => "Terjadi kesalahan tak terduga. Lihat detail teknis.",
+    interrupted: () => "Terhenti di langkah ini karena panel dimulai ulang.",
+  } satisfies Record<string, Outcome>,
+  /** Shown when a server code has no copy yet (newer server): the raw code stays visible for support. */
+  unknownOutcome: (code: string) => `Hasil: ${code}`,
+  final: {
+    succeeded: "Perubahan selesai.",
+    rolled_back: "Perubahan gagal dan sudah dikembalikan. Aman, tidak ada yang perlu dibersihkan.",
+    failed: "Perubahan gagal dan butuh tindakan.",
+    interrupted: "Perubahan terputus karena panel dimulai ulang. Periksa dan pulihkan.",
+    resolved: "Sudah dipulihkan.",
+  },
+  next: {
+    recover: "Pulihkan",
+    rollback: "Kembalikan versi sebelumnya",
+    app_log: "Lihat log aplikasi",
+    open_site: "Buka detail situs",
+    first_deploy: "Unggah binary pertama",
+    redeploy: "Deploy ulang",
+  } satisfies Record<JobNextAction, string>,
+  recover: {
+    cleanup: "Pulihkan",
+    retryDelete: "Ulangi hapus situs",
+    retryHostname: "Ulangi hapus domain",
+    retryTitle: (target: string) => `Ulangi hapus ${target}?`,
+    retryBody:
+      "Langkah yang sudah selesai dilewati, sisanya dijalankan lagi dari catatan perubahan ini. Yang sudah terhapus tidak bisa dikembalikan.",
+    started: "Pemulihan dimulai.",
+    cleans: "Memulihkan sisa dari",
+    cleansLink: "perubahan yang terputus",
+  },
+  allSites: "Ke daftar situs",
+  whyFailed: "Kenapa gagal",
+  appLog: "Log aplikasi (stderr, 50 baris terakhir)",
+  appLogEmpty: "Log aplikasi kosong.",
+  appLogMissing: "Log aplikasi tidak tersedia.",
+  technical: "Detail teknis",
+  details: "Detail",
+  stepLog: "Log langkah",
+  copy: "Salin detail",
+  liveStep: (n: number, total: number, label: string, state: string) =>
+    `Langkah ${n} dari ${total}: ${label}… ${state}`,
+  progress: (pct: number) => `${pct}%`,
+  blip: "Panel terputus sebentar karena cloudflared dimulai ulang. Halaman ini lanjut sendiri.",
+  lostTitle: "Progres tidak bisa dimuat",
+  lostBody: "Panel tidak menjawab lebih dari 2 menit. Periksa koneksi dan HP server, lalu coba lagi.",
+  meta: {
+    started: "Mulai",
+    by: (name: string) => `oleh ${name}`,
+    duration: (d: string) => `durasi ${d}`,
+  },
+  list: {
+    empty: "Belum ada perubahan. Membuat, mengubah, atau men-deploy situs akan tercatat di sini.",
+    emptyFiltered: "Tidak ada perubahan yang cocok dengan filter.",
+    clearFilters: "Hapus filter",
+    columns: { change: "Perubahan", status: "Status", actor: "Oleh", started: "Mulai", duration: "Durasi" },
+    filterKind: "Jenis",
+    filterStatus: "Status",
+    allKinds: "Semua jenis",
+    allStatuses: "Semua status",
+    forTarget: (target: string) => `Riwayat perubahan · ${target}`,
+    system: "Sistem",
+    label: "Daftar perubahan",
+  },
+  errorCodes: {
+    not_recoverable: "Perubahan ini tidak perlu atau tidak bisa dipulihkan lagi.",
+    already_resolved: "Perubahan ini sudah dipulihkan oleh admin lain. Muat ulang halaman.",
+    invalid_pagination: "Halaman yang diminta tidak valid.",
+  },
+} as const);

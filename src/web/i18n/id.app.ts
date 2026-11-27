@@ -8,4 +8,6 @@ export const idApp = {
     signOut: "Keluar",
     signOutFailed: "Tidak bisa keluar. Periksa koneksi internet, lalu coba lagi.",
   },
+  languagePackFailed:
+    "Bahasa Indonesia tidak bisa dimuat, jadi panel tampil dalam bahasa Inggris. Muat ulang halaman untuk mencoba lagi.",
 } as const;

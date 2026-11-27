@@ -1,4 +1,4 @@
-import { formatBytes } from "@/shared/format.id";
+import { formatBytes } from "@/shared/format.number";
 import type { JobKind, JobNextAction, JobParams, JobStepKey, JobStepStatus } from "@/shared/job.types";
 
 /** Formats an outcome sentence from its coded params. */
@@ -7,7 +7,7 @@ type Outcome = (p: JobParams) => string;
 /** Param as display text; missing → "–". */
 const s = (v: JobParams[string] | undefined): string => (v === undefined || v === null ? "–" : String(v));
 /** Byte param as "89,2 MB". */
-const b = (v: JobParams[string] | undefined): string => (typeof v === "number" ? formatBytes(v) : s(v));
+const b = (v: JobParams[string] | undefined): string => (typeof v === "number" ? formatBytes(v, "id") : s(v));
 const runtime = (v: JobParams[string] | undefined): string =>
   v === "native" ? "Android native" : v === "grun" ? "glibc (lewat grun)" : s(v);
 /** `health_timeout.last`: "refused", "no_answer" or an HTTP status. */

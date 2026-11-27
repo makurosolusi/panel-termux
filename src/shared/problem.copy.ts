@@ -1,6 +1,7 @@
 // Indonesian text of every ProblemCode, shared by the Ringkasan (web) and Telegram (server) so both say the same
 // thing (PLAN/02 K2 §5.7). A deliberate exception to "UI strings live in i18n": the server needs the same words.
-import { formatBytes, formatDuration, formatNumber, formatTemperature } from "./format.id";
+// The copy below is Indonesian, so it formats with "id" until it is split per locale (PLAN/08 §5, wave 1).
+import { formatBytes, formatDuration, formatNumber, formatTemperature } from "./format.number";
 import type { AlertErrorCode, Problem, ProblemCode } from "./monitor.types";
 
 /** The part of a Problem the copy reads. */
@@ -41,7 +42,7 @@ const COPY: Record<ProblemCode, Copy> = {
     title: (p) => `Layanan ${p.target} mati`,
     detail: (p) => {
       const sec = num(p.params.downSec);
-      return sec === null ? "Seharusnya berjalan." : `Seharusnya berjalan. Mati sejak ${formatDuration(sec)}.`;
+      return sec === null ? "Seharusnya berjalan." : `Seharusnya berjalan. Mati sejak ${formatDuration(sec, "id")}.`;
     },
   },
   service_crash_loop: {
@@ -55,11 +56,11 @@ const COPY: Record<ProblemCode, Copy> = {
   app_errored: {
     title: (p) => `Aplikasi ${p.target} bermasalah`,
     detail: (p) =>
-      `pm2 berhenti mencoba setelah ${formatNumber(num(p.params.restarts) ?? 0)}× gagal. Lihat log stderr.`,
+      `pm2 berhenti mencoba setelah ${formatNumber(num(p.params.restarts) ?? 0, 0, "id")}× gagal. Lihat log stderr.`,
   },
   app_crash_loop: {
     title: (p) => `Aplikasi ${p.target} terus dimulai ulang`,
-    detail: (p) => `${formatNumber(num(p.params.restarts10m) ?? 0)}× dalam 10 mnt terakhir. Lihat log stderr.`,
+    detail: (p) => `${formatNumber(num(p.params.restarts10m) ?? 0, 0, "id")}× dalam 10 mnt terakhir. Lihat log stderr.`,
   },
   domain_unreachable: { title: (p) => `${p.target} tidak bisa dijangkau`, detail: domainReason },
   domain_http_error: { title: (p) => `${p.target} menjawab HTTP ${str(p.params.status)}`, detail: domainReason },
@@ -80,7 +81,7 @@ const COPY: Record<ProblemCode, Copy> = {
     detail: () => "Lihat item yang gagal di halaman Cadangan.",
   },
   backup_stale: {
-    title: (p) => `Tidak ada cadangan dalam ${formatNumber(num(p.params.hours) ?? 0)} jam terakhir`,
+    title: (p) => `Tidak ada cadangan dalam ${formatNumber(num(p.params.hours) ?? 0, 0, "id")} jam terakhir`,
     detail: () => "Cadangan harian mungkin tidak berjalan.",
   },
   backup_item_stale: {
@@ -89,7 +90,7 @@ const COPY: Record<ProblemCode, Copy> = {
       const name = BACKUP_ITEM[str(p.params.itemKind)] ?? str(p.params.name);
       return hours === null
         ? `Cadangan ${name} belum pernah berhasil`
-        : `Cadangan ${name} sudah ${formatNumber(hours)} jam tidak berhasil`;
+        : `Cadangan ${name} sudah ${formatNumber(hours, 0, "id")} jam tidak berhasil`;
     },
     detail: () => "Item ini gagal di cadangan terakhir. Lihat halaman Cadangan.",
   },
@@ -112,14 +113,14 @@ const COPY: Record<ProblemCode, Copy> = {
   disk_low: {
     title: () => "Penyimpanan hampir penuh",
     detail: (p) =>
-      `Tinggal ${formatNumber(num(p.params.freePct) ?? 0, 1)}% (${formatBytes(num(p.params.freeBytes) ?? 0)}) bebas.`,
+      `Tinggal ${formatNumber(num(p.params.freePct) ?? 0, 1, "id")}% (${formatBytes(num(p.params.freeBytes) ?? 0, "id")}) bebas.`,
   },
   battery_low: {
-    title: (p) => `Baterai tinggal ${formatNumber(num(p.params.percent) ?? 0)}% dan tidak mengisi`,
+    title: (p) => `Baterai tinggal ${formatNumber(num(p.params.percent) ?? 0, 0, "id")}% dan tidak mengisi`,
     detail: () => "Server ikut mati bila baterai habis. Colokkan charger.",
   },
   battery_hot: {
-    title: (p) => `Baterai panas (${formatTemperature(num(p.params.temperatureC))})`,
+    title: (p) => `Baterai panas (${formatTemperature(num(p.params.temperatureC), "id")})`,
     detail: () => "Pindahkan HP ke tempat sejuk atau lepas casingnya.",
   },
   alerts_failing: {
@@ -133,7 +134,7 @@ const COPY: Record<ProblemCode, Copy> = {
   host_rebooted: {
     title: () => "HP baru saja menyala ulang",
     detail: (p) =>
-      `Aktif ${formatNumber(num(p.params.uptimeMin) ?? 0)} mnt. Periksa apakah semua layanan sudah berjalan.`,
+      `Aktif ${formatNumber(num(p.params.uptimeMin) ?? 0, 0, "id")} mnt. Periksa apakah semua layanan sudah berjalan.`,
   },
   panel_restarted_unexpectedly: {
     title: () => "Panel sempat berhenti tak terduga",
@@ -149,10 +150,11 @@ export const detail = (p: ProblemText): string => COPY[p.code].detail(p);
 
 /** Recovery line without the "PULIH" label: "{title} · berlangsung {durasi}" (internet has its own sentence). */
 export function recovered(p: ProblemText, durationSec: number): string {
-  if (p.code === "internet_down") return `HP sempat tidak terhubung internet selama ${formatDuration(durationSec)}`;
-  return `${title(p)} · berlangsung ${formatDuration(durationSec)}`;
+  if (p.code === "internet_down")
+    return `HP sempat tidak terhubung internet selama ${formatDuration(durationSec, "id")}`;
+  return `${title(p)} · berlangsung ${formatDuration(durationSec, "id")}`;
 }
 
 /** Recovery line for a problem that ended while the panel was not running (PLAN/02 §4.6 step 3). */
 export const recoveredWhileOffline = (p: ProblemText, lastSeenAgoSec: number): string =>
-  `${title(p)} · pulih saat panel tidak berjalan (terakhir terlihat ${formatDuration(lastSeenAgoSec)} lalu)`;
+  `${title(p)} · pulih saat panel tidak berjalan (terakhir terlihat ${formatDuration(lastSeenAgoSec, "id")} lalu)`;

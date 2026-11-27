@@ -1,6 +1,7 @@
 // Telegram digest text (PLAN/02 §3.8): HTML, no emoji, ≤ 3,500 chars, ≤ 15 item lines, relative times only (the
 // runit process TZ is not reliable). Problem wording comes from src/shared/problem.copy.ts.
-import { formatDuration } from "../../shared/format.id";
+// Digest text is Indonesian until alerts.language lands (PLAN/08 §3.4, wave 1), so durations format with "id".
+import { formatDuration } from "../../shared/format.number";
 import type { Problem } from "../../shared/monitor.types";
 import { recovered, recoveredWhileOffline, title } from "../../shared/problem.copy";
 
@@ -32,7 +33,7 @@ function line(item: DigestItem): string {
     case "open":
     case "remind": {
       const head = item.type === "remind" ? "MASIH · " : "";
-      const since = item.sinceSec >= 60 ? ` · sejak ${formatDuration(item.sinceSec)}` : "";
+      const since = item.sinceSec >= 60 ? ` · sejak ${formatDuration(item.sinceSec, "id")}` : "";
       return `${head}${LABEL[item.problem.severity]} · ${title(item.problem)}${since}`;
     }
     case "recovered":

@@ -47,10 +47,12 @@ export const idShell = {
     ago: (s: string) => `${s} lalu`,
     in: (s: string) => `dalam ${s}`,
     yesterday: "kemarin",
+    days: (n: number) => `${n} hari`,
     refresh: "Muat ulang",
     live: "Pembaruan otomatis aktif",
     stale: "Gagal memperbarui",
   },
+  load: { cores: (n: number) => `${n} inti` },
   copy: { copy: "Salin", copied: "Tersalin", failed: "Tidak bisa menyalin. Salin manual dari teks di atas." },
   table: {
     loading: "Memuat data…",

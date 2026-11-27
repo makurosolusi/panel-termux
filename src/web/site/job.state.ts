@@ -1,8 +1,9 @@
 // Pure state of the job progress page (PLAN/03 §4.5, §5.5): stepper labels from coded keys, durations, live
 // announcement, cloudflared-blip tolerance and recover/next-action decisions.
-import { formatDuration } from "@/shared/format.id";
+
 import type { Job, JobNextAction, JobParams, JobStep, JobStepKey, JobStepStatus } from "@/shared/job.types";
 import { idJob } from "@/web/i18n/id.job";
+import { formatDuration } from "@/web/shared/format";
 
 /** Poll interval of the job progress view while it runs. */
 export const JOB_POLL_MS = 1_000;

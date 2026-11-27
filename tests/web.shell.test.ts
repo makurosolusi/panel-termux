@@ -1,5 +1,6 @@
-import { describe, expect, test } from "bun:test";
-import * as sharedFormat from "@/shared/format.id";
+import { afterAll, beforeAll, describe, expect, test } from "bun:test";
+import * as sharedFormat from "@/shared/format.number";
+import { activeLocale, setActiveLocale } from "@/shared/i18n";
 import type { Role } from "@/shared/roles";
 import { backupRoutes } from "@/web/backup/backup.routes";
 import { typedMatches } from "@/web/components/confirm-action";
@@ -232,6 +233,10 @@ describe("status → tone", () => {
 });
 
 describe("formatters (shell)", () => {
+  // These cases pin the Indonesian output; English is covered byte-exact in tests/format.number.test.ts.
+  beforeAll(() => setActiveLocale("id"));
+  afterAll(() => setActiveLocale("en")); // module singleton: restore so later files run in the default locale
+
   test("durations", () => {
     expect(formatDuration(3)).toBe("3 dtk");
     expect(formatDuration(120)).toBe("2 mnt");
@@ -280,13 +285,15 @@ describe("formatters (shell)", () => {
     expect(formatPercent(Number.POSITIVE_INFINITY)).toBe("–");
   });
 
-  test("web re-exports the shared Indonesian formatters unchanged", () => {
-    expect(webFormat.formatBytes).toBe(sharedFormat.formatBytes);
-    expect(webFormat.formatDuration).toBe(sharedFormat.formatDuration);
-    expect(webFormat.formatNumber).toBe(sharedFormat.formatNumber);
-    expect(webFormat.formatPercent).toBe(sharedFormat.formatPercent);
-    expect(webFormat.formatMegabytes).toBe(sharedFormat.formatMegabytes);
-    expect(webFormat.formatTemperature).toBe(sharedFormat.formatTemperature);
+  test("web formatters are the shared ones bound to the active locale", () => {
+    const l = activeLocale();
+    expect(l).toBe("id");
+    expect(webFormat.formatBytes(1536)).toBe(sharedFormat.formatBytes(1536, l));
+    expect(webFormat.formatDuration(437)).toBe(sharedFormat.formatDuration(437, l));
+    expect(webFormat.formatNumber(1234.5, 1)).toBe(sharedFormat.formatNumber(1234.5, 1, l));
+    expect(webFormat.formatPercent(42.25, 1)).toBe(sharedFormat.formatPercent(42.25, 1, l));
+    expect(webFormat.formatMegabytes(3776)).toBe(sharedFormat.formatMegabytes(3776, l));
+    expect(webFormat.formatTemperature(36.5)).toBe(sharedFormat.formatTemperature(36.5, l));
   });
 
   test("log clock and day label in local time", () => {

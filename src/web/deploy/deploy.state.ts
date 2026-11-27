@@ -1,9 +1,10 @@
 // Pure decisions of the #deploy section: what an upload error means for the card, rollback availability and the
 // "Dari → Ke" description of a binary.
-import { formatBytes } from "@/shared/format.id";
+
 import type { BinaryInfo, SiteDetail } from "@/shared/site.types";
 import { idDeploy } from "@/web/i18n/id.deploy";
 import { ApiError, apiErrorMessage } from "@/web/shared/api.client";
+import { formatBytes } from "@/web/shared/format";
 import { DEPLOY_ERROR_CODES, DeployApiError } from "./deploy.api";
 import { isTransientStatus } from "./deploy.upload";
 

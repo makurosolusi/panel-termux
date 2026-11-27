@@ -27,6 +27,9 @@ import { cloudflaredPoll, needsFullReload, panelPoll } from "@/web/panel/restart
 import { serviceSince, sortServices } from "@/web/panel/services.page";
 import { consequences } from "@/web/panel/unit.actions";
 import { apiErrorMessage, errorFromResponse } from "@/web/shared/api.client";
+import { formatLocaleForFile } from "./i18n.fixture";
+
+formatLocaleForFile("id"); // Indonesian literals below until wave 1 migrates this file
 
 // test-only fixtures
 const svc = (over: Partial<Service> = {}): Service => ({

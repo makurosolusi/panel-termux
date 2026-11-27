@@ -24,6 +24,9 @@ import {
 } from "../src/web/dev/onboarding.state";
 import { idDevHealth } from "../src/web/i18n/id.dev.health";
 import { idDevSetup } from "../src/web/i18n/id.dev.setup";
+import { formatLocaleForFile } from "./i18n.fixture";
+
+formatLocaleForFile("id"); // Indonesian literals below until wave 1 migrates this file
 
 // test-only fixtures
 const NOW = new Date("2026-11-27T10:00:00Z");

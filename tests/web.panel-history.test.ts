@@ -4,6 +4,9 @@ import { heartbeatBars, heartbeatSummary } from "@/web/panel/heartbeat.strip";
 import { navBadgeView } from "@/web/panel/nav.badge.provider";
 import { closedText, eventDurationSec, groupByDay } from "@/web/panel/problems.page";
 import { seriesStats, sparklinePath, sparklineSummary, toSparkPoints } from "@/web/panel/sparkline";
+import { formatLocaleForFile } from "./i18n.fixture";
+
+formatLocaleForFile("id"); // Indonesian literals below until wave 1 migrates this file
 
 const MIN = 60_000;
 const scale = { width: 100, height: 10, min: 0, max: 100, maxGapMs: 15 * MIN };

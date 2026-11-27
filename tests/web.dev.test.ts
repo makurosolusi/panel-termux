@@ -14,6 +14,9 @@ import { levelParam, toViewerLines } from "@/web/dev/logs.page";
 import { lastSeenText, userActions } from "@/web/dev/users.list";
 import { ApiError as DevApiError, errorFromResponse, redirectFor } from "@/web/shared/api.client";
 import { formatBytes, formatDateTime, formatUptime, usedPercent } from "@/web/shared/format";
+import { formatLocaleForFile } from "./i18n.fixture";
+
+formatLocaleForFile("id"); // Indonesian literals below until wave 1 migrates this file
 
 describe("errorFromResponse / redirectFor / devErrorMessage", () => {
   test.each([
