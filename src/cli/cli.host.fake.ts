@@ -65,6 +65,8 @@ export type FakeHostOptions = {
   selfPath?: string;
   execAnswers?: (tool: string, args: readonly string[]) => ExecResult | undefined;
   fetch?: (url: string, init?: RequestInit) => Promise<Response>;
+  /** host.link refuses with EACCES like Android app storage (E9); default true. */
+  linkFails?: boolean;
 };
 
 /** Pid of the fake runsvdir (service-daemon pidfile) and of the supervised panel (= createFakeSystem `panelPid`). */
@@ -307,6 +309,11 @@ function fakeSystem(scenario: FakeScenarioName, root: string, paths: CliPaths): 
   };
 }
 
+/** link(2) as Termux answers it in app data (E9). */
+const termuxLink = (src: string, dst: string) => {
+  throw Object.assign(new Error(`EACCES: permission denied, link '${src}' -> '${dst}'`), { code: "EACCES" });
+};
+
 const offline = async (url: string): Promise<Response> => {
   throw new TypeError(`fetch ${url} failed: fake host is offline`);
 };
@@ -354,6 +361,7 @@ export function createFakeHost(scenario: FakeScenarioName, opts: FakeHostOptions
     arch: "arm64",
     termuxEnv: { TERMUX_VERSION: "0.118.3", TERMUX_APK_RELEASE: "F_DROID" },
     freeBytes: () => FAKE_FREE_BYTES,
+    link: opts.linkFails === false ? linkSync : termuxLink,
     system: sys,
     resetSystem: () => {
       system = undefined;

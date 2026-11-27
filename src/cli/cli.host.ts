@@ -1,12 +1,13 @@
 // CliHost (PLAN/07 §7.1, K13, D1, D14, D15): everything the CLI asks of the phone, so tests and PANEL_CLI_FAKE swap
 // one object. The CLI never uses the server's mode picker: it picks fake when `sv` is missing and logs to stdout.
-import { existsSync, statfsSync } from "node:fs";
+import { existsSync, linkSync, statfsSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { type ExecOptions, type ExecResult, resolveArgv, runTermux, termuxPrefix } from "../server/exec/termux.exec";
 import { createTermuxSystem } from "../server/system/system.select";
 import type { SystemAdapters } from "../server/system/system.types";
 import { ENV_VARS } from "../shared/env.schema";
+import type { LinkFn } from "../shared/file.link";
 import { listProcs, localHealth, pidAlive, procExeId } from "./cli.host.proc";
 import { ttyAsk, ttySecret } from "./cli.prompt";
 
@@ -69,6 +70,8 @@ export interface CliHost {
   termuxEnv: TermuxEnv;
   /** Free bytes on the filesystem holding `path` (statfs). */
   freeBytes: (path: string) => number;
+  /** link(2) for linkOrCopy (E9: Termux refuses it with EACCES; the fake does too unless `linkFails: false`). */
+  link: LinkFn;
   /** System adapters for this mode, created on first call (createTermuxSystem / createFakeSystem, never the server mode picker). */
   system: () => SystemAdapters;
   /** Drops the cached adapters so the next system() sees tools installed meanwhile (K13: after the package step). */
@@ -221,6 +224,7 @@ export function createTermuxHost(): CliHost {
       const s = statfsSync(path);
       return s.bavail * s.bsize;
     },
+    link: linkSync,
     system: () => (system ??= createTermuxSystem()),
     resetSystem: () => {
       system = undefined;

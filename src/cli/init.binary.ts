@@ -1,16 +1,12 @@
 // Step 1 of `panel init` (PLAN/07 §4.1, K19, K21, K24, C21, C24, E10, E11, E16): put this binary at ~/panel/panel
-// (panel.new → fsync → self check → panel.prev by link + rename → rename), the `panel` command symlink, then remove
+// (panel.new → fsync → self check → panel.prev by link or copy (E9) + rename → rename), the `panel` command symlink, then remove
 // the download and old ~/panel-src/v<version> folders. Same bytes already installed = no binary write, no check.
 import {
   chmodSync,
-  closeSync,
   copyFileSync,
   existsSync,
-  fsyncSync,
-  linkSync,
   lstatSync,
   mkdirSync,
-  openSync,
   readFileSync,
   readlinkSync,
   renameSync,
@@ -22,6 +18,7 @@ import {
 import { dirname, join, resolve } from "node:path";
 import { BinaryError, detectRuntime } from "../server/deploy/elf.runtime";
 import { ENV_VARS, type EnvVar, type EnvVarName } from "../shared/env.schema";
+import { fsyncPath, linkOrCopy } from "../shared/file.link";
 import { type CliHost, probePaths } from "./cli.host";
 import { CliExit } from "./cli.output";
 import { readEnvFile } from "./env.file";
@@ -31,7 +28,7 @@ import { tilde } from "./init.plan";
 import { defineStep, INIT_EXIT, INIT_STEP_TITLES, type InitContext, type PlanLine } from "./init.types";
 import { previewVerify, verifyInstall } from "./init.verify";
 
-/** Headroom on top of 2 × panel.db + one binary (E16: panel.prev is a hard link, so the binary counts once). */
+/** Headroom on top of 2 × panel.db + the new binary + the old one when kept (E16: Termux copies panel.prev, E9). */
 export const SPACE_HEADROOM_BYTES = 256 * 1024 * 1024;
 /** Lets a phone install a local build without a release tag (developers only; the bun runtime is still refused). */
 export const DEV_INSTALL_ENV = "PANEL_DEV_INSTALL";
@@ -62,15 +59,6 @@ const envDefault = (name: EnvVarName) => (ENV_VARS as readonly EnvVar[]).find((v
 const errCode = (e: unknown) => (e as NodeJS.ErrnoException).code ?? (e as Error).message;
 const mb = (n: number) => `${Math.ceil(n / 1024 / 1024)} MB`;
 const binLink = (host: CliHost) => join(host.paths.prefix, "bin", "panel");
-
-function fsyncPath(path: string): void {
-  const fd = openSync(path, "r");
-  try {
-    fsyncSync(fd);
-  } finally {
-    closeSync(fd);
-  }
-}
 
 /** Runs one filesystem write; failure = exit 1 naming the operation and the errno. */
 function step(what: string, fn: () => void): void {
@@ -114,8 +102,11 @@ export function releaseBlocker(tag: string, devInstall: boolean, compiled: boole
   return null;
 }
 
-/** Not a release build, wrong build (not aarch64 bionic) or too little space for 2 × panel.db + 256 MB + binary (E16). */
-function blockerOf(host: CliHost): string | null {
+/**
+ * Not a release build, wrong build (not aarch64 bionic) or too little space for 2 × panel.db + 256 MB + binary, plus
+ * a copy of the old binary when it is kept as panel.prev (E16; Android refuses the hard link, E9).
+ */
+function blockerOf(host: CliHost, keepPrev: boolean): string | null {
   if (host.mode === "termux") {
     // a compiled binary runs its entry from Bun's embedded filesystem (/$bunfs/…); plain bun runs a real file
     const blocked = releaseBlocker(releaseTag(), process.env[DEV_INSTALL_ENV] === "1", Bun.main.startsWith("/$bunfs/"));
@@ -129,7 +120,9 @@ function blockerOf(host: CliHost): string | null {
   }
   const env = envOf(host);
   const db = join(resolve(host.paths.panelDir, env.PANEL_DATA_DIR || envDefault("PANEL_DATA_DIR")), "panel.db");
-  const need = 2 * (existsSync(db) ? statSync(db).size : 0) + SPACE_HEADROOM_BYTES + statSync(host.selfPath).size;
+  const prev = keepPrev ? statSync(probePaths(host.paths).binary).size : 0;
+  const need =
+    2 * (existsSync(db) ? statSync(db).size : 0) + SPACE_HEADROOM_BYTES + statSync(host.selfPath).size + prev;
   const free = host.freeBytes(existsSync(host.paths.panelDir) ? host.paths.panelDir : host.paths.home);
   return free < need ? `Ruang kosong ${mb(free)}, butuh ${mb(need)} untuk memasang panel` : null;
 }
@@ -138,15 +131,15 @@ async function detect(ctx: InitContext): Promise<BinaryState> {
   const { host } = ctx;
   const p = probePaths(host.paths);
   const install = !ctx.decision.sameBinary;
-  const installed = existsSync(p.binary);
+  const keepPrev = install && existsSync(p.binary) && (!existsSync(p.prev) || (await servesBinary(host)));
   return {
     install,
-    keepPrev: install && installed && (!existsSync(p.prev) || (await servesBinary(host))),
+    keepPrev,
     link: linkState(host),
     download: downloadPath(host),
     ...srcEntries(host),
     makeDataDir: !existsSync(p.dataDir),
-    blocker: install ? blockerOf(host) : null,
+    blocker: install ? blockerOf(host, keepPrev) : null,
     preview: install && ctx.args.dryRun ? await previewVerify(ctx, host.selfPath) : null,
   };
 }
@@ -186,7 +179,10 @@ function plan(ctx: InitContext, s: BinaryState): PlanLine[] {
   return lines;
 }
 
-/** panel.new → fsync → self check (fail: panel.new and a just-made ~/panel removed) → panel.prev → panel. */
+/**
+ * panel.new (a stale one from a failed run is overwritten) → fsync → self check (fail: panel.new and a just-made
+ * ~/panel removed) → panel.prev (link, or fsynced copy on Termux, via panel.prev.new + rename) → panel.
+ */
 async function installSelf(ctx: InitContext, s: BinaryState): Promise<void> {
   const { host } = ctx;
   const p = probePaths(host.paths);
@@ -209,7 +205,7 @@ async function installSelf(ctx: InitContext, s: BinaryState): Promise<void> {
     const prevNew = `${p.prev}.new`;
     step(`menyimpan ${p.binary} sebagai ${p.prev}`, () => {
       rmSync(prevNew, { force: true });
-      linkSync(p.binary, prevNew);
+      linkOrCopy(p.binary, prevNew, { link: host.link });
       renameSync(prevNew, p.prev);
       fsyncPath(host.paths.panelDir);
     });

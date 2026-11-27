@@ -6,6 +6,7 @@ import * as fs from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { detectRuntime } from "../server/deploy/elf.runtime";
 import { ENV_VARS, type EnvVar, type EnvVarName } from "../shared/env.schema";
+import { fsyncPath, type LinkFn, linkOrCopy, sameFile } from "../shared/file.link";
 import { type CliHost, probePaths } from "./cli.host";
 import type { CliIo, Command, ParsedArgs } from "./cli.main";
 import { CliExit, type CliOut } from "./cli.output";
@@ -41,20 +42,12 @@ const stamp = (d: Date) =>
   `${d.getFullYear()}${pad(d.getMonth() + 1)}${pad(d.getDate())}${pad(d.getHours())}${pad(d.getMinutes())}${pad(d.getSeconds())}`;
 const showStamp = (s: string) => s.replace(/^(\d{4})(\d\d)(\d\d)(\d\d)(\d\d)(\d\d)$/, "$1-$2-$3 $4:$5:$6");
 
-function fsyncPath(path: string): void {
-  const fd = fs.openSync(path, "r");
-  try {
-    fs.fsyncSync(fd);
-  } finally {
-    fs.closeSync(fd);
-  }
-}
-
 /**
- * Swap without a gap: copy prev → panel.new (755, fsync), hardlink panel → panel.old, rename panel.new → panel,
- * rename panel.old → panel.prev (directory fsynced after each rename). A crash leaves `panel` runnable.
+ * Swap without a gap: copy prev → panel.new (755, fsync), keep panel as panel.old (hardlink, or on Termux a fsynced
+ * copy via panel.old.tmp, E9), rename panel.new → panel, rename panel.old → panel.prev (directory fsynced after
+ * each rename). A crash leaves `panel` runnable, and panel.old is only ever a complete file.
  */
-export function swapBinary(dir: string, onStep: (step: string) => void = () => {}): void {
+export function swapBinary(dir: string, onStep: (step: string) => void = () => {}, link: LinkFn = fs.linkSync): void {
   const [cur, prev, next, old] = [
     join(dir, "panel"),
     join(dir, "panel.prev"),
@@ -74,7 +67,9 @@ export function swapBinary(dir: string, onStep: (step: string) => void = () => {
     fs.chmodSync(next, 0o755);
     fsyncPath(next);
   });
-  step(`link ${cur} ke ${old}`, () => fs.linkSync(cur, old));
+  step(`simpan ${cur} sebagai ${old}`, () => {
+    linkOrCopy(cur, old, { link, via: `${old}.tmp` });
+  });
   step(`rename ${next} ke ${cur}`, () => {
     fs.renameSync(next, cur);
     fsyncPath(dir);
@@ -85,11 +80,15 @@ export function swapBinary(dir: string, onStep: (step: string) => void = () => {
   });
 }
 
-/** A leftover panel.old: same file as panel = crash before the swap (removed, false); else finishes it (true). */
+/**
+ * A partial panel.old.tmp is removed. A leftover panel.old: same bytes as panel = crash before the swap (removed,
+ * false); else finishes it (true).
+ */
 function finishInterruptedSwap(dir: string): boolean {
   const [cur, prev, old] = [join(dir, "panel"), join(dir, "panel.prev"), join(dir, "panel.old")];
+  fs.rmSync(`${old}.tmp`, { force: true });
   if (!fs.existsSync(old)) return false;
-  if (fs.statSync(old).ino === fs.statSync(cur).ino) {
+  if (sameFile(old, cur)) {
     fs.rmSync(old);
     return false;
   }
@@ -263,7 +262,7 @@ export async function runRollback(args: ParsedArgs, io: CliIo, opts: RollbackOpt
   }
 
   const before = await health(host, port);
-  swapBinary(dir, opts.onSwapStep);
+  swapBinary(dir, opts.onSwapStep, host.link);
   out.check("ok", "Binary ditukar: panel = versi sebelumnya, panel.prev = versi yang tadi berjalan");
   if (withDb && snap) {
     const code = await sv(host, "down");

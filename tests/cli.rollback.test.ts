@@ -18,10 +18,11 @@ const NEW = "\x7fELF fake panel\n"; // what the fake scenario installs as ~/pane
 const OLD = Buffer.from(fakeElf({ fill: 7 })); // a valid aarch64/bionic panel.prev
 const EM_X86_64 = 62;
 
-function setup(opts: { tty?: boolean; answers?: boolean[]; prev?: Uint8Array | null } = {}) {
+function setup(opts: { tty?: boolean; answers?: boolean[]; prev?: Uint8Array | null; linkFails?: boolean } = {}) {
   const root = mkdtempSync(join(tmpdir(), "cli-rollback-"));
   roots.push(root);
-  const host = createFakeHost("ready", { root, tty: opts.tty ?? false, answers: opts.answers ?? [] });
+  const { tty = false, answers = [], linkFails } = opts;
+  const host = createFakeHost("ready", { root, tty, answers, linkFails });
   const dir = host.paths.panelDir;
   if (opts.prev !== null) writeFileSync(join(dir, "panel.prev"), opts.prev ?? OLD, { mode: 0o755 });
   return { host, dir, data: join(dir, "data") };
@@ -161,6 +162,38 @@ describe("panel rollback: swap", () => {
     expect(again.code).toBe(0);
     expect(read(join(dir, "panel")).equals(Buffer.from(fakeElf({ fill: 9 })))).toBe(true);
     expect(read(join(dir, "panel.prev")).equals(OLD)).toBe(true);
+  });
+
+  for (const linkFails of [true, false])
+    test(`link ${linkFails ? "refused like Termux (E9) → copy" : "allowed → hard link"}; panel never missing`, async () => {
+      const { host, dir } = setup({ linkFails });
+      const [cur, old] = [join(dir, "panel"), join(dir, "panel.old")];
+      const ino = statSync(cur).ino;
+      const seen: string[] = [];
+      const onSwapStep = (s: string) => {
+        expect(read(cur).length).toBeGreaterThan(0);
+        expect(existsSync(`${old}.tmp`)).toBe(false);
+        if (seen.push(s) === 2) {
+          expect(read(old).toString()).toBe(NEW);
+          expect(statSync(old).ino === ino).toBe(!linkFails);
+        }
+      };
+      const r = await run(host, { yes: true }, { onSwapStep });
+      expect(r.code).toBe(0);
+      expect(seen).toHaveLength(4);
+      expect(read(cur).equals(OLD)).toBe(true);
+      expect(readFileSync(join(dir, "panel.prev"), "utf8")).toBe(NEW);
+    });
+
+  test("leftover panel.old copy with panel's bytes (Termux crash before rename) and panel.old.tmp → removed", async () => {
+    const { host, dir } = setup();
+    writeFileSync(join(dir, "panel.old"), NEW);
+    writeFileSync(join(dir, "panel.old.tmp"), "partial copy");
+    const r = await run(host, { yes: true });
+    expect(r.code).toBe(0);
+    expect(read(join(dir, "panel")).equals(OLD)).toBe(true);
+    expect(readFileSync(join(dir, "panel.prev"), "utf8")).toBe(NEW);
+    expect(existsSync(join(dir, "panel.old")) || existsSync(join(dir, "panel.old.tmp"))).toBe(false);
   });
 
   test("leftover panel.old of the same file (crash before rename) is removed and the swap runs", async () => {
