@@ -1,12 +1,14 @@
 // Integration status of pm2 + cloudflared for panel-managed sites (PLAN/03 §3.6): checks, snippet, 30 s cache.
 import { existsSync, statSync } from "node:fs";
+import { dirname, join } from "node:path";
 import type { Integration, IntegrationCheck, IntegrationCheckKey, JobParams } from "../../shared/site.types";
 import { describeSetting } from "../settings.service";
 import { Pm2UnavailableError } from "../system/system.types";
 import { ensureAppsJson, parseApps } from "./apps.file";
 import { ecosystemBlock, snippetCurrent } from "./ecosystem.patch";
 import { type EcosystemProbe, probeEcosystem } from "./ecosystem.probe";
-import { type FixCtx, fixAvailability, lastFixesOf, prefixOf, runnablePanelApps, runScriptPath } from "./fix.plan";
+import { type FixCtx, lastFixesOf, prefixOf, runnablePanelApps, runScriptPath } from "./fix.plan";
+import { fixAvailability } from "./fix.planners";
 import { readTunnelId } from "./ingress.editor";
 import { sitePaths } from "./site.checks";
 import { readTextOrNull } from "./site.files";
@@ -129,6 +131,8 @@ async function compute(ctx: FixCtx, probe: EcosystemProbe): Promise<Integration>
     checkedAt: new Date().toISOString(),
     fixes: await fixAvailability(ctx, new Set(failing.map((c) => c.key)), probe),
     lastFixes: lastFixesOf(ctx),
+    // Same rule as the site job's DNS step (site.steps routeWithCert): token, else cert.pem next to config.yml.
+    dnsMode: tokenSet ? "token" : existsSync(join(dirname(p.cfConfig), "cert.pem")) ? "cloudflared" : "manual",
     // 0.2.x fields, read by the web until its Persiapan card lands (W5).
     ecosystemIncludesAppsJson: spreads,
     appsJsonExists: appsText !== null,

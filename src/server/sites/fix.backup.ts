@@ -10,9 +10,9 @@ export const FIX_BACKUP_KEEP = 10;
 const ROOT = "fix-backups";
 const DIR_MODE = 0o700;
 const FILE_MODE = 0o600;
-const FILES: readonly FixFile[] = ["ecosystem", "pm2_run"];
+const FILES: readonly FixFile[] = ["ecosystem", "pm2_run", "apps_json"];
 // Milliseconds so two fixes in one second (Perbaiki semua) still order; second-only names are older backups.
-const ID = /^(ecosystem|pm2_run)\.(\d{8}-(?:\d{9}|\d{6}))-([0-9a-f]{8})$/;
+const ID = /^(ecosystem|pm2_run|apps_json)\.(\d{8}-(?:\d{9}|\d{6}))-([0-9a-f]{8})$/;
 const NAME = /^(\d{8})-(\d{9}|\d{6})-([0-9a-f]{8})\.bak$/;
 
 /** One backup on disk; `id` = `<file>.<stamp>-<sha8>`, `sha8` = first 8 hex of the sha256 the fix produced. */

@@ -2,10 +2,9 @@
 // Persiapan fix in fake mode. All file texts here are test-only fixtures shaped like real phones.
 import { chmodSync, existsSync, mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-// @ts-expect-error TS7016: Bun embeds the shipped template as text (`type: "text"`); tsc has no type for a .js text import.
-import ECOSYSTEM_TEMPLATE from "../../../deploy/pm2/ecosystem.config.js" with { type: "text" };
 // @ts-expect-error TS2307: Bun embeds the shipped runit script as text; tsc cannot resolve an extensionless module.
 import PM2_RUN_TEMPLATE from "../../../deploy/pm2/run" with { type: "text" };
+import { ecosystemFromTemplate } from "../sites/ecosystem.template";
 
 /**
  * Persiapan state of the sandbox: `ready` = shipped template + run script (all checks pass); `poco` = POCO's
@@ -28,11 +27,7 @@ export const FAKE_INTEGRATIONS: readonly FakeIntegration[] = [
  * The shipped deploy/pm2/ecosystem.config.js with its Termux paths pointed into the sandbox (so the Persiapan card
  * passes in fake mode). `$PREFIX` becomes `<home>/usr`, where the sandbox puts the guard's `sleep`.
  */
-export const fakeEcosystem = (home: string): string =>
-  ECOSYSTEM_TEMPLATE.replace(/^const SITES = .*$/m, `const SITES = ${JSON.stringify(join(home, "sites"))};`).replace(
-    /^const PREFIX = .*$/m,
-    `const PREFIX = ${JSON.stringify(join(home, "usr"))};`,
-  );
+export const fakeEcosystem = (home: string): string => ecosystemFromTemplate(join(home, "sites"), join(home, "usr"));
 
 /** POCO's ecosystem (R&D/07 §1) with sandbox paths; `extra` lands in the apps array after the two hand apps. */
 const pocoEcosystem = (home: string, extra = "", comment = "Admin DB: sengaja hanya 127.0.0.1, tanpa domain") =>

@@ -2,7 +2,7 @@ import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { eq } from "drizzle-orm";
-import { auditLog, job } from "@/server/db/schema";
+import { auditLog, job, siteHostname } from "@/server/db/schema";
 import { HEALTH_TIMING } from "@/server/deploy/health.check";
 import type { Page } from "@/shared/dev.types";
 import type { Job, Site, SiteDetail, SiteEnvSaved } from "@/shared/site.types";
@@ -200,18 +200,35 @@ describe("hostnames", () => {
     });
   });
 
-  test("remove: ingress → restart → dns; last refused; hand-written refused", async () => {
+  test("remove: ingress → restart → dns; last refused; hand-written only with confirm=<hostname>", async () => {
     const j = await startJob("DELETE", "/sites/shop/hostnames/c.shop.example.test");
     expect(codes(j)).toEqual(["ingress:ingress_removed", "tunnel_restart:tunnel_restarted", "dns:dns_deleted"]);
     expect(read(cfg)).not.toContain("c.shop.example.test");
     expect(fakeDns.records.has("c.shop.example.test")).toBe(false);
     expect(await json(await call("DELETE", "/sites/solusi/hostnames/solusi.contoh.test"), 409)).toMatchObject({
       error: "hand_written",
+      hostname: "solusi.contoh.test",
     });
-    expect((await startJob("DELETE", "/sites/solusi/hostnames/two.example.test")).status).toBe("succeeded");
-    expect(await json(await call("DELETE", "/sites/solusi/hostnames/solusi.contoh.test"), 400)).toMatchObject({
+    const detail = await json<SiteDetail>(await call("GET", "/sites/solusi"));
+    expect(detail.dns.map((d) => [d.hostname, d.handWritten])).toEqual([
+      ["solusi.contoh.test", true],
+      ["two.example.test", false],
+    ]);
+    const wrong = "/sites/solusi/hostnames/solusi.contoh.test?confirm=two.example.test";
+    expect(await json(await call("DELETE", wrong), 409)).toMatchObject({ error: "hand_written" });
+    const savedCfg = read(cfg) as string;
+    const j2 = await startJob("DELETE", "/sites/solusi/hostnames/solusi.contoh.test?confirm=solusi.contoh.test");
+    expect(codes(j2)).toEqual(["ingress:ingress_removed", "tunnel_restart:tunnel_restarted", "dns:dns_none_owned"]);
+    expect(read(cfg)).not.toContain("solusi.contoh.test");
+    expect(await json(await call("DELETE", "/sites/solusi/hostnames/two.example.test"), 400)).toMatchObject({
       error: "last_hostname",
     });
+    // Put the hand-written rule back: the adopted-delete test below needs it.
+    writeFileSync(cfg, savedCfg);
+    h.db
+      .insert(siteHostname)
+      .values({ hostname: "solusi.contoh.test", siteName: "solusi", ingressManaged: false, dnsManaged: false })
+      .run();
   });
 });
 

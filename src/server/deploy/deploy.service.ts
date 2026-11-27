@@ -13,7 +13,7 @@ import type { JobRunner, JobSpec, StepDef } from "../sites/job.runner";
 import { errMsg } from "../sites/job.step";
 import { SITE_NAME_RE, type SiteCtx } from "../sites/site.checks";
 import { identityOf, rowFor, siteBinaries } from "./binary.identity";
-import { assertIntegration, assertRuntime, assertSiteSpace, scriptRuntime } from "./deploy.checks";
+import { assertIntegration, assertRuntime, assertSiteSpace, ensureSiteFolder, scriptRuntime } from "./deploy.checks";
 import { listDeploys } from "./deploy.history";
 import { type CleanupOf, cleanupSteps } from "./deploy.recovery";
 import { appRestartStep, healthStep, revertApp } from "./deploy.restart";
@@ -140,8 +140,8 @@ export function createDeployService(deps: DeployDeps) {
     /** POST /sites/:name/uploads → 201 UploadState. */
     async startUpload(name: string, body: unknown): Promise<UploadState> {
       const s = siteRow(name);
-      if (!existsSync(s.dir)) throw new ApiError(409, "no_folder", `site folder ${s.dir} does not exist`);
       await assertIntegration(s, deps.integrationFailing);
+      if (ensureSiteFolder(s)) log.info(`[deploy] ${s.name}: site folder was missing, made it again with .env PORT`);
       return uploads.start(s.name, body);
     },
 

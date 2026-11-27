@@ -62,8 +62,8 @@ export function createSiteRoutes(auth: Auth, sites: SiteService) {
       .post("/sites/:name/hostnames", ({ params, body, user, status }) =>
         status(202, sites.addHostnames(user.id, params.name, body)),
       )
-      .delete("/sites/:name/hostnames/:hostname", ({ params, user, status }) =>
-        status(202, sites.removeHostname(user.id, params.name, decodeURIComponent(params.hostname))),
+      .delete("/sites/:name/hostnames/:hostname", ({ params, query, user, status }) =>
+        status(202, sites.removeHostname(user.id, params.name, decodeURIComponent(params.hostname), query.confirm)),
       )
       .delete("/sites/:name", ({ params, query, user, status }) =>
         status(

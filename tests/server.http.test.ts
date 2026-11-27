@@ -1,4 +1,4 @@
-import { afterAll, beforeAll, describe, expect, test } from "bun:test";
+import { afterAll, beforeAll, describe, expect, spyOn, test } from "bun:test";
 import { createHash } from "node:crypto";
 import { Elysia } from "elysia";
 import { requestUserIds } from "@/server/auth/role.guard";
@@ -7,8 +7,10 @@ import { AUTH_LIMIT_PER_IP, clientIp, createRateLimiter, MUTATION_LIMIT_PER_SESS
 import { currentRequest } from "@/server/http/request.context";
 import { requestLine, requestStats } from "@/server/http/request.log";
 import { inlineScriptHashes, pageCsp } from "@/server/http/security.headers";
+import { REQUEST_IDLE_TIMEOUT_SEC } from "@/server/http/spa.serve";
 import { app, servePanel } from "@/server/index";
 import { readLogs } from "@/server/log.service";
+import { DEFAULT_RESTART_POLL } from "@/server/sites/integration.fix";
 
 const BASE = "http://localhost:3200"; // test-only
 const echo = new Elysia({ prefix: "/api" })
@@ -327,5 +329,21 @@ describe("createApiHandler order: host → CSRF → rate limit → context", () 
     expect(accessSeen.at).toBeNull();
     await handle(req("GET", "/api/panel/authed", { headers: jwt }));
     expect(accessSeen.at).toBeInstanceOf(Date);
+  });
+});
+
+describe("idle timeout (QA fix-04 BLOCKER-1)", () => {
+  test("the panel server is started with REQUEST_IDLE_TIMEOUT_SEC, above the checked pm2 restart wait", () => {
+    expect(REQUEST_IDLE_TIMEOUT_SEC * 1000).toBeGreaterThan(2 * DEFAULT_RESTART_POLL.timeoutMs);
+    expect(REQUEST_IDLE_TIMEOUT_SEC).toBeLessThanOrEqual(255); // Bun's maximum
+    const serve = spyOn(Bun, "serve");
+    try {
+      const server = servePanel(app, "https://panel.example.com", 0, false);
+      server.stop(true);
+      const panel = serve.mock.calls.map(([o]) => o as { port?: number; idleTimeout?: number }).at(-1);
+      expect(panel?.idleTimeout).toBe(REQUEST_IDLE_TIMEOUT_SEC);
+    } finally {
+      serve.mockRestore();
+    }
   });
 });

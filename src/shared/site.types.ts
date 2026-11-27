@@ -82,8 +82,11 @@ export type SiteDetail = Site & {
   pm2EnvKeys?: string[];
   /** 0.3.0 */
   restartPending?: boolean;
-  /** `managed` = the panel created (and may delete) the DNS record. */
-  dns: { hostname: string; managed: boolean }[];
+  /**
+   * `managed` = the panel created (and may delete) the DNS record. 0.4.0 `handWritten` = ingress rule written by hand
+   * (adopted site): removing it needs `confirm=<hostname>`.
+   */
+  dns: { hostname: string; managed: boolean; handWritten?: boolean }[];
   /** 0.3.0 */
   health?: SiteHealthConfig;
   /** 0.3.0 */
@@ -248,6 +251,8 @@ export type IntegrationCheck = {
   params: JobParams;
   detail: string | null;
 };
+/** Integration.dnsMode. */
+export type DnsMode = "token" | "cloudflared" | "manual";
 /** GET /integration: whether the phone's config files are wired for panel-managed sites. */
 export type Integration = {
   /** 0.3.0. sites_dir, apps_json, ecosystem_loads, ecosystem_spreads_apps_json, snippet_current, pm2_runtime, tunnel ok. */
@@ -268,6 +273,11 @@ export type Integration = {
   fixes?: FixAvailability[];
   /** 0.4.0: newest panel backup of each fixed file, newest first (one undo per file). */
   lastFixes?: FixBackup[];
+  /**
+   * 0.4.0: how a new site's DNS record gets made: `token` = Cloudflare API; `cloudflared` = no token, `cloudflared
+   * tunnel route dns` with ~/.cloudflared/cert.pem (only names inside the cert's zone); `manual` = neither.
+   */
+  dnsMode?: DnsMode;
   /** 0.2.x */
   ecosystemIncludesAppsJson: boolean;
   /** 0.2.x */

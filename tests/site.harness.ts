@@ -26,12 +26,12 @@ export const SECRET_VALUE = "s3cr3t $value with spaces";
 /**
  * Shared setup of the site API tests: temp DB + fake system in a sandbox HOME (fake ports: 3001 listening),
  * fake DNS provider whose "configured" state can be toggled. `fake` = extra fake-system options (e.g. integration
- * scenario), `pm2RestartPoll` = checked pm2 restart timing. Call once at the top level of a test file.
+ * scenario), `pm2RestartPoll` = checked pm2 restart timing, `defaultDns` = no test DNS stub. Call once at the top level of a test file.
  */
 export function siteHarness(
-  opts: { healthTimeoutMs?: number; fake?: FakeOptions; pm2RestartPoll?: Pm2RestartPoll } = {},
+  opts: { healthTimeoutMs?: number; fake?: FakeOptions; pm2RestartPoll?: Pm2RestartPoll; defaultDns?: boolean } = {},
 ) {
-  const { fake, pm2RestartPoll, ...deployOpts } = opts;
+  const { fake, pm2RestartPoll, defaultDns, ...deployOpts } = opts;
   const dir = mkdtempSync(join(tmpdir(), "panel-site-api-"));
   const home = join(dir, "home");
   const system = createFakeSystem({ home, delayMs: 20, listeningPorts: [3001], ...fake });
@@ -137,7 +137,8 @@ export function siteHarness(
     runMigrations(db);
     auth = createAuth({ db, env, secret: SECRET });
     const dev = { db, secret: SECRET, superAdmins: SUPER, dataDir: dir, pm2RestartPoll };
-    api = createApiRoutes(auth, dev, system, dns, deployOpts);
+    // `defaultDns`: the DNS provider boot would pick (fake `offline` → the token-gated offline fake).
+    api = createApiRoutes(auth, dev, system, defaultDns ? undefined : dns, deployOpts);
     admin = await cookieFor(addUser("admin@x.io", "admin"));
     userCookie = await cookieFor(addUser("plain@x.io", "user"));
     root = await cookieFor(addUser("root@example.com", "super_admin"));

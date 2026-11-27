@@ -8,6 +8,7 @@ import { roleGuard } from "../auth/role.guard";
 import { createBackupDevRoutes, createBackupRoutes } from "../backup/backup.routes";
 import { backupServiceFor } from "../backup/backup.service";
 import { createCloudflareDevRoutes } from "../cloudflare/cloudflare.routes";
+import { tokenGated } from "../cloudflare/dns.fake";
 import { createDnsProvider, type SiteDnsProvider } from "../cloudflare/dns.provider";
 import { getSecurityStatus } from "../data-key.service";
 import { latestSchemaVersion } from "../db/migrate";
@@ -16,6 +17,7 @@ import { createDeployService } from "../deploy/deploy.service";
 import type { HealthTiming } from "../deploy/health.check";
 import { DEFAULT_PORT } from "../env";
 import { type MonitorDeps, monitorFor } from "../monitor/monitor.service";
+import { describeSetting } from "../settings.service";
 import { createSiteService, type SiteDeps } from "../sites/site.service";
 import { FAKE_HOME_DIR } from "../system/system.fake";
 import { selectSystem } from "../system/system.select";
@@ -54,7 +56,10 @@ export function createApiRoutes(
   auth: Auth,
   dev: ApiDeps,
   system: SystemAdapters = selectSystem({ fakeHome: join(dev.dataDir, FAKE_HOME_DIR) }), // fake HOME inside the data dir, like boot
-  dns: SiteDnsProvider = system.offline?.dns ?? createDnsProvider({ db: dev.db, secret: dev.secret }),
+  // Fake DNS honours "no token" like the real provider, so the cloudflared cert path runs in fake mode (QA fix-04).
+  dns: SiteDnsProvider = system.offline
+    ? tokenGated(system.offline.dns, () => describeSetting(dev.db, "cloudflare.api_token").isSet)
+    : createDnsProvider({ db: dev.db, secret: dev.secret }),
   deploy: { healthTimeoutMs?: number; healthTiming?: HealthTiming } = {},
 ) {
   const { db, secret, dataDir } = dev;

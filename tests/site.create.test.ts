@@ -262,7 +262,7 @@ describe("create job", () => {
       h.setDnsConfigured(true);
     }
     expect((await json<SiteDetail>(await call("GET", "/sites/nodns"))).dns).toEqual([
-      { hostname: "nodns.example.test", managed: false },
+      { hostname: "nodns.example.test", managed: false, handWritten: false },
     ]);
   });
 

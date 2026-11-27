@@ -116,26 +116,48 @@ describe.skipIf(!node)("ecosystem fix edge cases", () => {
     h.api.decorator.sites.removeFixCandidate(); // nothing left: no error
   });
 
-  test("sites_dir_create: only under HOME; makes the folder (700) and apps.json", async () => {
+  test("sites_dir_create: only under HOME; one row; makes the folder (700), apps.json and the template ecosystem", async () => {
     const outside = join(h.dir, "outside", "sites");
     setSetting({ db: h.db, secret: SECRET }, "sites.dir", outside, ADMIN_ID);
     const i = await json<Integration>(await call("GET", "/integration"));
-    expect(i.fixes?.[0]).toEqual({
-      key: "sites_dir_create",
-      checks: ["sites_dir"],
-      available: false,
-      reason: "sites_dir_outside_home",
-    });
+    expect(i.fixes?.filter((f) => f.key !== "pm2_auto_exit")).toEqual([
+      {
+        key: "sites_dir_create",
+        checks: ["sites_dir", "apps_json", "ecosystem_file"],
+        available: false,
+        reason: "sites_dir_outside_home",
+      },
+    ]);
     const dir = join(home, "new", "sites");
     setSetting({ db: h.db, secret: SECRET }, "sites.dir", dir, ADMIN_ID);
     const p = await json<FixPreview>(await preview("sites_dir_create"));
-    expect(p).toMatchObject({ files: [], effects: { dir } });
+    const newEcosystem = join(dir, "ecosystem.config.js");
+    expect(p).toMatchObject({ files: [], effects: { dir, newEcosystem, appliesOnRestart: true } });
     expect(existsSync(dir)).toBe(false);
-    expect((await json<{ outcome: string }>(await apply("sites_dir_create"))).outcome).toBe("applied");
+    const r = await json<{ outcome: string; integration: Integration }>(await apply("sites_dir_create"));
+    expect(r.outcome).toBe("applied");
     expect(statSync(dir).mode & 0o777).toBe(0o700);
     expect(readFileSync(join(dir, "apps.json"), "utf8")).toBe("[]\n");
-    expect(lastAudit()).toEqual({ key: "sites_dir_create", outcome: "applied" });
+    expect(statSync(newEcosystem).mode & 0o777).toBe(0o644);
+    const text = readFileSync(newEcosystem, "utf8");
+    expect(text).toContain(`const SITES = ${JSON.stringify(dir)};`);
+    expect(text).toContain(`const PREFIX = ${JSON.stringify(join(home, "usr"))};`);
+    expect(r.integration.checks?.filter((c) => c.state === "error").map((c) => c.key)).toEqual([]);
+    expect(r.integration.fixes?.map((f) => f.key)).toEqual(["pm2_auto_exit"]);
+    expect(lastAudit()).toEqual({ key: "sites_dir_create", outcome: "applied", newEcosystem: true });
     expect((await json<{ outcome: string }>(await apply("sites_dir_create"))).outcome).toBe("unchanged");
+  });
+
+  test("sites_dir_create: folder there, ecosystem missing → one fix that writes only the ecosystem", async () => {
+    const dir = join(home, "new", "sites");
+    setSetting({ db: h.db, secret: SECRET }, "sites.dir", dir, ADMIN_ID);
+    rmSync(join(dir, "ecosystem.config.js"));
+    const i = await json<Integration>(await call("POST", "/integration/verify"));
+    expect(i.fixes?.[0]).toEqual({ key: "sites_dir_create", checks: ["ecosystem_file"], available: true });
+    const p = await json<FixPreview>(await preview("sites_dir_create"));
+    expect(p.effects).toMatchObject({ dir: null, newEcosystem: join(dir, "ecosystem.config.js") });
+    expect((await json<{ outcome: string }>(await apply("sites_dir_create"))).outcome).toBe("applied");
+    expect(existsSync(join(dir, "ecosystem.config.js"))).toBe(true);
     setSetting({ db: h.db, secret: SECRET }, "sites.dir", "~/sites", ADMIN_ID);
   });
 });

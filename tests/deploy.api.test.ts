@@ -3,6 +3,7 @@ import { existsSync, readFileSync, rmSync, statSync, writeFileSync } from "node:
 import { join } from "node:path";
 import { eq } from "drizzle-orm";
 import { auditLog, deploy as deployTable } from "@/server/db/schema";
+import { folderRecreatable } from "@/server/deploy/deploy.checks";
 import { readLogs } from "@/server/log.service";
 import type { ChunkReceived, Deploy, UploadState } from "@/shared/deploy.types";
 import type { Page } from "@/shared/dev.types";
@@ -95,15 +96,29 @@ describe("resumable upload API", () => {
     expect(await json(await call("GET", `/uploads/${t.uploadId}`), 404)).toMatchObject({ error: "upload_expired" });
   });
 
-  test("unknown site → 404, missing folder → 409 no_folder", async () => {
+  test("unknown site → 404; missing folder: managed without database made again, else 409 no_folder", async () => {
     expect(await json(await call("POST", "/sites/nope/uploads", { sizeBytes: 1 }), 404)).toMatchObject({
       error: "not_found",
     });
-    const { dir } = h.addSite("nofolder");
+    const { dir, port } = h.addSite("nofolder");
     rmSync(dir, { recursive: true });
-    expect(await json(await call("POST", "/sites/nofolder/uploads", { sizeBytes: 1 }), 409)).toMatchObject({
+    const up = await json<UploadState>(await call("POST", "/sites/nofolder/uploads", { sizeBytes: 1 }), 201);
+    await call("DELETE", `/uploads/${up.uploadId}`);
+    expect(statSync(dir).mode & 0o777).toBe(0o700);
+    expect(readFileSync(join(dir, ".env"), "utf8")).toBe(`PORT=${port}\n`);
+    expect(statSync(join(dir, ".env")).mode & 0o777).toBe(0o600);
+    const adopted = h.addSite("nofolder2", { managed: false });
+    rmSync(adopted.dir, { recursive: true });
+    // The same rule hides the site page's deploy blocker (SiteDetail.deployBlocker).
+    expect([
+      folderRecreatable({ managed: true, database: "db1" }),
+      folderRecreatable({ managed: false, database: null }),
+    ]).toEqual([false, false]);
+    expect(await json(await call("POST", "/sites/nofolder2/uploads", { sizeBytes: 1 }), 409)).toMatchObject({
       error: "no_folder",
+      database: false,
     });
+    expect(existsSync(adopted.dir)).toBe(false);
   });
 });
 

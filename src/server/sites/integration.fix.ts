@@ -1,8 +1,8 @@
 // In-UI integration fixes (PLAN/06 §3.4–3.7, §6.2; DECISIONS C1/C3/C6): preview, apply, restore and the checked pm2
 // restart. Synchronous under jobs.assertIdle() + backup.busy() + one `integration` action lock (F5). File contents and
 // env values never reach the audit or the log.
-import { mkdirSync, readFileSync, statSync } from "node:fs";
-import type { FixKey, FixPreview, FixResult, Pm2RestartResult } from "../../shared/fix.types";
+import { existsSync, mkdirSync, readFileSync, statSync } from "node:fs";
+import type { FixEffects, FixKey, FixPreview, FixResult, Pm2RestartResult } from "../../shared/fix.types";
 import type { App } from "../../shared/panel.types";
 import { recordAudit } from "../audit.service";
 import { log } from "../log.service";
@@ -11,6 +11,7 @@ import { createActionLocks } from "../panel/action.lock";
 import { ApiError } from "../routes/http.error";
 import { Pm2UnavailableError } from "../system/system.types";
 import { ensureAppsJson } from "./apps.file";
+import { ecosystemFromTemplate } from "./ecosystem.template";
 import { fixIoError, listFixBackups, resolveFixBackup, saveFixBackup } from "./fix.backup";
 import {
   checkRunScriptSyntax,
@@ -19,23 +20,26 @@ import {
   type FixCtx,
   fixTargetPath,
   NO_EFFECTS,
-  planFix,
   prefixOf,
+  runnablePanelApps,
   runScriptPath,
   sha256,
   validateEcosystem,
 } from "./fix.plan";
+import { planFix } from "./fix.planners";
 import type { IntegrationService } from "./integration.service";
 import type { JobRunner } from "./job.runner";
 import { validateRunScript } from "./runscript.patch";
+import { sitePaths } from "./site.checks";
 import { readBytesOrNull, writeAtomic } from "./site.files";
 
 /** How the checked pm2 restart waits for apps to come back (PLAN/06 §3.7: every 2 s, up to 30 s). */
 export type Pm2RestartPoll = { intervalMs: number; timeoutMs: number };
-const DEFAULT_POLL: Pm2RestartPoll = { intervalMs: 2_000, timeoutMs: 30_000 };
+/** Production timing of the checked restart (HTTP idle timeout must stay above it, spa.serve). */
+export const DEFAULT_RESTART_POLL: Pm2RestartPoll = { intervalMs: 2_000, timeoutMs: 30_000 };
 const MS_PER_SEC = 1000;
 const SITES_DIR_MODE = 0o700;
-const NEW_FILE_MODE = { ecosystem: 0o644, pm2_run: 0o755 } as const;
+const NEW_FILE_MODE = { ecosystem: 0o644, pm2_run: 0o755, apps_json: 0o644 } as const;
 
 /** Deps of the fix service; `ctx.dataDir` holds the fix backups. */
 export type IntegrationFixDeps = {
@@ -73,8 +77,9 @@ async function io<T>(op: string, fn: () => T | Promise<T>): Promise<T> {
 export function createIntegrationFixes(deps: IntegrationFixDeps) {
   const { ctx, jobs, integration } = deps;
   const { db, system, dataDir } = ctx;
-  const poll = deps.poll ?? DEFAULT_POLL;
+  const poll = deps.poll ?? DEFAULT_RESTART_POLL;
   const withLock = createActionLocks();
+  let restarting: Promise<Pm2RestartResult> | null = null;
 
   /** 409 `busy` while a site job or a backup runs, then the `integration` lock (a second click is 409 too). */
   function exclusive<T>(fn: () => Promise<T>): Promise<T> {
@@ -90,12 +95,50 @@ export function createIntegrationFixes(deps: IntegrationFixDeps) {
     integration: await integration.refresh(),
   });
 
-  const validate = (patch: FilePatch, probe: Parameters<typeof validateEcosystem>[3]) =>
-    patch.file === "ecosystem"
-      ? validateEcosystem(ctx, patch.candidate, patch.mode, probe)
-      : validateRunScript(patch.path, patch.original, patch.candidate, patch.line, patch.mode, prefixOf(ctx)).then(
-          (r) => (r.ok ? null : r.detail),
-        );
+  // apps.json needs no load test: the rebuild writes JSON.stringify output, and the ecosystem block tolerates any bytes.
+  const validate = async (patch: FilePatch, probe: Parameters<typeof validateEcosystem>[3]) => {
+    if (patch.file === "apps_json") return null;
+    if (patch.file === "ecosystem") return validateEcosystem(ctx, patch.candidate, patch.mode, probe);
+    const r = await validateRunScript(
+      patch.path,
+      patch.original,
+      patch.candidate,
+      patch.line,
+      patch.mode,
+      prefixOf(ctx),
+    );
+    return r.ok ? null : r.detail;
+  };
+
+  /** sites_dir_create: folder (700), apps.json `[]` and the shipped ecosystem, each only when missing. */
+  async function createMissing(actorId: string, key: FixKey, effects: FixEffects): Promise<void> {
+    if (effects.dir) {
+      const dir = effects.dir;
+      await io(`create ${dir}`, () => mkdirSync(dir, { recursive: true, mode: SITES_DIR_MODE }));
+    }
+    await io("create apps.json", () => ensureAppsJson(ctx));
+    const path = effects.newEcosystem;
+    if (path) {
+      const bytes = Buffer.from(ecosystemFromTemplate(sitePaths(ctx).sitesDir, prefixOf(ctx)));
+      const detail = await io(`validate ${path}`, () => validateEcosystem(ctx, bytes, NEW_FILE_MODE.ecosystem, null));
+      if (detail !== null) {
+        recordAudit(db, {
+          actorId,
+          action: "integration.fix",
+          target: key,
+          meta: { key, outcome: "validation_failed" },
+        });
+        throw new ApiError(422, "validation_failed", `fix ${key} was not applied: the template does not load`, {
+          detail,
+        });
+      }
+      if (existsSync(path)) throw new ApiError(409, "changed_during_fix", `${path} appeared while the fix ran`);
+      await io(`write ${path}`, () => writeAtomic(path, bytes, { mode: NEW_FILE_MODE.ecosystem }));
+    }
+    const meta = { key, outcome: "applied", ...(path ? { newEcosystem: true } : {}) };
+    recordAudit(db, { actorId, action: "integration.fix", target: key, meta });
+    log.info(`[integration] fix ${key} applied by ${actorId}${path ? " (ecosystem from the template)" : ""}`);
+  }
 
   /** Steps 7–11 of PLAN/06 §3.4: re-check, backup, atomic write, sha after, audit. */
   async function write(actorId: string, key: FixKey, patch: FilePatch): Promise<void> {
@@ -134,7 +177,9 @@ export function createIntegrationFixes(deps: IntegrationFixDeps) {
    * restart) never offers another restore: the newest backup then holds the fixed file.
    */
   async function restartChecked(actorId: string, offer: boolean): Promise<Pm2RestartResult> {
-    const before = await onlineApps();
+    // Expected back: what ran before plus every runnable apps.json entry, so a site an earlier restart lost is still
+    // reported as missing (QA fix-04 MAJOR-1). A hand-written app that was stopped stays out.
+    const before = [...new Set([...(await onlineApps()), ...runnablePanelApps(ctx)])];
     const sup = await system.runit.supervise("pm2");
     const startedAt = sup?.uptimeSec === undefined ? null : Date.now() - sup.uptimeSec * MS_PER_SEC;
     if (!(await system.runit.control("pm2", "restart"))) throw new ApiError(404, "not_found", "unknown service pm2");
@@ -176,17 +221,14 @@ export function createIntegrationFixes(deps: IntegrationFixDeps) {
       const expect = obj(obj(body).expect);
       return exclusive(async () => {
         // The probe serves apps.json to the candidate, so the file must exist before validation (D3, as verify).
-        if (key === "ecosystem_block") ensureAppsJson(ctx);
+        if (key === "ecosystem_block") await io("create apps.json", () => ensureAppsJson(ctx));
         const plan = await planFix(ctx, key);
         if (plan.kind === "manual")
           throw new ApiError(422, "not_fixable", `fix ${key} cannot run: ${plan.reason}`, { reason: plan.reason });
         if (plan.kind === "unchanged") return result(key, "unchanged");
         const patch = plan.patch;
         if (patch === null) {
-          const dir = plan.effects.dir as string;
-          await io(`create ${dir}`, () => mkdirSync(dir, { recursive: true, mode: SITES_DIR_MODE }));
-          ensureAppsJson(ctx);
-          recordAudit(db, { actorId, action: "integration.fix", target: key, meta: { key, outcome: "applied" } });
+          await createMissing(actorId, key, plan.effects);
           return result(key, "applied");
         }
         if (expect[patch.path] !== patch.sha)
@@ -217,10 +259,13 @@ export function createIntegrationFixes(deps: IntegrationFixDeps) {
           throw new ApiError(409, "changed_since", `${path} was edited after the fix`);
         const bytes = readFileSync(e.path);
         const mode = cur === null ? NEW_FILE_MODE[e.file] : statSync(path).mode & 0o777;
+        // An apps.json backup is the unparsable file itself: putting it back is what undo means, so no check.
         const detail = await io(`validate backup ${e.id}`, () =>
-          e.file === "ecosystem"
-            ? validateEcosystem(ctx, bytes, mode, null)
-            : checkRunScriptSyntax(ctx, runScriptPath(ctx), bytes, mode),
+          e.file === "apps_json"
+            ? null
+            : e.file === "ecosystem"
+              ? validateEcosystem(ctx, bytes, mode, null)
+              : checkRunScriptSyntax(ctx, runScriptPath(ctx), bytes, mode),
         );
         if (detail !== null) throw new ApiError(422, "validation_failed", `backup ${e.id} does not load`, { detail });
         // Undo of the undo: the current file is backed up as well (named after the bytes restored now).
@@ -240,8 +285,20 @@ export function createIntegrationFixes(deps: IntegrationFixDeps) {
       });
     },
 
-    /** POST /integration/pm2/restart: confirmed in the UI, checked here (PLAN/06 F10). */
-    restartPm2: (actorId: string): Promise<Pm2RestartResult> => exclusive(() => restartChecked(actorId, true)),
+    /**
+     * POST /integration/pm2/restart: confirmed in the UI, checked here (PLAN/06 F10). A repeat while one runs (the
+     * browser resends a POST whose connection dropped) gets that run's result instead of 409 `busy`.
+     */
+    restartPm2(actorId: string): Promise<Pm2RestartResult> {
+      if (restarting) return restarting;
+      const run = exclusive(() => restartChecked(actorId, true));
+      restarting = run;
+      const clear = () => {
+        restarting = null;
+      };
+      run.then(clear, clear);
+      return run;
+    },
   };
 }
 
