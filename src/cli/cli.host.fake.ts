@@ -143,7 +143,7 @@ function answer(scenario: FakeScenarioName, tool: string, args: readonly string[
   if (name === "dpkg" && args[0] === "-s") {
     const pkg = args[1] ?? "";
     return f.packages.includes(pkg)
-      ? ok(`Package: ${pkg}\nStatus: install ok installed\n`)
+      ? ok(`Package: ${pkg}\nStatus: ${f.held.includes(pkg) ? "hold" : "install"} ok installed\n`)
       : { code: 1, stdout: "", stderr: `dpkg-query: package '${pkg}' is not installed\n` };
   }
   if (name === "apt-mark" && args[0] === "showhold") return ok(f.held.map((p) => `${p}\n`).join(""));

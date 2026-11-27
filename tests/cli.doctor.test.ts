@@ -146,6 +146,28 @@ describe("bootstrap checks", () => {
     expect(c?.hint).toContain("panel docs paket");
   });
 
+  test("held packages (dpkg `hold ok installed`) count as installed, pkg_held ok", async () => {
+    const h = host("poco");
+    expect((await h.exec("dpkg", ["-s", "cloudflared"])).stdout).toContain("Status: hold ok installed");
+    const r = await doctor(h);
+    for (const k of ["pkg_cloudflared", "pkg_postgresql", "pkg_held"] as const) expect(get(r, k)?.state).toBe("ok");
+    expect(r.checks.filter((c) => c.group === "paket" && c.state !== "ok")).toEqual([]);
+  });
+
+  test("half-installed package → broken install, no pkg command (C15)", async () => {
+    const h = withExec(host("ready"), (t, a) =>
+      t === "dpkg" && a[1] === "cloudflared"
+        ? { code: 0, stdout: "Package: cloudflared\nStatus: hold ok half-installed\n", stderr: "" }
+        : null,
+    );
+    const c = get(await doctor(h), "pkg_cloudflared");
+    expect(c?.state).toBe("error");
+    expect(c?.label).toBe("cloudflared terpasang tidak lengkap");
+    expect(c?.hint).toContain("panel docs paket");
+    expect(c?.hint).not.toContain("pkg install");
+    expect(c?.action).toBe("docs");
+  });
+
   test("postgres_major: PG_VERSION major differs from postgres --version (D11)", async () => {
     const h = host("ready", (r) => {
       const f = probePaths({ home: r, prefix: join(r, "usr"), svdir: "", logdir: "", panelDir: "" }).pgVersion;

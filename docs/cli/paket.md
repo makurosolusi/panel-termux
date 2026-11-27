@@ -44,6 +44,19 @@ apt-mark hold postgresql
 Pesan `role "postgres" already exists` saat restore boleh diabaikan. Cek situs, lalu hapus
 `postgresql.lama` dan `~/pg-semua.sql` bila semua sudah benar.
 
+## Paket terpasang tidak lengkap
+
+`panel doctor` melapor "terpasang tidak lengkap" bila `dpkg -s <paket>` tidak berakhir dengan
+`installed` (mis. `half-installed` atau `unpacked`), biasanya karena pemasangan terputus.
+Selesaikan tanpa upgrade:
+
+```
+dpkg --configure -a
+```
+
+Jangan jalankan `pkg upgrade` untuk memperbaikinya. Bila paketnya cloudflared atau postgresql,
+ikuti langkah upgrade aman di atas. Status `hold ok installed` berarti terpasang dan ditahan.
+
 ## Hal lain yang mengubah perilaku panel
 
 - Bun juga memuat `.env.local`, `.env.development`, `.env.production`, `.env.test`, dan

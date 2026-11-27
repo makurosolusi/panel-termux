@@ -3,7 +3,7 @@
 import type { DoctorBootstrapKey, DoctorCheck, DoctorState } from "../shared/doctor.types";
 import { group, make, REINSTALL } from "./doctor.checks.base";
 import { panelChecks, tunnelChecks } from "./doctor.checks.panel";
-import { type DoctorProbe, HELD_PACKAGES } from "./doctor.probe";
+import { type DoctorProbe, HELD_PACKAGES, type PackageState } from "./doctor.probe";
 
 const MB = 1024 * 1024;
 /** Below this the panel cannot unpack a deploy or snapshot panel.db (PLAN/07 §3.1). */
@@ -64,15 +64,20 @@ function packageChecks(p: DoctorProbe): DoctorCheck[] {
   const k = group("paket");
   const pkg = (key: DoctorBootstrapKey, name: string, has: boolean, state: DoctorState, install = name) =>
     k(key, has, name, [state, `${name} belum terpasang`, `jalankan: pkg install ${install}`]);
+  // Broken (half-installed/unpacked): no pkg command, a reinstall could upgrade a held package (C15).
+  const dpkg = (key: DoctorBootstrapKey, name: string, s: PackageState, state: DoctorState) =>
+    s === "broken"
+      ? make("paket", key, state, `${name} terpasang tidak lengkap`, "perbaiki pemasangan paket (panel docs paket)")
+      : pkg(key, name, s === "installed", state);
   const out = [
-    pkg("pkg_termux_services", "termux-services", p.packages["termux-services"], "error"),
-    pkg("pkg_cloudflared", "cloudflared", p.packages.cloudflared, "error"),
+    dpkg("pkg_termux_services", "termux-services", p.packages["termux-services"], "error"),
+    dpkg("pkg_cloudflared", "cloudflared", p.packages.cloudflared, "error"),
     pkg("node", "node", p.files.node, "error", "nodejs-lts"),
     k("pm2", p.files.pm2Runtime, "pm2", ["error", "pm2 belum terpasang", "jalankan: npm install -g pm2"]),
-    pkg("pkg_postgresql", "postgresql", p.packages.postgresql, "warning"),
-    pkg("pkg_termux_api", "termux-api", p.packages["termux-api"], "warning"),
+    dpkg("pkg_postgresql", "postgresql", p.packages.postgresql, "warning"),
+    dpkg("pkg_termux_api", "termux-api", p.packages["termux-api"], "warning"),
   ];
-  const installed = HELD_PACKAGES.filter((n) => p.packages[n]);
+  const installed = HELD_PACKAGES.filter((n) => p.packages[n] === "installed");
   if (installed.length && p.held !== null) {
     const loose = installed.filter((n) => !p.held?.includes(n)).join(" dan ");
     out.push(
@@ -125,7 +130,7 @@ function serviceChecks(p: DoctorProbe): DoctorCheck[] {
     svc("svc_cloudflared", "cloudflared"),
     svc("svc_postgres", "postgres"),
   ];
-  if (p.packages.cloudflared) {
+  if (p.packages.cloudflared === "installed") {
     // D5: the package ships `down`; with a configured tunnel that means every site is offline after a reboot.
     out.push(
       l("cloudflared_down_file", !p.cfDownFile, "cloudflared menyala otomatis", [
@@ -144,7 +149,7 @@ function serviceChecks(p: DoctorProbe): DoctorCheck[] {
         ),
       );
   }
-  if (p.packages.postgresql)
+  if (p.packages.postgresql === "installed")
     out.push(
       l("postgres_initdb", p.pgDataMajor !== null, "Data PostgreSQL sudah dibuat", [
         "warning",
