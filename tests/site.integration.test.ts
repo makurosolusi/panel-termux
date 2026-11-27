@@ -1,9 +1,10 @@
 import { describe, expect, test } from "bun:test";
-import { readFileSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
+import { ecosystemBlock } from "@/server/sites/ecosystem.patch";
 import { PROBE_ENV_KEYS } from "@/server/sites/ecosystem.probe";
-import { ECOSYSTEM_SNIPPET } from "@/server/sites/integration.service";
 import { siteSecretsFor } from "@/server/sites/site.secrets";
+import { fakeEcosystem } from "@/server/system/system.fake";
 import type { Integration, IntegrationCheck, SiteDetail } from "@/shared/site.types";
 import { fakeElf, GLIBC_LINKER } from "./deploy.fixture";
 import { siteHarness } from "./site.harness";
@@ -17,9 +18,9 @@ const verify = async () => json<Integration>(await call("POST", "/integration/ve
 const states = (i: Integration) =>
   Object.fromEntries((i.checks ?? []).map((c) => [c.key, c.state])) as Record<IntegrationCheck["key"], string>;
 const checkOf = (i: Integration, key: IntegrationCheck["key"]) => i.checks?.find((c) => c.key === key);
-/** Ecosystem with the current snippet, the guard and `extra` apps (JS source). */
+/** Ecosystem with the guard, `extra` apps (JS source) and the current panel block. */
 const snippetEco = (extra = "") =>
-  `${ECOSYSTEM_SNIPPET}\nmodule.exports = { apps: [{ name: "pm2-guard", script: "/bin/sleep", args: "infinity" },${extra} ...panelApps] };\n`;
+  `module.exports = { apps: [{ name: "pm2-guard", script: "/bin/sleep", args: "infinity" },${extra}] };\n${ecosystemBlock(join(home, "usr"))}`;
 
 describe.skipIf(!node)("integration checks (real node probe)", () => {
   test("GET never writes; 0.2.x ecosystem without apps.json → not ready, reasons coded", async () => {
@@ -40,7 +41,7 @@ describe.skipIf(!node)("integration checks (real node probe)", () => {
     });
     expect(checkOf(i, "apps_json")?.params).toEqual({ reason: "missing" });
     expect(checkOf(i, "ecosystem_loads")?.params).toEqual({ reason: "syntax" });
-    expect(i.snippet).toBe(ECOSYSTEM_SNIPPET);
+    expect(i.snippet).toBe(ecosystemBlock(join(home, "usr")));
     expect(i.ecosystemPath).toBe(eco);
     // 0.2.x fields stay for the current web.
     expect(i).toMatchObject({ ecosystemIncludesAppsJson: false, appsJsonExists: false, cloudflareTokenSet: false });
@@ -76,7 +77,8 @@ describe.skipIf(!node)("integration checks (real node probe)", () => {
   test("pm2_auto_exit reads the sandbox's runit script in fake mode, not the host $PREFIX", async () => {
     expect(system.prefix).toBe(join(home, "usr"));
     expect(checkOf(await verify(), "pm2_auto_exit")?.state).toBe("ok");
-    expect(checkOf(await verify(), "pm2_guard")).toBeUndefined(); // moot with --no-auto-exit (QA N5)
+    // The flag no longer hides pm2_guard (debat C15): with the block, the guard only fails on old files.
+    expect(checkOf(await verify(), "pm2_guard")?.state).toBe("ok");
     const run = join(home, "usr", "var", "service", "pm2", "run");
     const shipped = readFileSync(run, "utf8");
     writeFileSync(run, shipped.replace("--no-auto-exit ", ""));
@@ -154,5 +156,44 @@ describe.skipIf(!node)("integration checks (real node probe)", () => {
     } finally {
       if (before !== null) writeFileSync(eco, before);
     }
+  });
+
+  test("fixes[] per file shape; ready sandbox lists none; appNames = hand apps ∪ runnable panel sites", async () => {
+    writeFileSync(eco, fakeEcosystem(home)); // earlier tests leave other files behind
+    const before = read(eco);
+    const fixture = (n: string) => readFileSync(join(import.meta.dir, "fixtures", "ecosystem", `${n}.config.js`));
+    const block = async () => (await verify()).fixes?.find((f) => f.key === "ecosystem_block");
+    try {
+      expect((await verify()).fixes).toEqual([]);
+      writeFileSync(eco, fixture("old-spread"));
+      expect(await block()).toMatchObject({ available: true });
+      const p = await json<{ effects: { oldSpread: boolean } }>(
+        await call("POST", "/integration/fixes/ecosystem_block/preview"),
+      );
+      expect(p.effects.oldSpread).toBe(true);
+      writeFileSync(eco, fixture("latin1"));
+      expect(await block()).toMatchObject({ available: false, reason: "not_utf8" });
+      writeFileSync(eco, 'throw new Error("boom");\n');
+      expect(await block()).toMatchObject({ available: false, reason: "ecosystem_unloadable" });
+    } finally {
+      if (before !== null) writeFileSync(eco, before);
+    }
+    const dir = join(home, "sites", "blog");
+    mkdirSync(dir, { recursive: true });
+    writeFileSync(join(dir, "run"), "#!/bin/sh\n");
+    writeFileSync(join(dir, "app"), "x");
+    // An entry without a script is dropped by the block, so it is not runnable either (block filter, §3.1).
+    writeFileSync(
+      appsJson,
+      JSON.stringify([
+        { name: "blog", cwd: dir, script: "./run" },
+        { name: "bare", cwd: dir },
+      ]),
+    );
+    const i = await verify();
+    expect(i.appNames).toContain("blog");
+    expect(i.appNames).not.toContain("bare");
+    expect(checkOf(i, "apps_entries_runnable")).toMatchObject({ state: "warning", params: { count: 1 } });
+    writeFileSync(appsJson, "[]\n");
   });
 });

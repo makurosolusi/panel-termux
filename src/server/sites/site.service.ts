@@ -14,6 +14,8 @@ import { type Pm2Proc, Pm2UnavailableError } from "../system/system.types";
 import { discover } from "./adopt.candidates";
 import { ensureAppsJson } from "./apps.file";
 import { envKeys } from "./env.file";
+import { removeFixCandidate } from "./fix.plan";
+import { createIntegrationFixes, type Pm2RestartPoll } from "./integration.fix";
 import { createIntegration } from "./integration.service";
 import { recoverJob } from "./job.recovery";
 import { createJobRunner, type JobRunnerDeps } from "./job.runner";
@@ -39,7 +41,13 @@ import { toSites, troubled } from "./site.view";
  * Deps of the site service. `panel` defaults to APP_BASE_URL/PORT of the process env; `backupBusy`/`onSiteDeleted`
  * are the backup lock and the after-delete hook (see JobCtx).
  */
-export type SiteDeps = Omit<SiteCtx, "panel"> & { panel?: PanelSelf } & Omit<JobCtx, keyof SiteCtx> & JobRunnerDeps;
+export type SiteDeps = Omit<SiteCtx, "panel"> & { panel?: PanelSelf } & Omit<JobCtx, keyof SiteCtx> &
+  JobRunnerDeps & {
+    /** Panel data dir: integration fix backups (PLAN/06 F6). */
+    dataDir: string;
+    /** Checked pm2 restart timing (tests shorten it). */
+    pm2RestartPoll?: Pm2RestartPoll;
+  };
 
 const MAX_HOSTNAMES = 5;
 
@@ -70,6 +78,14 @@ export function createSiteService(deps: SiteDeps) {
   const { db, system } = ctx;
   const jobs = createJobRunner(db, { monitor: deps.monitor });
   const integ = createIntegration(ctx);
+  const fixes = createIntegrationFixes({
+    ctx,
+    jobs,
+    backupBusy: deps.backupBusy,
+    monitor: deps.monitor,
+    integration: integ,
+    poll: deps.pm2RestartPoll,
+  });
 
   const siteRow = (name: string) => {
     if (!SITE_NAME_RE.test(name)) throw bad("invalid_name", `invalid site name ${JSON.stringify(name)}`);
@@ -258,6 +274,10 @@ export function createSiteService(deps: SiteDeps) {
       jobs.assertIdle();
       return integ.verify();
     },
+    /** Integration fixes: preview, apply, restore, checked pm2 restart (PLAN/06 §5.2). */
+    fixes,
+    /** Boot: removes a fix candidate left by a crash (it can hold env secrets, debat C13). */
+    removeFixCandidate: () => removeFixCandidate(ctx),
     /** Sync status for /dev/setup (`ecosystemIncludesAppsJson`), from the last check. */
     integration: () => integ.snapshot(),
     /** Boot: writes apps.json `[]` when sites.dir exists and it does not (D3). */

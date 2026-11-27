@@ -10,7 +10,8 @@ import { type Db, openDb } from "@/server/db/client";
 import { runMigrations } from "@/server/db/migrate";
 import { user } from "@/server/db/schema";
 import { createApiRoutes } from "@/server/routes/api.routes";
-import { createFakeSystem } from "@/server/system/system.fake";
+import type { Pm2RestartPoll } from "@/server/sites/integration.fix";
+import { createFakeSystem, type FakeOptions } from "@/server/system/system.fake";
 import type { DatabaseInfo } from "@/shared/panel.types";
 import type { Role } from "@/shared/roles";
 import type { Job } from "@/shared/site.types";
@@ -24,12 +25,16 @@ export const SECRET_VALUE = "s3cr3t $value with spaces";
 
 /**
  * Shared setup of the site API tests: temp DB + fake system in a sandbox HOME (fake ports: 3001 listening),
- * fake DNS provider whose "configured" state can be toggled. Call once at the top level of a test file.
+ * fake DNS provider whose "configured" state can be toggled. `fake` = extra fake-system options (e.g. integration
+ * scenario), `pm2RestartPoll` = checked pm2 restart timing. Call once at the top level of a test file.
  */
-export function siteHarness(opts: { healthTimeoutMs?: number } = {}) {
+export function siteHarness(
+  opts: { healthTimeoutMs?: number; fake?: FakeOptions; pm2RestartPoll?: Pm2RestartPoll } = {},
+) {
+  const { fake, pm2RestartPoll, ...deployOpts } = opts;
   const dir = mkdtempSync(join(tmpdir(), "panel-site-api-"));
   const home = join(dir, "home");
-  const system = createFakeSystem({ home, delayMs: 20, listeningPorts: [3001] });
+  const system = createFakeSystem({ home, delayMs: 20, listeningPorts: [3001], ...fake });
   const fakeDns = createFakeDnsProvider();
   let dnsConfigured = true;
   const configured = () => {
@@ -131,7 +136,8 @@ export function siteHarness(opts: { healthTimeoutMs?: number } = {}) {
     db = openDb(dir);
     runMigrations(db);
     auth = createAuth({ db, env, secret: SECRET });
-    api = createApiRoutes(auth, { db, secret: SECRET, superAdmins: SUPER, dataDir: dir }, system, dns, opts);
+    const dev = { db, secret: SECRET, superAdmins: SUPER, dataDir: dir, pm2RestartPoll };
+    api = createApiRoutes(auth, dev, system, dns, deployOpts);
     admin = await cookieFor(addUser("admin@x.io", "admin"));
     userCookie = await cookieFor(addUser("plain@x.io", "user"));
     root = await cookieFor(addUser("root@example.com", "super_admin"));

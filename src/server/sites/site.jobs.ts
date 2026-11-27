@@ -127,7 +127,7 @@ export function createSiteJob(ctx: JobCtx, actorId: string, input: CreateInput):
     ingressStep(ctx, tunnel, hostnames, false, (t) =>
       hostnames.reduce((acc, h) => insertIngressRule(acc, h, serviceOf(port)), t),
     ),
-    dnsEnsureStep(ctx.dns, hostnames, tunnelIdOf(ctx), owned, actorId),
+    dnsEnsureStep(ctx.dns, hostnames, tunnelIdOf(ctx), owned, actorId, ctx.system.cloudflared),
     tunnelRestartStep(ctx, tunnel),
     domainProbeStep(ctx, hostnames),
   ];
@@ -181,7 +181,7 @@ export function addHostnamesJob(ctx: JobCtx, actorId: string, s: SiteRow, hostna
       ingressStep(ctx, tunnel, hostnames, false, (t) =>
         hostnames.reduce((acc, h) => insertIngressRule(acc, h, serviceOf(s.port)), t),
       ),
-      dnsEnsureStep(ctx.dns, hostnames, tunnelIdOf(ctx), owned, actorId),
+      dnsEnsureStep(ctx.dns, hostnames, tunnelIdOf(ctx), owned, actorId, ctx.system.cloudflared),
       tunnelRestartStep(ctx, tunnel),
       domainProbeStep(ctx, hostnames),
     ],

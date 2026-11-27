@@ -1,38 +1,18 @@
 // Integration status of pm2 + cloudflared for panel-managed sites (PLAN/03 §3.6): checks, snippet, 30 s cache.
-import { existsSync } from "node:fs";
-import { join } from "node:path";
+import { existsSync, statSync } from "node:fs";
 import type { Integration, IntegrationCheck, IntegrationCheckKey, JobParams } from "../../shared/site.types";
-import { termuxPrefix } from "../exec/termux.exec";
 import { describeSetting } from "../settings.service";
 import { Pm2UnavailableError } from "../system/system.types";
-import { ensureAppsJson, entryBinary, parseApps } from "./apps.file";
+import { ensureAppsJson, parseApps } from "./apps.file";
+import { ecosystemBlock, snippetCurrent } from "./ecosystem.patch";
 import { type EcosystemProbe, probeEcosystem } from "./ecosystem.probe";
+import { type FixCtx, fixAvailability, lastFixOf, prefixOf, runnablePanelApps, runScriptPath } from "./fix.plan";
 import { readTunnelId } from "./ingress.editor";
-import { type SiteCtx, sitePaths } from "./site.checks";
+import { sitePaths } from "./site.checks";
 import { readTextOrNull } from "./site.files";
 
-/** The block the owner pastes above `module.exports` (plus `...panelApps,` last in `apps`). Exact text, lab E1e/E5. */
-export const ECOSYSTEM_SNIPPET = `// Panel Termux: situs buatan panel tercatat di apps.json (dikelola panel, jangan diedit tangan).
-// Aman bila apps.json belum ada, kosong, atau rusak; entri yang binary-nya belum ada dilewati,
-// karena satu script yang hilang membuat pm2-runtime menghentikan semua aplikasi.
-const panelApps = (() => {
-  try {
-    const fs = require("fs");
-    const path = require("path");
-    const list = require("./apps.json");
-    return Array.isArray(list)
-      ? list.filter(
-          (a) => a && typeof a.name === "string" && fs.existsSync(path.resolve(a.cwd || __dirname, a.script || "")),
-        )
-      : [];
-  } catch (e) {
-    console.error(\`[ecosystem] apps.json dilewati: \${e.message}\`);
-    return [];
-  }
-})();
-`;
-
 const CACHE_MS = 30_000;
+const MS_PER_SEC = 1000;
 const READY_KEYS: IntegrationCheckKey[] = [
   "sites_dir",
   "apps_json",
@@ -49,13 +29,26 @@ const NEEDS_ECOSYSTEM: ReadonlySet<IntegrationCheckKey> = new Set([
   "snippet_current",
   "pm2_guard",
 ]);
-/** Snippet text is current when it has the panelApps block with the existsSync filter (B18). */
-export const snippetCurrent = (eco: string | null) => eco !== null && /panelApps/.test(eco) && /existsSync/.test(eco);
+
+/** Kept for callers of the 0.3.0 location; the rule itself lives with the patcher (PLAN/06 §3.2). */
+export { snippetCurrent } from "./ecosystem.patch";
+
+/** The old block is only worth a row when the file uses apps.json at all (POCO bug, R&D/07 §1). */
+const MENTIONS_APPS_JSON = /apps\.json|\.\/apps["']/;
 
 const check = (key: IntegrationCheckKey, ok: boolean, bad: "warning" | "error", params: JobParams = {}) =>
   ({ key, state: ok ? "ok" : bad, params, detail: null }) as IntegrationCheck;
 
-async function compute(ctx: SiteCtx, probe: EcosystemProbe): Promise<Integration> {
+/** `pm2_auto_exit` params: `{ pending: 1 }` when the run script changed after runit pm2 last started (PLAN/06 F4). */
+async function autoExitParams(ctx: FixCtx, runPath: string): Promise<JobParams> {
+  // ponytail: any edit of the run script (a comment too) counts as pending; acceptable per PLAN/06 §3.6.
+  const sup = await ctx.system.runit.supervise("pm2");
+  if (sup?.state !== "run" || sup.uptimeSec === undefined) return {};
+  const startedAt = Date.now() - sup.uptimeSec * MS_PER_SEC;
+  return statSync(runPath).mtimeMs > startedAt ? { pending: 1 } : {};
+}
+
+async function compute(ctx: FixCtx, probe: EcosystemProbe): Promise<Integration> {
   const p = sitePaths(ctx);
   const eco = readTextOrNull(p.ecosystem);
   const appsText = readTextOrNull(p.appsJson);
@@ -65,7 +58,7 @@ async function compute(ctx: SiteCtx, probe: EcosystemProbe): Promise<Integration
   } catch {
     apps = null; // reported as apps_json invalid below
   }
-  const runnable = (apps ?? []).filter((a) => entryBinary(a, p.sitesDir).every((f) => existsSync(f)));
+  const runnable = runnablePanelApps(ctx);
   const panelNames = new Set((apps ?? []).map((a) => a.name as string));
   const snippet = snippetCurrent(eco);
   let tunnelId: string | null = null;
@@ -84,11 +77,15 @@ async function compute(ctx: SiteCtx, probe: EcosystemProbe): Promise<Integration
     pm2Reason = e instanceof Pm2UnavailableError ? e.reason : (e as Error).message;
   }
   // The flag must be on a command line: the shipped script also names it in a comment.
-  const autoExitOff = (run: string | null) =>
-    (run ?? "").split("\n").some((l) => !l.trimStart().startsWith("#") && l.includes("--no-auto-exit"));
-  const svRun = readTextOrNull(join(ctx.system.prefix ?? termuxPrefix(), "var", "service", "pm2", "run"));
+  const runPath = runScriptPath(ctx);
+  const svRun = readTextOrNull(runPath);
+  const autoExitOff = (svRun ?? "")
+    .split("\n")
+    .some((l) => !l.trimStart().startsWith("#") && l.includes("--no-auto-exit"));
   const tokenSet = describeSetting(ctx.db, "cloudflare.api_token").isSet;
-  const spreads = probe.ok && probe.loadedAppsJson && runnable.every((a) => probe.names.includes(a.name as string));
+  // The probe serves a sentinel as apps.json: it reaching the list proves the spread/block (debat C3).
+  const spreads = probe.ok && probe.spreads;
+  const noSites: JobParams = !spreads && (apps ?? []).length === 0 ? { noSites: 1 } : {};
   const loads = check("ecosystem_loads", probe.ok, "error", probe.ok ? {} : { reason: probe.reason });
   if (!probe.ok) loads.detail = probe.detail;
   const checks: IntegrationCheck[] = [
@@ -101,32 +98,37 @@ async function compute(ctx: SiteCtx, probe: EcosystemProbe): Promise<Integration
     ),
     check("ecosystem_file", eco !== null, "error", { path: p.ecosystem }),
     loads,
-    check("ecosystem_spreads_apps_json", spreads, "error"),
+    check("ecosystem_spreads_apps_json", spreads, "error", noSites),
     check("snippet_current", snippet, "error"),
     check("apps_entries_runnable", runnable.length === (apps ?? []).length, snippet ? "warning" : "error", {
       count: (apps ?? []).length - runnable.length,
     }),
     check("pm2_runtime", pm2Reason === null, "error", pm2Reason ? { reason: pm2Reason } : {}),
-    check("pm2_auto_exit", autoExitOff(svRun), "warning"),
+    check("pm2_auto_exit", autoExitOff, "warning", autoExitOff ? await autoExitParams(ctx, runPath) : {}),
     check("pm2_guard", probe.ok && probe.names.some((n) => !panelNames.has(n)), "warning"),
     { ...check("tunnel", tunnelId !== null, "error"), detail: tunnelDetail },
     check("cloudflare_token", tokenSet, "warning"),
   ];
   // Without the file, "cannot load / old block / no guard" only restate ecosystem_file: show the root cause alone.
-  // `ready` stays false: the hidden READY_KEYS are missing, so they do not count as ok.
-  // With `--no-auto-exit` pm2 survives zero apps, so the guard is moot: showing it would contradict pm2_auto_exit.
+  // `ready` stays false: the hidden READY_KEYS are missing, so they do not count as ok. A file that never names
+  // apps.json has no "old block" either: ecosystem_spreads_apps_json alone is the root cause.
+  const noOldBlock = eco !== null && !MENTIONS_APPS_JSON.test(eco);
   const moot = (k: IntegrationCheckKey) =>
-    (eco === null && NEEDS_ECOSYSTEM.has(k)) || (k === "pm2_guard" && autoExitOff(svRun));
+    (eco === null && NEEDS_ECOSYSTEM.has(k)) || (k === "snippet_current" && noOldBlock);
   const shown = checks.filter((c) => !moot(c.key));
   const failing = shown.filter((c) => c.state !== "ok");
+  const ok = (k: IntegrationCheckKey) =>
+    shown.find((c) => c.key === k)?.state === "ok" || (k === "snippet_current" && noOldBlock);
   return {
-    ready: READY_KEYS.every((k) => shown.find((c) => c.key === k)?.state === "ok"),
+    ready: READY_KEYS.every(ok),
     checks: shown,
-    snippet: ECOSYSTEM_SNIPPET,
+    snippet: ecosystemBlock(prefixOf(ctx)),
     ecosystemPath: p.ecosystem,
     appsJsonPath: p.appsJson,
-    appNames: probe.ok ? probe.names : [],
+    appNames: probe.ok ? [...new Set([...probe.names, ...runnable])] : [],
     checkedAt: new Date().toISOString(),
+    fixes: await fixAvailability(ctx, new Set(failing.map((c) => c.key)), probe),
+    lastFix: lastFixOf(ctx),
     // 0.2.x fields, read by the web until its Persiapan card lands (W5).
     ecosystemIncludesAppsJson: spreads,
     appsJsonExists: appsText !== null,
@@ -137,7 +139,7 @@ async function compute(ctx: SiteCtx, probe: EcosystemProbe): Promise<Integration
 }
 
 /** Integration status with a ≤ 30 s cache keyed by the sites dir (a sites.dir change recomputes). */
-export function createIntegration(ctx: SiteCtx) {
+export function createIntegration(ctx: FixCtx) {
   let cache: { at: number; dir: string; value: Integration; probe: EcosystemProbe } | null = null;
 
   async function refresh(): Promise<Integration> {
@@ -152,6 +154,8 @@ export function createIntegration(ctx: SiteCtx) {
   return {
     /** GET /integration: cached status, no writes. */
     get: async (): Promise<Integration> => (fresh() ? (cache?.value as Integration) : refresh()),
+    /** Recomputes now (after a fix wrote a file). */
+    refresh,
     /** POST /integration/verify: creates apps.json `[]` when missing (D3), then re-checks. */
     async verify(): Promise<Integration> {
       ensureAppsJson(ctx);

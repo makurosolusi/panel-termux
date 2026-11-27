@@ -16,7 +16,7 @@ import { createDeployService } from "../deploy/deploy.service";
 import type { HealthTiming } from "../deploy/health.check";
 import { DEFAULT_PORT } from "../env";
 import { type MonitorDeps, monitorFor } from "../monitor/monitor.service";
-import { createSiteService } from "../sites/site.service";
+import { createSiteService, type SiteDeps } from "../sites/site.service";
 import { FAKE_HOME_DIR } from "../system/system.fake";
 import { selectSystem } from "../system/system.select";
 import type { SystemAdapters } from "../system/system.types";
@@ -40,7 +40,8 @@ export type ApiDeps = DevDeps & {
   appBaseUrl?: string;
   panelPort?: number;
   createdThisBoot?: boolean;
-} & Partial<Pick<MonitorDeps, "bootNotice" | "connectivityUrl" | "adminSeenSinceBoot">>;
+} & Partial<Pick<MonitorDeps, "bootNotice" | "connectivityUrl" | "adminSeenSinceBoot">> &
+  Pick<SiteDeps, "pm2RestartPoll">;
 
 /**
  * Auth-aware API under /api (CSRF guard and limits run before it, in createApiHandler): Better Auth endpoints, /ready,
@@ -85,6 +86,8 @@ export function createApiRoutes(
     panel,
     monitor,
     backupBusy: () => backup.busy(),
+    dataDir,
+    pm2RestartPoll: dev.pm2RestartPoll,
     // `deploys` is created below; the hook only runs after a delete job, long after this function returned.
     onSiteDeleted: (name) => deploys.dropUploadsFor(name),
   });
