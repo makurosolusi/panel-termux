@@ -61,7 +61,7 @@ describe("boot (step 9)", () => {
     expect(text).toContain(`exec ${h.paths.prefix}/bin/service-daemon start`);
     expect(statSync(file).mode & 0o777).toBe(0o755);
     expect(argvs(h)).toContain("termux-wake-lock");
-    expect(ctx.lines.join("")).toContain("pilih Izinkan");
+    expect(ctx.lines.join("")).toContain("choose Allow");
     expect(ctx.state.manual).toHaveLength(2);
   });
 

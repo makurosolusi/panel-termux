@@ -1,15 +1,17 @@
 // panel init (PLAN/07 §4): detect → plan → confirm → run steps → summary. Owns step 0 (lock, arch, mode), the one
 // rule of which step may change the phone in which mode/TTY (§4 mode table, K9, K21, C22, C23) and the exit codes.
 // Steps (init.types.ts contract) recompute their state from the phone, so a rerun resumes without a state file (m6).
-import { closeSync, existsSync, mkdirSync, openSync, readFileSync, realpathSync, rmSync, writeSync } from "node:fs";
-import { dirname, join } from "node:path";
+import { existsSync, realpathSync } from "node:fs";
+import { join } from "node:path";
 import { type CliHost, probePaths } from "./cli.host";
+import { tr } from "./cli.locale";
 import type { CliIo, Command, ParsedArgs } from "./cli.main";
 import { CliExit } from "./cli.output";
 import { binaryStep } from "./init.binary";
 import { bootStep } from "./init.boot";
 import { envStep } from "./init.env";
 import { chooseInitLanguage } from "./init.language";
+import { acquireLock } from "./init.lock";
 import { detectMode, SELF_VERSION } from "./init.mode";
 import { packagesStep } from "./init.packages";
 import { panelSvStep } from "./init.panel-sv";
@@ -29,6 +31,7 @@ import {
   type InitStep,
   type InitStepId,
   type PlanLine,
+  stepTitle,
 } from "./init.types";
 
 /** Test knobs: the step list (default INIT_STEPS). */
@@ -63,18 +66,37 @@ export const INIT_STEPS: readonly InitStep[] = [
   startStep,
 ];
 
-const usage = (message: string) => new CliExit(INIT_EXIT.usage, message, "lihat: panel init --help");
+const usage = (message: string) =>
+  new CliExit(INIT_EXIT.usage, message, tr("see: panel init --help", "lihat: panel init --help"));
 const list = (v: unknown): string[] => (Array.isArray(v) ? v.map(String) : typeof v === "string" ? [v] : []);
 
 /** Flags → InitArgs; bad values are usage errors (exit 2) before the phone is looked at. */
 export function parseInitArgs(values: ParsedArgs["values"]): InitArgs {
   const skip = list(values.skip);
   const bad = skip.find((s) => !(INIT_SKIPPABLE as readonly string[]).includes(s));
-  if (bad !== undefined) throw usage(`Nilai --skip tidak dikenal: ${bad} (pilihan: ${INIT_SKIPPABLE.join(", ")})`);
+  const choices = INIT_SKIPPABLE.join(", ");
+  if (bad !== undefined)
+    throw usage(
+      tr(
+        `Unknown --skip value: ${bad} (choices: ${choices})`,
+        `Nilai --skip tidak dikenal: ${bad} (pilihan: ${choices})`,
+      ),
+    );
   const sshKey = typeof values["ssh-key"] === "string" ? values["ssh-key"] : null;
-  if (sshKey === "") throw usage("--ssh-key kosong: beri URL https://, path file, atau - (stdin)");
+  if (sshKey === "")
+    throw usage(
+      tr(
+        "--ssh-key is empty: give an https:// URL, a file path or - (stdin)",
+        "--ssh-key kosong: beri URL https://, path file, atau - (stdin)",
+      ),
+    );
   if (sshKey !== null && /^http:\/\//i.test(sshKey))
-    throw usage("--ssh-key tidak menerima http://: pakai https://, path file, atau - (stdin)");
+    throw usage(
+      tr(
+        "--ssh-key does not accept http://: use https://, a file path or - (stdin)",
+        "--ssh-key tidak menerima http://: pakai https://, path file, atau - (stdin)",
+      ),
+    );
   return {
     yes: values.yes === true,
     dryRun: values["dry-run"] === true,
@@ -84,62 +106,6 @@ export function parseInitArgs(values: ParsedArgs["values"]): InitArgs {
     adminEmails: list(values["admin-email"]),
     skip: new Set(skip as InitSkippable[]),
   };
-}
-
-const errCode = (e: unknown) => (e as NodeJS.ErrnoException).code ?? (e as Error).message;
-
-/** pid in a lock file still runs `init` (m7: dead pid, or a reused pid running something else, = stale). */
-function lockHeld(host: CliHost, pid: number): boolean {
-  if (!Number.isInteger(pid) || pid <= 0 || !host.proc.alive(pid)) return false;
-  return host.proc.list().some((p) => p.pid === pid && p.cmdline.includes("init"));
-}
-
-const readLock = (file: string): string | null => {
-  try {
-    return readFileSync(file, "utf8").trim();
-  } catch (e) {
-    if ((e as NodeJS.ErrnoException).code === "ENOENT") return null;
-    throw new CliExit(INIT_EXIT.failed, `Gagal membaca lock ${file}: ${errCode(e)}.`);
-  }
-};
-
-/** `$PREFIX/tmp/panel-init.lock` (O_EXCL, holds our pid; outside $HOME, C20). Returns an idempotent release. */
-export function acquireLock(host: CliHost): () => void {
-  const file = join(host.paths.prefix, "tmp", "panel-init.lock");
-  const own = String(host.proc.selfPid);
-  for (let attempt = 0; attempt < 2; attempt++) {
-    try {
-      mkdirSync(dirname(file), { recursive: true });
-      const fd = openSync(file, "wx", 0o600);
-      try {
-        writeSync(fd, `${own}\n`);
-      } finally {
-        closeSync(fd);
-      }
-      let held = true;
-      return () => {
-        // a lock another init took over after ours was removed by hand is not ours to delete
-        if (held && readLock(file) === own) rmSync(file, { force: true });
-        held = false;
-      };
-    } catch (e) {
-      if ((e as NodeJS.ErrnoException).code !== "EEXIST")
-        throw new CliExit(INIT_EXIT.failed, `Gagal membuat lock ${file}: ${errCode(e)}.`);
-    }
-    const text = readLock(file);
-    if (text === null) continue; // released meanwhile
-    const pid = Number(text);
-    if (lockHeld(host, pid))
-      throw new CliExit(
-        INIT_EXIT.failed,
-        `panel init lain sedang berjalan (pid ${pid}).`,
-        `tunggu sampai selesai; bila tidak ada yang berjalan: rm ${file}`,
-      );
-    // stale (m7); removed only while it still holds that pid, so a lock a racing init just took stays
-    // ponytail: read-then-rm leaves a tiny window; a rename-based lock closes it if two inits ever really race
-    if (readLock(file) === text) rmSync(file, { force: true });
-  }
-  throw new CliExit(INIT_EXIT.failed, `Gagal membuat lock ${file}: dibuat ulang proses lain.`, "ulangi panel init");
 }
 
 /** m8: `panel init` when $PREFIX/bin/panel resolves to ~/panel/panel, else the installed binary, else this file. */
@@ -157,16 +123,32 @@ export async function runInit(parsed: ParsedArgs, io: CliIo, opts: InitOpts = {}
   const host = await io.host();
   const tty = host.tty.isTty;
   if (args.skipVerify && !tty)
-    throw usage("--skip-verify hanya bisa dipakai di terminal (butuh jawaban y), tidak dengan pipa atau ssh tanpa -t");
+    throw usage(
+      tr(
+        "--skip-verify only works in a terminal (it needs a y answer), not with a pipe or ssh without -t",
+        "--skip-verify hanya bisa dipakai di terminal (butuh jawaban y), tidak dengan pipa atau ssh tanpa -t",
+      ),
+    );
   if (host.arch !== "arm64")
-    throw new CliExit(INIT_EXIT.failed, `Prosesor HP ini ${host.arch}; panel butuh arm64 (64-bit).`);
+    throw new CliExit(
+      INIT_EXIT.failed,
+      tr(
+        `This phone's processor is ${host.arch}; the panel needs arm64 (64-bit).`,
+        `Prosesor HP ini ${host.arch}; panel butuh arm64 (64-bit).`,
+      ),
+    );
   const release = args.dryRun ? () => {} : acquireLock(host);
   let guarded = 0;
   let warned = false;
   const onSigint = () => {
     if (guarded > 0 && !warned) {
       warned = true;
-      out.note("ℹ️ Menunggu pkg selesai; tekan Ctrl-C sekali lagi untuk memaksa berhenti.");
+      out.note(
+        tr(
+          "ℹ️ Waiting for pkg to finish; press Ctrl-C once more to force a stop.",
+          "ℹ️ Menunggu pkg selesai; tekan Ctrl-C sekali lagi untuk memaksa berhenti.",
+        ),
+      );
       return;
     }
     release();
@@ -182,13 +164,22 @@ export async function runInit(parsed: ParsedArgs, io: CliIo, opts: InitOpts = {}
       dryRun: args.dryRun,
       say: (t) => out.note(t),
     });
-    out.line(`Panel Termux ${SELF_VERSION} — penyiapan HP${args.dryRun ? " (--dry-run: tidak ada yang diubah)" : ""}`);
+    const dry = args.dryRun ? tr(" (--dry-run: nothing is changed)", " (--dry-run: tidak ada yang diubah)") : "";
+    out.line(
+      tr(`Panel Termux ${SELF_VERSION} — phone setup${dry}`, `Panel Termux ${SELF_VERSION} — penyiapan HP${dry}`),
+    );
     out.line();
     if (decision.mode === "downgrade")
       throw new CliExit(
         INIT_EXIT.needsUser,
-        `Binary ini v${SELF_VERSION}, lebih lama dari panel yang terpasang (v${decision.installed.version}).`,
-        "untuk kembali ke versi sebelumnya: panel rollback [--db]",
+        tr(
+          `This binary is v${SELF_VERSION}, older than the installed panel (v${decision.installed.version}).`,
+          `Binary ini v${SELF_VERSION}, lebih lama dari panel yang terpasang (v${decision.installed.version}).`,
+        ),
+        tr(
+          "to go back to the previous version: panel rollback [--db]",
+          "untuk kembali ke versi sebelumnya: panel rollback [--db]",
+        ),
       );
     const mode = decision.mode;
     const ctx: InitContext = {
@@ -220,8 +211,13 @@ export async function runInit(parsed: ParsedArgs, io: CliIo, opts: InitOpts = {}
           if (mode === "fresh" && args.yes) return true;
           if (tty) return ask(true);
         } else if (tty) return ask(false); // --yes never answers these (K9, C19, K19)
-        if (action === "skip-verify") throw usage("--skip-verify hanya bisa dipakai di terminal");
-        throw new CliExit(INIT_EXIT.needsUser, `Butuh jawaban di terminal: ${question}`, `jalankan: ${manual}`);
+        if (action === "skip-verify")
+          throw usage(tr("--skip-verify only works in a terminal", "--skip-verify hanya bisa dipakai di terminal"));
+        throw new CliExit(
+          INIT_EXIT.needsUser,
+          tr(`Needs an answer in a terminal: ${question}`, `Butuh jawaban di terminal: ${question}`),
+          tr(`run: ${manual}`, `jalankan: ${manual}`),
+        );
       },
     };
     const planned: Planned[] = [];
@@ -243,7 +239,7 @@ export async function runInit(parsed: ParsedArgs, io: CliIo, opts: InitOpts = {}
     if (todo.length === 0) {
       const errors = await leftErrors();
       if (errors.length === 0) {
-        out.line("Tidak ada yang perlu diubah.");
+        out.line(tr("Nothing needs to change.", "Tidak ada yang perlu diubah."));
         return INIT_EXIT.ok;
       }
       summary(out, ctx, errors);
@@ -253,11 +249,17 @@ export async function runInit(parsed: ParsedArgs, io: CliIo, opts: InitOpts = {}
     if (!args.yes && !tty)
       throw new CliExit(
         INIT_EXIT.needsUser,
-        "panel init butuh konfirmasi, tapi tidak ada terminal.",
-        `jalankan di terminal, atau: ${ctx.resumeCommand()} --yes`,
+        tr(
+          "panel init needs a confirmation, but there is no terminal.",
+          "panel init butuh konfirmasi, tapi tidak ada terminal.",
+        ),
+        tr(
+          `run it in a terminal, or: ${ctx.resumeCommand()} --yes`,
+          `jalankan di terminal, atau: ${ctx.resumeCommand()} --yes`,
+        ),
       );
-    if (!args.yes && !(await host.tty.confirm("Lanjutkan?", true))) {
-      out.line("Dibatalkan, tidak ada yang diubah.");
+    if (!args.yes && !(await host.tty.confirm(tr("Continue?", "Lanjutkan?"), true))) {
+      out.line(tr("Cancelled, nothing was changed.", "Dibatalkan, tidak ada yang diubah."));
       return INIT_EXIT.cancelled;
     }
     const postponed: PlanLine[] = [];
@@ -265,12 +267,13 @@ export async function runInit(parsed: ParsedArgs, io: CliIo, opts: InitOpts = {}
       const state = await step.detect(ctx); // fresh: an earlier step may have done part of it
       if (!hasAction(step.plan(ctx, state))) continue;
       out.line();
-      out.line(`${step.title.charAt(0).toUpperCase()}${step.title.slice(1)}`);
+      const title = stepTitle(step.id);
+      out.line(`${title.charAt(0).toUpperCase()}${title.slice(1)}`);
       try {
         await step.apply(ctx, state);
       } catch (e) {
         if (!(e instanceof CliExit && e.code === INIT_EXIT.needsUser && DEFERRED_NEEDS_USER.has(step.id))) throw e;
-        out.check("warning", `${e.message} Langkah lain dilanjutkan.`);
+        out.check("warning", `${e.message} ${tr("The other steps continue.", "Langkah lain dilanjutkan.")}`);
         postponed.push({ kind: "error", text: e.message, ...(e.hint ? { hint: e.hint } : {}) });
       }
     }

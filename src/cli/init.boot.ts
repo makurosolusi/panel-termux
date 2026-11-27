@@ -6,19 +6,23 @@ import { join } from "node:path";
 import { TermuxExecError } from "../server/exec/termux.exec";
 import { writeAtomic } from "../server/sites/site.files";
 import { type CliHost, type CliPaths, probePaths } from "./cli.host";
+import { tr } from "./cli.locale";
 import { ANDROID_APPS, BOOT_STARTS_SERVICES } from "./doctor.probe";
-import { defineStep, INIT_STEP_TITLES, type PlanLine } from "./init.types";
+import { defineStep, type PlanLine } from "./init.types";
 
 /** File name init writes under ~/.termux/boot. */
 export const BOOT_SCRIPT = "panel-termux";
 const CMD = "/system/bin/cmd";
 const CMD_TIMEOUT_MS = 5000;
-const INSTALL_BOOT = "Pasang aplikasi Termux:Boot dari sumber yang sama dengan Termux (F-Droid), lalu buka sekali";
+const docsHint = () => tr("see: panel docs android", "lihat: panel docs android");
 
-/** Boot script text: absolute tool paths (Termux:Boot starts it with a bare environment), SVDIR + LOGDIR (m4). */
+/**
+ * Boot script text: absolute tool paths (Termux:Boot starts it with a bare environment), SVDIR + LOGDIR (m4). Its
+ * comment is English for every locale: a file on the phone, not CLI output.
+ */
 export const bootScript = (p: CliPaths) =>
   `#!${p.prefix}/bin/sh
-# Ditulis oleh panel init: saat HP menyala, Termux dijaga tetap hidup dan runit menyalakan semua layanan.
+# Written by panel init: when the phone turns on, Termux is kept awake and runit starts every service.
 ${p.prefix}/bin/termux-wake-lock
 export SVDIR="${p.svdir}" LOGDIR="${p.logdir}"
 exec ${p.prefix}/bin/service-daemon start
@@ -47,17 +51,23 @@ function starters(dir: string): string[] {
 /** Step 9 (§4.1). */
 export const bootStep = defineStep<BootState>({
   id: "boot",
-  title: INIT_STEP_TITLES.boot,
   detect: async (ctx) => ({ starters: starters(probePaths(ctx.host.paths).bootDir), app: await bootApp(ctx.host) }),
   plan(_ctx, s) {
     const lines: PlanLine[] = [];
     if (s.starters.length === 0)
       lines.push({
         kind: "action",
-        text: "Menyalakan semua otomatis setelah HP menyala (Termux:Boot); HP akan menanyakan izin baterai: pilih Izinkan",
+        text: tr(
+          "Starting everything by itself after the phone turns on (Termux:Boot); the phone will ask about battery use: choose Allow",
+          "Menyalakan semua otomatis setelah HP menyala (Termux:Boot); HP akan menanyakan izin baterai: pilih Izinkan",
+        ),
       });
     if (s.app === false)
-      lines.push({ kind: "warning", text: "Aplikasi Termux:Boot belum terpasang", hint: "lihat: panel docs android" });
+      lines.push({
+        kind: "warning",
+        text: tr("The Termux:Boot app is not installed", "Aplikasi Termux:Boot belum terpasang"),
+        hint: docsHint(),
+      });
     return lines;
   },
   async apply(ctx, s) {
@@ -66,14 +76,33 @@ export const bootStep = defineStep<BootState>({
     mkdirSync(dir, { recursive: true });
     writeAtomic(file, bootScript(ctx.host.paths), { mode: 0o755 });
     ctx.state.changed.push(file);
-    ctx.out.line("HP akan menanyakan izin baterai untuk Termux: pilih Izinkan.");
+    ctx.out.line(
+      tr(
+        "The phone will ask about battery use for Termux: choose Allow.",
+        "HP akan menanyakan izin baterai untuk Termux: pilih Izinkan.",
+      ),
+    );
     const rc = await ctx.host.run("termux-wake-lock", [], { stdio: "ignore" });
-    if (rc !== 0) ctx.out.check("warning", `termux-wake-lock gagal (kode ${rc})`, "lihat: panel docs android");
-    if (s.app === false) ctx.state.manual.push(INSTALL_BOOT);
+    if (rc !== 0)
+      ctx.out.check(
+        "warning",
+        tr(`termux-wake-lock failed (code ${rc})`, `termux-wake-lock gagal (kode ${rc})`),
+        docsHint(),
+      );
+    if (s.app === false)
+      ctx.state.manual.push(
+        tr(
+          "Install the Termux:Boot app from the same source as Termux (F-Droid), then open it once",
+          "Pasang aplikasi Termux:Boot dari sumber yang sama dengan Termux (F-Droid), lalu buka sekali",
+        ),
+      );
     // Battery optimisation is an Android setting init cannot change (m11); said once, on a new phone.
     if (ctx.mode === "fresh")
       ctx.state.manual.push(
-        "Matikan pembatasan baterai untuk Termux dan Termux:Boot (Pengaturan → Aplikasi → Termux → Baterai → Tidak dibatasi); panduan: panel docs android",
+        tr(
+          "Turn off battery restrictions for Termux and Termux:Boot (Settings → Apps → Termux → Battery → Unrestricted); guide: panel docs android",
+          "Matikan pembatasan baterai untuk Termux dan Termux:Boot (Pengaturan → Aplikasi → Termux → Baterai → Tidak dibatasi); panduan: panel docs android",
+        ),
       );
   },
 });

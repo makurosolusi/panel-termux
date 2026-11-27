@@ -70,12 +70,12 @@ describe("verifyLine", () => {
   test("ok states the limit (intact, not origin) and names gh attestation for a computer", () => {
     const l = verifyLine({ kind: "ok", tag: TAG });
     expect(l.kind).toBe("ok");
-    expect(l.text).toContain("membuktikan unduhan utuh, bukan asal rilis");
+    expect(l.text).toContain("proves the download is intact, not where it came from");
     expect(l.hint).toContain("gh attestation verify panel --repo makurosolusi/panel-termux");
   });
 
   test("local → info; offline → error that offers --skip-verify; mismatch → error", () => {
-    expect(verifyLine({ kind: "local" })).toEqual({ kind: "info", text: "build lokal: tidak dicek terhadap rilis" });
+    expect(verifyLine({ kind: "local" })).toEqual({ kind: "info", text: "local build: not checked against a release" });
     const off = verifyLine({ kind: "offline", tag: TAG, detail: "x" });
     expect(off.kind).toBe("error");
     expect(off.hint).toContain("--skip-verify");

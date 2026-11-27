@@ -48,7 +48,7 @@ describe("pm2 without pm2-runtime (M2)", () => {
     const ctx = ctxOf("repair", false, false);
     const lines = await planOf(ctx);
     expect(lines).toEqual([
-      { kind: "warning", text: "pm2 belum terpasang", hint: "jalankan lagi panel init di terminal" },
+      { kind: "warning", text: "pm2 is not installed yet", hint: "run panel init again in a terminal" },
     ]);
     expect(existsSync(join(ctx.host.paths.home, "sites"))).toBe(false);
     expect(existsSync(join(ctx.host.paths.svdir, "pm2"))).toBe(false);

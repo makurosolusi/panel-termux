@@ -4,8 +4,9 @@ import { existsSync, mkdirSync, readFileSync, renameSync, rmSync, symlinkSync, w
 import { join } from "node:path";
 import { writeFileSynced } from "../server/sites/site.files";
 import { type CliHost, probePaths } from "./cli.host";
+import { tr } from "./cli.locale";
 import { CliExit } from "./cli.output";
-import { defineStep, INIT_EXIT, INIT_STEP_TITLES, type InitContext } from "./init.types";
+import { defineStep, INIT_EXIT, type InitContext } from "./init.types";
 
 /** Waits of the service steps; tests pass small values. */
 export type InitTiming = {
@@ -47,7 +48,7 @@ export async function sv(ctx: InitContext, args: string[], t: InitTiming, timeou
   const ok = await waitFor(
     async () => {
       const r = await ctx.host.exec("sv", args, timeoutMs ? { timeoutMs } : {});
-      last = `kode ${r.code}${r.stdout || r.stderr ? `: ${(r.stdout + r.stderr).trim().slice(0, 200)}` : ""}`;
+      last = `${tr("code", "kode")} ${r.code}${r.stdout || r.stderr ? `: ${(r.stdout + r.stderr).trim().slice(0, 200)}` : ""}`;
       return r.code === 0;
     },
     t.svMs,
@@ -56,8 +57,11 @@ export async function sv(ctx: InitContext, args: string[], t: InitTiming, timeou
   if (!ok)
     throw new CliExit(
       INIT_EXIT.failed,
-      `Perintah sv ${args.join(" ")} gagal (${last}).`,
-      `pastikan runit berjalan, lalu jalankan lagi: ${ctx.resumeCommand()}`,
+      tr(`Command sv ${args.join(" ")} failed (${last}).`, `Perintah sv ${args.join(" ")} gagal (${last}).`),
+      tr(
+        `make sure runit is running, then run again: ${ctx.resumeCommand()}`,
+        `pastikan runit berjalan, lalu jalankan lagi: ${ctx.resumeCommand()}`,
+      ),
     );
 }
 
@@ -101,9 +105,16 @@ export type RunitState = { alive: boolean };
 export const createRunitStep = (timing: InitTiming = INIT_TIMING) =>
   defineStep<RunitState>({
     id: "runit",
-    title: INIT_STEP_TITLES.runit,
     detect: async (ctx) => ({ alive: daemonAlive(ctx.host) }),
-    plan: (_ctx, s) => (s.alive ? [] : [{ kind: "action", text: "Menyalakan runit (pengelola layanan Termux)" }]),
+    plan: (_ctx, s) =>
+      s.alive
+        ? []
+        : [
+            {
+              kind: "action",
+              text: tr("Starting runit (the Termux service manager)", "Menyalakan runit (pengelola layanan Termux)"),
+            },
+          ],
     async apply(ctx) {
       // stdio ignore + CliHost's clean env (K11b): runsvdir and every service inherit no ENV_VARS key; SVDIR/LOGDIR
       // explicit because a non-login ssh session has neither (m4, lab A). Exit 1 with runsvdir alive = ok (m5).
@@ -111,10 +122,16 @@ export const createRunitStep = (timing: InitTiming = INIT_TIMING) =>
       if (!(await waitFor(() => daemonAlive(ctx.host), timing.daemonMs, timing.pollMs)))
         throw new CliExit(
           INIT_EXIT.needsUser,
-          `runit belum menyala (service-daemon start kode ${rc}).`,
-          `tutup dan buka lagi Termux, lalu jalankan: ${ctx.resumeCommand()}`,
+          tr(
+            `runit is not running yet (service-daemon start code ${rc}).`,
+            `runit belum menyala (service-daemon start kode ${rc}).`,
+          ),
+          tr(
+            `close and reopen Termux, then run: ${ctx.resumeCommand()}`,
+            `tutup dan buka lagi Termux, lalu jalankan: ${ctx.resumeCommand()}`,
+          ),
         );
-      ctx.out.check("ok", "runit berjalan");
+      ctx.out.check("ok", tr("runit is running", "runit berjalan"));
     },
   });
 

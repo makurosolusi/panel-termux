@@ -16,7 +16,8 @@ import { join } from "node:path";
 import { type FakeScenarioName, probePaths } from "@/cli/cli.host";
 import { createFakeHost, type FakeHostOptions } from "@/cli/cli.host.fake";
 import { createCliOut } from "@/cli/cli.output";
-import { binaryStep, releaseBlocker, SPACE_HEADROOM_BYTES } from "@/cli/init.binary";
+import { binaryStep } from "@/cli/init.binary";
+import { releaseBlocker, SPACE_HEADROOM_BYTES } from "@/cli/init.binary.checks";
 import { runInit } from "@/cli/init.command";
 import { SELF_VERSION } from "@/cli/init.mode";
 
@@ -93,7 +94,7 @@ describe("binary step: fresh phone", () => {
     expect(statSync(p.dataDir).mode & 0o777).toBe(0o700);
     expect(existsSync(join(root, "panel-termux"))).toBe(false); // K24: download outside ~/panel removed
     expect(r.text).toContain(
-      "Binary cocok dengan SHA256SUMS rilis v0.5.1 (membuktikan unduhan utuh, bukan asal rilis)",
+      "Binary matches SHA256SUMS of release v0.5.1 (proves the download is intact, not where it came from)",
     );
     expect(fetches(h).map((f) => f.argv[0])).toEqual([
       "https://github.com/makurosolusi/panel-termux/releases/download/v0.5.1/SHA256SUMS",
@@ -106,7 +107,7 @@ describe("binary step: fresh phone", () => {
     const before = snapshot(root);
     const r = await init(h);
     expect(r.code).toBe(1);
-    expect(r.text).toContain("tidak cocok dengan SHA256SUMS rilis v0.5.1");
+    expect(r.text).toContain("does not match SHA256SUMS of release v0.5.1");
     expect(snapshot(root)).toEqual(before);
   });
 
@@ -115,7 +116,7 @@ describe("binary step: fresh phone", () => {
     const off = host("fresh");
     const r = await init(off.h);
     expect(r.code).toBe(1);
-    expect(r.text).toContain("Cek diri butuh internet");
+    expect(r.text).toContain("The self check needs internet");
     expect(existsSync(off.h.paths.panelDir)).toBe(false);
 
     const no = host("fresh", { tty: true, answers: [false] });
@@ -126,7 +127,7 @@ describe("binary step: fresh phone", () => {
     const yes = host("fresh", { tty: true, answers: [true] });
     const ok = await init(yes.h, { "skip-verify": true });
     expect(ok.code).toBe(0);
-    expect(ok.text).toContain("CEK DIRI DILEWATI");
+    expect(ok.text).toContain("SELF CHECK SKIPPED");
     expect(fetches(yes.h)).toEqual([]);
     expect(readFileSync(yes.p.binary, "utf8")).toBe(SELF);
   });
@@ -142,7 +143,7 @@ describe("binary step: fresh phone", () => {
     const { h, p } = host("fresh");
     const r = await init(h);
     expect(r.code).toBe(0);
-    expect(r.text).toContain("build lokal: tidak dicek terhadap rilis");
+    expect(r.text).toContain("local build: not checked against a release");
     expect(fetches(h)).toEqual([]);
     expect(existsSync(p.binary)).toBe(true);
   });
@@ -153,9 +154,9 @@ describe("binary step: fresh phone", () => {
     const before = snapshot(root);
     const r = await init(h, { "dry-run": true, yes: false });
     expect(r.code).toBe(0);
-    expect(r.text).toContain("Binary cocok dengan SHA256SUMS");
-    expect(r.text).toContain("Memasang panel ke ~/panel/panel (perintah: panel)");
-    expect(r.text).toContain("Menghapus file unduhan ~/panel-termux");
+    expect(r.text).toContain("Binary matches SHA256SUMS");
+    expect(r.text).toContain("Installing the panel to ~/panel/panel (command: panel)");
+    expect(r.text).toContain("Deleting the download ~/panel-termux");
     expect(snapshot(root)).toEqual(before);
   });
 
@@ -165,7 +166,7 @@ describe("binary step: fresh phone", () => {
     const before = snapshot(root);
     const r = await init(h);
     expect(r.code).toBe(1);
-    expect(r.text).toContain("Ruang kosong");
+    expect(r.text).toContain("free, the panel needs");
     expect(snapshot(root)).toEqual(before);
   });
 });
@@ -180,7 +181,7 @@ describe("binary step: upgrade (K21, C21)", () => {
     const oldIno = statSync(p.binary).ino;
     const r = await init(h);
     expect(r.code).toBe(0);
-    expect(r.text).toContain(`Mengganti ~/panel/panel dengan v${SELF_VERSION} (v0.4.0 disimpan sebagai panel.prev)`);
+    expect(r.text).toContain(`Replacing ~/panel/panel with v${SELF_VERSION} (v0.4.0 kept as panel.prev)`);
     expect(readFileSync(p.prev).equals(old)).toBe(true);
     expect(statSync(p.prev).ino).not.toBe(oldIno);
     expect(readFileSync(p.binary, "utf8")).toBe(SELF);
@@ -203,7 +204,7 @@ describe("binary step: upgrade (K21, C21)", () => {
     const before = snapshot(root);
     const r = await init(h);
     expect(r.code).toBe(1);
-    expect(r.text).toContain("Ruang kosong");
+    expect(r.text).toContain("free, the panel needs");
     expect(snapshot(root)).toEqual(before);
   });
 
@@ -227,7 +228,7 @@ describe("binary step: upgrade (K21, C21)", () => {
     const before = snapshot(join(tmp, "partial"));
     const r = await init(h);
     expect(r.code).toBe(0);
-    expect(r.text).toContain("Sudah lengkap: binary panel");
+    expect(r.text).toContain("Already complete: panel binary");
     expect(fetches(h)).toEqual([]);
     expect(snapshot(join(tmp, "partial"))).toEqual(before);
     expect(existsSync(process.execPath)).toBe(true);
@@ -242,7 +243,7 @@ describe("binary step: symlink and ~/panel-src (E11)", () => {
     });
     const r = await init(h);
     expect(r.code).toBe(0);
-    expect(r.text).toContain("bukan milik panel; tidak diubah");
+    expect(r.text).toContain("does not belong to the panel; left unchanged");
     expect(readFileSync(link, "utf8")).toBe("#!/bin/sh\necho other\n");
   });
 
@@ -257,16 +258,16 @@ describe("binary step: symlink and ~/panel-src (E11)", () => {
     expect(readdirSync(join(root, "panel-src")).sort()).toEqual(
       [".env.example", "deploy", "dist", "v0.4.0", `v${SELF_VERSION}`, "v99.0.0"].sort(),
     );
-    expect(r.text).toContain("~/panel-src/dist tidak dipakai lagi; hapus bila tidak perlu");
-    expect(r.text).toContain("Menghapus unduhan lama di ~/panel-src: v0.4.0-rc.1, v0.3.0");
+    expect(r.text).toContain("~/panel-src/dist is no longer used; delete it if you do not need it");
+    expect(r.text).toContain("Deleting old downloads in ~/panel-src: v0.4.0-rc.1, v0.3.0");
   });
 });
 
 describe("binary step: what may be installed and deleted (K24)", () => {
   test("releaseBlocker: bun runtime never; no release tag only with PANEL_DEV_INSTALL=1", () => {
-    expect(releaseBlocker("v0.5.1", false, false)).toContain("runtime bun");
-    expect(releaseBlocker("", true, false)).toContain("runtime bun");
-    expect(releaseBlocker("", false, true)).toContain("bukan build rilis");
+    expect(releaseBlocker("v0.5.1", false, false)).toContain("bun runtime");
+    expect(releaseBlocker("", true, false)).toContain("bun runtime");
+    expect(releaseBlocker("", false, true)).toContain("not a release build");
     expect(releaseBlocker("", true, true)).toBeNull();
     expect(releaseBlocker("v0.5.1", false, true)).toBeNull();
   });
@@ -284,7 +285,7 @@ describe("binary step: what may be installed and deleted (K24)", () => {
       expect(r.code).toBe(0);
       expect(readFileSync(p.binary, "utf8")).toBe(SELF);
       expect(existsSync(self)).toBe(true);
-      expect(r.text).not.toContain("Menghapus file unduhan");
+      expect(r.text).not.toContain("Deleting the download");
     }
   });
 });

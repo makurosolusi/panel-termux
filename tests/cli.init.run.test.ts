@@ -3,6 +3,7 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import type { FakeScenarioName } from "@/cli/cli.host";
 import type { FakeHostOptions } from "@/cli/cli.host.fake";
+import { setCliLocale } from "@/cli/cli.locale";
 import { runCli } from "@/cli/cli.main";
 import { createCliOut } from "@/cli/cli.output";
 import { releaseTag, SELF_VERSION } from "@/cli/init.mode";
@@ -16,7 +17,7 @@ describe("confirmRisky: one restart rule (K9, C22)", () => {
   async function risky(scenario: FakeScenarioName, action: RiskyAction, flags = {}, opts: FakeHostOptions = {}) {
     let answer: boolean | undefined;
     const s = stubs(new Set(["binary"]), async (id, ctx) => {
-      if (id === "binary") answer = await ctx.confirmRisky(action, "Mulai ulang?", "sv restart x");
+      if (id === "binary") answer = await ctx.confirmRisky(action, "Restart?", "sv restart x");
     });
     const r = await init(host(scenario, opts), { yes: true, ...flags }, s.steps);
     return r.code === 0 ? answer : r.code;
@@ -135,7 +136,7 @@ describe("Ctrl-C during pkg (K7, §4.2)", () => {
     const r = await init(host("fresh"), { yes: true }, s.steps);
     expect(r.code).toBe(0);
     expect(result).toBe("pkg selesai");
-    expect(r.stderr).toContain("Ctrl-C sekali lagi");
+    expect(r.stderr).toContain("Ctrl-C once more");
   });
 });
 
@@ -145,7 +146,28 @@ describe("dispatcher", () => {
     const out = createCliOut({ stdout: (t) => stdout.push(t), stderr: () => {} });
     const h = host("fresh");
     expect(await runCli(["init", "--dry-run"], { out, host: async () => h })).toBe(0);
-    expect(stdout.join("")).toContain("HP ini belum punya instalasi panel");
+    expect(stdout.join("")).toContain("This phone has no panel installed yet");
+  });
+
+  test("--lang id: plan header, a step's plan line, run header and summary in Indonesian", async () => {
+    const stdout: string[] = [];
+    const out = createCliOut({ stdout: (t) => stdout.push(t), stderr: () => {} });
+    try {
+      expect(await runCli(["init", "--lang", "id", "--dry-run"], { out, host: async () => host("fresh") })).toBe(0);
+      const plan = stdout.join("");
+      expect(plan).toContain(`Panel Termux ${SELF_VERSION} — penyiapan HP (--dry-run: tidak ada yang diubah)`);
+      expect(plan).toContain("HP ini belum punya instalasi panel. Yang akan dilakukan:");
+      expect(plan).toContain("Menyalakan runit (pengelola layanan Termux)");
+      expect(plan).not.toContain("What will be done");
+      // runCli set the locale for this run; runInit (the harness) keeps it
+      const r = await init(host("fresh"), { yes: true, lang: "id" }, stubs(new Set(["packages"])).steps);
+      expect(r.code).toBe(0);
+      expect(r.stdout).toContain("\nPaket Termux\n");
+      expect(r.stdout).toContain("Sudah lengkap: binary panel, runit, PostgreSQL");
+      expect(r.stdout).toContain("✅ panel init selesai.");
+    } finally {
+      setCliLocale({ locale: "en", source: "default" });
+    }
   });
 });
 

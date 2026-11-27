@@ -8,14 +8,7 @@ import type { FakeScenarioName } from "@/cli/cli.host";
 import { createFakeHost, type FakeHostOptions } from "@/cli/cli.host.fake";
 import { createCliOut } from "@/cli/cli.output";
 import { runInit } from "@/cli/init.command";
-import {
-  defineStep,
-  INIT_STEP_IDS,
-  INIT_STEP_TITLES,
-  type InitContext,
-  type InitStep,
-  type InitStepId,
-} from "@/cli/init.types";
+import { defineStep, INIT_STEP_IDS, type InitContext, type InitStep, type InitStepId } from "@/cli/init.types";
 
 /** A fake host as the tests use it. */
 export type Host = ReturnType<typeof createFakeHost>;
@@ -81,12 +74,11 @@ export function stubs(
   const steps = INIT_STEP_IDS.map((id) =>
     defineStep({
       id,
-      title: INIT_STEP_TITLES[id],
       detect: async () => {
         detected.push(id);
         return todo.has(id);
       },
-      plan: (_ctx, needed: boolean) => (needed ? [{ kind: "action" as const, text: `aksi ${id}` }] : []),
+      plan: (_ctx, needed: boolean) => (needed ? [{ kind: "action" as const, text: `action ${id}` }] : []),
       apply: async (ctx) => {
         applied.push(id);
         await onApply?.(id, ctx);

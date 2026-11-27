@@ -10,14 +10,7 @@ import { CliExit, createCliOut } from "@/cli/cli.output";
 import { INIT_STEPS } from "@/cli/init.command";
 import { languageAnswer } from "@/cli/init.language";
 import { detectMode } from "@/cli/init.mode";
-import {
-  defineStep,
-  INIT_EXIT,
-  INIT_STEP_IDS,
-  INIT_STEP_TITLES,
-  type InitStep,
-  type InitStepId,
-} from "@/cli/init.types";
+import { defineStep, INIT_EXIT, INIT_STEP_IDS, type InitStep, type InitStepId } from "@/cli/init.types";
 import { init, initSandbox, snapshot, stubs } from "./cli.init.harness";
 
 const { fresh, host } = initSandbox();
@@ -80,7 +73,7 @@ describe("--dry-run writes nothing (§4.1)", () => {
       const before = snapshot(h.paths.home);
       const r = await init(h, { "dry-run": true }, INIT_STEPS);
       expect(r.code).toBe(0);
-      expect(r.stdout).toContain("--dry-run: tidak ada yang diubah");
+      expect(r.stdout).toContain("--dry-run: nothing is changed");
       expect(snapshot(h.paths.home)).toEqual(before);
       expect(h.records.filter((x) => x.kind === "run")).toEqual([]);
     });
@@ -90,7 +83,7 @@ describe("--dry-run writes nothing (§4.1)", () => {
       const s = stubs();
       const r = await init(host("downgrade"), flags, s.steps);
       expect(r.code).toBe(3);
-      expect(r.stderr).toContain("lebih lama");
+      expect(r.stderr).toContain("older than the installed panel");
       expect(r.stderr).toContain("panel rollback [--db]");
       expect(s.detected).toEqual([]);
     }
@@ -103,9 +96,9 @@ describe("plan and run rules per mode (§4 mode table, C23)", () => {
     const r = await init(host("upgrade"), { yes: true }, s.steps);
     expect(r.code).toBe(0);
     expect(s.applied).toEqual(["binary", "panel-sv", "start"]);
-    expect(r.stdout).toContain(`Panel v${FAKE_OLD_VERSION} sudah terpasang`);
-    expect(r.stdout).toContain("⚠️ aksi packages (tidak dipasang saat upgrade)");
-    expect(r.stdout).toContain("→ jalankan lagi panel init di terminal");
+    expect(r.stdout).toContain(`Panel v${FAKE_OLD_VERSION} is installed`);
+    expect(r.stdout).toContain("⚠️ action packages (not installed during an upgrade)");
+    expect(r.stdout).toContain("→ run panel init again in a terminal");
   });
 
   test("repair without TTY (--yes too): packages, postgres, boot only reported; with TTY they run", async () => {
@@ -115,7 +108,7 @@ describe("plan and run rules per mode (§4 mode table, C23)", () => {
     const r = await init(host("ready", { selfPath: self }), { yes: true }, quiet.steps);
     expect(r.code).toBe(0);
     for (const id of ["packages", "postgres", "boot"] as const) expect(quiet.applied).not.toContain(id);
-    expect(r.stdout).toContain("(butuh terminal)");
+    expect(r.stdout).toContain("(needs a terminal)");
     const loud = stubs();
     await init(host("ready", { selfPath: self, tty: true, answers: [true] }), {}, loud.steps);
     expect(loud.applied).toEqual([
@@ -151,7 +144,7 @@ describe("plan and run rules per mode (§4 mode table, C23)", () => {
     const b = stubs();
     const no = await init(host("fresh", { tty: true, answers: [false] }), {}, b.steps);
     expect(no.code).toBe(4);
-    expect(no.stdout).toContain("Dibatalkan");
+    expect(no.stdout).toContain("Cancelled");
     expect(b.applied).toEqual([]);
   });
 
@@ -159,8 +152,8 @@ describe("plan and run rules per mode (§4 mode table, C23)", () => {
     const s = stubs(new Set());
     const r = await init(host("fresh", { tty: true, answers: [] }), {}, s.steps);
     expect(r.code).toBe(0);
-    expect(r.stdout).toContain("Tidak ada yang perlu diubah.");
-    expect(r.stdout).toContain("Sudah lengkap: binary panel, paket Termux");
+    expect(r.stdout).toContain("Nothing needs to change.");
+    expect(r.stdout).toContain("Already complete: panel binary, Termux packages");
   });
 
   test("each step is detected again right before apply; done meanwhile → skipped (resume)", async () => {
@@ -180,9 +173,8 @@ describe("plan and run rules per mode (§4 mode table, C23)", () => {
     writeFileSync(self, "\x7fELF small self\n");
     const h = host("fresh", { selfPath: self });
     expect(await runCli(["init", "--yes"], { out, host: async () => h })).toBe(3);
-    expect(stderr.join("")).toContain(".env belum lengkap");
+    expect(stderr.join("")).toContain(".env is not complete");
     expect(INIT_STEPS.map((x) => x.id)).toEqual([...INIT_STEP_IDS]);
-    expect(INIT_STEPS.map((x) => x.title)).toEqual(INIT_STEP_IDS.map((id) => INIT_STEP_TITLES[id]));
     expect(existsSync(join(h.paths.prefix, "tmp", "panel-init.lock"))).toBe(false); // released on failure too
   });
 });
@@ -193,7 +185,6 @@ describe("problems left at the end (M1) and the postponed tunnel exit 3 (MINOR 6
   const broken = (id: InitStepId, fixedBy?: () => boolean) =>
     defineStep({
       id,
-      title: INIT_STEP_TITLES[id],
       detect: async () => null,
       plan: () => (fixedBy?.() ? [] : [{ kind: "error" as const, text: `rusak ${id}`, hint: `perbaiki ${id}` }]),
       apply: async () => {},
@@ -203,10 +194,10 @@ describe("problems left at the end (M1) and the postponed tunnel exit 3 (MINOR 6
     const s = stubs(new Set());
     const r = await init(host("fresh", { tty: true }), {}, withStep(s.steps, broken("postgres")));
     expect(r.code).toBe(1);
-    expect(r.stdout).not.toContain("Tidak ada yang perlu diubah");
-    expect(r.stdout).toContain("panel init selesai dengan masalah:");
+    expect(r.stdout).not.toContain("Nothing needs to change");
+    expect(r.stdout).toContain("panel init finished with problems:");
     expect(r.stdout).toContain("❌ rusak postgres");
-    expect(r.stdout).not.toContain("Sudah lengkap: binary panel, paket Termux, runit, PostgreSQL");
+    expect(r.stdout).not.toContain("Already complete: panel binary, Termux packages, runit, PostgreSQL");
   });
 
   test("other steps run, the error is still there afterwards → exit 1; fixed meanwhile → exit 0", async () => {
@@ -215,7 +206,7 @@ describe("problems left at the end (M1) and the postponed tunnel exit 3 (MINOR 6
     expect(s.applied).toEqual(["binary"]);
     expect(r.code).toBe(1);
     expect(r.stdout).toContain("❌ rusak postgres");
-    expect(r.stdout).not.toContain("✅ panel init selesai.");
+    expect(r.stdout).not.toContain("✅ panel init finished.");
     let fixed = false;
     const t = stubs(new Set(["binary"]), async () => {
       fixed = true;
@@ -229,7 +220,7 @@ describe("problems left at the end (M1) and the postponed tunnel exit 3 (MINOR 6
       ),
     );
     expect(ok.code).toBe(0);
-    expect(ok.stdout).toContain("panel init selesai.");
+    expect(ok.stdout).toContain("panel init finished.");
   });
 
   test("tunnel exit 3 waits: boot and start still run, then exit 3 with its message; env exit 3 stops at once", async () => {
@@ -270,10 +261,12 @@ describe("language question (E12)", () => {
     const h = host("fresh", { tty: true, answers: ["2", false] });
     const r = await init(h, ask);
     expect(r.code).toBe(4); // the second answer declined the plan question: the question did not eat it
-    expect(r.stdout).toContain("Dibatalkan");
+    expect(r.stdout).toContain("Dibatalkan, tidak ada yang diubah.");
     const text = envText(h);
     expect(text).toMatch(/^PANEL_LANG=id$/m);
     expect(text).toContain("APP_BASE_URL=");
+    expect(text).toContain("# --- Opsional: hapus tanda # untuk mengubah nilai bawaan ---"); // comments follow the answer
+    expect(text).not.toContain("# --- Optional:");
     expect(statSync(probePaths(h.paths).envFile).mode & 0o777).toBe(0o600);
     expect(activeCliLocale()).toEqual({ locale: "id", source: "env-file" });
     reset();

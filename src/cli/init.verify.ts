@@ -2,6 +2,7 @@
 // matched against the `panel` line of SHA256SUMS of the release tag embedded at build time, fetched over HTTPS.
 // Proves the download is intact, not where it came from (D12); `gh attestation verify` on a computer proves origin.
 import type { DoctorState } from "../shared/doctor.types";
+import { tr } from "./cli.locale";
 import { CliExit } from "./cli.output";
 import { releaseTag, sha256File } from "./init.mode";
 import { INIT_EXIT, type InitContext, type PlanLine } from "./init.types";
@@ -12,13 +13,24 @@ export const RELEASE_DOWNLOAD_URL = "https://github.com/makurosolusi/panel-termu
 export const RELEASE_ASSET = "panel";
 const FETCH_TIMEOUT_MS = 30_000;
 const HTTP_NOT_FOUND = 404;
-const ORIGIN_HINT =
-  "untuk membuktikan asal rilis, di komputer: gh attestation verify panel --repo makurosolusi/panel-termux";
-const skipLine: CheckLine = {
+const VERIFY_CMD = "gh attestation verify panel --repo makurosolusi/panel-termux";
+const originHint = () =>
+  tr(
+    `to prove where the release came from, on a computer: ${VERIFY_CMD}`,
+    `untuk membuktikan asal rilis, di komputer: ${VERIFY_CMD}`,
+  );
+const skipLine = (): CheckLine => ({
   kind: "warning",
-  text: "CEK DIRI DILEWATI: binary ini tidak dicocokkan dengan rilis apa pun",
-};
-const REDOWNLOAD_HINT = "unduh ulang dengan seluruh baris pasang dari README, lalu jalankan lagi";
+  text: tr(
+    "SELF CHECK SKIPPED: this binary is not matched against any release",
+    "CEK DIRI DILEWATI: binary ini tidak dicocokkan dengan rilis apa pun",
+  ),
+});
+const redownloadHint = () =>
+  tr(
+    "download again with the full install line from the README, then run it again",
+    "unduh ulang dengan seluruh baris pasang dari README, lalu jalankan lagi",
+  );
 
 /** A checked-fact plan line (never an action). */
 export type CheckLine = PlanLine & { kind: DoctorState };
@@ -63,41 +75,62 @@ export function verifyLine(o: VerifyOutcome): CheckLine {
     case "ok":
       return {
         kind: "ok",
-        text: `Binary cocok dengan SHA256SUMS rilis ${o.tag} (membuktikan unduhan utuh, bukan asal rilis)`,
-        hint: ORIGIN_HINT,
+        text: tr(
+          `Binary matches SHA256SUMS of release ${o.tag} (proves the download is intact, not where it came from)`,
+          `Binary cocok dengan SHA256SUMS rilis ${o.tag} (membuktikan unduhan utuh, bukan asal rilis)`,
+        ),
+        hint: originHint(),
       };
     case "local":
-      return { kind: "info", text: "build lokal: tidak dicek terhadap rilis" };
+      return {
+        kind: "info",
+        text: tr("local build: not checked against a release", "build lokal: tidak dicek terhadap rilis"),
+      };
     case "mismatch":
       return {
         kind: "error",
-        text: `Binary ini tidak cocok dengan SHA256SUMS rilis ${o.tag}: unduhan rusak atau bukan dari rilis itu`,
-        hint: REDOWNLOAD_HINT,
+        text: tr(
+          `This binary does not match SHA256SUMS of release ${o.tag}: the download is damaged or not from that release`,
+          `Binary ini tidak cocok dengan SHA256SUMS rilis ${o.tag}: unduhan rusak atau bukan dari rilis itu`,
+        ),
+        hint: redownloadHint(),
       };
     case "missing":
       return {
         kind: "error",
-        text: `SHA256SUMS rilis ${o.tag} tidak memuat baris "${RELEASE_ASSET}"`,
-        hint: REDOWNLOAD_HINT,
+        text: tr(
+          `SHA256SUMS of release ${o.tag} has no "${RELEASE_ASSET}" line`,
+          `SHA256SUMS rilis ${o.tag} tidak memuat baris "${RELEASE_ASSET}"`,
+        ),
+        hint: redownloadHint(),
       };
     case "not-found":
       return {
         kind: "error",
-        text: `Rilis ${o.tag} tidak punya SHA256SUMS (${o.detail} → 404)`,
-        hint: REDOWNLOAD_HINT,
+        text: tr(
+          `Release ${o.tag} has no SHA256SUMS (${o.detail} → 404)`,
+          `Rilis ${o.tag} tidak punya SHA256SUMS (${o.detail} → 404)`,
+        ),
+        hint: redownloadHint(),
       };
     case "offline":
       return {
         kind: "error",
-        text: `Cek diri butuh internet: SHA256SUMS rilis ${o.tag} tidak bisa diunduh (${o.detail})`,
-        hint: "sambungkan internet lalu ulangi, atau jalankan di terminal dengan --skip-verify",
+        text: tr(
+          `The self check needs internet: SHA256SUMS of release ${o.tag} could not be downloaded (${o.detail})`,
+          `Cek diri butuh internet: SHA256SUMS rilis ${o.tag} tidak bisa diunduh (${o.detail})`,
+        ),
+        hint: tr(
+          "connect to the internet and try again, or run it in a terminal with --skip-verify",
+          "sambungkan internet lalu ulangi, atau jalankan di terminal dengan --skip-verify",
+        ),
       };
   }
 }
 
 /** Dry-run preview (§4.1): what the check would say about this binary; `--skip-verify` = a warning, no fetch. */
 export async function previewVerify(ctx: InitContext, file: string): Promise<CheckLine> {
-  if (ctx.args.skipVerify) return skipLine;
+  if (ctx.args.skipVerify) return skipLine();
   return verifyLine(await checkRelease(ctx, file));
 }
 
@@ -108,13 +141,21 @@ export async function previewVerify(ctx: InitContext, file: string): Promise<Che
  */
 export async function verifyInstall(ctx: InitContext, file: string): Promise<void> {
   if (ctx.args.skipVerify) {
-    ctx.out.check(skipLine.kind, skipLine.text);
+    const skip = skipLine();
+    ctx.out.check(skip.kind, skip.text);
     const go = await ctx.confirmRisky(
       "skip-verify",
-      "Pasang binary yang tidak dicek ini?",
-      `${ctx.resumeCommand()} (tanpa --skip-verify, dengan internet)`,
+      tr("Install this unchecked binary?", "Pasang binary yang tidak dicek ini?"),
+      tr(
+        `${ctx.resumeCommand()} (without --skip-verify, with internet)`,
+        `${ctx.resumeCommand()} (tanpa --skip-verify, dengan internet)`,
+      ),
     );
-    if (!go) throw new CliExit(INIT_EXIT.cancelled, "Dibatalkan: binary tidak dipasang.");
+    if (!go)
+      throw new CliExit(
+        INIT_EXIT.cancelled,
+        tr("Cancelled: the binary was not installed.", "Dibatalkan: binary tidak dipasang."),
+      );
     return;
   }
   const line = verifyLine(await checkRelease(ctx, file));

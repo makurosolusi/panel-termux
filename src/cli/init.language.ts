@@ -55,7 +55,8 @@ export async function chooseInitLanguage({ host, lang, yes, dryRun, say }: InitL
   setCliLocale({ locale, source: "env-file" });
   if (!dryRun) {
     mkdirSync(dirname(file), { recursive: true });
-    writeAtomic(file, setEnvLine(text ?? renderEnvTemplate({ full: true }), "PANEL_LANG", locale), { mode: ENV_MODE });
+    const base = text ?? renderEnvTemplate({ full: true, locale }); // template comments in the chosen language
+    writeAtomic(file, setEnvLine(base, "PANEL_LANG", locale), { mode: ENV_MODE });
   }
   return locale;
 }

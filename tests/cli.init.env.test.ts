@@ -119,17 +119,17 @@ describe("init step env: fresh phone with a terminal", () => {
     expect(v.GOOGLE_CLIENT_SECRET).toBe(SECRET);
     expect(() => parseEnv(v)).not.toThrow();
     // template comments and the optional block are kept
-    expect(readFileSync(file, "utf8")).toContain("# --- Opsional");
+    expect(readFileSync(file, "utf8")).toContain("# --- Optional");
     const redirect = events.indexOf("out   https://panel.contoh.com/api/auth/callback/google");
     expect(redirect).toBeGreaterThan(-1);
     expect(redirect).toBeLessThan(events.indexOf("ask Client ID:"));
     expect(events.filter((e) => !e.startsWith("out"))).toEqual([
-      "ask Alamat panel (mis. panel.contoh.com):",
-      "ask Email Google pemilik panel (super admin):",
+      "ask Panel address (e.g. panel.example.com):",
+      "ask Google email of the panel owner (super admin):",
       "ask Client ID:",
       "secret Client secret:",
     ]);
-    expect(out()).toContain(`(tersimpan, ${SECRET.length} karakter)`);
+    expect(out()).toContain(`(saved, ${SECRET.length} characters)`);
     expect(ctx.state.changed).toEqual([file]);
     // the secret is only in .env: never printed, never in another file
     expect(out()).not.toContain(SECRET);
@@ -142,10 +142,10 @@ describe("init step env: fresh phone with a terminal", () => {
       answers: ["bukan alamat", "panel.contoh.com", "salah", "a@b.co", "  ", CLIENT_ID, "", SECRET],
     });
     expect(await run(ctx)).toBe(0);
-    expect(events.filter((e) => e.startsWith("ask Alamat"))).toHaveLength(2);
+    expect(events.filter((e) => e.startsWith("ask Panel address"))).toHaveLength(2);
     expect(events.filter((e) => e.startsWith("secret"))).toHaveLength(2);
     expect(parsed(file).SUPER_ADMIN_EMAILS).toBe("a@b.co");
-    expect(out()).toContain("bukan alamat yang valid");
+    expect(out()).toContain("not a valid address");
   });
 
   test("EOF stops asking: exit 3 naming the variables left, answers so far are saved", async () => {
@@ -153,7 +153,7 @@ describe("init step env: fresh phone with a terminal", () => {
     expect(await run(ctx)).toBe(3);
     expect(events.filter((e) => !e.startsWith("out"))).toHaveLength(2);
     expect(parsed(file).APP_BASE_URL).toBe("https://panel.contoh.com");
-    expect(out()).toContain("belum lengkap: SUPER_ADMIN_EMAILS, GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET");
+    expect(out()).toContain("is not complete: SUPER_ADMIN_EMAILS, GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET");
   });
 });
 
@@ -230,7 +230,7 @@ describe("init step env: flags and no terminal", () => {
     expect(v.APP_BASE_URL).toBe("https://panel.contoh.com");
     expect(v.SUPER_ADMIN_EMAILS).toBe("a@b.co,c@d.co");
     expect(mode(file)).toBe(0o600);
-    expect(out()).toContain(".env belum lengkap: GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET.");
+    expect(out()).toContain(".env is not complete: GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET.");
   });
 
   test("--skip tunnel: APP_BASE_URL = http://localhost:<PORT>, not asked", async () => {
@@ -238,7 +238,7 @@ describe("init step env: flags and no terminal", () => {
     writeFileSync(file, "PORT=3300\n", { mode: 0o600 });
     expect(await run(ctx)).toBe(0);
     expect(parsed(file).APP_BASE_URL).toBe("http://localhost:3300");
-    expect(events.some((e) => e.startsWith("ask Alamat"))).toBe(false);
+    expect(events.some((e) => e.startsWith("ask Panel address"))).toBe(false);
     expect(events).toContain("out   http://localhost:3300/api/auth/callback/google");
   });
 

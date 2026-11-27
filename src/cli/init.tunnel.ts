@@ -4,18 +4,15 @@
 // needs a terminal comes before the first write, so a run without one stops (exit 3) with the phone unchanged.
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
-import { insertIngressRule, readTunnelId } from "../server/sites/ingress.editor";
-import { type StepContext, StepError } from "../server/sites/job.step";
-import type { SiteCtx } from "../server/sites/site.checks";
-import { writeAtomic } from "../server/sites/site.files";
-import { ingressStep, tunnelState } from "../server/sites/site.steps";
-import { DnsRecordExistsError, DnsWrongZoneError } from "../server/system/system.types";
+import { readTunnelId } from "../server/sites/ingress.editor";
 import { HOSTNAME_RE } from "../shared/address.rules";
 import { ENV_VARS, type EnvVar } from "../shared/env.schema";
 import { probePaths } from "./cli.host";
+import { tr } from "./cli.locale";
 import { CliExit } from "./cli.output";
 import { readEnvFile } from "./env.file";
 import { stepRuns } from "./init.plan";
+import { addIngress, routeDns, writeConfig } from "./init.tunnel.config";
 import { ensureTunnel, login } from "./init.tunnel.login";
 import {
   applyService,
@@ -24,7 +21,7 @@ import {
   restartNeedsTerminal,
   type ServiceState,
 } from "./init.tunnel.service";
-import { defineStep, INIT_EXIT, INIT_STEP_TITLES, type InitContext, type PlanLine } from "./init.types";
+import { defineStep, INIT_EXIT, type InitContext, type PlanLine } from "./init.types";
 
 export { defaultTunnelName } from "./init.tunnel.login";
 
@@ -72,9 +69,17 @@ async function detect(ctx: InitContext): Promise<TunnelStepState> {
       const doc = Bun.YAML.parse(config) as { tunnel?: unknown; ingress?: { hostname?: unknown }[] };
       ref = typeof doc.tunnel === "string" ? doc.tunnel.trim() : null;
       ingress = host !== null && (doc.ingress ?? []).some((r) => r?.hostname === host);
-      if (id === null || !ref) configProblem = "~/.cloudflared/config.yml tidak menyebut tunnel";
+      if (id === null || !ref)
+        configProblem = tr(
+          "~/.cloudflared/config.yml does not name a tunnel",
+          "~/.cloudflared/config.yml tidak menyebut tunnel",
+        );
     } catch (e) {
-      configProblem = `~/.cloudflared/config.yml tidak bisa dibaca (${(e as Error).message})`;
+      const why = (e as Error).message;
+      configProblem = tr(
+        `~/.cloudflared/config.yml cannot be read (${why})`,
+        `~/.cloudflared/config.yml tidak bisa dibaca (${why})`,
+      );
     }
   }
   const panel = await ctx.host.system().runit.supervise("panel");
@@ -97,110 +102,106 @@ async function detect(ctx: InitContext): Promise<TunnelStepState> {
 const ingressWillChange = (s: TunnelStepState) =>
   s.host !== null && !s.ingress && (s.config === null || !s.panelRunning);
 
-const needsTerminal = (ctx: InitContext) => `jalankan ${ctx.resumeCommand()} di terminal`;
+const needsTerminal = (ctx: InitContext) =>
+  tr(`run ${ctx.resumeCommand()} in a terminal`, `jalankan ${ctx.resumeCommand()} di terminal`);
+const loginHint = (ctx: InitContext) =>
+  tr(
+    `run in a terminal: cloudflared tunnel login, then ${ctx.resumeCommand()}`,
+    `jalankan di terminal: cloudflared tunnel login, lalu ${ctx.resumeCommand()}`,
+  );
 
 function plan(ctx: InitContext, s: TunnelStepState): PlanLine[] {
   // M2: no cloudflared and step 2 does not run now (repair without terminal) → `cloudflared …` would not exist
   if (!s.service.installed && !stepRuns(ctx, "packages"))
-    return [{ kind: "warning", text: "cloudflared belum terpasang; tunnel belum disiapkan", hint: needsTerminal(ctx) }];
-  const where = s.host ?? "alamat panel";
+    return [
+      {
+        kind: "warning",
+        text: tr(
+          "cloudflared is not installed; the tunnel is not set up yet",
+          "cloudflared belum terpasang; tunnel belum disiapkan",
+        ),
+        hint: needsTerminal(ctx),
+      },
+    ];
+  const where = s.host ?? tr("the panel address", "alamat panel");
   const lines: PlanLine[] = [];
   if (s.config === null) {
-    const login = s.cert ? "" : "Login Cloudflare di browser, ";
-    lines.push({ kind: "action", text: `${login}${login ? "membuat" : "Membuat"} tunnel, menghubungkan ${where}` });
+    lines.push({
+      kind: "action",
+      text: s.cert
+        ? tr(`Creating a tunnel, connecting ${where}`, `Membuat tunnel, menghubungkan ${where}`)
+        : tr(
+            `Cloudflare login in the browser, creating a tunnel, connecting ${where}`,
+            `Login Cloudflare di browser, membuat tunnel, menghubungkan ${where}`,
+          ),
+    });
     if (!s.cert && !ctx.tty)
       lines.push({
         kind: "warning",
-        text: "Login Cloudflare butuh browser dan terminal; tunnel dilewati, langkah lain tetap jalan",
-        hint: `jalankan di terminal: cloudflared tunnel login, lalu ${ctx.resumeCommand()}`,
+        text: tr(
+          "Cloudflare login needs a browser and a terminal; the tunnel is skipped, the other steps still run",
+          "Login Cloudflare butuh browser dan terminal; tunnel dilewati, langkah lain tetap jalan",
+        ),
+        hint: loginHint(ctx),
       });
   } else if (s.configProblem !== null)
-    return [{ kind: "error", text: s.configProblem, hint: "perbaiki file itu (panel docs cloudflare), lalu ulangi" }];
+    return [
+      {
+        kind: "error",
+        text: s.configProblem,
+        hint: tr(
+          "fix that file (panel docs cloudflare), then try again",
+          "perbaiki file itu (panel docs cloudflare), lalu ulangi",
+        ),
+      },
+    ];
   else if (s.host !== null && !s.ingress) {
     if (s.panelRunning)
       lines.push({
         kind: "warning",
-        text: `${s.host} belum ada di ~/.cloudflared/config.yml; panel sedang berjalan, jadi file itu tidak diubah`,
-        hint: `sv down panel, lalu ${ctx.resumeCommand()}`,
+        text: tr(
+          `${s.host} is not in ~/.cloudflared/config.yml yet; the panel is running, so that file is not changed`,
+          `${s.host} belum ada di ~/.cloudflared/config.yml; panel sedang berjalan, jadi file itu tidak diubah`,
+        ),
+        hint: tr(`sv down panel, then ${ctx.resumeCommand()}`, `sv down panel, lalu ${ctx.resumeCommand()}`),
       });
-    else lines.push({ kind: "action", text: `Menghubungkan ${s.host} ke tunnel ${s.ref} (DNS + config.yml)` });
+    else
+      lines.push({
+        kind: "action",
+        text: tr(
+          `Connecting ${s.host} to tunnel ${s.ref} (DNS + config.yml)`,
+          `Menghubungkan ${s.host} ke tunnel ${s.ref} (DNS + config.yml)`,
+        ),
+      });
   }
   if (restartNeedsTerminal(ctx, s.service, ingressWillChange(s)))
     lines.push({
       kind: "warning",
-      text: "cloudflared yang berjalan perlu dimulai ulang (semua situs putus sebentar); tanpa terminal tunnel tidak diubah",
+      text: tr(
+        "The running cloudflared needs a restart (every site drops briefly); without a terminal the tunnel is not changed",
+        "cloudflared yang berjalan perlu dimulai ulang (semua situs putus sebentar); tanpa terminal tunnel tidak diubah",
+      ),
       hint: needsTerminal(ctx),
     });
   return [...lines, ...planService(ctx, s.service)];
 }
 
-/** config.yml (600) with only the catch-all; the panel rule is added by `addIngress` right after. */
-function writeConfig(ctx: InitContext, s: TunnelStepState, id: string): void {
-  const file = join(s.cfDir, "config.yml");
-  const text = `tunnel: ${id}\ncredentials-file: ${s.cfDir}/${id}.json\ningress:\n  - service: http_status:404\n`;
-  writeAtomic(file, text, { mode: 0o600 });
-  ctx.state.changed.push(file);
-}
-
-/** DNS for the panel host; a record of another target moves only after confirmRisky('dns-overwrite') (C19). */
-async function routeDns(ctx: InitContext, ref: string, id: string, host: string): Promise<void> {
-  const cf = ctx.host.system().cloudflared;
-  try {
-    await cf.routeDns(id, host);
-    return;
-  } catch (e) {
-    if (e instanceof DnsWrongZoneError)
-      throw new CliExit(
-        INIT_EXIT.failed,
-        `cert.pem untuk zona lain: Cloudflare memberi nama ${e.fqdn}, bukan ${host}.`,
-        `login ulang dengan domain yang benar: hapus ~/.cloudflared/cert.pem, lalu ${ctx.resumeCommand()}`,
-      );
-    const msg = `Gagal mengarahkan ${host} ke tunnel ${ref} (periksa internet).`; // cloudflared's text stays out (K10)
-    if (!(e instanceof DnsRecordExistsError)) throw new CliExit(INIT_EXIT.failed, msg, ctx.resumeCommand());
-  }
-  // cloudflared with cert.pem does not tell where the record points, so the old target stays unknown
-  ctx.out.line(`${host}: record DNS lain (tujuan tidak terbaca dengan cert.pem) → tunnel ${ref} (${id.slice(0, 8)})`);
-  const manual = `cloudflared tunnel route dns --overwrite-dns ${ref} ${host}, lalu ${ctx.resumeCommand()}`;
-  const yes = await ctx.confirmRisky(
-    "dns-overwrite",
-    `Alamat ${host} sudah diarahkan ke tunnel lain. Pindahkan ke tunnel ini? Yang dilayani alamat itu sekarang akan putus.`,
-    manual,
-  );
-  if (!yes) throw new CliExit(INIT_EXIT.cancelled, `Dibatalkan: DNS ${host} tidak diubah.`, `atau jalankan: ${manual}`);
-  await cf.routeDns(id, host, { overwrite: true });
-}
-
-/** Panel rule above the catch-all through the site jobs' ingressStep (validate, config.yml.bak, atomic rename). */
-async function addIngress(ctx: InitContext, s: TunnelStepState, host: string): Promise<void> {
-  const file = join(s.cfDir, "config.yml");
-  const cf = { ...ctx.host.system().cloudflared, configPath: file };
-  const step = ingressStep({ system: { cloudflared: cf } } as unknown as SiteCtx, tunnelState(), [host], false, (t) =>
-    insertIngressRule(t, host, `http://localhost:${s.port}`),
-  );
-  try {
-    const quiet: StepContext = { log: () => {} }; // ingressStep never logs
-    await step.run(quiet);
-  } catch (e) {
-    if (!(e instanceof StepError)) throw e;
-    throw new CliExit(
-      INIT_EXIT.failed,
-      `${host} tidak bisa ditambahkan ke ~/.cloudflared/config.yml (${e.code}).`,
-      "periksa file itu (panel docs cloudflare); isi lama tidak berubah",
-    );
-  }
-  ctx.state.changed.push(file, `${file}.bak`);
-}
-
 async function apply(ctx: InitContext, s: TunnelStepState): Promise<void> {
   if (s.configProblem !== null) throw new CliExit(INIT_EXIT.failed, s.configProblem, "panel docs cloudflare");
-  const noHost = "Alamat panel belum ada di ~/panel/.env (APP_BASE_URL).";
+  const noHost = tr(
+    "The panel address is not in ~/panel/.env yet (APP_BASE_URL).",
+    "Alamat panel belum ada di ~/panel/.env (APP_BASE_URL).",
+  );
   if (s.host === null) throw new CliExit(INIT_EXIT.needsUser, noHost, ctx.resumeCommand());
   const ingressChanged = ingressWillChange(s);
   // MINOR 6: the restart question would come after DNS + config.yml; without a terminal stop before both
   if (restartNeedsTerminal(ctx, s.service, ingressChanged))
     throw new CliExit(
       INIT_EXIT.needsUser,
-      "cloudflared yang berjalan perlu dimulai ulang; tunnel tidak diubah tanpa terminal.",
+      tr(
+        "The running cloudflared needs a restart; the tunnel is not changed without a terminal.",
+        "cloudflared yang berjalan perlu dimulai ulang; tunnel tidak diubah tanpa terminal.",
+      ),
       needsTerminal(ctx),
     );
   let { ref, id } = s;
@@ -223,7 +224,6 @@ async function apply(ctx: InitContext, s: TunnelStepState): Promise<void> {
 /** Step 8 of `panel init`. */
 export const tunnelStep = defineStep<TunnelStepState>({
   id: "tunnel",
-  title: INIT_STEP_TITLES.tunnel,
   detect,
   plan,
   apply,

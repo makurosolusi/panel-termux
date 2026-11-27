@@ -3,6 +3,7 @@
 // mode / with this TTY (§4 mode table, K9, K21, C22, C23) is decided in init.command.ts, never in the step.
 import type { DoctorState } from "../shared/doctor.types";
 import type { CliHost } from "./cli.host";
+import { tr } from "./cli.locale";
 import type { CliOut } from "./cli.output";
 
 /** Exit codes of init (PLAN/07 §2.2). Throw `new CliExit(INIT_EXIT.needsUser, message, hint)` from a step. */
@@ -46,7 +47,7 @@ export type ModeDecision = {
   staleProcess: boolean;
 };
 
-/** One plan line: `action` = numbered "Yang akan dilakukan" line; ok/warning/error/info = a checked fact (+ → hint). */
+/** One plan line: `action` = numbered "What will be done" line; ok/warning/error/info = a checked fact (+ → hint). */
 export type PlanLine = { kind: "action" | DoctorState; text: string; hint?: string };
 
 /**
@@ -89,7 +90,7 @@ export type InitContext = {
    * exit 4). Throws CliExit 3 (exit 2 for skip-verify) when it cannot ask; `manual` = the exact command to run instead.
    */
   confirmRisky: (action: RiskyAction, question: string, manual: string) => Promise<boolean>;
-  /** Runs `fn` with the first Ctrl-C ignored ("menunggu pkg selesai"), for pkg/npm (K7, §4.2). */
+  /** Runs `fn` with the first Ctrl-C ignored ("waiting for pkg to finish"), for pkg/npm (K7, §4.2). */
   guardSigint: <T>(fn: () => Promise<T>) => Promise<T>;
   /** Command that resumes init (m8): `panel init` when $PREFIX/bin/panel is ours, else `~/panel/panel init`. */
   resumeCommand: () => string;
@@ -112,20 +113,22 @@ export const INIT_STEP_IDS = [
 /** One step id. */
 export type InitStepId = (typeof INIT_STEP_IDS)[number];
 
-/** Step title (InitStep.title): lowercase name used in "Sudah lengkap: …" and as the run header. */
-export const INIT_STEP_TITLES: Record<InitStepId, string> = {
-  binary: "binary panel",
-  packages: "paket Termux",
-  runit: "runit",
-  ssh: "SSH",
-  postgres: "PostgreSQL",
-  env: ".env",
-  "panel-sv": "layanan panel",
-  pm2: "pm2",
-  tunnel: "tunnel Cloudflare",
-  boot: "Termux:Boot",
-  start: "menyalakan panel",
+const STEP_TITLES: Record<InitStepId, [en: string, id: string]> = {
+  binary: ["panel binary", "binary panel"],
+  packages: ["Termux packages", "paket Termux"],
+  runit: ["runit", "runit"],
+  ssh: ["SSH", "SSH"],
+  postgres: ["PostgreSQL", "PostgreSQL"],
+  env: [".env", ".env"],
+  "panel-sv": ["panel service", "layanan panel"],
+  pm2: ["pm2", "pm2"],
+  tunnel: ["Cloudflare tunnel", "tunnel Cloudflare"],
+  boot: ["Termux:Boot", "Termux:Boot"],
+  start: ["starting the panel", "menyalakan panel"],
 };
+
+/** Step title in the active CLI locale: lowercase name used in "Already complete: …" and as the run header. */
+export const stepTitle = (id: InitStepId): string => tr(...STEP_TITLES[id]);
 
 /**
  * One init step. `detect` and `plan` never write anything and start no child that changes the phone (`--dry-run`
@@ -135,8 +138,6 @@ export const INIT_STEP_TITLES: Record<InitStepId, string> = {
  */
 export type InitStep<S = unknown> = {
   id: InitStepId;
-  /** INIT_STEP_TITLES[id]. */
-  title: string;
   detect: (ctx: InitContext) => Promise<S>;
   plan: (ctx: InitContext, state: S) => PlanLine[];
   apply: (ctx: InitContext, state: S) => Promise<void>;

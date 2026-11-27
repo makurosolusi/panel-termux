@@ -3,6 +3,7 @@
 // the tunnel token) and errors carry the exit code only.
 import { existsSync } from "node:fs";
 import { join } from "node:path";
+import { tr } from "./cli.locale";
 import { CliExit } from "./cli.output";
 import { INIT_EXIT, type InitContext } from "./init.types";
 
@@ -11,7 +12,7 @@ const API_TIMEOUT_MS = 30_000;
 /** Tunnel names we create/accept (cloudflared allows more; we keep them safe for argv and the run script). */
 const TUNNEL_NAME_RE = /^[a-z0-9][a-z0-9-]{0,62}$/;
 
-/** Q7: `panel.contoh.com` → `panel-contoh-com` (prefix `panel-` + the domain without its first label). */
+/** Q7: `panel.example.com` → `panel-example-com` (prefix `panel-` + the domain without its first label). */
 export function defaultTunnelName(host: string): string {
   const domain = host.split(".").slice(1).join("-");
   return `panel-${domain || host.replaceAll(".", "-")}`.slice(0, 63);
@@ -21,27 +22,44 @@ export function defaultTunnelName(host: string): string {
 const cfFail = (what: string, code: number, ctx: InitContext) =>
   new CliExit(
     INIT_EXIT.failed,
-    `cloudflared ${what} gagal (kode ${code}).`,
-    `periksa internet, lalu ${ctx.resumeCommand()}`,
+    tr(`cloudflared ${what} failed (code ${code}).`, `cloudflared ${what} gagal (kode ${code}).`),
+    tr(`check the internet, then ${ctx.resumeCommand()}`, `periksa internet, lalu ${ctx.resumeCommand()}`),
   );
 
+/** Cloudflare login in the browser (TTY only, else exit 3); records cert.pem. */
 export async function login(ctx: InitContext, cfDir: string): Promise<void> {
   if (!ctx.tty)
     throw new CliExit(
       INIT_EXIT.needsUser,
-      "Login Cloudflare butuh browser dan terminal.",
-      `jalankan di terminal: cloudflared tunnel login, lalu ${ctx.resumeCommand()}`,
+      tr("Cloudflare login needs a browser and a terminal.", "Login Cloudflare butuh browser dan terminal."),
+      tr(
+        `run in a terminal: cloudflared tunnel login, then ${ctx.resumeCommand()}`,
+        `jalankan di terminal: cloudflared tunnel login, lalu ${ctx.resumeCommand()}`,
+      ),
     );
-  ctx.out.line("Login Cloudflare di browser: buka alamat yang muncul di bawah, lalu pilih domain panel.");
+  ctx.out.line(
+    tr(
+      "Cloudflare login in the browser: open the address shown below, then choose the panel's domain.",
+      "Login Cloudflare di browser: buka alamat yang muncul di bawah, lalu pilih domain panel.",
+    ),
+  );
   let opened = false;
   const code = await ctx.host.run("cloudflared", ["tunnel", "login"], {
     onLine: (line) => {
       const url = /https:\/\/\S+/.exec(line)?.[0];
       if (!url || opened) return;
       opened = true;
-      ctx.out.line(`Bila browser tidak terbuka sendiri, buka: ${url}`); // one-time login URL, not a secret (D14)
+      // one-time login URL, not a secret (D14)
+      ctx.out.line(
+        tr(`If the browser does not open by itself, open: ${url}`, `Bila browser tidak terbuka sendiri, buka: ${url}`),
+      );
       ctx.host.exec("termux-open-url", [url]).catch(() => {
-        ctx.out.note("ℹ️ termux-open-url tidak tersedia; buka alamat di atas secara manual.");
+        ctx.out.note(
+          tr(
+            "ℹ️ termux-open-url is not available; open the address above by hand.",
+            "ℹ️ termux-open-url tidak tersedia; buka alamat di atas secara manual.",
+          ),
+        );
       });
     },
   });
@@ -62,7 +80,14 @@ async function tunnelIdOf(ctx: InitContext, name: string): Promise<string | null
   try {
     rows = JSON.parse(r.stdout || "[]") as TunnelRow[];
   } catch (e) {
-    throw new CliExit(INIT_EXIT.failed, `cloudflared tunnel list: output bukan JSON (${(e as Error).message}).`);
+    const why = (e as Error).message;
+    throw new CliExit(
+      INIT_EXIT.failed,
+      tr(
+        `cloudflared tunnel list: the output is not JSON (${why}).`,
+        `cloudflared tunnel list: output bukan JSON (${why}).`,
+      ),
+    );
   }
   const row = (Array.isArray(rows) ? rows : []).find((t) => t?.name === name && typeof t.id === "string");
   return row ? (row.id as string).toLowerCase() : null;
@@ -70,10 +95,17 @@ async function tunnelIdOf(ctx: InitContext, name: string): Promise<string | null
 
 async function askName(ctx: InitContext, suggested: string): Promise<string> {
   for (;;) {
-    const a = (await ctx.prompt.ask(`Nama tunnel [${suggested}]:`))?.trim().toLowerCase();
+    const a = (await ctx.prompt.ask(tr(`Tunnel name [${suggested}]:`, `Nama tunnel [${suggested}]:`)))
+      ?.trim()
+      .toLowerCase();
     if (!a) return suggested; // Enter or EOF = the default
     if (TUNNEL_NAME_RE.test(a)) return a;
-    ctx.out.line("Nama tunnel: huruf kecil, angka, dan tanda minus (mis. panel-contoh-com).");
+    ctx.out.line(
+      tr(
+        "Tunnel name: lowercase letters, digits and hyphens (e.g. panel-example-com).",
+        "Nama tunnel: huruf kecil, angka, dan tanda minus (mis. panel-contoh-com).",
+      ),
+    );
   }
 }
 
@@ -92,25 +124,48 @@ export async function ensureTunnel(
       if (r.code !== 0) throw cfFail(`tunnel create ${name}`, r.code, ctx);
       id = await tunnelIdOf(ctx, name);
       if (id === null)
-        throw new CliExit(INIT_EXIT.failed, `Tunnel ${name} sudah dibuat tetapi tidak muncul di daftar.`);
+        throw new CliExit(
+          INIT_EXIT.failed,
+          tr(
+            `Tunnel ${name} was created but does not show up in the list.`,
+            `Tunnel ${name} sudah dibuat tetapi tidak muncul di daftar.`,
+          ),
+        );
       const cred = join(cfDir, `${id}.json`);
-      if (!existsSync(cred)) throw new CliExit(INIT_EXIT.failed, `Kredensial tunnel ${name} tidak ada di ${cred}.`);
+      if (!existsSync(cred))
+        throw new CliExit(
+          INIT_EXIT.failed,
+          tr(
+            `The credentials of tunnel ${name} are missing at ${cred}.`,
+            `Kredensial tunnel ${name} tidak ada di ${cred}.`,
+          ),
+        );
       ctx.state.changed.push(cred);
       return { name, id };
     }
     if (existsSync(join(cfDir, `${id}.json`))) {
-      ctx.out.line(`Tunnel ${name} sudah ada dan kredensialnya ada di HP ini: dipakai ulang.`);
+      ctx.out.line(
+        tr(
+          `Tunnel ${name} already exists and its credentials are on this phone: reused.`,
+          `Tunnel ${name} sudah ada dan kredensialnya ada di HP ini: dipakai ulang.`,
+        ),
+      );
       return { name, id };
     }
+    const foreign = tr(
+      `Tunnel ${name} already exists in the Cloudflare account, but its credentials are not on this phone.`,
+      `Tunnel ${name} sudah ada di akun Cloudflare, tetapi kredensialnya tidak ada di HP ini.`,
+    );
     if (!ctx.tty)
       throw new CliExit(
         INIT_EXIT.needsUser,
-        `Tunnel ${name} sudah ada di akun Cloudflare, tetapi kredensialnya tidak ada di HP ini.`,
-        `pilih nama lain: jalankan ${ctx.resumeCommand()} di terminal; atau bila tunnel itu tidak dipakai lagi: cloudflared tunnel delete ${name}`,
+        foreign,
+        tr(
+          `choose another name: run ${ctx.resumeCommand()} in a terminal; or if that tunnel is no longer used: cloudflared tunnel delete ${name}`,
+          `pilih nama lain: jalankan ${ctx.resumeCommand()} di terminal; atau bila tunnel itu tidak dipakai lagi: cloudflared tunnel delete ${name}`,
+        ),
       );
-    ctx.out.line(
-      `Tunnel ${name} sudah ada di akun Cloudflare, tetapi kredensialnya tidak ada di HP ini. Pilih nama lain.`,
-    );
+    ctx.out.line(`${foreign} ${tr("Choose another name.", "Pilih nama lain.")}`);
     name = await askName(ctx, `${name}-2`);
   }
 }

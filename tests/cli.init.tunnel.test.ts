@@ -156,7 +156,7 @@ describe("fresh phone", () => {
     const { h, cfDir, svdir } = setup("fresh", { tty: true, answers: [true, ""], files: ENV_FILE });
     const r = await init(h);
     expect(r.code).toBe(0);
-    expect(r.text).toContain("Bila browser tidak terbuka sendiri, buka: https://dash.cloudflare.com/");
+    expect(r.text).toContain("If the browser does not open by itself, open: https://dash.cloudflare.com/");
     const all = argvs(h);
     expect(all).toContain("cloudflared tunnel login");
     expect(all).toContain("cloudflared tunnel create panel-contoh-com");
@@ -182,8 +182,8 @@ describe("fresh phone", () => {
     const before = snapshot(root);
     const r = await init(h, { yes: true });
     expect(r.code).toBe(3);
-    expect(r.text).toContain("⚠️ Login Cloudflare butuh browser dan terminal; tunnel dilewati"); // in the plan
-    expect(r.text).toContain("❌ Login Cloudflare butuh browser dan terminal.");
+    expect(r.text).toContain("⚠️ Cloudflare login needs a browser and a terminal; the tunnel is skipped"); // in the plan
+    expect(r.text).toContain("❌ Cloudflare login needs a browser and a terminal.");
     expect(argvs(h)).not.toContain("cloudflared tunnel login");
     const lockless = (snap: string[]) => snap.filter((f) => !f.startsWith(`${root}/usr `) && !f.includes("/usr/tmp"));
     expect(lockless(snapshot(root))).toEqual(lockless(before)); // the init lock lives in $PREFIX/tmp
@@ -198,7 +198,7 @@ describe("fresh phone", () => {
     });
     const r = await init(h);
     expect(r.code).toBe(0);
-    expect(r.text).toContain("dipakai ulang");
+    expect(r.text).toContain("reused");
     expect(argvs(h).some((a) => a.includes("tunnel create"))).toBe(false);
     expect(argvs(h)).not.toContain("cloudflared tunnel login");
     expect(readFileSync(join(cfDir, "config.yml"), "utf8")).toContain(`tunnel: ${NEW_ID}`);
@@ -250,7 +250,7 @@ describe("DNS record of another tunnel (C19, E1)", () => {
     const r = await init(s.h);
     expect(r.code).toBe(0);
     expect(r.text).toContain(
-      `${HOST}: record DNS lain (tujuan tidak terbaca dengan cert.pem) → tunnel panel-contoh-com (11111111)`,
+      `${HOST}: another DNS record (its target cannot be read with cert.pem) → tunnel panel-contoh-com (11111111)`,
     );
     expect(s.overwrites).toEqual([`${NEW_ID} ${HOST}`]);
   });
@@ -282,7 +282,7 @@ describe("existing install (repair)", () => {
     const before = snapshot(root);
     const r = await init(h, { "dry-run": true });
     expect(r.code).toBe(0);
-    expect(r.text).toContain("Sudah lengkap: tunnel Cloudflare.");
+    expect(r.text).toContain("Already complete: Cloudflare tunnel.");
     expect(snapshot(root)).toEqual(before);
     expect(argvs(h).filter((a) => a.startsWith("cloudflared") || a.startsWith("sv "))).toEqual([]);
   });
@@ -298,7 +298,7 @@ describe("existing install (repair)", () => {
     const s = setup("ready", { tty: true, answers: [true] });
     const before = noPanelRule(s.cfDir);
     const r = await init(s.h);
-    expect(r.text).toContain("panel sedang berjalan, jadi file itu tidak diubah");
+    expect(r.text).toContain("the panel is running, so that file is not changed");
     expect(readFileSync(join(s.cfDir, "config.yml"), "utf8")).toBe(before);
     expect(argvs(s.h).some((a) => a.startsWith("cloudflared tunnel route"))).toBe(false);
   });
@@ -328,8 +328,10 @@ describe("existing install (repair)", () => {
     const before = readFileSync(join(s.cfDir, "config.yml"), "utf8");
     const r = await init(s.h, { yes: true });
     expect(r.code).toBe(3);
-    expect(r.text).toContain("cloudflared yang berjalan perlu dimulai ulang (semua situs putus sebentar)"); // plan
-    expect(r.text).toContain("❌ cloudflared yang berjalan perlu dimulai ulang; tunnel tidak diubah tanpa terminal.");
+    expect(r.text).toContain("The running cloudflared needs a restart (every site drops briefly)"); // plan
+    expect(r.text).toContain(
+      "❌ The running cloudflared needs a restart; the tunnel is not changed without a terminal.",
+    );
     expect(argvs(s.h)).not.toContain("sv restart cloudflared");
     // stopped before DNS and config.yml (MINOR 6): nothing half done that a terminal run would have asked about
     expect(argvs(s.h).some((a) => a.startsWith("cloudflared tunnel route"))).toBe(false);
@@ -342,14 +344,14 @@ describe("existing install (repair)", () => {
     const before = snapshot(root);
     const r = await init(h, { yes: true });
     expect(r.code).toBe(0);
-    expect(r.text).toContain("⚠️ cloudflared belum terpasang; tunnel belum disiapkan");
-    expect(r.text).not.toContain("Sudah lengkap: tunnel");
+    expect(r.text).toContain("⚠️ cloudflared is not installed; the tunnel is not set up yet");
+    expect(r.text).not.toContain("Already complete: Cloudflare tunnel");
     expect(argvs(h).filter((a) => a.startsWith("cloudflared") || a.startsWith("sv "))).toEqual([]);
     const lockless = (snap: string[]) => snap.filter((f) => !f.startsWith(`${root}/usr `) && !f.includes("/usr/tmp"));
     expect(lockless(snapshot(root))).toEqual(lockless(before));
     // with a terminal step 2 runs first (it installs cloudflared), so the tunnel is planned
     const t = setup("fresh", { files, tty: true });
-    expect((await init(t.h, { "dry-run": true })).text).toContain("Membuat tunnel, menghubungkan panel.contoh.com");
+    expect((await init(t.h, { "dry-run": true })).text).toContain("Creating a tunnel, connecting panel.contoh.com");
   });
 
   test("custom run script is kept (K6); template in repair without TTY → warning, not replaced", async () => {
@@ -361,7 +363,7 @@ describe("existing install (repair)", () => {
     const template = "#!/bin/sh\nexec cloudflared tunnel run --token-file $HOME/.cloudflared/token 2>&1\n";
     const t = setup("ready", { files: { "usr/var/service/cloudflared/run": template } });
     const r = await init(t.h, { yes: true });
-    expect(r.text).toContain("Run script cloudflared masih template paket");
+    expect(r.text).toContain("The cloudflared run script is still the package template");
     expect(readFileSync(join(t.svdir, "cloudflared", "run"), "utf8")).toBe(template);
     expect(existsSync(join(probePaths(t.h.paths).cloudflaredDir, "token"))).toBe(false);
   });

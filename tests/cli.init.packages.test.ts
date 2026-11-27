@@ -6,7 +6,8 @@ import { type FakeScenarioName, probePaths } from "@/cli/cli.host";
 import { createFakeHost, type FakeAnswer, type FakeHost } from "@/cli/cli.host.fake";
 import { createCliOut } from "@/cli/cli.output";
 import { runInit } from "@/cli/init.command";
-import { packagesStep, parseAptSimulation } from "@/cli/init.packages";
+import { packagesStep } from "@/cli/init.packages";
+import { parseAptSimulation } from "@/cli/init.packages.apt";
 
 const tmp = mkdtempSync(join(tmpdir(), "panel-cli-init-pkg-"));
 afterAll(() => rmSync(tmp, { recursive: true, force: true }));
@@ -119,10 +120,10 @@ describe("packages step (K7, K8, D9, C20)", () => {
     const r = await init(h, { "dry-run": true });
     expect(r.code).toBe(0);
     expect(r.text).toContain(
-      "Memperbarui paket Termux (pkg upgrade), lalu memasang: termux-services, nodejs-lts, postgresql, cloudflared, termux-api",
+      "Updating Termux packages (pkg upgrade), then installing: termux-services, nodejs-lts, postgresql, cloudflared, termux-api",
     );
-    expect(r.text).toContain("Menahan cloudflared dan postgresql dari upgrade otomatis");
-    expect(r.text).toContain("Memasang pm2 7.1.2 (npm)");
+    expect(r.text).toContain("Holding cloudflared and postgresql back from automatic upgrades");
+    expect(r.text).toContain("Installing pm2 7.1.2 (npm)");
     expect(runs(h)).toEqual([]);
     expect(snapshot(h.paths.home)).toEqual(before);
   });
@@ -147,7 +148,7 @@ describe("packages step (K7, K8, D9, C20)", () => {
     expect(h.records.find((x) => x.argv[0] === "pkg")?.envKeys).toContain("DEBIAN_FRONTEND");
     expect(h.records.some((x) => x.argv.includes("--reinstall"))).toBe(false);
     expect(h.records.some((x) => x.argv[0] === "apt-get")).toBe(false); // upgrade path: no simulation
-    expect(r.text).toContain("Ditahan: cloudflared, postgresql");
+    expect(r.text).toContain("Held: cloudflared, postgresql");
   });
 
   test("fresh with TTY: declining pkg upgrade falls back to the simulated install", async () => {
@@ -160,8 +161,8 @@ describe("packages step (K7, K8, D9, C20)", () => {
   test("--ssh-key adds openssh; --skip postgres/tunnel leaves those out", async () => {
     const h = phone("fresh");
     const r = await init(h, { "dry-run": true, "ssh-key": "/k.pub", skip: ["postgres", "tunnel"] });
-    expect(r.text).toContain("memasang: termux-services, nodejs-lts, termux-api, openssh");
-    expect(r.text).not.toContain("Menahan");
+    expect(r.text).toContain("installing: termux-services, nodejs-lts, termux-api, openssh");
+    expect(r.text).not.toContain("Holding");
   });
 
   test("a failing pkg install names the package and panel docs paket (exit 1)", async () => {
@@ -170,16 +171,16 @@ describe("packages step (K7, K8, D9, C20)", () => {
     h.run = async (tool, args = [], opts) => ((await run(tool, args, opts)) || args.includes("postgresql") ? 100 : 0);
     const r = await init(h, { yes: true });
     expect(r.code).toBe(1);
-    expect(r.text).toContain("Memasang paket postgresql gagal (pkg keluar dengan kode 100)");
-    expect(r.text).toContain("panel docs paket");
+    expect(r.text).toContain("Installing package postgresql failed (pkg exited with code 100)");
+    expect(r.text).toContain("panel docs packages");
   });
 
   test("fresh-pg (PostgreSQL data → repair): never pkg upgrade; simulated first; postgresql held", async () => {
     const h = phone("fresh-pg", { tty: true, answers: [true, true], sim: L8_UPGRADE });
     const r = await init(h);
     expect(r.code).toBe(0);
-    expect(r.text).toContain("Memasang: termux-services, nodejs-lts, cloudflared, termux-api");
-    expect(r.text).toContain("Pemasangan juga memperbarui paket terpasang: runit");
+    expect(r.text).toContain("Installing: termux-services, nodejs-lts, cloudflared, termux-api");
+    expect(r.text).toContain("The install also updates installed packages: runit");
     expect(runs(h).some((c) => c.includes("upgrade"))).toBe(false);
     const sim = h.records.find((x) => x.argv[0] === "apt-get");
     expect(sim?.argv).toEqual([
@@ -199,14 +200,14 @@ describe("packages step (K7, K8, D9, C20)", () => {
     expect(seq.filter((x) => x === "run apt-get update")).toHaveLength(1);
     expect(seq.lastIndexOf("exec apt-get -s")).toBeGreaterThan(update);
     expect(seq.indexOf("run pkg install")).toBeGreaterThan(seq.lastIndexOf("exec apt-get -s"));
-    expect(r.text).toContain("Memperbarui daftar paket (apt-get update)");
+    expect(r.text).toContain("Updating the package lists (apt-get update)");
   });
 
   test("fresh-pg: simulation replacing cloudflared/postgresql → exit 3, no pkg install", async () => {
     const h = phone("fresh-pg", { tty: true, answers: [true], sim: L8_REINSTALL });
     const r = await init(h);
     expect(r.code).toBe(3);
-    expect(r.text).toContain("akan ikut mengganti cloudflared");
+    expect(r.text).toContain("would also replace cloudflared");
     expect(r.text).toContain("pkg install termux-services nodejs-lts cloudflared termux-api");
     expect(runs(h).filter((c) => c.startsWith("pkg"))).toEqual([]);
   });
@@ -215,7 +216,7 @@ describe("packages step (K7, K8, D9, C20)", () => {
     const h = phone("fresh-pg", { sim: L8_NEW });
     const r = await init(h, { yes: true });
     expect(r.code).toBe(0);
-    expect(r.text).toContain("(butuh terminal)");
+    expect(r.text).toContain("(needs a terminal)");
     expect(runs(h)).toEqual([]);
   });
 
@@ -223,7 +224,7 @@ describe("packages step (K7, K8, D9, C20)", () => {
     const h = phone("poco");
     const r = await init(h, { yes: true });
     expect(r.code).toBe(0);
-    expect(r.text).toContain("Sudah lengkap: paket Termux.");
+    expect(r.text).toContain("Already complete: Termux packages.");
     expect(runs(h)).toEqual([]);
     expect(h.records.some((x) => x.argv[0] === "apt-get")).toBe(false);
   });
@@ -232,7 +233,7 @@ describe("packages step (K7, K8, D9, C20)", () => {
     const h = phone("fresh-resume");
     const r = await init(h, { yes: true });
     expect(r.code).toBe(0);
-    expect(r.text).toContain("Menyelesaikan pemasangan paket yang terputus");
+    expect(r.text).toContain("Finishing an interrupted package install");
     const cmds = runs(h);
     expect(cmds[0]).toBe("dpkg --configure -a --force-confdef --force-confold");
     expect(cmds[1]).toStartWith("pkg upgrade");
@@ -251,7 +252,7 @@ describe("packages step (K7, K8, D9, C20)", () => {
         : audit(tool, args, opts);
     const r = await init(h);
     expect(r.code).toBe(3);
-    expect(r.text).toContain("jalankan: dpkg --configure -a --force-confdef --force-confold");
+    expect(r.text).toContain("run: dpkg --configure -a --force-confdef --force-confold");
     expect(runs(h)).toEqual([]);
   });
 });
