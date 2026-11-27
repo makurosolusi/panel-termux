@@ -128,3 +128,29 @@ to wave 0b.
 - Drop `og.id.png`, the `?lang=id` OG variant, `og:locale:alternate` and `hreflang`. OG preview is English only.
 - Drop locale-aware data-key text: the data-key download is English only.
 - Drop reload-on-mismatch (finding 6).
+
+## Appendix — tsc spike on `id.job.ts` (wave 0a stage 1, `wkr-i18n-base-01`, 2026-11-27)
+
+Setup: `Messages<T>` exactly as in PLAN/08 §4.2 in a temporary `src/shared/i18n.ts`; `src/web/i18n/en.job.ts` = a
+copy of `id.job.ts` exporting `tJob`; `id.job.ts` annotated `export const idJob: Messages<typeof tJob> = { … }` (102
+function leaves, `satisfies Record<…>` clauses kept). TypeScript 7.0.2, `tsc --noEmit --extendedDiagnostics`, three
+runs each on the whole project. The spike files were removed afterwards (stage 2 creates the real ones).
+
+| Run set  | Check time (s)        | Instantiations | Types   |
+| -------- | --------------------- | -------------- | ------- |
+| baseline | 1.29 · 1.37 · 1.02    | 1,848,486      | 460,847 |
+| typed    | 1.11 · 0.99 · 1.04    | 1,864,001      | 462,282 |
+
+Result: no measurable check-time cost (differences are run-to-run noise; +0.8 % instantiations). Far below the 2 s
+stop threshold. Parameter types flow from English: `(p) =>` in the overlay needs no annotation.
+
+Deliberate errors (all readable, pointing at the overlay line):
+
+- Missing key: `TS2741: Property 'validated' is missing in type '{ invalid_site: … }' but required in type '{ readonly validated: () => string; … }'.`
+- Misspelled / extra key: `TS2561: Object literal may only specify known properties, but 'tunnel_restartd' does not exist in type '{ … }'. Did you mean to write 'tunnel_restarted'?`
+- Function with more parameters than English: `TS2322: Type '(pct: string, more: string) => string' is not assignable to type '(pct: number) => string'. Target signature provides too few arguments. Expected 2 or more, but got 1.`
+
+Not caught by the type (as expected, covered by `tests/i18n.parity.test.ts`): array length, and an overlay function
+declaring fewer parameters than English (TypeScript allows dropping parameters).
+
+Decision: continue with `Messages<typeof t*>` as planned.
