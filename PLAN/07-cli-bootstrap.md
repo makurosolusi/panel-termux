@@ -1,8 +1,9 @@
-# PLAN 07 — CLI di binary: `-h`, `-v`, `doctor`, `docs`, `init`, `upgrade`, `rollback`
+# PLAN 07 — CLI di binary: `-h`, `-v`, `doctor`, `docs`, `env`, `init`, `upgrade`, `rollback`
 
 Ditulis `wkr-cli-plan-01`, 2026-11-27. Dasar riset: `R&D/08-cli-bootstrap.md` (inventaris 27 langkah, verifikasi Bun /
 Termux / cloudflared, pembanding industri). Mengikuti `PLAN/DECISIONS.md` (terutama B14, B18, B23, C1, C3, C5, C6) dan
-aturan global (`~/.claude/CLAUDE.md`). Status: **rencana, belum ada kode**.
+aturan global (`~/.claude/CLAUDE.md`). Status: **rencana, belum ada kode**. Ditambah `wkr-cli-plan-02`, 2026-11-27:
+perintah `panel env` / `--env` (K17–K18, §6.2) atas permintaan pemilik.
 
 ## 0. Ringkasan
 
@@ -10,7 +11,8 @@ Binary `panel` mendapat CLI. Tanpa argumen tetap menjalankan server (runit tidak
 tanpa mengubah apa pun dan memakai pemeriksaan yang sama dengan kartu Persiapan. `init` membangun ekosistem dari
 Termux kosong (paket, runit, postgres, pm2, `.env` lewat prompt, tunnel Cloudflare, Termux:Boot), lalu menyalakan
 panel. `init` idempoten dan aman di HP yang sudah jalan (POCO): ia hanya **mengisi yang belum ada**, tidak pernah
-menimpa. `upgrade`/`rollback` mengganti binary dari rilis GitHub dengan verifikasi SHA-256 dan `panel.prev`.
+menimpa. `panel env > .env` mencetak `.env` minimal (hanya variabel wajib, tanpa nilai) dari satu skema env yang
+juga dipakai validasi boot, doctor, prompt `init`, dan `.env.example`. `upgrade`/`rollback` mengganti binary dari rilis GitHub dengan verifikasi SHA-256 dan `panel.prev`.
 `install.sh` menyusut menjadi: cek HP → unduh → verifikasi → `exec panel init`.
 
 ## 1. Keputusan PLAN
@@ -33,6 +35,8 @@ menimpa. `upgrade`/`rollback` mengganti binary dari rilis GitHub dengan verifika
 | K14 | `install.sh` = bootstrap tipis yang `exec` binary hasil unduhan: `exec "$BIN" init "$@" </dev/tty` (bila `/dev/tty` ada). Kontrak exit 0/1/3 dipertahankan.                                                                                                       | Permintaan pemilik; landing/README tetap satu perintah.                                                |
 | K15 | Tarball rilis **tidak berubah** di 0.5.0 (binary + `install-phone.sh` + `deploy/*` + `.env.example`); binary meng-embed semua template yang ia tulis. `install-phone.sh` dihapus di rilis sesudahnya.                                                             | Pengguna yang mem-pin versi lama tidak rusak; satu langkah per rilis.                                  |
 | K16 | Versi rilis: **0.5.0** = P0 + P1 + `upgrade`/`rollback` (P2a). P2b (Access lewat API, dsb.) = backlog.                                                                                                                                                          | Fitur baru (semver minor), C7 pola rilis.                                                              |
+| K17 | Satu skema env: `src/shared/env.schema.ts` mengekspor `ENV_VARS` (urutan tetap; per variabel `name`, `required`, `default?`, `example?`, `description` Indonesia satu baris, `secret`) + `renderEnvTemplate({ full })`. Dipakai: `parseEnv` (daftar wajib + default `PORT`/`PANEL_DATA_DIR`), doctor `env_complete`, urutan/daftar prompt `init`, `panel env`, dan `.env.example` (= output `panel env --full`, ditegakkan test). Modul murni: tanpa impor server, fs, atau `process.env`. | Permintaan pemilik; menghapus tiga daftar paralel (`env.ts`, `.env.example`, `REQUIRED_VARS` `install-phone.sh`). |
+| K18 | `panel env` (alias `panel --env`, **tanpa** short flag `-e`): stdout = template saja (bersih untuk redirect), catatan ke stderr, exit 0. Tidak pernah membaca isi `.env` yang ada maupun `process.env` (hanya `stat`). Nilai variabel **dikosongkan**; contoh nilai ada di komentar. Seperti `-v`/`-h`, tidak memuat bundle server (K1, §7.3). | Nilai kosong → panel menolak start dan `install-phone.sh`/doctor menyebut namanya, bukan jalan dengan data contoh. `-e` tidak dipakai agar tidak mengunci huruf itu (mis. `--email`) dan karena `env` sudah pendek. |
 
 ## 2. Perintah, flag, exit code
 
@@ -46,6 +50,7 @@ menimpa. `upgrade`/`rollback` mengganti binary dari rilis GitHub dengan verifika
 | `panel -v`, `--version`, `--v`       | `--json`                                                                                                   | tidak        | P0   |
 | `panel doctor`                       | `--json`                                                                                                   | tidak        | P0   |
 | `panel docs [topik]`                 | tanpa topik = daftar topik                                                                                 | tidak        | P0   |
+| `panel env`, `--env`                 | `--full` (tambah variabel opsional, dikomentari dengan nilai bawaan)                                       | tidak        | P0   |
 | `panel init`                         | `-y/--yes`, `--hostname <fqdn>`, `--admin-email <email>` (boleh berulang), `--tunnel <nama>`, `--port <n>`, `--skip <postgres\|tunnel\|boot>` (boleh berulang), `--dry-run` | ya           | P1   |
 | `panel upgrade`                      | `--to <vX.Y.Z>`, `--check`, `-y/--yes`                                                                     | ya           | P2a  |
 | `panel rollback`                     | `--db`, `-y/--yes`                                                                                         | ya           | P2a  |
@@ -53,6 +58,9 @@ menimpa. `upgrade`/`rollback` mengganti binary dari rilis GitHub dengan verifika
 `-v` mencetak satu baris `panel-termux 0.5.0 (android-arm64, bun 1.4.2)`; `--json` → `{"name":"panel-termux",
 "version":"0.5.0","platform":"android","arch":"arm64","bun":"1.4.2"}`. Platform/arch dari `process.platform`/
 `process.arch`, versi dari `package.json` (sudah diimpor `boot.ts`).
+
+`--env` dinormalisasi ke perintah `env` sebelum parse (sama dengan `--v`/`--h`, K3), jadi `panel --env --full` =
+`panel env --full`. Short flag yang dipakai tetap hanya `-h`, `-v`, `-y`.
 
 `init --dry-run` = cetak rencana lalu keluar 0 tanpa menulis (sama dengan menjawab "tidak", tetapi exit 0).
 
@@ -74,6 +82,7 @@ menimpa. `upgrade`/`rollback` mengganti binary dari rilis GitHub dengan verifika
 - Setiap `❌`/`⚠️` diikuti satu baris `→` berisi tindakan: `panel init`, "buka Situs → Persiapan", atau perintah manual.
 - Pesan error memakai pola Rule 11: `❌ Gagal memasang nodejs-lts: pkg keluar dengan kode 100. → Periksa koneksi,
   lalu jalankan panel init lagi.` Nilai rahasia tidak pernah muncul; untuk `.env` hanya nama variabel.
+- Perintah yang outputnya untuk di-redirect (`env`, `--json`): stdout hanya data; peringatan/catatan ke stderr.
 - Contoh `doctor`:
 
 ```text
@@ -124,7 +133,7 @@ Kunci stabil (dipakai `--json` dan test). Kolom **Sumber**: fungsi yang dipakai;
 | layanan    | `cloudflared_down_file`, `cloudflared_run_script` (template paket vs run kustom, R&D/08 §5.3) | warning | baru                                   |
 | layanan    | `postgres_initdb` (`PG_VERSION`)                          | warning | baru                                                                        |
 | panel      | `binary_installed` (+ versi terpasang vs binary ini → info) | error | baru (`~/panel/panel`; versi dari `/api/health` bila jalan)                 |
-| panel      | `env_complete` (nama variabel kosong)                     | error   | baru; aturan sama dengan `REQUIRED_VARS` `install-phone.sh`                 |
+| panel      | `env_complete` (nama variabel kosong)                     | error   | baru; daftar wajib dari `ENV_VARS` (K17)                                     |
 | panel      | `env_valid`                                               | error   | `parseEnv(isi file)` (pesan `EnvError` tanpa nilai)                          |
 | panel      | `data_dir_private` (mode 700)                             | warning | baru                                                                        |
 | panel      | `panel_health`                                            | error   | `NetAdapter.httpStatus(PORT, "/api/health")` (ada)                          |
@@ -193,7 +202,7 @@ ulang keadaannya dari sistem, jadi rerun melanjutkan dari mana pun (tanpa state 
 | 2   | Paket              | `dpkg -s`, node, `pm2-runtime`                          | HP baru: tawarkan `pkg upgrade` dulu. Lalu `DEBIAN_FRONTEND=noninteractive pkg install -y -o Dpkg::Options::=--force-confdef -o Dpkg::Options::=--force-confold <yang hilang>`; `npm install -g pm2@7.1.2`. Verifikasi ulang dengan `dpkg -s` | Hanya yang hilang; tanpa `pkg upgrade`                                          |
 | 3   | runit              | runsvdir hidup                                          | `service-daemon start` dengan `SVDIR`/`LOGDIR` di-export; tunggu pidfile ≤ 15 dtk. Bila L1 gagal: exit 3 "tutup dan buka lagi Termux, lalu `panel init`" (binary sudah terpasang di langkah 1)                                                 | Tidak ada aksi bila hidup                                                       |
 | 4   | Postgres           | `PG_VERSION`, `svc_postgres`                            | `initdb -D $PREFIX/var/lib/postgresql -U postgres --auth-local=trust --auth-host=scram-sha-256`; hapus `down`, `sv up postgres`                                                                                                                  | Data ada → tidak disentuh; layanan mati → hanya disebut (doctor/UI punya tombol) |
-| 5   | `.env`             | `env_complete`, `env_valid`                             | Buat dari `.env.example` ter-embed (600). Tanya **hanya** yang kosong (§4.3). Validasi `parseEnv`                                                                                                                                                  | Nilai yang ada tidak pernah ditanya ulang/ditimpa                               |
+| 5   | `.env`             | `env_complete`, `env_valid`                             | Buat dari `renderEnvTemplate({ full: true })` (600; = `.env.example`, K17). Tanya **hanya** yang kosong (§4.3). Validasi `parseEnv`                                                                                                                | Nilai yang ada tidak pernah ditanya ulang/ditimpa                               |
 | 6   | Layanan panel      | `$SVDIR/panel/run` sama dengan template                 | Folder `.panel.new` → `run` + `log/run` → rename; `down` selama `.env` belum lengkap                                                                                                                                                              | Run script beda → peringatan saja, tidak ditimpa                                |
 | 7   | pm2                | `ecosystem.config.js`, `apps.json`, `$SVDIR/pm2`        | **Hanya bila ketiganya tidak ada**: `ecosystemFromTemplate`, `apps.json` `[]`, run script pm2 ter-embed (folder `.pm2.new` → rename), `sv up pm2`                                                                                                 | Tidak menulis apa pun; hasil integrasi dicetak + "buka Situs → Persiapan" (K6)  |
 | 8   | Tunnel             | `cf_cert`, `cf_config`, `cf_panel_ingress`, DNS         | §4.4                                                                                                                                                                                                                                                | Hanya menambah rute panel bila belum ada (dengan konfirmasi)                    |
@@ -235,7 +244,7 @@ Butuh internet, ±10–20 menit. Lanjutkan? [Y/n]
 
 ### 4.3 Prompt `.env`
 
-Urutan dan teks (hanya untuk variabel kosong):
+Urutan = urutan variabel wajib di `ENV_VARS` (K17); teks prompt (hanya untuk variabel kosong):
 
 1. `Alamat panel (mis. panel.contoh.com):` → validasi `HOSTNAME_RE` (ada di `site.checks.ts`) → `APP_BASE_URL=https://<host>`.
 2. `Email Google pemilik panel (super admin):` → `EMAIL_RE`; boleh beberapa dipisah koma.
@@ -325,13 +334,73 @@ Uji penerimaan wajib: skenario `poco` (fixture meniru POCO: ecosystem tulisan ta
 - `sv -w 130 restart panel` (atau `sv up`), tunggu health.
 - Menggantikan `rollback_hint` di `install-phone.sh` (petunjuknya menjadi `panel rollback [--db]`).
 
-## 6. `docs`
+## 6. `docs` dan `env`
+
+### 6.1 `docs`
 
 - `panel docs` = daftar topik; `panel docs <topik>` = cetak teks polos (≤ ±60 baris per topik, lebar ≤ 100 kolom).
 - Topik: `instal`, `google`, `cloudflare`, `access`, `android`, `upgrade`, `rollback`, `masalah` (gejala umum →
   perintah doctor/UI).
 - Sumber: `docs/cli/<topik>.md` di-embed (`with { type: "text" }`, pola `ecosystem.template.ts`); README menautkan
   folder ini, bukan menyalin. Topik tak dikenal → exit 2 + daftar.
+
+### 6.2 `env` (K17, K18)
+
+Variabel yang benar-benar diwajibkan `parseEnv` (`src/server/env.ts`, diperiksa 2026-11-27): `APP_BASE_URL`,
+`GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `SUPER_ADMIN_EMAILS`. `PORT` (bawaan 3200) dan `PANEL_DATA_DIR`
+(bawaan `./data`) opsional, jadi **tidak** masuk template minimal. Opsional lain: `PANEL_CONNECTIVITY_URL`,
+`PANEL_SKIP_SNAPSHOT`. `PGUSER`, `PM2_HOME`, `NODE_ENV`, `HOME`, `PREFIX` adalah env alat/OS, bukan konfigurasi panel,
+dan tidak masuk skema.
+
+`panel env` (stdout persis, nilai kosong):
+
+```text
+# Panel Termux — .env minimal. Isi nilai yang kosong, simpan sebagai ~/panel/.env (chmod 600).
+# Pengaturan lain (Cloudflare, backup, Telegram, situs, monitor) ada di /dev → Pengaturan. Panduan: panel docs google
+
+# Alamat publik panel (https://domain, atau http://localhost:<port> saat lokal). Contoh: https://panel.contoh.com
+APP_BASE_URL=
+# Client ID OAuth Google (tipe Web application). Contoh: 1234-abcd.apps.googleusercontent.com
+GOOGLE_CLIENT_ID=
+# Client secret OAuth Google. Rahasia: jangan dibagikan atau di-commit.
+GOOGLE_CLIENT_SECRET=
+# Email Google yang menjadi super admin, pisahkan dengan koma. Contoh: kamu@contoh.com
+SUPER_ADMIN_EMAILS=
+```
+
+`panel env --full` menambahkan (bawaan diambil dari `default` di skema):
+
+```text
+
+# --- Opsional: hapus tanda # untuk mengubah nilai bawaan ---
+# Port panel (selalu listen di 127.0.0.1 saja).
+# PORT=3200
+# Folder panel.db dan secret (cadangkan!). Relatif ke working directory.
+# PANEL_DATA_DIR=./data
+# URL yang dicek monitor untuk membedakan "tidak ada internet" dari "situs mati".
+# PANEL_CONNECTIVITY_URL=https://www.gstatic.com/generate_204
+# 1 = migrasi tetap jalan walau snapshot panel.db gagal (mis. disk penuh). Hanya untuk satu kali start, lalu hapus.
+# PANEL_SKIP_SNAPSHOT=0
+```
+
+Aturan:
+
+- Header tanpa nomor versi, supaya `.env.example` tidak berubah tiap rilis.
+- Variabel `secret: true` tidak pernah diberi contoh nilai; komentarnya menyebut "Rahasia".
+- Satu baris komentar per variabel (deskripsi + `Contoh:` bila ada `example`). Teks deskripsi hanya di skema.
+- Format baris lewat `encodeEnvLine` (B23) agar `.env.example` dan file buatan `init` sama persis.
+- Peringatan stderr (informasional; exit tetap 0), dicek dengan `statSync` saja, isi file tidak dibaca:
+  - stdout (`fstatSync(1)`) adalah file yang sama (dev + inode) dengan `./.env` atau `~/panel/.env` →
+    `⚠️ .env ini sudah dikosongkan oleh shell sebelum panel berjalan; isi lamanya hilang.` +
+    `→ pulihkan dari cadangan (secrets.tar.gz), lain kali pakai: panel env > .env.new`.
+  - Selain itu, `./.env` atau `~/panel/.env` ada → `ℹ️ <path> sudah ada. "panel env > .env" akan menimpanya.` +
+    `→ pakai: panel env > .env.new, atau aktifkan set -o noclobber (shell menolak menimpa; >| memaksa).`
+  - Panel tidak bisa mencegah penimpaan: shell memotong file target **sebelum** proses dijalankan. Hal ini ditulis juga
+    di `panel env --help` dan `docs/cli/instal.md`.
+- `.env.example` di repo = output `panel env --full` byte demi byte. Diperbarui dengan
+  `bun src/server/main.ts env --full > .env.example`; test gagal bila berbeda (K15: tarball tetap memuat file ini).
+  Konsekuensi: `PORT` dan `PANEL_DATA_DIR` di `.env.example` menjadi baris komentar. Nilai efektifnya sama (bawaan),
+  dan `install-phone.test.sh` (`cmp .env .env.example`) tetap lulus.
 
 ## 7. Arsitektur kode
 
@@ -350,6 +419,8 @@ Uji penerimaan wajib: skenario `poco` (fixture meniru POCO: ecosystem tulisan ta
 | `src/cli/doctor.checks.ts`        | Fungsi murni → `DoctorCheck[]`                                                                         | 250            |
 | `src/cli/doctor.command.ts`       | Perintah `doctor` (+ integrasi, DB read-only/`:memory:`)                                               | 150            |
 | `src/cli/docs.command.ts`         | Perintah `docs` + import topik                                                                         | 100            |
+| `src/cli/env.command.ts`          | Perintah `env`: `renderEnvTemplate` → stdout, cek `.env`/`fstat(1)` → stderr (§6.2)                    | 100            |
+| `src/shared/env.schema.ts`        | `ENV_VARS` + `renderEnvTemplate({ full })` (K17), murni                                                | 200            |
 | `src/cli/init.plan.ts`            | Fungsi murni `DoctorProbe` + flag → `InitStep[]` (rencana)                                             | 250            |
 | `src/cli/init.run.ts`             | Eksekusi langkah, lock, konfirmasi, ringkasan                                                         | 300            |
 | `src/cli/init.packages.ts`        | Langkah 2–4 (pkg, npm, runit, postgres)                                                               | 250            |
@@ -360,7 +431,7 @@ Uji penerimaan wajib: skenario `poco` (fixture meniru POCO: ecosystem tulisan ta
 | `src/cli/upgrade.command.ts`      | `upgrade`                                                                                              | 200            |
 | `src/cli/rollback.command.ts`     | `rollback`                                                                                             | 150            |
 | `src/shared/doctor.types.ts`      | `DoctorCheck`, `DoctorReport` (skema `--json`)                                                         | 100            |
-| `src/cli/templates.ts`            | Re-export teks ter-embed: `.env.example`, `deploy/sv/panel/run`, `deploy/pm2/run` (yang terakhir sudah di-embed `fake.integration.ts`) | 50 |
+| `src/cli/templates.ts`            | Re-export teks ter-embed: `deploy/sv/panel/run`, `deploy/pm2/run` (yang terakhir sudah di-embed `fake.integration.ts`) | 50 |
 | `docs/cli/*.md`                   | Topik `docs`                                                                                          | –              |
 | `scripts/cli.test.sh`             | Test shell binary hasil compile                                                                        | –              |
 
@@ -381,13 +452,16 @@ Tidak ada interface dengan satu implementasi selain `CliHost` (dua: termux + fak
 | `apps.json` awal                       | `sites/apps.file.ts` `ensureAppsJson`                                         |
 | Tulis `.env`                           | `shared/env.codec.ts` `findEnvLine`, `encodeEnvLine`, `envValueProblem`       |
 | Validasi `.env`                        | `server/env.ts` `parseEnv`, `EnvError`                                        |
+| Daftar variabel, bawaan, template      | `shared/env.schema.ts` `ENV_VARS`, `renderEnvTemplate` (baru, K17)            |
+| Bawaan `PANEL_CONNECTIVITY_URL`        | `monitor/monitor.service.ts` `CONNECTIVITY_PROBE_URL` (test menyamakan dengan skema) |
 | Validasi hostname/email                | `sites/site.checks.ts` `HOSTNAME_RE`; `env.ts` `EMAIL_RE` (diekspor)           |
 | Exec Termux tanpa shell                | `exec/termux.exec.ts` `runTermux`, `termuxPrefix`                             |
 | DB read-only / `:memory:`              | `bun:sqlite` + `drizzle` + `db/migrate.ts` `runMigrations` (bukan `openDb`)    |
 | Ruang kosong                           | `statfsSync` (pola `health.service.ts`)                                       |
 
 Perubahan kecil pada file yang ada (pemilik ditetapkan §10): `scripts/build.ts` (entrypoint → `main.ts`),
-`src/server/env.ts` (ekspor `EMAIL_RE`), `package.json` (`scripts.dev` tetap `index.ts`; tidak ada dependency baru).
+`src/server/env.ts` (ekspor `EMAIL_RE`; daftar wajib dan bawaan dari `ENV_VARS`, validasi per variabel tetap di sini),
+`.env.example` (digenerate, §6.2), `package.json` (`scripts.dev` tetap `index.ts`; tidak ada dependency baru).
 
 ### 7.3 CLI dan ukuran/bundle server
 
@@ -399,7 +473,9 @@ Perubahan kecil pada file yang ada (pemilik ditetapkan §10): `scripts/build.ts`
 - Ukuran binary: tambahan CLI diharapkan < 300 KB (minified, termasuk `docs/cli/*.md`); diukur di kriteria
   penerimaan (`ls -l dist/panel-android-arm64` sebelum/sesudah). Jalur serve mengevaluasi modul yang sama dengan
   sekarang (plus `main.ts`).
-- Waktu `panel -v` di HP < 0,5 dtk (L4), karena `boot.ts` tidak dievaluasi.
+- Waktu `panel -v` di HP < 0,5 dtk (L4), karena `boot.ts` tidak dievaluasi. Sama untuk `panel env`: `env.command.ts`
+  hanya mengimpor `src/shared/env.schema.ts`, `src/shared/env.codec.ts`, dan `node:fs`/`node:os` (ditegakkan
+  `cli.imports.test.ts`).
 
 ## 8. Rilis dan `install.sh`
 
@@ -441,7 +517,9 @@ unduh `SHA256SUMS` + tarball, `sha256sum -c`, cache `~/panel-src/<versi>`. Berub
 | `cli.upgrade.test.ts`         | SHA salah → tidak ada swap; versi sama → 0 tanpa unduh tarball; target < 0.5.0 ditolak; health gagal → tawaran rollback; sukses → `panel.prev` = binary lama                                              |
 | `cli.rollback.test.ts`        | Swap dua arah; `--db` membuat salinan `before-rollback` dulu; tanpa `panel.prev` → exit 1                                                                                                               |
 | `cli.docs.test.ts`            | Setiap topik ada dan tidak kosong; topik tak dikenal → 2; setiap `panel <perintah>` yang disebut di docs ada di dispatcher                                                                              |
-| `cli.imports.test.ts`         | Tidak ada file `src/server/**` (selain `main.ts`) atau `src/web/**` yang mengimpor `src/cli/**`                                                                                                        |
+| `cli.env.test.ts`             | `panel env` = tepat 4 kunci wajib (urutan `ENV_VARS`), semua nilai kosong; `--full` = semua kunci skema, opsional dikomentari dengan bawaan; tidak ada `example` untuk `secret: true`; output di-parse dotenv sama dengan skema; `.env.example` === `renderEnvTemplate({ full: true })`; `--env` = `env`; `.env` ber-nilai rahasia di cwd → nilainya tidak muncul di stdout/stderr dan isi file tidak berubah; stdout = `./.env` (fd ke file itu) → peringatan "dikosongkan" di stderr, stdout tetap hanya template; exit 0 |
+| `env.schema.test.ts`          | Kunci skema = kunci tipe `Env`; daftar wajib `ENV_VARS` = variabel yang membuat `parseEnv` melempar `EnvError` bila kosong; bawaan `PORT`/`PANEL_DATA_DIR` = hasil `parseEnv` tanpa nilai; bawaan `PANEL_CONNECTIVITY_URL` = `CONNECTIVITY_PROBE_URL`; `REQUIRED_VARS` di `scripts/install-phone.sh` (teks) = daftar wajib |
+| `cli.imports.test.ts`         | Tidak ada file `src/server/**` (selain `main.ts`) atau `src/web/**` yang mengimpor `src/cli/**`; `env.command.ts` dan `src/shared/env.schema.ts` tidak mengimpor `src/server/**`                                                                                                        |
 
 ### 9.2 Shell (`scripts/cli.test.sh <binary>`, pola `install-phone.test.sh`)
 
@@ -454,6 +532,13 @@ Menjalankan binary hasil `bun run build:local` dengan HOME/PREFIX sementara (tan
   tertutup).
 - `PANEL_CLI_FAKE=ready doctor` exit 0; `PANEL_CLI_FAKE=fresh doctor` exit 1; `doctor --json` valid JSON, `schema` = 1.
 - `docs` exit 0 dan mendaftar topik; `docs instal` tidak kosong.
+- `env` exit 0; stdout di-parse sebagai dotenv (`bun -e` dengan parser `.env` Bun) dan kuncinya tepat `APP_BASE_URL
+  GOOGLE_CLIENT_ID GOOGLE_CLIENT_SECRET SUPER_ADMIN_EMAILS`; stderr kosong di folder tanpa `.env`.
+- `env > f` → `f` valid dan identik dengan stdout `env`; `env --full > f` identik dengan `.env.example` di repo;
+  `--env` = `env`.
+- Di folder berisi `.env` (nilai palsu + `APP_BASE_URL` palsu): `env > out` → stderr memuat peringatan `.env sudah ada`,
+  stdout bebas nilai palsu, `.env` tidak berubah, tidak ada `data/panel.db`, tidak listen. `env > .env` → stderr memuat
+  peringatan "dikosongkan", exit 0.
 - `PANEL_CLI_FAKE=fresh init --yes </dev/null` → exit 3, output menyebut `GOOGLE_CLIENT_ID`; sebuah nilai rahasia
   yang ditanam di `.env` fake tidak muncul di output.
 
@@ -466,22 +551,25 @@ lewat `https://<host>`. Lalu `panel doctor` di POCO (read-only) dan bandingkan d
 ## 10. Rencana kerja (worker, kepemilikan file eksklusif)
 
 Worker tidak commit/push/ganti branch. Kontrak bersama ditulis lebih dulu oleh `wkr-cli-core-01`
+(termasuk entri dispatch `env`, normalisasi `--env`, dan teks bantuan `env` di `cli.main.ts`/`cli.help.ts`; bentuk
+`ENV_VARS` dibekukan di K17 sehingga `wkr-cli-env-01` dan `wkr-cli-doctor-01` bisa paralel)
 (`src/shared/doctor.types.ts`, tanda tangan `CliHost`, `CliOut`, `Command = (args: ParsedArgs, io: CliIo) =>
 Promise<number>`), lalu worker lain paralel.
 
 | Fase | Worker               | File (eksklusif)                                                                                                                                         | Bergantung pada              |
 | ---- | -------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------- |
 | P0   | `wkr-cli-core-01`    | `src/server/main.ts`, `scripts/build.ts`, `src/cli/cli.main.ts`, `cli.output.ts`, `cli.help.ts`, `cli.host.ts`, `cli.host.fake.ts`, `src/shared/doctor.types.ts`, `tests/cli.args.test.ts`, `tests/cli.imports.test.ts` | –                            |
-| P0   | `wkr-cli-doctor-01`  | `src/cli/doctor.probe.ts`, `doctor.checks.ts`, `doctor.command.ts`, `src/server/env.ts` (ekspor `EMAIL_RE` saja), `tests/cli.doctor.test.ts`               | kontrak core                 |
-| P0   | `wkr-cli-docs-01`    | `src/cli/docs.command.ts`, `docs/cli/*.md`, `tests/cli.docs.test.ts`                                                                                     | kontrak core                 |
+| P0   | `wkr-cli-doctor-01`  | `src/cli/doctor.probe.ts`, `doctor.checks.ts`, `doctor.command.ts`, `tests/cli.doctor.test.ts`                                                              | kontrak core, `ENV_VARS`     |
+| P0   | `wkr-cli-docs-01`    | `src/cli/docs.command.ts`, `docs/cli/*.md` (`instal.md` memuat `panel env > .env.new` + `noclobber`), `tests/cli.docs.test.ts`                                                                                     | kontrak core                 |
+| P0   | `wkr-cli-env-01`     | `src/shared/env.schema.ts`, `src/cli/env.command.ts`, `src/server/env.ts` (ekspor `EMAIL_RE` + pakai `ENV_VARS`), `.env.example` (digenerate), `tests/env.schema.test.ts`, `tests/cli.env.test.ts` | kontrak core                 |
 | P0   | `wkr-cli-shell-01`   | `scripts/cli.test.sh`, `.github/workflows/ci.yml`, `.github/workflows/release.yml` (satu langkah)                                                         | gelombang P0 lain selesai    |
 | P1   | `wkr-lab-cli-01`     | `PLAN/debate/07-cli-lab-results.md` (L1–L4; HP terisolasi, POCO hanya read-only)                                                                         | –                            |
 | P1   | `wkr-cli-init-01`    | `src/cli/init.plan.ts`, `init.run.ts`, `init.packages.ts`, `init.files.ts`, `src/cli/templates.ts`, `tests/cli.init.plan.test.ts`, `tests/cli.init.run.test.ts` | P0                           |
-| P1   | `wkr-cli-env-01`     | `src/cli/init.env.ts`, `src/cli/cli.prompt.ts`, `tests/cli.init.env.test.ts`                                                                             | P0                           |
+| P1   | `wkr-cli-initenv-01` | `src/cli/init.env.ts`, `src/cli/cli.prompt.ts`, `tests/cli.init.env.test.ts`                                                                             | P0                           |
 | P1   | `wkr-cli-tunnel-01`  | `src/cli/init.tunnel.ts`, `tests/cli.init.tunnel.test.ts`                                                                                                | P0, hasil L2                 |
 | P1   | `wkr-dist-02`        | `scripts/install-release.sh`, `scripts/install-release.test.sh`                                                                                          | `init` exit code final       |
 | P2a  | `wkr-cli-upgrade-01` | `src/cli/release.fetch.ts`, `upgrade.command.ts`, `rollback.command.ts`, `tests/cli.upgrade.test.ts`, `tests/cli.rollback.test.ts`                       | P0                           |
-| akhir | `wkr-docs-cli-01`   | `README.md` (bagian Instal di HP, Rollback, Build), `CHANGELOG.md` `[0.5.0]`, `package.json` (versi), `src/web/i18n/id.landing.ts` (`install`, `how`), `scripts/install-phone.sh` (petunjuk rollback → `panel rollback`), `PLAN/DECISIONS.md` (bagian D baru) | semua                        |
+| akhir | `wkr-docs-cli-01`   | `README.md` (bagian Instal di HP, Rollback, Build), `CHANGELOG.md` `[0.5.0]`, `package.json` (versi), `src/web/i18n/id.landing.ts` (`install`, `how`), `scripts/install-phone.sh` (petunjuk rollback → `panel rollback`), README bagian `.env` (rujuk `panel env > .env.new`, Rule 16 terbatas), `PLAN/DECISIONS.md` (bagian D baru) | semua                        |
 
 `init.run.ts` adalah satu-satunya file yang mengimpor langkah dari `init.packages/files/env/tunnel`; ketiga worker P1
 mengekspor fungsi langkah dengan tanda tangan `InitStepRun` dari kontrak core, jadi tidak ada file bersama.
@@ -495,6 +583,10 @@ mengekspor fungsi langkah dengan tanda tangan `InitStepRun` dari kontrak core, j
 - [ ] `panel doctor` di POCO (read-only, dijalankan koordinator setelah izin) menampilkan masalah yang sama dengan kartu
       Persiapan, tidak mengubah file apa pun (`find ~ $PREFIX/var/service -newer <penanda>` kosong selain log).
 - [ ] `panel doctor --json` cocok dengan `DoctorReport` skema 1.
+- [ ] `panel env > .env.new` di HP menghasilkan file berisi tepat 4 variabel wajib bernilai kosong; stdout tanpa
+      catatan; peringatan hanya di stderr; tanpa snapshot/migrasi/bind port; < 0,5 dtk.
+- [ ] `.env.example` = `panel env --full`; daftar wajib `parseEnv`, doctor `env_complete`, prompt `init`, dan
+      `REQUIRED_VARS` `install-phone.sh` semuanya sama dengan `ENV_VARS` (test).
 - [ ] HP Termux baru: satu perintah `install.sh` + jawaban prompt → panel sehat di `https://<host>/api/health`, tanpa
       membuka/menutup Termux (bila L1 lulus), tanpa `nano`.
 - [ ] Rerun `panel init` di HP yang sudah lengkap: 0 aksi tulis, exit 0.
@@ -516,6 +608,7 @@ mengekspor fungsi langkah dengan tanda tangan `InitStepRun` dari kontrak core, j
 | CLI dan panel menulis file yang sama bersamaan                                             | K6: CLI hanya membuat yang belum ada; edit `config.yml` hanya sisip rute panel lewat `ingressStep`     |
 | Rahasia bocor lewat argv/riwayat shell                                                     | K10: tidak ada flag rahasia                                                                           |
 | Binary lama (< 0.5.0) dijalankan dengan argumen saat upgrade/rollback                      | Uji `--version` hanya untuk binary ≥ 0.5.0; rollback tidak mengeksekusi `panel.prev` kecuali lewat runit |
+| `panel env > .env` menimpa `.env` yang sudah berisi rahasia                                | Tidak bisa dicegah (shell memotong dulu); K18: peringatan stderr + saran `> .env.new`/`noclobber`, di `--help` dan `docs instal` |
 | Doctor berbeda dengan UI                                                                    | K5: fungsi + copy yang sama; test membandingkan label                                                 |
 
 ## 13. Pertanyaan terbuka (dengan rekomendasi)
