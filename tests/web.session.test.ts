@@ -8,7 +8,16 @@ import { ApiError } from "@/web/shared/api.client";
 // test-only fixture
 const as = (role: Role, home = "/elsewhere"): MeResult => ({
   status: "ok",
-  me: { id: "u1", email: "a@example.test", name: "A", image: null, role, home, createdAt: "2026-01-01T00:00:00.000Z" },
+  me: {
+    id: "u1",
+    email: "a@example.test",
+    name: "A",
+    image: null,
+    role,
+    home,
+    createdAt: "2026-01-01T00:00:00.000Z",
+    locale: null,
+  },
 });
 const anon: MeResult = { status: "unauthorized" };
 

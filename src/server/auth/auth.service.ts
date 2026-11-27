@@ -31,6 +31,8 @@ export function createAuth({ db, env, secret }: AuthDeps) {
       additionalFields: {
         // input:false → clients cannot set it on sign-up/update; only the server changes roles.
         role: { type: [...ROLES], required: false, defaultValue: "user", input: false },
+        // UI language (DECISIONS E3); null = follow the device. Only PATCH /api/me writes it.
+        locale: { type: "string", required: false, input: false },
       },
     },
     databaseHooks: {

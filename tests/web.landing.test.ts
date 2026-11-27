@@ -20,6 +20,7 @@ const as = (role: Role): MeResult => ({
     role,
     home: "https://evil.example",
     createdAt: "2026-01-01T00:00:00.000Z",
+    locale: null,
   },
 });
 

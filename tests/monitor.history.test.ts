@@ -15,7 +15,7 @@ const freshDb = (): Db => {
   const dir = join(root, String(n++));
   mkdirSync(dir);
   const db = openDb(dir);
-  expect(runMigrations(db)).toBe("0008_monitor");
+  expect(runMigrations(db)).toBe("0009_user_locale");
   return db;
 };
 

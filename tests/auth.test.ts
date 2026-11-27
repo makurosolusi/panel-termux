@@ -131,6 +131,7 @@ describe("HTTP API", () => {
       role: "user",
       home: "/profile",
       createdAt: expect.stringMatching(/^\d{4}-\d\d-\d\dT/),
+      locale: null,
     });
   });
 

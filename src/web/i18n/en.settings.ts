@@ -134,6 +134,11 @@ export const tSettings = msg("settings", {
       placeholder: "mis. -1001234567890",
       invalid: "Isi ID angka (mis. `-1001234567890`) atau `@namakanal`.",
     },
+    "alerts.language": {
+      label: "Telegram language",
+      help: "Language of alert and test messages sent to Telegram.",
+      invalid: "Choose English or Bahasa Indonesia.",
+    },
     "alerts.min_severity": {
       label: "Kirim mulai dari",
       help: "Peringatan = semua masalah (peringatan dikirim senyap). Gawat = hanya yang gawat.",

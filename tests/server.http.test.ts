@@ -315,7 +315,7 @@ describe("createApiHandler order: host → CSRF → rate limit → context", () 
     expect(await res.json()).toEqual({
       requestId: res.headers.get("x-request-id"),
       ipMasked: "203.0.113.x",
-      userAgent: "Chrome di Android",
+      userAgent: "Chrome · Android",
     });
     expect(currentRequest()).toBeNull();
   });

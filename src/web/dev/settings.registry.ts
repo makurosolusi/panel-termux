@@ -1,6 +1,7 @@
 // Web-side shape of /dev/settings (PLAN/05 §5.2): which card each key sits in and which control edits it.
 // Validation stays on the server (B8); labels live in id.settings.ts.
 import { SETTING_KEYS, type SettingKey } from "@/shared/dev.types";
+import { LOCALES } from "@/shared/locale";
 
 /** Settings cards, in page order. */
 export const SETTING_GROUPS = ["cloudflare", "backup", "alerts", "sites", "monitor", "security"] as const;
@@ -66,6 +67,7 @@ export const SETTING_FIELDS = {
   "alerts.telegram_bot_token": { group: "alerts", control: "secret", required: true, helpUrl: BOTFATHER_HELP },
   "alerts.telegram_chat_id": { group: "alerts", control: "text", required: true },
   "alerts.min_severity": { group: "alerts", control: "select", choices: ["warning", "danger"] },
+  "alerts.language": { group: "alerts", control: "select", choices: LOCALES },
   "monitor.sample_interval_sec": { group: "monitor", control: "number" },
   "monitor.battery_warn_percent": { group: "monitor", control: "numberOrOff" },
 } as const satisfies Record<SettingKey, SettingFieldDef>;

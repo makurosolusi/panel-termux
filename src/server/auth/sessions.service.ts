@@ -1,4 +1,5 @@
 import { and, desc, eq, gt, ne } from "drizzle-orm";
+import { deviceLabel } from "../../shared/device.label";
 import type { MeSession } from "../../shared/me.types";
 import type { RevokedSessions } from "../../shared/security.types";
 import { recordAudit } from "../audit.service";
@@ -16,7 +17,7 @@ const BROWSERS: [RegExp, string][] = [
   [/Firefox\/|FxiOS\//, "Firefox"],
   [/Chrome\/|CriOS\//, "Chrome"],
   [/Safari\//, "Safari"],
-  [/curl\//, "curl (baris perintah)"],
+  [/curl\//, "curl"],
 ];
 const SYSTEMS: [RegExp, string][] = [
   [/Android/, "Android"],
@@ -27,19 +28,13 @@ const SYSTEMS: [RegExp, string][] = [
   [/Linux/, "Linux"],
 ];
 
-/** Shown for a User-Agent that names no known browser or OS. */
-export const UNKNOWN_DEVICE = "Perangkat tidak dikenal";
-
 /**
- * Indonesian device label "Browser di OS" from a User-Agent, shown as-is in /profile and /dev/audit
- * (first match wins; order matters: Edge/Opera also say Chrome).
+ * Locale-neutral device label "Browser · OS" from a User-Agent (E10), null when it names neither; the UI renders
+ * null in its own language. First match wins; order matters: Edge/Opera also say Chrome.
  */
 export function shortUserAgent(ua: string | null): string | null {
   if (!ua) return null;
-  const browser = BROWSERS.find(([re]) => re.test(ua))?.[1];
-  const os = SYSTEMS.find(([re]) => re.test(ua))?.[1];
-  if (browser && os) return `${browser} di ${os}`;
-  return browser ?? os ?? UNKNOWN_DEVICE;
+  return deviceLabel(BROWSERS.find(([re]) => re.test(ua))?.[1], SYSTEMS.find(([re]) => re.test(ua))?.[1]);
 }
 
 /** IPv4 → last octet masked (`203.0.113.x`); IPv6 → first three groups (`2001:db8:1::/48`). */

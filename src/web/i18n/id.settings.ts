@@ -129,6 +129,11 @@ export const idSettings: Messages<typeof tSettings> = {
       placeholder: "mis. -1001234567890",
       invalid: "Isi ID angka (mis. `-1001234567890`) atau `@namakanal`.",
     },
+    "alerts.language": {
+      label: "Bahasa Telegram",
+      help: "Bahasa pesan notifikasi dan pesan uji yang dikirim ke Telegram.",
+      invalid: "Pilih English atau Bahasa Indonesia.",
+    },
     "alerts.min_severity": {
       label: "Kirim mulai dari",
       help: "Peringatan = semua masalah (peringatan dikirim senyap). Gawat = hanya yang gawat.",

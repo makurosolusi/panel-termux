@@ -1,6 +1,7 @@
 // Pure form logic of /dev/settings (PLAN/05 §5.2): drafts, dirty tracking per card, field status, PATCH error mapping.
 import type { BackupVerify, BackupVerifyInput } from "@/shared/backup.types";
 import type { CloudflareVerify, DevSetting, DevSettings, DevSettingsPatch, SettingKey } from "@/shared/dev.types";
+import { LANGUAGE_NAMES, type Locale } from "@/shared/locale";
 import type { StatusTone } from "@/web/components/status.tone";
 import { tSettings } from "@/web/i18n/en.settings";
 import {
@@ -217,5 +218,6 @@ export function statusLabel(s: FieldStatus, now: Date): string {
 export function choiceLabel(key: SettingKey, v: string): string {
   if (v === OFF) return tSettings.options.off;
   if (key === "alerts.min_severity") return tSettings.options.severity[v as "warning" | "danger"] ?? v;
+  if (key === "alerts.language") return LANGUAGE_NAMES[v as Locale] ?? v;
   return tSettings.options.hour(Number(v));
 }

@@ -146,6 +146,7 @@ export const SETTING_KEYS = [
   "alerts.telegram_bot_token",
   "alerts.telegram_chat_id",
   "alerts.min_severity",
+  "alerts.language",
   "monitor.sample_interval_sec",
   "monitor.battery_warn_percent",
 ] as const;

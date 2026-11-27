@@ -1,6 +1,7 @@
 import { homedir } from "node:os";
 import { join } from "node:path";
 import type { SettingKey } from "../shared/dev.types";
+import { DEFAULT_LOCALE, LOCALES } from "../shared/locale";
 
 /** Server-side definition of one setting: storage + validation only; labels live in the web (B8). */
 export type SettingDef = {
@@ -158,6 +159,8 @@ export const SETTINGS = {
     validate: (v) => (TELEGRAM_CHAT_RE.test(v) ? null : "must be a numeric chat id or @channel name"),
   },
   "alerts.min_severity": { secret: false, default: "warning", validate: oneOf("warning", "danger") },
+  // Language of Telegram texts (E11): a panel setting, the chat has no viewer. Migration 0009 sets `id` on upgrades.
+  "alerts.language": { secret: false, default: DEFAULT_LOCALE, validate: oneOf(...LOCALES) },
   "monitor.sample_interval_sec": {
     secret: false,
     default: "60",

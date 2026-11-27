@@ -4,13 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { eq } from "drizzle-orm";
 import { createAuth } from "@/server/auth/auth.service";
-import {
-  maskIp,
-  revokeAllSessions,
-  revokeUserSessions,
-  shortUserAgent,
-  UNKNOWN_DEVICE,
-} from "@/server/auth/sessions.service";
+import { maskIp, revokeAllSessions, revokeUserSessions, shortUserAgent } from "@/server/auth/sessions.service";
 import { type Db, openDb } from "@/server/db/client";
 import { runMigrations } from "@/server/db/migrate";
 import { appMeta, auditLog, session, user } from "@/server/db/schema";
@@ -18,7 +12,8 @@ import { createApiHandler } from "@/server/http/api.handler";
 import { readLogs } from "@/server/log.service";
 import { createApiRoutes } from "@/server/routes/api.routes";
 import { createFakeSystem } from "@/server/system/system.fake";
-import type { MeSession } from "@/shared/me.types";
+import { normalizeDeviceLabel } from "@/shared/device.label";
+import type { Me, MeSession } from "@/shared/me.types";
 import type { Role } from "@/shared/roles";
 
 // test-only dummy values
@@ -60,11 +55,17 @@ async function login(userId: string): Promise<{ cookie: string; id: string }> {
   return { cookie: `better-auth.session_token=${encodeURIComponent(value)}`, id: s.id };
 }
 
-const call = (method: string, path: string, cookie?: string) =>
+const call = (method: string, path: string, cookie?: string, body?: unknown) =>
   api.handle(
     new Request(`${BASE}/api${path}`, {
       method,
-      headers: { origin: BASE, "x-requested-with": "XMLHttpRequest", ...(cookie ? { cookie } : {}) },
+      headers: {
+        origin: BASE,
+        "x-requested-with": "XMLHttpRequest",
+        ...(cookie ? { cookie } : {}),
+        ...(body === undefined ? {} : { "content-type": "application/json" }),
+      },
+      ...(body === undefined ? {} : { body: JSON.stringify(body) }),
     }),
   );
 
@@ -85,14 +86,25 @@ afterAll(() => {
 
 describe("helpers", () => {
   test("shortUserAgent", () => {
-    expect(shortUserAgent(CHROME_ANDROID)).toBe("Chrome di Android");
-    expect(shortUserAgent("Mozilla/5.0 (Windows NT 10.0) Chrome/131 Safari/537 Edg/131")).toBe("Edge di Windows");
+    expect(shortUserAgent(CHROME_ANDROID)).toBe("Chrome · Android");
+    expect(shortUserAgent("Mozilla/5.0 (Windows NT 10.0) Chrome/131 Safari/537 Edg/131")).toBe("Edge · Windows");
     expect(shortUserAgent("Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) Version/18 Safari/604")).toBe(
-      "Safari di iOS",
+      "Safari · iOS",
     );
-    expect(shortUserAgent("curl/8.7.1")).toBe("curl (baris perintah)");
-    expect(shortUserAgent("SomeBot/1.0")).toBe(UNKNOWN_DEVICE);
+    expect(shortUserAgent("curl/8.7.1")).toBe("curl");
+    expect(shortUserAgent("SomeBot/1.0")).toBeNull();
     expect(shortUserAgent(null)).toBeNull();
+  });
+
+  test("normalizeDeviceLabel reads 0.5.x rows locale-neutral (E10)", () => {
+    expect(normalizeDeviceLabel("Chrome di Android")).toBe("Chrome · Android");
+    expect(normalizeDeviceLabel("Samsung Internet di Android")).toBe("Samsung Internet · Android");
+    expect(normalizeDeviceLabel("curl (baris perintah)")).toBe("curl");
+    expect(normalizeDeviceLabel("Perangkat tidak dikenal")).toBeNull();
+    expect(normalizeDeviceLabel(null)).toBeNull();
+    expect(normalizeDeviceLabel("")).toBeNull();
+    expect(normalizeDeviceLabel("Firefox · Linux")).toBe("Firefox · Linux");
+    expect(normalizeDeviceLabel("macOS")).toBe("macOS");
   });
 
   test("maskIp", () => {
@@ -125,7 +137,7 @@ describe("/api/me/sessions", () => {
       current: false,
       createdAt: expect.any(String),
       lastActiveAt: expect.any(String),
-      userAgent: "Chrome di Android",
+      userAgent: "Chrome · Android",
       ipMasked: "203.0.113.x",
     });
     const tokens = db.select({ t: session.token }).from(session).all();
@@ -169,6 +181,46 @@ describe("/api/me/sessions", () => {
     expect(res.status).toBe(200);
     const line = readLogs({ level: "debug", q: `user=${me}`, limit: 1 })[0]?.msg;
     expect(line).toMatch(new RegExp(`^\\[http\\] GET /api/me/sessions 200 \\d+ms user=${me}$`));
+  });
+});
+
+describe("/api/me locale (E2, E3)", () => {
+  const me = async (cookie: string) => (await (await call("GET", "/me", cookie)).json()) as Me;
+
+  test("null by default; PATCH stores en/id/null and GET returns it", async () => {
+    const id = addUser("lang@x.io");
+    const { cookie } = await login(id);
+    expect((await me(cookie)).locale).toBeNull();
+    for (const locale of ["id", "en", null] as const) {
+      expect((await call("PATCH", "/me", cookie, { locale })).status).toBe(204);
+      expect((await me(cookie)).locale).toBe(locale);
+      expect(db.select({ l: user.locale }).from(user).where(eq(user.id, id)).get()?.l).toBe(locale);
+    }
+  });
+
+  test("400 invalid_locale for anything but en, id or null; 401 without session", async () => {
+    const { cookie } = await login(addUser("badlang@x.io"));
+    for (const body of [{ locale: "fr" }, { locale: "en-US" }, { locale: 1 }, {}, { lang: "id" }]) {
+      const res = await call("PATCH", "/me", cookie, body);
+      expect(res.status).toBe(400);
+      expect(await res.json()).toMatchObject({ error: "invalid_locale" });
+    }
+    expect((await call("PATCH", "/me", undefined, { locale: "id" })).status).toBe(401);
+  });
+
+  test("better-auth cannot set locale through its own update endpoint (input: false)", async () => {
+    const id = addUser("sneaky@x.io");
+    const { cookie } = await login(id);
+    const res = await auth.handler(
+      new Request(`${BASE}/api/auth/update-user`, {
+        method: "POST",
+        headers: { origin: BASE, cookie, "content-type": "application/json" },
+        body: JSON.stringify({ locale: "id" }),
+      }),
+    );
+    expect(res.status).toBe(400);
+    expect(await res.json()).toMatchObject({ code: "FIELD_NOT_ALLOWED" });
+    expect(db.select({ l: user.locale }).from(user).where(eq(user.id, id)).get()?.l).toBeNull();
   });
 });
 

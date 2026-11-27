@@ -9,6 +9,9 @@ export const DEFAULT_LOCALE: Locale = "en";
 /** Every supported locale, default first. */
 export const LOCALES: readonly Locale[] = ["en", "id"];
 
+/** Name of each language in itself; never translated, so a user lost in the wrong language finds the way back. */
+export const LANGUAGE_NAMES: Record<Locale, string> = { en: "English", id: "Bahasa Indonesia" };
+
 /** BCP 47 tag handed to `Intl`/`toLocale*` per locale (English uses a 24-hour clock, see web format.ts). */
 export const INTL_TAG: Record<Locale, string> = { en: "en-US", id: "id-ID" };
 

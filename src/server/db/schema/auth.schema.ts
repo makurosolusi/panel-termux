@@ -1,5 +1,6 @@
 import { sql } from "drizzle-orm";
 import { index, integer, sqliteTable, text } from "drizzle-orm/sqlite-core";
+import type { Locale } from "../../../shared/locale";
 import type { Role } from "../../../shared/roles";
 
 // Better Auth core tables (user/session/account/verification). The drizzle adapter maps by the JS
@@ -12,7 +13,7 @@ const updatedAt = () =>
     .default(sql`(unixepoch() * 1000)`)
     .$onUpdate(() => new Date());
 
-/** Panel accounts. `role` is server-managed (input disabled in Better Auth config). */
+/** Panel accounts. `role` and `locale` are server-managed (input disabled in Better Auth config). */
 export const user = sqliteTable("user", {
   id: text("id").primaryKey(),
   name: text("name").notNull(),
@@ -20,6 +21,8 @@ export const user = sqliteTable("user", {
   emailVerified: integer("email_verified", { mode: "boolean" }).notNull().default(false),
   image: text("image"),
   role: text("role").$type<Role>().notNull().default("user"),
+  /** UI language; null = follow the device (DECISIONS E2). Written only by PATCH /api/me. */
+  locale: text("locale").$type<Locale>(),
   createdAt: createdAt(),
   updatedAt: updatedAt(),
 });

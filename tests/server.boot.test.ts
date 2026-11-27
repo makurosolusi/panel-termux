@@ -66,6 +66,9 @@ describe("boot (PLAN/04 F6/F7)", () => {
     db.$client.run(
       "DELETE FROM __drizzle_migrations WHERE created_at = (SELECT max(created_at) FROM __drizzle_migrations)",
     );
+    // The newest migration (0009) adds a column, which SQLite cannot guard with IF NOT EXISTS: undo it so the
+    // migration is really pending again. Adjust when a newer migration lands.
+    db.$client.run("ALTER TABLE user DROP COLUMN locale");
     db.$client.close();
 
     await bootOnce();
