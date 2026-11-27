@@ -3,7 +3,7 @@ import { readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { OG_TEXT } from "@/server/http/seo";
 import type { Role } from "@/shared/roles";
-import { idLanding } from "@/web/i18n/id.landing";
+import { tLanding } from "@/web/i18n/en.landing";
 import { ACCOUNT_DELETED_HREF, isAccountDeletedSearch } from "@/web/landing/account.deleted";
 import { landingCta } from "@/web/landing/landing.cta";
 import { GALLERY, imgLoading, SHOTS } from "@/web/landing/landing.shots";
@@ -41,12 +41,12 @@ describe("landingCta (header account link)", () => {
 
 describe("landing copy", () => {
   test("meta equals the server link preview (OG_TEXT) and fits a search snippet", () => {
-    expect(OG_TEXT).toEqual(idLanding.meta);
-    expect(idLanding.meta.description.length).toBeLessThanOrEqual(155);
+    expect(OG_TEXT).toEqual(tLanding.meta);
+    expect(tLanding.meta.description.length).toBeLessThanOrEqual(155);
   });
 
   test("install line = PLAN/07 K24 with the release asset `panel` the packager publishes", () => {
-    const cmd = idLanding.install.command;
+    const cmd = tLanding.install.command;
     expect(cmd).toBe(
       "cd && curl -fL --retry 3 -o panel-termux https://github.com/makurosolusi/panel-termux/releases/latest/download/panel && chmod +x panel-termux && ./panel-termux init",
     );
@@ -60,7 +60,7 @@ describe("landing copy", () => {
   });
 
   test("install steps: one line, what init asks (Google OAuth, Cloudflare login), then open the panel", () => {
-    const steps = idLanding.install.steps;
+    const steps = tLanding.install.steps;
     expect(steps.map((s) => s.title)).toEqual([
       "Jalankan baris ini di Termux",
       "Jawab pertanyaan init",
@@ -68,31 +68,31 @@ describe("landing copy", () => {
       "Buka panel",
     ]);
     expect(steps[1].body).toContain("Client secret");
-    expect(idLanding.install.upgrade).toContain("baris yang sama");
-    const all = JSON.stringify(idLanding);
+    expect(tLanding.install.upgrade).toContain("baris yang sama");
+    const all = JSON.stringify(tLanding);
     for (const gone of ["install.sh", "install-phone", "pkg install termux-services", "tutup dan buka lagi"])
       expect(all).not.toContain(gone);
   });
 
   test("no overclaims: no one-command promise, no Google sign-in CTA, no binary-size spec", () => {
-    const all = JSON.stringify(idLanding);
+    const all = JSON.stringify(tLanding);
     expect(all).not.toMatch(/1 perintah|satu perintah/i);
-    expect(Object.values(idLanding.cta)).not.toContain("Masuk dengan Google");
+    expect(Object.values(tLanding.cta)).not.toContain("Masuk dengan Google");
     expect(all).not.toContain("~110");
     expect(all).toContain("~65");
   });
 
   test("footer links point at the public repo files", () => {
-    expect(idLanding.links.license).toBe("https://github.com/makurosolusi/panel-termux/blob/main/LICENSE");
-    expect(idLanding.links.changelog).toBe("https://github.com/makurosolusi/panel-termux/blob/main/CHANGELOG.md");
-    expect(idLanding.links.releases).toBe("https://github.com/makurosolusi/panel-termux/releases");
+    expect(tLanding.links.license).toBe("https://github.com/makurosolusi/panel-termux/blob/main/LICENSE");
+    expect(tLanding.links.changelog).toBe("https://github.com/makurosolusi/panel-termux/blob/main/CHANGELOG.md");
+    expect(tLanding.links.releases).toBe("https://github.com/makurosolusi/panel-termux/releases");
   });
 });
 
 describe("screenshots", () => {
   test("four shots with alt text; gallery = the three non-hero shots", () => {
     expect(Object.keys(SHOTS).sort()).toEqual(["health", "overview", "services", "sites"]);
-    for (const shot of Object.values(SHOTS)) expect(idLanding.shots.items[shot.key].alt.length).toBeGreaterThan(20);
+    for (const shot of Object.values(SHOTS)) expect(tLanding.shots.items[shot.key].alt.length).toBeGreaterThan(20);
     expect(GALLERY).toEqual(["sites", "health", "services"]);
   });
 

@@ -10,7 +10,7 @@ import { TONE_TEXT } from "@/web/components/status.tone";
 import { PROBLEM_TONE } from "@/web/components/status.vocab";
 import { StatusBadge } from "@/web/components/status-badge";
 import { Button } from "@/web/components/ui/button";
-import { idOverview } from "@/web/i18n/id.overview";
+import { tOverview } from "@/web/i18n/en.overview";
 import { formatRelative } from "@/web/shared/format";
 import {
   DESKTOP_PROBLEM_ROWS,
@@ -25,7 +25,7 @@ import {
 } from "./overview.state";
 import { TOUCH_HIT } from "./panel.touch";
 
-const t = idOverview;
+const t = tOverview;
 const ICON = { danger: OctagonXIcon, warning: TriangleAlertIcon, info: InfoIcon } as const;
 const LINK = cn(TOUCH_HIT, "font-medium underline-offset-4 hover:underline");
 // Lazy: the Ringkasan is on the initial /panel chunk, the button (and its panel copy) only loads with a pm2/postgres problem.

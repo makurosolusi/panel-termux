@@ -7,12 +7,12 @@ import type {
   IntegrationCheck,
   SiteAdoptRequest,
 } from "@/shared/site.types";
-import { idSite } from "@/web/i18n/id.site";
+import { tSite } from "@/web/i18n/en.site";
 import { renderCopy } from "./site.check";
 
-const d = idSite.discovered;
+const d = tSite.discovered;
 type CheckCopyEntry = Parameters<typeof renderCopy>[0];
-const a = idSite.adopt;
+const a = tSite.adopt;
 
 /** One "Belum dikelola" row: where the domain points and whether it can be adopted (and why not). */
 export type DiscoveredRow = { hostname: string; target: string; adoptable: boolean; reason: string | null };
@@ -21,7 +21,7 @@ export type DiscoveredRow = { hostname: string; target: string; adoptable: boole
 export function discoveredRow(i: DiscoveredIngress, apps: readonly AdoptCandidateApp[]): DiscoveredRow {
   if (i.self || i.blockers?.includes("self"))
     return { hostname: i.hostname, target: d.self, adoptable: false, reason: null };
-  const port = i.port === null ? d.noPort : idSite.list.port(i.port);
+  const port = i.port === null ? d.noPort : tSite.list.port(i.port);
   const match = i.match ?? i.app ?? null;
   const target = `${port} → ${match ?? d.noApp}`;
   if (i.blockers?.includes("wildcard")) return { hostname: i.hostname, target, adoptable: false, reason: d.wildcard };
@@ -103,7 +103,7 @@ export const failingChecks = (i: Integration): IntegrationCheck[] => checksOf(i)
 
 /** Text of one check for its state (ok text when a state has no own copy). */
 export function checkText(c: IntegrationCheck): string {
-  const copy: Partial<Record<IntegrationCheck["state"], CheckCopyEntry>> = idSite.setup.checks[c.key];
+  const copy: Partial<Record<IntegrationCheck["state"], CheckCopyEntry>> = tSite.setup.checks[c.key];
   const forState = copy[c.state] ?? copy.ok ?? c.key;
   return renderCopy(forState, c.params);
 }
@@ -194,7 +194,7 @@ export const pm2Pending = (i: Integration): boolean =>
 
 /** Dialog title of one fix once its preview is known: replacing the old line is an update, not a first connection. */
 export function previewTitle(p: FixPreview): string {
-  const dl = idSite.setup.dialog;
+  const dl = tSite.setup.dialog;
   if (p.key === "ecosystem_block" && p.effects.oldSpread) return dl.ecosystem_block.titleUpdate;
   // folder already there: only the ecosystem file is made
   if (p.key === "sites_dir_create" && !p.effects.dir && p.effects.newEcosystem)
@@ -204,7 +204,7 @@ export function previewTitle(p: FixPreview): string {
 
 /** Plain-language lines of one fix preview, for the dialog (readers who never open the diff). */
 export function fixSummary(p: FixPreview): string[] {
-  const dl = idSite.setup.dialog;
+  const dl = tSite.setup.dialog;
   const e = p.effects;
   // pm2_auto_exit's own body already says when it takes effect
   const restart = e.appliesOnRestart ? [dl.restartNote] : [];

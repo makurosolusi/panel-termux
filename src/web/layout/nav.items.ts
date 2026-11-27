@@ -17,10 +17,10 @@ import {
   UsersIcon,
 } from "lucide-react";
 import { canAccess, type Role } from "@/shared/roles";
-import { idHistory } from "@/web/i18n/id.history";
-import { idShell } from "@/web/i18n/id.shell";
+import { tHistory } from "@/web/i18n/en.history";
+import { tShell } from "@/web/i18n/en.shell";
 
-const n = idShell.nav;
+const n = tShell.nav;
 
 /** Content width class of a page: tables/dashboards wide, forms and profile narrow. */
 export type PageWidth = "wide" | "narrow";
@@ -39,13 +39,13 @@ export type NavItem = {
 };
 
 /** Titled group of sidebar links. */
-export type NavGroup = { key: keyof typeof idShell.groups; label: string; items: readonly NavItem[] };
+export type NavGroup = { key: keyof typeof tShell.groups; label: string; items: readonly NavItem[] };
 
 /** Full navigation; access per item comes from `canAccess` (shared with the server's area rules). */
 export const NAV_GROUPS: readonly NavGroup[] = [
   {
     key: "server",
-    label: idShell.groups.server,
+    label: tShell.groups.server,
     items: [
       { to: "/panel", label: n.overview, icon: LayoutDashboardIcon, end: true },
       { to: "/panel/sites", label: n.sites, icon: LayersIcon },
@@ -58,7 +58,7 @@ export const NAV_GROUPS: readonly NavGroup[] = [
   },
   {
     key: "admin",
-    label: idShell.groups.admin,
+    label: tShell.groups.admin,
     items: [
       { to: "/dev", label: n.health, icon: HeartPulseIcon, end: true },
       { to: "/dev/users", label: n.users, icon: UsersIcon },
@@ -69,7 +69,7 @@ export const NAV_GROUPS: readonly NavGroup[] = [
   },
   {
     key: "account",
-    label: idShell.groups.account,
+    label: tShell.groups.account,
     items: [{ to: "/profile", label: n.profile, icon: UserIcon, width: "narrow" }],
   },
 ];
@@ -77,7 +77,7 @@ export const NAV_GROUPS: readonly NavGroup[] = [
 /** Routes without their own sidebar link, titled under the group of their path. */
 const HIDDEN_PAGES: readonly NavItem[] = [
   { to: "/panel/jobs", label: n.jobs, icon: ActivityIcon, parent: "/panel/sites" },
-  { to: "/panel/problems", label: idHistory.problems.title, icon: HistoryIcon, parent: "/panel" },
+  { to: "/panel/problems", label: tHistory.problems.title, icon: HistoryIcon, parent: "/panel" },
 ];
 
 /** Phone bottom bar slots 1–4 (PLAN/01 §3.7); slot 5 is the "Lainnya" sheet with everything else. */

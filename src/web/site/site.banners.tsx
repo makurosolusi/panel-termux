@@ -4,7 +4,7 @@ import { Link } from "react-router";
 import type { Job, SiteDetail } from "@/shared/site.types";
 import { Button } from "@/web/components/ui/button";
 import { noFolderText } from "@/web/deploy/deploy.state";
-import { idSiteDetail } from "@/web/i18n/id.site-detail";
+import { tSiteDetail } from "@/web/i18n/en.site-detail";
 import { TOUCH_BOX } from "@/web/panel/panel.touch";
 import type { ErrorCodes } from "@/web/shared/api.client";
 import { ServiceStartButton } from "@/web/shared/service-start";
@@ -12,7 +12,7 @@ import { jobPath } from "./site.api";
 import { RestartAction } from "./site.header";
 import { type SiteBanner, siteBanners } from "./site-detail.state";
 
-const b = idSiteDetail.banner;
+const b = tSiteDetail.banner;
 
 const BANNER = {
   info: { Icon: InfoIcon, box: "border-info/25 bg-info-subtle", icon: "text-info" },
@@ -55,10 +55,10 @@ export function SiteBanners({ site, interrupted, codes, onChanged, onDelete }: B
         <span key="no_folder" className="flex flex-wrap items-center gap-x-3">
           {onDelete && (
             <Button variant="link" size="sm" className="h-auto p-0 pointer-coarse:py-3" onClick={onDelete}>
-              {idSiteDetail.remove.button}
+              {tSiteDetail.remove.button}
             </Button>
           )}
-          {link("/panel/backups", idSiteDetail.remove.backupNow)}
+          {link("/panel/backups", tSiteDetail.remove.backupNow)}
         </span>,
       ];
     const action =

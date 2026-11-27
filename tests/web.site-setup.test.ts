@@ -2,8 +2,8 @@
 import { afterAll, afterEach, describe, expect, mock, spyOn, test } from "bun:test";
 import type { FixAvailability, FixBackup, FixPreview } from "@/shared/fix.types";
 import type { Integration, IntegrationCheck, IntegrationCheckKey } from "@/shared/site.types";
-import { idSite } from "@/web/i18n/id.site";
-import { joinNames } from "@/web/i18n/id.site.setup";
+import { tSite } from "@/web/i18n/en.site";
+import { joinNames } from "@/web/i18n/en.site.setup";
 import { ApiError } from "@/web/shared/api.client";
 import { toast } from "@/web/shared/toast.lazy";
 import { fixDialogTitle } from "@/web/site/fix.dialog";
@@ -24,7 +24,7 @@ import {
 } from "@/web/site/site.adopt";
 import { applyFixes, fixErrorMessage, fixExpect, toastFixRun, toastSiteError } from "@/web/site/site.api";
 
-const t = idSite.setup;
+const t = tSite.setup;
 
 // test-only fixtures
 const chk = (key: IntegrationCheckKey, state: IntegrationCheck["state"] = "ok", params = {}): IntegrationCheck => ({
@@ -237,7 +237,7 @@ describe("apply run", () => {
     expect(opts(0)?.action?.label).toBe("Jalankan pm2");
     toastSiteError(new ApiError("client", 409, "busy", null));
     expect(opts(1)?.action).toBeUndefined();
-    expect(idSite.errorCodes.pm2_not_running).not.toContain("sv up");
+    expect(tSite.errorCodes.pm2_not_running).not.toContain("sv up");
   });
 });
 

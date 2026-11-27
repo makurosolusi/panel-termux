@@ -4,10 +4,10 @@ import type { Role } from "@/shared/roles";
 import { RelativeTime } from "@/web/components/relative-time";
 import { Section } from "@/web/components/section";
 import { describeAudit } from "@/web/dev/audit.describe";
-import { idOverview } from "@/web/i18n/id.overview";
+import { tOverview } from "@/web/i18n/en.overview";
 import { TOUCH_HIT } from "./panel.touch";
 
-const t = idOverview;
+const t = tOverview;
 
 /**
  * Five newest audit entries as readable sentences (same wording as /dev/audit, QA M4); "Lihat semua" only for

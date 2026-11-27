@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, test } from "bun:test";
-import { idSecurity } from "@/web/i18n/id.security";
+import { tSecurity } from "@/web/i18n/en.security";
 import { settingLabel } from "@/web/security/data-key.card";
 import { attachmentName, isReauthRequired, SECURITY_ERROR_CODES, sensitiveFetch } from "@/web/security/security.api";
 import { accessState, dataKeyStatusKey } from "@/web/security/security.state";
@@ -42,7 +42,7 @@ describe("security api", () => {
     const err = await sensitiveFetch("POST", "/api/dev/security/data-key/export").catch((e: unknown) => e);
     expect(err).toBeInstanceOf(ApiError);
     expect(isReauthRequired(err)).toBe(true);
-    expect(apiErrorMessage(err, SECURITY_ERROR_CODES)).toBe(idSecurity.errorCodes.reauth_required);
+    expect(apiErrorMessage(err, SECURITY_ERROR_CODES)).toBe(tSecurity.errorCodes.reauth_required);
   });
 
   test("ok response is returned for blob reading", async () => {
@@ -54,7 +54,7 @@ describe("security api", () => {
   test("other 4xx codes map to security copy", () => {
     expect(isReauthRequired(errorFromResponse(409, { error: "key_mismatch" }))).toBe(false);
     expect(apiErrorMessage(errorFromResponse(400, { error: "confirm_mismatch" }), SECURITY_ERROR_CODES)).toBe(
-      idSecurity.errorCodes.confirm_mismatch,
+      tSecurity.errorCodes.confirm_mismatch,
     );
   });
 
@@ -67,10 +67,10 @@ describe("security api", () => {
   });
 
   test("copy", () => {
-    expect(idSecurity.sessions.summary(3, 2)).toBe(
+    expect(tSecurity.sessions.summary(3, 2)).toBe(
       "3 sesi aktif dari 2 pengguna. Sesi berakhir paling lama 30 hari setelah masuk.",
     );
-    expect(idSecurity.dataKey.resetBody(["Token API Cloudflare"])).toStartWith("Token API Cloudflare dihapus");
-    expect(idSecurity.dataKey.resetWord).toBe("hapus");
+    expect(tSecurity.dataKey.resetBody(["Token API Cloudflare"])).toStartWith("Token API Cloudflare dihapus");
+    expect(tSecurity.dataKey.resetWord).toBe("hapus");
   });
 });

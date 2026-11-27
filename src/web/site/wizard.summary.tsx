@@ -1,9 +1,9 @@
 import { CircleDashedIcon, TriangleAlertIcon } from "lucide-react";
 import type { SiteCreateRequest } from "@/shared/site.types";
-import { idSite } from "@/web/i18n/id.site";
+import { tSite } from "@/web/i18n/en.site";
 import { createPlan, type WizardDns } from "./site.check";
 
-const t = idSite.wizard;
+const t = tSite.wizard;
 
 /** Wizard step 3 (Ringkasan): the job's steps in order, the named cloudflared blip, and what comes after. */
 export function WizardSummary({

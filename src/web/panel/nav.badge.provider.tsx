@@ -2,7 +2,7 @@ import { cn } from "cn";
 import { createContext, type ReactNode, useContext } from "react";
 import type { PanelStatus } from "@/shared/monitor.types";
 import { canAccess } from "@/shared/roles";
-import { idHistory } from "@/web/i18n/id.history";
+import { tHistory } from "@/web/i18n/en.history";
 import { useMe } from "@/web/session/use-me";
 import { useApiQuery } from "@/web/shared/use-api-query";
 import { panelUrl } from "./panel.api";
@@ -49,7 +49,7 @@ const DOT = { danger: "bg-danger", warning: "bg-warning" } as const;
 export function NavBadge({ to, dot = false, className }: { to: string; dot?: boolean; className?: string }) {
   const view = useNavBadge(to);
   if (!view) return null;
-  const label = idHistory.navBadge(view.count);
+  const label = tHistory.navBadge(view.count);
   if (dot)
     return <span role="img" aria-label={label} className={cn("size-2 rounded-full", DOT[view.tone], className)} />;
   return (

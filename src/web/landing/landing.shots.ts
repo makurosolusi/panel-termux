@@ -6,10 +6,10 @@ import servicesMDark from "@/web/assets/landing/services-m-dark.webp";
 import servicesMLight from "@/web/assets/landing/services-m-light.webp";
 import sitesDDark from "@/web/assets/landing/sites-d-dark.webp";
 import sitesDLight from "@/web/assets/landing/sites-d-light.webp";
-import type { idLanding } from "@/web/i18n/id.landing";
+import type { tLanding } from "@/web/i18n/en.landing";
 
 /** The four landing screenshots (PLAN/05 §5.8): `-m` = phone 390×844, `-d` = desktop 1440×900. */
-export type ShotKey = keyof typeof idLanding.shots.items;
+export type ShotKey = keyof typeof tLanding.shots.items;
 
 /** One screenshot: CSS size (phone files are @2x) plus light/dark image URLs. */
 export type Shot = {

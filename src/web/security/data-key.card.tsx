@@ -8,18 +8,18 @@ import { RelativeTime } from "@/web/components/relative-time";
 import { Section } from "@/web/components/section";
 import { StatusBadge } from "@/web/components/status-badge";
 import { Button } from "@/web/components/ui/button";
-import { idSecurity } from "@/web/i18n/id.security";
-import { idSettings } from "@/web/i18n/id.settings";
+import { tSecurity } from "@/web/i18n/en.security";
+import { tSettings } from "@/web/i18n/en.settings";
 import { toast } from "@/web/shared/toast.lazy";
 import { exportDataKey, isReauthRequired, resetDataKey, SECURITY_ERROR_CODES } from "./security.api";
 import { Notice, ReauthNotice } from "./security.notice";
 import { dataKeyStatusKey } from "./security.state";
 
-const t = idSecurity.dataKey;
+const t = tSecurity.dataKey;
 
 /** Field label of a setting key from the settings copy, or the raw key when it has none. */
 export const settingLabel = (key: string): string =>
-  (idSettings.fields as Record<string, { label: string } | undefined>)[key]?.label ?? key;
+  (tSettings.fields as Record<string, { label: string } | undefined>)[key]?.label ?? key;
 
 /**
  * "Kunci data" card (`#kunci-data`, PLAN/04 §5.2): match state, last download, "Unduh kunci data" (confirm, fresh

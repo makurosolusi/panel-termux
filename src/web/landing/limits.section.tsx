@@ -1,7 +1,7 @@
-import { idLanding } from "@/web/i18n/id.landing";
+import { tLanding } from "@/web/i18n/en.landing";
 import { SectionHead } from "./section.head";
 
-const t = idLanding.limits;
+const t = tLanding.limits;
 
 /** `#batasan`: honest limitations, as a numbered two-column list. */
 export function LimitsSection() {

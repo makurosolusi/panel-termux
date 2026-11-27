@@ -2,14 +2,14 @@ import { isRouteErrorResponse, Link, useRouteError } from "react-router";
 import { homeFor } from "@/shared/roles";
 import { ErrorState } from "@/web/components/error-state";
 import { Button } from "@/web/components/ui/button";
-import { idShell } from "@/web/i18n/id.shell";
+import { tShell } from "@/web/i18n/en.shell";
 import { useMe } from "@/web/session/use-me";
 import { isChunkLoadError } from "@/web/shared/chunk.error";
 import { useChunkRecovery } from "@/web/shared/use-chunk-recovery";
 import { NotFoundPage } from "./not-found.page";
 
-const t = idShell.routeError;
-const c = idShell.chunkError;
+const t = tShell.routeError;
+const c = tShell.chunkError;
 
 /**
  * Route ErrorBoundary inside the shell (sidebar stays usable): a thrown 404 response shows the 404 page; a failed

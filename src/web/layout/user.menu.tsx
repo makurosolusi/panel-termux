@@ -14,13 +14,13 @@ import {
   DropdownMenuTrigger,
 } from "@/web/components/ui/dropdown-menu";
 import { UserAvatar } from "@/web/components/user-avatar";
-import { idApp } from "@/web/i18n/id.app";
-import { idShell } from "@/web/i18n/id.shell";
+import { tApp } from "@/web/i18n/en.app";
+import { tShell } from "@/web/i18n/en.shell";
 import type { Me } from "@/web/session/session.api";
 import { parsePreference } from "@/web/theme/theme.preference";
 import { setThemePreference, useTheme } from "@/web/theme/theme.store";
 
-const t = idShell;
+const t = tShell;
 const THEME_OPTIONS = [
   { value: "system", label: t.theme.system, icon: MonitorIcon },
   { value: "light", label: t.theme.light, icon: SunIcon },
@@ -56,7 +56,7 @@ export function UserMenu({
           <>
             <span className="flex min-w-0 flex-1 flex-col">
               <span className="truncate text-sm font-medium">{me.name}</span>
-              <span className="truncate text-xs text-muted-foreground">{idApp.roles[me.role]}</span>
+              <span className="truncate text-xs text-muted-foreground">{tApp.roles[me.role]}</span>
             </span>
             <ChevronsUpDownIcon className="size-4 shrink-0 text-muted-foreground" aria-hidden />
           </>
@@ -94,7 +94,7 @@ export function UserMenu({
           }}
         >
           <LogOutIcon aria-hidden />
-          {idApp.menu.signOut}
+          {tApp.menu.signOut}
         </DropdownMenuItem>
         {error && (
           <p role="alert" className="px-2 py-1.5 text-xs text-destructive">

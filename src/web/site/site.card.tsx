@@ -16,12 +16,12 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/web/components/ui/dropdown-menu";
-import { idSite } from "@/web/i18n/id.site";
+import { tSite } from "@/web/i18n/en.site";
 import { apiFetch } from "@/web/shared/api.client";
 import { deployOutcomeSuffix } from "./job.status-key";
 import { jobPath, SITE_ERROR_CODES, siteUrl } from "./site.api";
 
-const t = idSite.list;
+const t = tSite.list;
 
 const APP_STATUS_KEY: Readonly<Record<SiteAppStatus, StatusKey>> = {
   online: "running",

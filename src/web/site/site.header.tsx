@@ -22,7 +22,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/web/components/ui/dropdown-menu";
-import { idSiteDetail } from "@/web/i18n/id.site-detail";
+import { tSiteDetail } from "@/web/i18n/en.site-detail";
 import { ERROR_TOAST_MS } from "@/web/shared/api.action";
 import { apiErrorMessage, apiFetch, type ErrorCodes } from "@/web/shared/api.client";
 import { ServiceStartButton } from "@/web/shared/service-start";
@@ -32,7 +32,7 @@ import { jobPath, siteUrl } from "./site.api";
 import { canRestart, HostLink, SiteAppBadge } from "./site.card";
 import { healthToast, siteBusy } from "./site-detail.state";
 
-const t = idSiteDetail.header;
+const t = tSiteDetail.header;
 
 /**
  * "Mulai ulang" with its confirmation (job `site.restart` → progress page); disabled while busy or not deployed.
@@ -98,7 +98,7 @@ export function SiteHeader(props: { site: SiteDetail; meta: PageMeta; codes: Err
   return (
     <PageHeader
       title={site.name}
-      back={{ to: "/panel/sites", label: idSiteDetail.back }}
+      back={{ to: "/panel/sites", label: tSiteDetail.back }}
       status={<SiteAppBadge site={site} />}
       meta={props.meta}
       description={

@@ -25,7 +25,7 @@ import {
   testFailure,
   turnsOnIncludeSecrets,
 } from "@/web/dev/settings.state";
-import { idSettings } from "@/web/i18n/id.settings";
+import { tSettings } from "@/web/i18n/en.settings";
 import { ApiError } from "@/web/shared/api.client";
 
 // test-only fixture
@@ -50,7 +50,7 @@ describe("registry", () => {
   test("health/onboarding anchors exist and every group has copy", () => {
     expect(GROUP_ANCHOR.cloudflare).toBe("cloudflare");
     expect(GROUP_ANCHOR.backup).toBe("cadangan");
-    for (const g of SETTING_GROUPS) expect(idSettings.groups[g].title.length).toBeGreaterThan(2);
+    for (const g of SETTING_GROUPS) expect(tSettings.groups[g].title.length).toBeGreaterThan(2);
   });
   test("secret controls match the server's secret keys", () => {
     const secrets: string[] = SETTING_KEYS.filter((k) => fieldDef(k).control === "secret");
@@ -177,9 +177,9 @@ describe("error mapping", () => {
     expect(err).toBeInstanceOf(SettingsPatchError);
     expect(err.code).toBe("invalid_value");
     expect(saveFailure(err)).toBe("fields");
-    expect(fieldErrorMessage("backup.s3_bucket", "invalid")).toBe(idSettings.fields["backup.s3_bucket"].invalid);
+    expect(fieldErrorMessage("backup.s3_bucket", "invalid")).toBe(tSettings.fields["backup.s3_bucket"].invalid);
     expect(fieldErrorMessage("backup.s3_bucket", "empty")).toBe("Wajib diisi.");
-    expect(fieldErrorMessage("backup.s3_bucket", "unknown")).toBe(idSettings.unknownKey);
+    expect(fieldErrorMessage("backup.s3_bucket", "unknown")).toBe(tSettings.unknownKey);
   });
   test("403 reauth_required and 409 key_mismatch become notices; other failures toast", () => {
     expect(saveFailure(patchErrorFrom(403, { error: "reauth_required", message: "m" }))).toBe("reauth");
@@ -200,7 +200,7 @@ describe("test result rendering", () => {
     });
     expect(cloudflareOutcome({ ok: false, code: "no_zones", zones: 0, detail: null }).tone).toBe("warning");
     const bad = cloudflareOutcome({ ok: false, code: "key_mismatch", zones: null, detail: "d" });
-    expect(bad).toEqual({ tone: "danger", text: idSettings.test.cloudflare.key_mismatch, detail: "d" });
+    expect(bad).toEqual({ tone: "danger", text: tSettings.test.cloudflare.key_mismatch, detail: "d" });
   });
   test("S3: ok shows ms; delete_denied is a warning; others danger with detail", () => {
     const r = (o: Partial<BackupVerify>): BackupVerify => ({
@@ -214,12 +214,12 @@ describe("test result rendering", () => {
     });
     expect(s3Outcome(r({ ok: true, code: "ok", failedStep: null })).text).toContain("120 md");
     expect(s3Outcome(r({ code: "delete_denied" })).tone).toBe("warning");
-    expect(s3Outcome(r({}))).toEqual({ tone: "danger", text: idSettings.test.s3.write_denied, detail: "AccessDenied" });
+    expect(s3Outcome(r({}))).toEqual({ tone: "danger", text: tSettings.test.s3.write_denied, detail: "AccessDenied" });
   });
   test("Telegram: known codes, too_soon is a warning, unknown falls back to the API message", () => {
     const e = (status: number, code: string) => new ApiError(status >= 500 ? "server" : "client", status, code, null);
-    expect(testFailure(e(502, "telegram_forbidden")).text).toBe(idSettings.test.telegram.telegram_forbidden);
-    expect(testFailure(e(409, "alerts_not_configured")).text).toBe(idSettings.test.telegram.alerts_not_configured);
+    expect(testFailure(e(502, "telegram_forbidden")).text).toBe(tSettings.test.telegram.telegram_forbidden);
+    expect(testFailure(e(409, "alerts_not_configured")).text).toBe(tSettings.test.telegram.alerts_not_configured);
     expect(testFailure(e(409, "telegram_webhook_set")).text).toContain("webhook");
     expect(testFailure(e(429, "too_soon")).tone).toBe("warning");
     expect(testFailure(new ApiError("client", 400, "weird", "server said no")).text).toBe("server said no");
@@ -229,7 +229,7 @@ describe("test result rendering", () => {
 describe("field copy with `code`", () => {
   // CodeText renders unbalanced backticks as plain text, so every backtick in help/invalid copy must pair up.
   test("help and invalid strings render backticked parts as code, never raw backticks", () => {
-    const copies = Object.values(idSettings.fields).flatMap((f) => [f.help, f.invalid]);
+    const copies = Object.values(tSettings.fields).flatMap((f) => [f.help, f.invalid]);
     const withCode = copies.filter((c) => c.includes("`"));
     expect(withCode.length).toBeGreaterThan(3);
     for (const c of withCode) expect(codeSegments(c).some((seg) => seg.code)).toBe(true);

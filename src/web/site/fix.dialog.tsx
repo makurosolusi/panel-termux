@@ -11,18 +11,18 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/web/components/ui/dialog";
-import { idSite } from "@/web/i18n/id.site";
+import { tSite } from "@/web/i18n/en.site";
 import { useDoneFocus } from "@/web/shared/focus.return";
 import { PHONE_SHEET } from "./adopt.dialog";
 import { FixDiff } from "./fix.diff";
 import { fixSummary, previewTitle, restartNeeded } from "./site.adopt";
 import { applyFixes, fixErrorMessage, previewFix, toastFixRun } from "./site.api";
 
-const t = idSite.setup.dialog;
+const t = tSite.setup.dialog;
 
 /** Dialog title: the fix's own question, or "Perbaiki n hal sekaligus?" for several. */
 export const fixDialogTitle = (keys: readonly FixKey[]): string =>
-  keys.length === 1 && keys[0] ? t[keys[0]].title : idSite.setup.dialogAll.title(keys.length);
+  keys.length === 1 && keys[0] ? t[keys[0]].title : tSite.setup.dialogAll.title(keys.length);
 
 /** Footer that stays at the bottom of the scrolling sheet while the diff is open (QA fix-04 MINOR-1). */
 const STICKY_FOOTER =

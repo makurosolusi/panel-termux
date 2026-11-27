@@ -4,10 +4,10 @@ import type { Problem } from "@/shared/monitor.types";
 import { detail } from "@/shared/problem.copy";
 import type { Site } from "@/shared/site.types";
 import { missingFromPm2 } from "@/shared/site.types";
-import { idDeploy } from "@/web/i18n/id.deploy";
-import { idJob } from "@/web/i18n/id.job";
-import { idPanel } from "@/web/i18n/id.panel";
-import { idSiteDetail } from "@/web/i18n/id.site-detail";
+import { tDeploy } from "@/web/i18n/en.deploy";
+import { tJob } from "@/web/i18n/en.job";
+import { tPanel } from "@/web/i18n/en.panel";
+import { tSiteDetail } from "@/web/i18n/en.site-detail";
 import { problemService } from "@/web/panel/overview.problems";
 import { serviceToStart } from "@/web/site/job.failure";
 import { finalReason, liveAnnouncement, shownStepStatus, stepDurationMs, stepEndMs } from "@/web/site/job.state";
@@ -42,8 +42,8 @@ describe("interrupted job steps (QA M4)", () => {
   });
 
   test("interrupted copy is not repeated word for word", () => {
-    expect(idJob.outcomes.interrupted()).not.toBe(idJob.final.interrupted);
-    expect<string>(idJob.recover.cleanup).toBe(idJob.next.recover);
+    expect(tJob.outcomes.interrupted()).not.toBe(tJob.final.interrupted);
+    expect<string>(tJob.recover.cleanup).toBe(tJob.next.recover);
   });
 });
 
@@ -118,17 +118,17 @@ describe("in-UI start of pm2/postgres instead of manual commands (PLAN/06 §6.1,
   });
 
   test("no `sv up` or ssh instruction left in the P1 copy", () => {
-    const texts = [idJob, idDeploy, idPanel, idSiteDetail].map((d) =>
+    const texts = [tJob, tDeploy, tPanel, tSiteDetail].map((d) =>
       JSON.stringify(d, (_k, v) => (typeof v === "function" ? v({}) : v)),
     );
     for (const text of texts) expect(text).not.toContain("sv up");
-    expect(idJob.outcomes.pm2_not_running()).toBe(
+    expect(tJob.outcomes.pm2_not_running()).toBe(
       "Layanan pm2 tidak berjalan, jadi semua situs ikut berhenti. Jalankan pm2, lalu coba lagi.",
     );
-    const site = JSON.stringify(idSiteDetail.header);
+    const site = JSON.stringify(tSiteDetail.header);
     expect(site).not.toContain("ssh");
     expect(detail({ code: "pm2_unavailable", target: "pm2", params: {} })).not.toContain("Mulai layanan");
-    expect(idJob.outcomes.dns_wrong_zone({ fqdn: "a.b.contoh.com" })).toContain("(a.b.contoh.com)");
-    expect(idJob.outcomes.app_not_in_ecosystem({ name: "shop" })).toContain("shop");
+    expect(tJob.outcomes.dns_wrong_zone({ fqdn: "a.b.contoh.com" })).toContain("(a.b.contoh.com)");
+    expect(tJob.outcomes.app_not_in_ecosystem({ name: "shop" })).toContain("shop");
   });
 });

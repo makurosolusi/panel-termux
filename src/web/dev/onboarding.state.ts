@@ -1,12 +1,12 @@
 import type { DevSetup, SetupDismissPut, SetupItem, SetupItemKey, SetupManualPut } from "@/shared/dev.types";
-import { idDevSetup } from "@/web/i18n/id.dev.setup";
+import { tDevSetup } from "@/web/i18n/en.dev.setup";
 import { runApiAction } from "@/web/shared/api.action";
 import { apiFetch, apiUrl } from "@/web/shared/api.client";
 
 // Decisions of the onboarding card/banner (PLAN/05 F1, §3.1): which items show, progress, visibility, actions; plus
 // the two PUTs both use.
 
-const t = idDevSetup;
+const t = tDevSetup;
 
 /** Cloudflare Access recipe (README "Instal di HP", step 4). */
 export const ACCESS_GUIDE_URL = "https://github.com/makurosolusi/panel-termux#instal-di-hp";

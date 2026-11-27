@@ -4,12 +4,12 @@ import type { LogStream } from "@/shared/panel.types";
 import { ErrorState } from "@/web/components/error-state";
 import { LogViewer } from "@/web/components/log-viewer";
 import { PageHeader } from "@/web/components/page-header";
-import { idPanel } from "@/web/i18n/id.panel";
+import { tPanel } from "@/web/i18n/en.panel";
 import { apiErrorMessage } from "@/web/shared/api.client";
 import { useLogFollow } from "@/web/shared/use-log-follow";
 import { type ControlKind, panelUrl } from "./panel.api";
 
-const t = idPanel.log;
+const t = tPanel.log;
 const STREAMS: readonly LogStream[] = ["out", "err"];
 
 /** `?stream=err` selects stderr; anything else is stdout. */
@@ -96,7 +96,7 @@ export function LogPage({ kind }: { kind: ControlKind }) {
             <ErrorState
               compact
               title={t.failed}
-              description={apiErrorMessage(log.error, idPanel.errorCodes)}
+              description={apiErrorMessage(log.error, tPanel.errorCodes)}
               onRetry={log.reload}
               retrying={log.loading}
             />

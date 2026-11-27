@@ -12,10 +12,10 @@ import {
   type SiteHealthConfig,
   type SiteSettingsUpdate,
 } from "@/shared/site.types";
-import { idSiteDetail } from "@/web/i18n/id.site-detail";
+import { tSiteDetail } from "@/web/i18n/en.site-detail";
 import { cleanHost, issueText, noteText } from "./site.check";
 
-const t = idSiteDetail;
+const t = tSiteDetail;
 const DAY_MS = 86_400_000;
 
 /** Banner shown above the sections, in display order. */

@@ -12,13 +12,13 @@ import {
   DialogTrigger,
 } from "@/web/components/ui/dialog";
 import { Input } from "@/web/components/ui/input";
-import { idSiteDetail } from "@/web/i18n/id.site-detail";
+import { tSiteDetail } from "@/web/i18n/en.site-detail";
 import { useReturnFocus } from "@/web/shared/focus.return";
 import { applyPaste, type PasteEntry, parseEnvPaste, pasteApplicable } from "./env.paste";
 import { type EnvDraft, type EnvRow, envRowErrors, newEnvRow } from "./env.rows";
 import { SecretInput } from "./env.secret-input";
 
-const t = idSiteDetail.env;
+const t = tSiteDetail.env;
 
 /** Editable KEY/value rows with per-row validation; `existing` keys count as duplicates, `locked` keys are refused. */
 export function EnvRowsEditor({
@@ -89,7 +89,7 @@ export function EnvRowsEditor({
   );
 }
 
-const p = idSiteDetail.paste;
+const p = tSiteDetail.paste;
 
 /** Masked value with its problems below (no own column: an empty cell left a stray " · " on phone cards). */
 const PasteValue = ({ entry: e }: { entry: PasteEntry }) => (

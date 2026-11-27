@@ -1,10 +1,10 @@
 import type { SecurityStatus } from "@/shared/security.types";
 import { RelativeTime } from "@/web/components/relative-time";
 import { StatusBadge } from "@/web/components/status-badge";
-import { idSecurity } from "@/web/i18n/id.security";
+import { tSecurity } from "@/web/i18n/en.security";
 import { accessState } from "./security.state";
 
-const t = idSecurity.access;
+const t = tSecurity.access;
 
 /** "Cloudflare Access" row (`#access`): not applicable on http, seen (with time), or a warning to set it up. */
 export function AccessStatusRow({ access }: { access: SecurityStatus["access"] }) {

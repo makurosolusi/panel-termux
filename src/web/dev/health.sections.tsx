@@ -9,7 +9,7 @@ import { RelativeTime } from "@/web/components/relative-time";
 import { Section } from "@/web/components/section";
 import { RowsSkeleton } from "@/web/components/skeletons";
 import { StatTile } from "@/web/components/stat-tile";
-import { idDevHealth } from "@/web/i18n/id.dev.health";
+import { tDevHealth } from "@/web/i18n/en.dev.health";
 import { AccessStatusRow } from "@/web/security/access.row";
 import { DataKeyCard } from "@/web/security/data-key.card";
 import { SECURITY_ERROR_CODES, SECURITY_STATUS_URL } from "@/web/security/security.api";
@@ -18,7 +18,7 @@ import { formatBytes, formatClock, formatDateTime, formatNumber, formatUptime, u
 import { useApiQuery } from "@/web/shared/use-api-query";
 import { DISK_THRESHOLDS } from "./health.state";
 
-const t = idDevHealth;
+const t = tDevHealth;
 
 /** Four KPI tiles: Waktu aktif, Memori, Penyimpanan (bar), Request/menit; 2×2 on phones. */
 export function HealthTiles({ h }: { h: DevHealth }) {

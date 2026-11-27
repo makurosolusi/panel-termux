@@ -11,7 +11,7 @@ import {
   DialogTrigger,
 } from "@/web/components/ui/dialog";
 import { Input } from "@/web/components/ui/input";
-import { idSiteDetail } from "@/web/i18n/id.site-detail";
+import { tSiteDetail } from "@/web/i18n/en.site-detail";
 import { ERROR_TOAST_MS } from "@/web/shared/api.action";
 import { apiErrorMessage, type ErrorCodes } from "@/web/shared/api.client";
 import { toast } from "@/web/shared/toast.lazy";
@@ -19,7 +19,7 @@ import { useSiteCheck } from "./site.api";
 import { cleanHost } from "./site.check";
 import { hostnameFeedback, hostnamesCheck, MAX_NEW_HOSTNAMES, normalizeHostnames } from "./site-detail.state";
 
-const t = idSiteDetail.domains;
+const t = tSiteDetail.domains;
 
 type AddProps = { busy: boolean; blinking: string[]; codes: ErrorCodes; onSubmit: (h: string[]) => Promise<unknown> };
 

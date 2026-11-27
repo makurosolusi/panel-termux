@@ -7,14 +7,14 @@ import { ErrorState } from "@/web/components/error-state";
 import { PageHeader } from "@/web/components/page-header";
 import { QueryView } from "@/web/components/query-view";
 import { RelativeTime } from "@/web/components/relative-time";
-import { idPanel } from "@/web/i18n/id.panel";
+import { tPanel } from "@/web/i18n/en.panel";
 import { formatBytes } from "@/web/shared/format";
 import { ServiceStartButton } from "@/web/shared/service-start";
 import { useApiQuery } from "@/web/shared/use-api-query";
 import { panelUrl } from "./panel.api";
 import { TOUCH_HIT } from "./panel.touch";
 
-const t = idPanel.databases;
+const t = tPanel.databases;
 
 /** A database backup older than this is shown as a warning (same 36 h as the backup_stale rule). */
 export const DB_BACKUP_STALE_MS = 36 * 3_600_000;
@@ -90,7 +90,7 @@ export function DatabasesPage() {
       {header}
       <QueryView
         query={query}
-        codes={idPanel.errorCodes}
+        codes={tPanel.errorCodes}
         empty={<EmptyState icon={DatabaseIcon} title={t.emptyTitle} description={t.emptyBody} />}
       >
         {(list) => (

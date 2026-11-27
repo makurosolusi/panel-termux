@@ -1,10 +1,10 @@
 import { Progress } from "@/web/components/ui/progress";
-import { idDeploy } from "@/web/i18n/id.deploy";
+import { tDeploy } from "@/web/i18n/en.deploy";
 import { formatBytes } from "@/web/shared/format";
 import type { UploadPhase } from "./deploy.api";
 import { CHUNK_MAX_RETRIES, uploadProgress } from "./deploy.upload";
 
-const t = idDeploy.upload;
+const t = tDeploy.upload;
 
 /** Info-toned bar for long-running progress (tokens only). */
 export const INFO_PROGRESS = "bg-info-subtle [&>[data-slot=progress-indicator]]:bg-info";

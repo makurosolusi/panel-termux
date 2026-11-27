@@ -7,7 +7,7 @@ import type { JobAccepted, SiteDetail, SiteEnvSaved, SiteEnvUpdate } from "@/sha
 import { ActionBar } from "@/web/components/action-bar";
 import { Badge } from "@/web/components/ui/badge";
 import { Button } from "@/web/components/ui/button";
-import { idSiteDetail } from "@/web/i18n/id.site-detail";
+import { tSiteDetail } from "@/web/i18n/en.site-detail";
 import { useTaskMode } from "@/web/layout/task.mode";
 import { ERROR_TOAST_MS } from "@/web/shared/api.action";
 import { apiErrorMessage, apiFetch, type ErrorCodes } from "@/web/shared/api.client";
@@ -29,7 +29,7 @@ import { SecretInput } from "./env.secret-input";
 import { jobPath, siteUrl } from "./site.api";
 import { canRestart } from "./site.card";
 
-const t = idSiteDetail.env;
+const t = tSiteDetail.env;
 
 const BADGE_CLASS: Record<EnvKeyBadge | "new", string> = {
   locked: "border-border text-muted-foreground",
@@ -144,7 +144,7 @@ export function SiteEnvEditor({ site, busy, codes, onSaved }: EditorProps) {
           trigger={
             <Button type="button" variant="outline" size="sm" disabled={busy}>
               <ClipboardPasteIcon aria-hidden />
-              {idSiteDetail.paste.open}
+              {tSiteDetail.paste.open}
             </Button>
           }
         />

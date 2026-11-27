@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, mock, test } from "bun:test";
-import { idCommon } from "@/web/i18n/id.common";
+import { tCommon } from "@/web/i18n/en.common";
 import {
   AJAX_HEADERS,
   ApiError,
@@ -32,7 +32,7 @@ describe("Cloudflare Access 401 vs panel 401", () => {
     const access = errorFromResponse(401, null);
     expect(access.kind).toBe("access");
     expect(redirectFor(access)).toBeNull();
-    expect(apiErrorMessage(access)).toBe(idCommon.errors.access);
+    expect(apiErrorMessage(access)).toBe(tCommon.errors.access);
 
     const forbidden = errorFromResponse(403, { error: "forbidden" });
     expect(forbidden.kind).toBe("forbidden");
@@ -51,12 +51,12 @@ describe("Cloudflare Access 401 vs panel 401", () => {
 
   test("detail under an error title is the next step only, never a repeat of the title", () => {
     const network = new ApiError("network", null, null, null);
-    expect(apiErrorDetail(network)).toBe(idCommon.errorSteps.network);
-    expect(apiErrorDetail(network)).not.toContain(idCommon.errorTitles.network);
-    expect(apiErrorMessage(network)).toBe(idCommon.errors.network); // toasts keep the full sentence
-    expect(apiErrorDetail(errorFromResponse(503, null))).toBe(idCommon.errorSteps.server);
+    expect(apiErrorDetail(network)).toBe(tCommon.errorSteps.network);
+    expect(apiErrorDetail(network)).not.toContain(tCommon.errorTitles.network);
+    expect(apiErrorMessage(network)).toBe(tCommon.errors.network); // toasts keep the full sentence
+    expect(apiErrorDetail(errorFromResponse(503, null))).toBe(tCommon.errorSteps.server);
     expect(apiErrorDetail(errorFromResponse(409, { error: "busy" }), { busy: "Sedang sibuk." })).toBe("Sedang sibuk.");
-    expect(apiErrorDetail(new Error("x"))).toBe(idCommon.errors.generic);
+    expect(apiErrorDetail(new Error("x"))).toBe(tCommon.errors.generic);
   });
 
   test("AJAX header asks Access for a 401 instead of a redirect", () => {
@@ -67,16 +67,16 @@ describe("Cloudflare Access 401 vs panel 401", () => {
 describe("error copy", () => {
   test("every error kind has a title", () => {
     const kinds: ApiErrorKind[] = ["network", "unauthorized", "access", "forbidden", "client", "server"];
-    expect(Object.keys(idCommon.errorTitles).sort()).toEqual([...kinds].sort());
-    for (const kind of kinds) expect(idCommon.errorTitles[kind]).toBeTruthy();
+    expect(Object.keys(tCommon.errorTitles).sort()).toEqual([...kinds].sort());
+    for (const kind of kinds) expect(tCommon.errorTitles[kind]).toBeTruthy();
   });
 
   test("known code first, then 4xx server message, then per kind", () => {
     const conflict = errorFromResponse(409, { error: "name_taken", message: "Name taken" });
     expect(apiErrorMessage(conflict, { name_taken: "Nama sudah dipakai." })).toBe("Nama sudah dipakai.");
     expect(apiErrorMessage(conflict)).toBe("Name taken");
-    expect(apiErrorMessage(errorFromResponse(503, null))).toBe(idCommon.errors.server);
-    expect(apiErrorMessage(new Error("x"))).toBe(idCommon.errors.generic);
+    expect(apiErrorMessage(errorFromResponse(503, null))).toBe(tCommon.errors.server);
+    expect(apiErrorMessage(new Error("x"))).toBe(tCommon.errors.generic);
   });
 });
 

@@ -1,5 +1,5 @@
 import type { Role } from "@/shared/roles";
-import { idApp } from "@/web/i18n/id.app";
+import { tApp } from "@/web/i18n/en.app";
 import type { StatusTone } from "./status.tone";
 import { StatusBadge } from "./status-badge";
 
@@ -11,5 +11,5 @@ export const ROLE_TONE = { user: "neutral", admin: "info", super_admin: "accent"
 
 /** Localized role label. */
 export function RoleBadge({ role, className }: { role: Role; className?: string }) {
-  return <StatusBadge tone={ROLE_TONE[role]} label={idApp.roles[role]} className={className} />;
+  return <StatusBadge tone={ROLE_TONE[role]} label={tApp.roles[role]} className={className} />;
 }

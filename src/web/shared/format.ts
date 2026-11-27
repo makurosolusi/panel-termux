@@ -4,7 +4,7 @@
 import * as base from "@/shared/format.number";
 import { activeLocale } from "@/shared/i18n";
 import { INTL_TAG } from "@/shared/locale";
-import { idShell } from "@/web/i18n/id.shell";
+import { tShell } from "@/web/i18n/en.shell";
 
 const tag = () => INTL_TAG[activeLocale()];
 
@@ -42,7 +42,7 @@ export function formatRelative(at: string | Date | null, now: Date = new Date())
   const d = at instanceof Date ? at : new Date(at);
   if (Number.isNaN(d.getTime())) return "–";
   const sec = Math.floor((now.getTime() - d.getTime()) / 1000);
-  const t = idShell.time;
+  const t = tShell.time;
   if (Math.abs(sec) < 60) return t.justNow;
   if (sec < 0 && -sec < 86_400) return t.in(formatDuration(-sec - (-sec % 60)));
   if (sec > 0 && sec < 86_400) return t.ago(formatDuration(sec - (sec % 60)));
@@ -105,5 +105,5 @@ export function formatLoadPerCore(load1: number, cores: number | null | undefine
   if (!cores || cores <= 0) return { text: value, tone: "neutral" };
   const perCore = load1 / cores;
   const tone = perCore >= LOAD_PER_CORE_DANGER ? "danger" : perCore >= LOAD_PER_CORE_WARN ? "warning" : "success";
-  return { text: `${value} / ${idShell.load.cores(cores)}`, tone };
+  return { text: `${value} / ${tShell.load.cores(cores)}`, tone };
 }

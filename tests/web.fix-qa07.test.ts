@@ -3,12 +3,12 @@
 import { describe, expect, test } from "bun:test";
 import type { FixEffects, FixPreview } from "@/shared/fix.types";
 import type { Integration, IntegrationCheck } from "@/shared/site.types";
-import { idSite } from "@/web/i18n/id.site";
-import { appNamesText } from "@/web/i18n/id.site.setup";
+import { tSite } from "@/web/i18n/en.site";
+import { appNamesText } from "@/web/i18n/en.site.setup";
 import { restartDescription, restartTier } from "@/web/site/setup.actions";
 import { applicableFixes, fixSummary, remainingProblems } from "@/web/site/site.adopt";
 
-const t = idSite.setup;
+const t = tSite.setup;
 const sd = t.dialog.sites_dir_create;
 
 // test-only fixtures

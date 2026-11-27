@@ -1,7 +1,7 @@
 import { CircleCheckIcon, InfoIcon, Loader2Icon, OctagonXIcon, TriangleAlertIcon } from "lucide-react";
 import { useEffect } from "react";
 import { Toaster as Sonner, type ToasterProps } from "sonner";
-import { idShell } from "@/web/i18n/id.shell";
+import { tShell } from "@/web/i18n/en.shell";
 import { toasterReady } from "@/web/shared/toast.lazy";
 import { useTheme } from "@/web/theme/theme.store";
 
@@ -22,9 +22,9 @@ const Toaster = ({ ...props }: ToasterProps) => {
       mobileOffset={MOBILE_OFFSET}
       visibleToasts={3}
       closeButton
-      containerAriaLabel={idShell.toaster.region}
+      containerAriaLabel={tShell.toaster.region}
       toastOptions={{
-        closeButtonAriaLabel: idShell.toaster.close,
+        closeButtonAriaLabel: tShell.toaster.close,
         classNames: {
           success: "[&_[data-icon]]:text-success",
           error: "[&_[data-icon]]:text-danger",

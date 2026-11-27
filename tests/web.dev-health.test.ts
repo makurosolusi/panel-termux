@@ -22,8 +22,8 @@ import {
   setupProgress,
   visibleItems,
 } from "../src/web/dev/onboarding.state";
-import { idDevHealth } from "../src/web/i18n/id.dev.health";
-import { idDevSetup } from "../src/web/i18n/id.dev.setup";
+import { tDevHealth } from "../src/web/i18n/en.dev.health";
+import { tDevSetup } from "../src/web/i18n/en.dev.setup";
 import { formatLocaleForFile } from "./i18n.fixture";
 
 formatLocaleForFile("id"); // Indonesian literals below until wave 1 migrates this file
@@ -86,7 +86,7 @@ describe("health verdict (B4: info never lowers it)", () => {
     expect(verdictOf(h)).toBe("ok");
     expect(verdictProblems(h)).toEqual([]);
     expect(infoRows(h)).toEqual(["backup_not_configured", "access_not_seen"]);
-    expect(verdictSentence(h, NOW, title)).toBe(idDevHealth.verdictOk);
+    expect(verdictSentence(h, NOW, title)).toBe(tDevHealth.verdictOk);
   });
 
   test("info codes fall back to the B4 defaults when the server omits infoCodes", () => {
@@ -108,13 +108,13 @@ describe("health verdict (B4: info never lowers it)", () => {
   test("a warn check → warn; server verdict wins when present", () => {
     const h = health({ checks: [check("errors", "warn", 4)] });
     expect(verdictOf(h)).toBe("warn");
-    expect(verdictSentence(h, NOW, title)).toBe(idDevHealth.checks.errors.warn(4));
+    expect(verdictSentence(h, NOW, title)).toBe(tDevHealth.checks.errors.warn(4));
     expect(verdictOf({ ...h, verdict: "fail" })).toBe("fail");
   });
 
   test("failing check outranks a warning problem in the headline", () => {
     const h = health({ problems: [problem("disk_low", "warning")], checks: [check("fake_on_https", "fail", "fake")] });
-    expect(verdictSentence(h, NOW, title)).toBe(idDevHealth.checks.fake_on_https.fail);
+    expect(verdictSentence(h, NOW, title)).toBe(tDevHealth.checks.fake_on_https.fail);
   });
 
   test("verdict maps to canonical status keys", () => {
@@ -128,18 +128,18 @@ describe("check rows", () => {
     expect(checkRow(check("errors", "ok", 0), h, NOW)).toEqual({
       key: "errors",
       status: "ok",
-      text: idDevHealth.checks.errors.ok,
+      text: tDevHealth.checks.errors.ok,
       href: undefined,
     });
     const fail = checkRow(check("errors", "fail", 12), h, NOW);
-    expect(fail.text).toBe(idDevHealth.checks.errors.fail(12));
+    expect(fail.text).toBe(tDevHealth.checks.errors.fail(12));
     expect(fail.href).toBe("/dev/logs?level=error");
   });
 
   test("sampler before the first sample → waiting and never lowers the row", () => {
     const row = checkRow(check("sampler", "warn", null), health({ sampledAt: null }), NOW);
     expect(row.status).toBe("ok");
-    expect(row.text).toBe(idDevHealth.checks.sampler.waiting);
+    expect(row.text).toBe(tDevHealth.checks.sampler.waiting);
   });
 
   test("late sampler says how long ago", () => {
@@ -188,7 +188,7 @@ const setup = (over: Partial<DevSetup> = {}): DevSetup => ({
 describe("onboarding items", () => {
   test("progress counts required + recommended only: 2 dari 6", () => {
     expect(setupProgress(setup())).toEqual({ done: 2, total: 6 });
-    expect(idDevSetup.banner.title(2, 6)).toBe("Siapkan Panel Termux: 2 dari 6 selesai");
+    expect(tDevSetup.banner.title(2, 6)).toBe("Siapkan Panel Termux: 2 dari 6 selesai");
   });
 
   test("access not applicable (http base) is hidden and not counted", () => {
@@ -215,7 +215,7 @@ describe("onboarding items", () => {
     expect(itemAction(item("backup", "required", false, { needsFirstRun: true }))).toEqual({
       kind: "route",
       to: "/panel/backups",
-      label: idDevSetup.backupFirstRun,
+      label: tDevSetup.backupFirstRun,
     });
     expect(itemAction(item("access", "required"))).toMatchObject({ kind: "external", to: ACCESS_GUIDE_URL });
     expect(itemAction(item("secret_saved", "required"))).toMatchObject({ kind: "anchor", to: "#kunci-data" });
@@ -223,7 +223,7 @@ describe("onboarding items", () => {
   });
 
   test("backtick copy splits into code segments", () => {
-    expect(codeSegments(idDevSetup.items.secret_saved.body)[0]).toEqual({ text: "data/secret", code: true });
+    expect(codeSegments(tDevSetup.items.secret_saved.body)[0]).toEqual({ text: "data/secret", code: true });
     expect(codeSegments("a `b` c")).toEqual([
       { text: "a ", code: false },
       { text: "b", code: true },

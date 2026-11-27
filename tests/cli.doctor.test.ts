@@ -12,7 +12,7 @@ import { runMigrations } from "@/server/db/migrate";
 import { setting } from "@/server/db/schema";
 import { TermuxExecError } from "@/server/exec/termux.exec";
 import type { DoctorKey, DoctorReport } from "@/shared/doctor.types";
-import { idSiteSetup } from "@/web/i18n/id.site.setup";
+import { tSiteSetup } from "@/web/i18n/en.site.setup";
 
 const tmp = mkdtempSync(join(tmpdir(), "panel-cli-doctor-"));
 afterAll(() => rmSync(tmp, { recursive: true, force: true }));
@@ -106,7 +106,7 @@ describe("scenarios (PLAN/07 §3.1, §9)", () => {
     const c = get(report, "ecosystem_spreads_apps_json");
     expect(c?.state).toBe("error");
     expect(c?.group).toBe("situs");
-    expect(c?.label).toBe(idSiteSetup.checks.ecosystem_spreads_apps_json.error(c?.params ?? {}));
+    expect(c?.label).toBe(tSiteSetup.checks.ecosystem_spreads_apps_json.error(c?.params ?? {}));
     expect(c?.hint).toStartWith("buka Situs → Persiapan");
     expect(c?.action).toBe("ui");
     expect(get(report, "pkg_held")?.state).toBe("ok");

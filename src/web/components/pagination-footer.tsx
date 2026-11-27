@@ -1,9 +1,9 @@
 import { ChevronLeftIcon, ChevronRightIcon } from "lucide-react";
 import { Button } from "@/web/components/ui/button";
-import { idShell } from "@/web/i18n/id.shell";
+import { tShell } from "@/web/i18n/en.shell";
 import { formatNumber } from "@/web/shared/format";
 
-const t = idShell.table;
+const t = tShell.table;
 
 /** 1-based page state for the footer; `total` = number of entries across all pages. */
 export type DataPagination = { page: number; pageCount: number; total?: number; onPageChange: (page: number) => void };

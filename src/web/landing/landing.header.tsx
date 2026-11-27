@@ -1,8 +1,8 @@
-import { idLanding } from "@/web/i18n/id.landing";
+import { tLanding } from "@/web/i18n/en.landing";
 import { BrandLogo } from "@/web/layout/brand.logo";
 import { AccountLink, InstallCta } from "./cta.link";
 
-const t = idLanding;
+const t = tLanding;
 const NAV = [
   { href: "#pasang", label: t.nav.install },
   { href: "#fitur", label: t.nav.features },

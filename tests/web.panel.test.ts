@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test";
 import type { LoadBaseline, Problem, ProblemCode } from "@/shared/monitor.types";
 import type { App, Battery, Domain, DomainHealth, PanelOverview, Service } from "@/shared/panel.types";
 import { detail, title } from "@/shared/problem.copy";
-import { idPanel } from "@/web/i18n/id.panel";
+import { tPanel } from "@/web/i18n/en.panel";
 import { appColumns } from "@/web/panel/apps.page";
 import { isBackupStale } from "@/web/panel/databases.page";
 import { domainRows, domainTarget } from "@/web/panel/domains.page";
@@ -100,7 +100,7 @@ describe("serviceKey / appKey", () => {
 });
 
 describe("domainVerdict (PLAN/02 §5.4)", () => {
-  const r = idPanel.domains.reasons;
+  const r = tPanel.domains.reasons;
   test("not checked yet", () =>
     expect(domainVerdict(health({ checkedAt: null, status: null }))).toEqual({
       key: "unchecked",
@@ -243,8 +243,8 @@ describe("control tiers (PLAN/02 §5.2)", () => {
     expect(isDeferredRestart("apps", "panel", "restart")).toBe(false);
   });
   test("cloudflared and panel carry their impact text", () => {
-    expect(idPanel.serviceImpact.cloudflared).toContain("Semua domain");
-    expect(idPanel.serviceImpact.panel).toContain("terputus");
+    expect(tPanel.serviceImpact.cloudflared).toContain("Semua domain");
+    expect(tPanel.serviceImpact.panel).toContain("terputus");
   });
 });
 
@@ -396,14 +396,14 @@ describe("panel error messages", () => {
     [503, "pm2_unavailable", "pm2 tidak berjalan"],
     [429, "too_soon", "Tunggu sebentar"],
   ] as const)("%i %s", (status, error, text) =>
-    expect(apiErrorMessage(errorFromResponse(status, { error }), idPanel.errorCodes)).toContain(text),
+    expect(apiErrorMessage(errorFromResponse(status, { error }), tPanel.errorCodes)).toContain(text),
   );
 });
 
 describe("W9 QA fixes", () => {
   test("panel/cloudflared restart: the impact line replaces the generic 'beberapa detik' sentence (#20)", () => {
     expect(consequences({ kind: "services", item: svc({ name: "panel" }) }, "restart")).toEqual([
-      idPanel.serviceImpact.panel as string,
+      tPanel.serviceImpact.panel as string,
     ]);
     expect(consequences({ kind: "services", item: svc({ name: "postgres" }) }, "restart")).toHaveLength(2);
   });

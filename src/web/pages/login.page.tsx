@@ -3,12 +3,12 @@ import { useState } from "react";
 import { useSearchParams } from "react-router";
 import { signInWithGoogle } from "@/web/auth/auth.client";
 import { Button } from "@/web/components/ui/button";
-import { idAccount } from "@/web/i18n/id.account";
+import { tAccount } from "@/web/i18n/en.account";
 import { LogoMark } from "@/web/layout/brand.logo";
 import { useDocumentTitle } from "@/web/layout/document.title";
 import { loginErrorMessage } from "./login.error";
 
-const t = idAccount.signIn;
+const t = tAccount.signIn;
 
 /** /login: branded Google sign-in card (PLAN/05 §5.7, F10). */
 export function LoginPage() {
@@ -66,7 +66,7 @@ export function LoginPage() {
         <p>
           {t.own}{" "}
           <a
-            href={idAccount.noAccess.ownServerHref}
+            href={tAccount.noAccess.ownServerHref}
             className="font-medium text-foreground underline underline-offset-4 relative pointer-coarse:after:absolute pointer-coarse:after:inset-x-0 pointer-coarse:after:-inset-y-3 pointer-coarse:after:content-['']"
           >
             {t.ownLink}

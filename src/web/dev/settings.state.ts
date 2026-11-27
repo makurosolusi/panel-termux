@@ -2,7 +2,7 @@
 import type { BackupVerify, BackupVerifyInput } from "@/shared/backup.types";
 import type { CloudflareVerify, DevSetting, DevSettings, DevSettingsPatch, SettingKey } from "@/shared/dev.types";
 import type { StatusTone } from "@/web/components/status.tone";
-import { idSettings } from "@/web/i18n/id.settings";
+import { tSettings } from "@/web/i18n/en.settings";
 import {
   AJAX_HEADERS,
   ApiError,
@@ -122,9 +122,9 @@ export function patchErrorFrom(status: number, body: unknown): SettingsPatchErro
 
 /** Message under a rejected field: the key's own `invalid` text, "Wajib diisi.", or the unknown-key text. */
 export function fieldErrorMessage(key: SettingKey, reason: FieldError): string {
-  if (reason === "empty") return idSettings.empty;
-  if (reason === "unknown") return idSettings.unknownKey;
-  return idSettings.fields[key].invalid;
+  if (reason === "empty") return tSettings.empty;
+  if (reason === "unknown") return tSettings.unknownKey;
+  return tSettings.fields[key].invalid;
 }
 
 /** How the card reacts to a failed save: inline field errors, a notice with an action, or a toast. */
@@ -146,7 +146,7 @@ export const groupItems = (group: SettingGroup, items: readonly DevSetting[]): D
 /** What a connection test shows: tone + sentence (+ technical detail when the server gave one). */
 export type TestOutcome = { tone: "success" | "warning" | "danger"; text: string; detail?: string | null };
 
-const tt = idSettings.test;
+const tt = tSettings.test;
 
 /** Outcome of POST /api/dev/cloudflare/verify: zone count when known; "no zones" is a warning. */
 export function cloudflareOutcome(r: CloudflareVerify): TestOutcome {
@@ -166,7 +166,7 @@ export function testFailure(err: unknown): TestOutcome {
   const known = code && code in tt.telegram ? tt.telegram[code as keyof typeof tt.telegram] : null;
   return {
     tone: code === "too_soon" ? "warning" : "danger",
-    text: known ?? apiErrorMessage(err, idSettings.errorCodes),
+    text: known ?? apiErrorMessage(err, tSettings.errorCodes),
   };
 }
 
@@ -197,25 +197,25 @@ export function statusLabel(s: FieldStatus, now: Date): string {
   const ago = (at: string | null) => (at ? formatRelative(at, now) : null);
   switch (s.kind) {
     case "default":
-      return idSettings.status.default;
+      return tSettings.status.default;
     case "notSet":
-      return idSettings.status.notSet;
+      return tSettings.status.notSet;
     case "unreadable":
-      return idSettings.secret.unreadable;
+      return tSettings.secret.unreadable;
     case "changed": {
       const a = ago(s.at);
-      return a ? idSettings.status.changed(a) : idSettings.status.changedNoDate;
+      return a ? tSettings.status.changed(a) : tSettings.status.changedNoDate;
     }
     case "stored": {
       const a = ago(s.at);
-      return a ? idSettings.secret.stored(a) : idSettings.secret.storedNoDate;
+      return a ? tSettings.secret.stored(a) : tSettings.secret.storedNoDate;
     }
   }
 }
 
 /** Label of a select choice. */
 export function choiceLabel(key: SettingKey, v: string): string {
-  if (v === OFF) return idSettings.options.off;
-  if (key === "alerts.min_severity") return idSettings.options.severity[v as "warning" | "danger"] ?? v;
-  return idSettings.options.hour(Number(v));
+  if (v === OFF) return tSettings.options.off;
+  if (key === "alerts.min_severity") return tSettings.options.severity[v as "warning" | "danger"] ?? v;
+  return tSettings.options.hour(Number(v));
 }

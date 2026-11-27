@@ -1,9 +1,9 @@
 import { CircleCheckIcon, XIcon } from "lucide-react";
 import { useEffect, useState } from "react";
-import { idLanding } from "@/web/i18n/id.landing";
+import { tLanding } from "@/web/i18n/en.landing";
 import { isAccountDeletedSearch } from "./account.deleted";
 
-const t = idLanding.accountDeleted;
+const t = tLanding.accountDeleted;
 
 /** One-time confirmation after self-delete; drops `?akun=dihapus` from the URL so a reload does not repeat it. */
 export function AccountDeletedNotice() {

@@ -1,8 +1,8 @@
 import type { ReactNode } from "react";
 import { Section } from "@/web/components/section";
-import { idSiteDetail } from "@/web/i18n/id.site-detail";
+import { tSiteDetail } from "@/web/i18n/en.site-detail";
 
-const t = idSiteDetail.anchors;
+const t = tSiteDetail.anchors;
 
 /** Section ids of the site detail, in page order (`#deploy` is the Deploy button's target). */
 export const SITE_ANCHORS = [

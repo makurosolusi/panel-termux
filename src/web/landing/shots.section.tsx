@@ -1,10 +1,10 @@
-import { idLanding } from "@/web/i18n/id.landing";
+import { tLanding } from "@/web/i18n/en.landing";
 import { BrowserFrame, PhoneFrame } from "./device.frame";
 import { GALLERY, SHOTS } from "./landing.shots";
 import { Screenshot } from "./screenshot";
 import { SectionHead } from "./section.head";
 
-const t = idLanding.shots;
+const t = tLanding.shots;
 
 /** `#layar`: three screenshots; horizontal scroll-snap on phones, a 3-column grid from md up. */
 export function ShotsSection() {

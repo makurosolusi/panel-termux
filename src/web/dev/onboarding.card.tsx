@@ -6,7 +6,7 @@ import type { DevSetup, SetupItem, SetupItemKey } from "@/shared/dev.types";
 import { CodeText } from "@/web/components/code-text";
 import { InlineCode } from "@/web/components/inline-code";
 import { Button } from "@/web/components/ui/button";
-import { idDevSetup } from "@/web/i18n/id.dev.setup";
+import { tDevSetup } from "@/web/i18n/en.dev.setup";
 import {
   type ItemAction,
   itemAction,
@@ -18,7 +18,7 @@ import {
   visibleItems,
 } from "./onboarding.state";
 
-const t = idDevSetup;
+const t = tDevSetup;
 
 function ActionLink({ action }: { action: ItemAction }) {
   if (action.kind === "route")

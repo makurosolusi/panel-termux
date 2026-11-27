@@ -5,7 +5,7 @@ import type { FixKey } from "@/shared/fix.types";
 import type { Integration } from "@/shared/site.types";
 import { RelativeTime } from "@/web/components/relative-time";
 import { Button } from "@/web/components/ui/button";
-import { idSite } from "@/web/i18n/id.site";
+import { tSite } from "@/web/i18n/en.site";
 import { panelUrl } from "@/web/panel/panel.api";
 import { ERROR_TOAST_MS } from "@/web/shared/api.action";
 import { apiErrorMessage, apiFetch } from "@/web/shared/api.client";
@@ -19,7 +19,7 @@ import { SITE_ERROR_CODES } from "./site.api";
 // preview dialog + diff only load when Perbaiki is pressed (bundle budget, PLAN/06 §4.1)
 const FixDialog = lazy(() => import("./fix.dialog").then((m) => ({ default: m.FixDialog })));
 
-const t = idSite.setup;
+const t = tSite.setup;
 /** Anchor of the card (onboarding "Perbaiki di Situs" links to /panel/sites#persiapan). */
 const SETUP_ANCHOR = "persiapan";
 

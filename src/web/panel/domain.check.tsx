@@ -2,13 +2,13 @@ import { Loader2Icon, RefreshCwIcon } from "lucide-react";
 import { useEffect, useState } from "react";
 import type { Domain } from "@/shared/panel.types";
 import { Button } from "@/web/components/ui/button";
-import { idPanel } from "@/web/i18n/id.panel";
+import { tPanel } from "@/web/i18n/en.panel";
 import { ERROR_TOAST_MS } from "@/web/shared/api.action";
 import { apiErrorMessage, apiFetch } from "@/web/shared/api.client";
 import { toast } from "@/web/shared/toast.lazy";
 import { panelUrl } from "./panel.api";
 
-const t = idPanel.domains;
+const t = tPanel.domains;
 
 /** Server limit per hostname (PLAN/02 §3.7: 429 `too_soon` within 10 s). */
 export const CHECK_COOLDOWN_MS = 10_000;
@@ -31,7 +31,7 @@ export function DomainCheckButton({ hostname, onChecked }: { hostname: string; o
       toast.success(t.checked(hostname));
       onChecked();
     } catch (err) {
-      toast.error(apiErrorMessage(err, idPanel.errorCodes), { duration: ERROR_TOAST_MS });
+      toast.error(apiErrorMessage(err, tPanel.errorCodes), { duration: ERROR_TOAST_MS });
     } finally {
       setPending(false);
       setCooling(true);

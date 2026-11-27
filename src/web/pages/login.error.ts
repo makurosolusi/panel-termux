@@ -1,4 +1,4 @@
-import { signInErrorMessage } from "@/web/i18n/id.account";
+import { signInErrorMessage } from "@/web/i18n/en.account";
 
 /**
  * Message for the OAuth callback's `?error=` code; null when there is none. Only the code is read: `error_description`

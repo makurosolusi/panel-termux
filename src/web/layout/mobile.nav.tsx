@@ -2,13 +2,13 @@ import { cn } from "cn";
 import { EllipsisIcon } from "lucide-react";
 import { useState } from "react";
 import { NavLink, useLocation } from "react-router";
-import { idShell } from "@/web/i18n/id.shell";
+import { tShell } from "@/web/i18n/en.shell";
 import { NavBadge } from "@/web/panel/nav.badge.provider";
 import type { Me } from "@/web/session/session.api";
 import { MobileMore } from "./mobile.more";
 import { activeInMore, activeNavTo, type NavGroup, type NavItem } from "./nav.items";
 
-const t = idShell.mobileNav;
+const t = tShell.mobileNav;
 const SLOT = "flex min-w-0 flex-1 flex-col items-center justify-center gap-0.5 text-[11px] leading-none";
 
 /** Phone bottom bar (< md): four primary destinations + "Lainnya" (sheet with the rest and the account). */

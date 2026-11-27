@@ -7,12 +7,12 @@ import type { BufferedLogLine } from "@/web/components/log.buffer";
 import { LogViewer } from "@/web/components/log-viewer";
 import { PageHeader } from "@/web/components/page-header";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/web/components/ui/select";
-import { idCommon } from "@/web/i18n/id.common";
-import { idDevLogs } from "@/web/i18n/id.dev.logs";
+import { tCommon } from "@/web/i18n/en.common";
+import { tDevLogs } from "@/web/i18n/en.dev.logs";
 import { apiErrorDetail } from "@/web/shared/api.client";
 import { useApiQuery } from "@/web/shared/use-api-query";
 
-const t = idDevLogs;
+const t = tDevLogs;
 const LOGS_REFRESH_MS = 5_000;
 /** Server maximum per request; the ring holds 2.000, the viewer shows the newest 1.000. */
 const LOGS_LIMIT = 1_000;
@@ -93,7 +93,7 @@ export function LogsPage() {
           query.error && (
             <ErrorState
               compact
-              title={idCommon.errorTitles[query.error.kind]}
+              title={tCommon.errorTitles[query.error.kind]}
               description={apiErrorDetail(query.error, t.errorCodes)}
               onRetry={query.reload}
               retrying={query.loading}

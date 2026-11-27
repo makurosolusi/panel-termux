@@ -1,12 +1,12 @@
 import type { DevHealth, HealthStatus, PanelCheck } from "@/shared/dev.types";
 import type { Problem } from "@/shared/panel.types";
 import type { StatusKey } from "@/web/components/status.vocab";
-import { idDevHealth } from "@/web/i18n/id.dev.health";
+import { tDevHealth } from "@/web/i18n/en.dev.health";
 import { formatRelative } from "@/web/shared/format";
 
 // Pure decisions of /dev Kesehatan sistem (PLAN/05 §3.4, F2): verdict, check rows, info rows. Status keys per B12.
 
-const t = idDevHealth;
+const t = tDevHealth;
 
 /** Verdict → canonical status key (badge tone); the label comes from `id.dev.health.verdict`. */
 export const HEALTH_STATUS_KEY: Readonly<Record<HealthStatus, StatusKey>> = {

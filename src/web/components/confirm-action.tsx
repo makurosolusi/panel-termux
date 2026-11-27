@@ -13,13 +13,13 @@ import {
 } from "@/web/components/ui/alert-dialog";
 import { Button } from "@/web/components/ui/button";
 import { Input } from "@/web/components/ui/input";
-import { idCommon } from "@/web/i18n/id.common";
-import { idShell } from "@/web/i18n/id.shell";
+import { tCommon } from "@/web/i18n/en.common";
+import { tShell } from "@/web/i18n/en.shell";
 import { apiErrorMessage, type ErrorCodes } from "@/web/shared/api.client";
 import { useDoneFocus } from "@/web/shared/focus.return";
 import { toast } from "@/web/shared/toast.lazy";
 
-const t = idShell.confirm;
+const t = tShell.confirm;
 
 type ConfirmBase = {
   /** The question: "Hapus situs blog?" */
@@ -161,7 +161,7 @@ export function ConfirmAction(props: ConfirmActionProps) {
           </form>
         )}
         <AlertDialogFooter>
-          <AlertDialogCancel disabled={pending}>{idCommon.cancel}</AlertDialogCancel>
+          <AlertDialogCancel disabled={pending}>{tCommon.cancel}</AlertDialogCancel>
           <Button
             type="button"
             variant={destructive ? "destructive" : "default"}

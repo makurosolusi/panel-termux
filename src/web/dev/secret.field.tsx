@@ -4,10 +4,10 @@ import type { SettingKey } from "@/shared/dev.types";
 import { ConfirmAction } from "@/web/components/confirm-action";
 import { Button } from "@/web/components/ui/button";
 import { Input } from "@/web/components/ui/input";
-import { idSettings, type SettingFieldCopy } from "@/web/i18n/id.settings";
+import { type SettingFieldCopy, tSettings } from "@/web/i18n/en.settings";
 import type { FieldProps } from "./setting.field";
 
-const t = idSettings.secret;
+const t = tSettings.secret;
 
 /**
  * Write-only secret (PLAN/05 §5.2): a stored value shows "Ganti" / "Hapus" and is never sent back to the browser;
@@ -24,7 +24,7 @@ export function SecretField({
   describedBy,
 }: FieldProps & { inputId: string; describedBy: string }) {
   const key = setting.key as SettingKey;
-  const copy: SettingFieldCopy = idSettings.fields[key];
+  const copy: SettingFieldCopy = tSettings.fields[key];
   const [replacing, setReplacing] = useState(false);
   const [visible, setVisible] = useState(false);
   const stored = setting.isSet && setting.readable !== false;
@@ -36,9 +36,9 @@ export function SecretField({
       description={key === "cloudflare.api_token" ? t.removeCloudflare : t.removeGeneric}
       confirmLabel={t.removeConfirm}
       destructive
-      codes={idSettings.errorCodes}
+      codes={tSettings.errorCodes}
       onConfirm={onRemove}
-      successToast={idSettings.removed(copy.label)}
+      successToast={tSettings.removed(copy.label)}
       trigger={
         <Button type="button" variant="outline" size="sm" disabled={disabled}>
           <Trash2Icon aria-hidden />

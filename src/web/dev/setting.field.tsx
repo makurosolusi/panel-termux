@@ -8,12 +8,12 @@ import { Button } from "@/web/components/ui/button";
 import { Input } from "@/web/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/web/components/ui/select";
 import { Switch } from "@/web/components/ui/switch";
-import { idSettings, type SettingFieldCopy } from "@/web/i18n/id.settings";
+import { type SettingFieldCopy, tSettings } from "@/web/i18n/en.settings";
 import { SecretField } from "./secret.field";
 import { fieldDef, OFF, ON } from "./settings.registry";
 import { choiceLabel, fieldStatus, shownValue, statusLabel } from "./settings.state";
 
-const t = idSettings;
+const t = tSettings;
 
 /** Props shared by the field controls. */
 export type FieldProps = {

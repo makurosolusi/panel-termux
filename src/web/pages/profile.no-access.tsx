@@ -2,9 +2,9 @@ import { LockKeyholeIcon, RotateCwIcon } from "lucide-react";
 import type { Role } from "@/shared/roles";
 import { CopyButton } from "@/web/components/copy-button";
 import { Button } from "@/web/components/ui/button";
-import { idAccount } from "@/web/i18n/id.account";
+import { tAccount } from "@/web/i18n/en.account";
 
-const t = idAccount.noAccess;
+const t = tAccount.noAccess;
 
 /** Only accounts with the `user` role have no panel access yet and see the next-steps card (PLAN/05 F8 step 3). */
 export const needsAccess = (role: Role): boolean => role === "user";

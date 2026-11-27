@@ -3,7 +3,7 @@ import { KeyValue } from "@/web/components/key-value";
 import { RelativeTime } from "@/web/components/relative-time";
 import { Section } from "@/web/components/section";
 import { StatusBadge } from "@/web/components/status-badge";
-import { idDeploy } from "@/web/i18n/id.deploy";
+import { tDeploy } from "@/web/i18n/en.deploy";
 import { formatBytes } from "@/web/shared/format";
 import { DeployCard } from "./deploy.card";
 import { DeployHistory } from "./deploy.history";
@@ -11,7 +11,7 @@ import { RollbackAction } from "./deploy.rollback";
 import { shortSha } from "./deploy.state";
 import type { Uploader } from "./deploy.uploader";
 
-const t = idDeploy;
+const t = tDeploy;
 
 /** "Versi berjalan": the live binary, and a note when it has no deploy record. */
 function LiveVersion({ live }: { live: BinaryInfo }) {

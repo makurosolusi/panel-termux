@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { LOG_LEVEL_TONE, PROBLEM_TONE, STATUS_KEYS, STATUS_META, statusView } from "@/web/components/status.vocab";
-import { idStatus, idStatusHelp } from "@/web/i18n/id.status";
+import { tStatus, tStatusHelp } from "@/web/i18n/en.status";
 
 describe("canonical status vocabulary", () => {
   test("every key has a non-empty label, a tone and an icon; none is accent", () => {
@@ -11,7 +11,7 @@ describe("canonical status vocabulary", () => {
       expect(v.icon).toBeDefined();
       expect(v.tone).not.toBe("accent");
     }
-    expect(Object.keys(idStatus).sort()).toEqual([...STATUS_KEYS].sort());
+    expect(Object.keys(tStatus).sort()).toEqual([...STATUS_KEYS].sort());
   });
 
   test("rollback and interruption are warning with help text (A10, B12)", () => {
@@ -29,7 +29,7 @@ describe("canonical status vocabulary", () => {
 
   test("domain verdict and data-key keys", () => {
     expect(statusView("auth_required")).toMatchObject({ tone: "neutral" });
-    expect(statusView("auth_required").help).toBe(idStatusHelp.auth_required ?? "");
+    expect(statusView("auth_required").help).toBe(tStatusHelp.auth_required ?? "");
     expect(statusView("unstable").tone).toBe("warning");
     expect(statusView("tunnel_down")).toMatchObject({ label: "Tunnel terputus", tone: "danger" });
     expect(statusView("key_mismatch")).toMatchObject({ label: "Kunci tidak cocok", tone: "danger" });

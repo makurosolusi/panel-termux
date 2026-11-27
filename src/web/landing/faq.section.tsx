@@ -1,8 +1,8 @@
 import { PlusIcon } from "lucide-react";
-import { idLanding } from "@/web/i18n/id.landing";
+import { tLanding } from "@/web/i18n/en.landing";
 import { SectionHead } from "./section.head";
 
-const t = idLanding.faq;
+const t = tLanding.faq;
 
 /** FAQ as native disclosure widgets (keyboard and screen-reader friendly without JS). */
 export function FaqSection() {

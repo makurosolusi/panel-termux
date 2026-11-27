@@ -1,12 +1,12 @@
 import { describe, expect, test } from "bun:test";
 import type { MeSession } from "@/shared/me.types";
-import { idAccount, signInErrorMessage } from "@/web/i18n/id.account";
+import { signInErrorMessage, tAccount } from "@/web/i18n/en.account";
 import { loginErrorMessage } from "@/web/pages/login.error";
 import { canSelfDelete } from "@/web/pages/profile.delete";
 import { needsAccess } from "@/web/pages/profile.no-access";
 import { hasOtherSessions, sessionActiveLabel, sessionDevice } from "@/web/pages/profile.sessions";
 
-const e = idAccount.signIn.errors;
+const e = tAccount.signIn.errors;
 
 describe("sign-in error mapping", () => {
   test("no ?error → no message", () => {
@@ -35,8 +35,8 @@ describe("sign-in error mapping", () => {
 describe("session row formatting", () => {
   test("device line in Indonesian, unknown → Perangkat tidak dikenal", () => {
     expect(sessionDevice("Chrome di Android")).toBe("Chrome di Android");
-    expect(sessionDevice("")).toBe(idAccount.sessions.unknownDevice);
-    expect(sessionDevice(null)).toBe(idAccount.sessions.unknownDevice);
+    expect(sessionDevice("")).toBe(tAccount.sessions.unknownDevice);
+    expect(sessionDevice(null)).toBe(tAccount.sessions.unknownDevice);
   });
   test("last activity at day resolution", () => {
     const now = new Date(2026, 10, 27, 0, 30); // just after local midnight
@@ -75,14 +75,14 @@ describe("role-dependent profile cards", () => {
     expect(canSelfDelete("super_admin")).toBe(false);
   });
   test("no-access copy gives concrete steps and links to install your own", () => {
-    expect(idAccount.noAccess.steps).toHaveLength(3);
-    expect(idAccount.noAccess.ownServerHref).toBe("/#pasang");
+    expect(tAccount.noAccess.steps).toHaveLength(3);
+    expect(tAccount.noAccess.ownServerHref).toBe("/#pasang");
   });
 });
 
 describe("delete-account copy (D-W9-2)", () => {
   test("says plainly what is removed and that audit keeps name/email for the retention period", () => {
-    const body = idAccount.deleteAccount.body;
+    const body = tAccount.deleteAccount.body;
     expect(body).toContain("sesi");
     expect(body).toContain("audit");
     expect(body).toContain("nama dan email");

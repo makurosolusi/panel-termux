@@ -14,12 +14,12 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/web/components/ui/dropdown-menu";
-import { idDevUsers } from "@/web/i18n/id.dev.users";
+import { tDevUsers } from "@/web/i18n/en.dev.users";
 import { apiFetch } from "@/web/shared/api.client";
 import { toast } from "@/web/shared/toast.lazy";
 import { UserRoleDialog } from "./user.role.dialog";
 
-const t = idDevUsers;
+const t = tDevUsers;
 const DAY_MS = 86_400_000;
 
 /** Which row actions a user gets: none for yourself (gembok), only "keluarkan" for env super admins (F5.5, K21). */

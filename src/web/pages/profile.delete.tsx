@@ -2,11 +2,11 @@ import { Trash2Icon } from "lucide-react";
 import type { Role } from "@/shared/roles";
 import { ConfirmAction } from "@/web/components/confirm-action";
 import { Button } from "@/web/components/ui/button";
-import { idAccount } from "@/web/i18n/id.account";
+import { tAccount } from "@/web/i18n/en.account";
 import { ACCOUNT_DELETED_HREF } from "@/web/landing/account.deleted";
 import { apiFetch } from "@/web/shared/api.client";
 
-const t = idAccount.deleteAccount;
+const t = tAccount.deleteAccount;
 
 /** Self-delete exists only for the `user` role; the server answers 403 for admins, so the card is not rendered. */
 export const canSelfDelete = (role: Role): boolean => role === "user";

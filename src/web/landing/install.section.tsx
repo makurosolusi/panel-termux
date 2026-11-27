@@ -1,10 +1,10 @@
 import { CheckIcon, ExternalLinkIcon } from "lucide-react";
 import { CopyButton } from "@/web/components/copy-button";
-import { idLanding } from "@/web/i18n/id.landing";
+import { tLanding } from "@/web/i18n/en.landing";
 import { SectionHead } from "./section.head";
 
-const t = idLanding.install;
-const links = idLanding.links;
+const t = tLanding.install;
+const links = tLanding.links;
 const LINK =
   "inline-flex min-h-11 items-center gap-1.5 rounded font-lp-mono text-xs font-semibold underline decoration-lp-signal decoration-2 underline-offset-4 hover:text-lp-signal focus-visible:outline-2 focus-visible:outline-lp-signal";
 

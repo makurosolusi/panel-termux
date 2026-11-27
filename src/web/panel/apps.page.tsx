@@ -7,7 +7,7 @@ import { ErrorState } from "@/web/components/error-state";
 import { PageHeader } from "@/web/components/page-header";
 import { QueryView } from "@/web/components/query-view";
 import { StatusBadge } from "@/web/components/status-badge";
-import { idPanel } from "@/web/i18n/id.panel";
+import { tPanel } from "@/web/i18n/en.panel";
 import { formatDuration, formatMegabytes, formatNumber } from "@/web/shared/format";
 import { ServiceStartButton } from "@/web/shared/service-start";
 import { useApiQuery } from "@/web/shared/use-api-query";
@@ -18,8 +18,8 @@ import { TOUCH_HIT } from "./panel.touch";
 import { UnitActions } from "./unit.actions";
 import { usePanelControl } from "./use-panel-control";
 
-const t = idPanel.apps;
-const dash = idPanel.dash;
+const t = tPanel.apps;
+const dash = tPanel.dash;
 /** Missing values render as null (the phone meta line skips them, QA #18); the table cell shows "–" via CSS instead. */
 const EMPTY_DASH = "empty:before:text-muted-foreground empty:before:content-['–']";
 
@@ -108,7 +108,7 @@ export function AppsPage() {
       ) : (
         <QueryView
           query={query}
-          codes={idPanel.errorCodes}
+          codes={tPanel.errorCodes}
           empty={<EmptyState icon={PackageIcon} title={t.emptyTitle} description={<CodeText text={t.emptyBody} />} />}
         >
           {(list) => <AppList list={list} control={control} />}

@@ -3,12 +3,12 @@ import type { AuditAction } from "@/shared/audit.types";
 import type { DevAuditEntry } from "@/shared/dev.types";
 import { isRole } from "@/shared/roles";
 import type { StatusTone } from "@/web/components/status.tone";
-import { idApp } from "@/web/i18n/id.app";
-import { idDevAudit } from "@/web/i18n/id.dev.audit";
-import { idDevSetup } from "@/web/i18n/id.dev.setup";
-import { idSettings } from "@/web/i18n/id.settings";
+import { tApp } from "@/web/i18n/en.app";
+import { tDevAudit } from "@/web/i18n/en.dev.audit";
+import { tDevSetup } from "@/web/i18n/en.dev.setup";
+import { tSettings } from "@/web/i18n/en.settings";
 
-const t = idDevAudit;
+const t = tDevAudit;
 const s = t.s;
 
 /** Sentence + row tone; `neutral` rows get no coloured edge. */
@@ -27,12 +27,12 @@ type Ctx = { a: string; target: string; m: Record<string, unknown>; e: DevAuditE
 
 const str = (v: unknown, fallback = ""): string => (typeof v === "string" && v ? v : fallback);
 const num = (v: unknown): number => (typeof v === "number" ? v : 0);
-const role = (v: unknown): string => (typeof v === "string" && isRole(v) ? idApp.roles[v] : str(v, "?"));
+const role = (v: unknown): string => (typeof v === "string" && isRole(v) ? tApp.roles[v] : str(v, "?"));
 const who = (c: Ctx): string => str(c.m.targetEmail, t.otherUser);
 const settingLabel = (key: string): string =>
-  (idSettings.fields as Record<string, { label: string } | undefined>)[key]?.label ?? key;
+  (tSettings.fields as Record<string, { label: string } | undefined>)[key]?.label ?? key;
 const setupLabel = (key: string): string =>
-  (idDevSetup.items as Record<string, { title: string } | undefined>)[key]?.title ?? key;
+  (tDevSetup.items as Record<string, { title: string } | undefined>)[key]?.title ?? key;
 
 function backupRun(c: Ctx): string {
   const base = c.e.actorKind === "system" || c.m.trigger === "schedule" ? s.backupScheduled : s.backupRun(c.a);

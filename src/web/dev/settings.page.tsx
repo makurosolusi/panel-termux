@@ -4,14 +4,14 @@ import type { DevSetting, DevSettings } from "@/shared/dev.types";
 import { EmptyState } from "@/web/components/empty-state";
 import { PageHeader } from "@/web/components/page-header";
 import { QueryView } from "@/web/components/query-view";
-import { idSettings } from "@/web/i18n/id.settings";
+import { tSettings } from "@/web/i18n/en.settings";
 import { useApiQuery } from "@/web/shared/use-api-query";
 import { devUrl } from "./dev.api";
 import { SettingsGroup } from "./settings.group";
 import { GROUP_ANCHOR, SETTING_GROUPS, type SettingGroup } from "./settings.registry";
 import { groupItems } from "./settings.state";
 
-const t = idSettings;
+const t = tSettings;
 const SETTINGS_URL = devUrl("/settings");
 
 /** Warns before leaving with unsaved cards: in-app navigation (router blocker) and tab close/reload (beforeunload). */

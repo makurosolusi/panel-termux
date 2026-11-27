@@ -11,18 +11,18 @@ import { StatusBadge } from "@/web/components/status-badge";
 import { Button } from "@/web/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/web/components/ui/select";
 import { usePageParam } from "@/web/components/use-page-param";
-import { idJob } from "@/web/i18n/id.job";
-import { idStatus } from "@/web/i18n/id.status";
+import { tJob } from "@/web/i18n/en.job";
+import { tStatus } from "@/web/i18n/en.status";
 import { panelUrl } from "@/web/panel/panel.api";
 import { useApiQuery } from "@/web/shared/use-api-query";
 import { durationText } from "./job.state";
 import { JOB_STATUS_KEY } from "./job.status-key";
 import { jobPath, SITE_ERROR_CODES } from "./site.api";
 
-const t = idJob.list;
+const t = tJob.list;
 const PAGE_SIZE = 20;
 const ALL = "all";
-const KINDS = Object.keys(idJob.kinds) as JobKind[];
+const KINDS = Object.keys(tJob.kinds) as JobKind[];
 const STATUSES = Object.keys(JOB_STATUS_KEY) as JobStatus[];
 
 const COLUMNS: DataColumn<Job>[] = [
@@ -32,7 +32,7 @@ const COLUMNS: DataColumn<Job>[] = [
     mobile: "title",
     cell: (j) => (
       <span>
-        {idJob.kinds[j.kind]} <span className="text-muted-foreground">· {j.target}</span>
+        {tJob.kinds[j.kind]} <span className="text-muted-foreground">· {j.target}</span>
       </span>
     ),
   },
@@ -103,7 +103,7 @@ export function JobsPage() {
         all={t.allKinds}
         value={kind}
         options={KINDS}
-        text={(k) => idJob.kinds[k]}
+        text={(k) => tJob.kinds[k]}
         onChange={(v) => setFilter("kind", v)}
       />
       <FilterSelect
@@ -111,7 +111,7 @@ export function JobsPage() {
         all={t.allStatuses}
         value={status}
         options={STATUSES}
-        text={(s) => idStatus[JOB_STATUS_KEY[s]].replace(/…$/, "")} // a filter is a category, not "in progress…"
+        text={(s) => tStatus[JOB_STATUS_KEY[s]].replace(/…$/, "")} // a filter is a category, not "in progress…"
         onChange={(v) => setFilter("status", v)}
       />
       {filtered && (
@@ -126,8 +126,8 @@ export function JobsPage() {
   return (
     <div className="flex flex-col">
       <PageHeader
-        title={target ? t.forTarget(target) : idJob.listTitle}
-        description={idJob.listDescription}
+        title={target ? t.forTarget(target) : tJob.listTitle}
+        description={tJob.listDescription}
         meta={{
           updatedAt: query.updatedAt,
           onRefresh: query.reload,
@@ -137,7 +137,7 @@ export function JobsPage() {
       />
       <QueryView
         query={query}
-        codes={{ ...SITE_ERROR_CODES, ...idJob.errorCodes }}
+        codes={{ ...SITE_ERROR_CODES, ...tJob.errorCodes }}
         isEmpty={(d) => d.items.length === 0 && !filtered}
         empty={<EmptyState title={t.empty} />}
       >

@@ -5,7 +5,7 @@ import type { DevSetting, SettingKey } from "@/shared/dev.types";
 import { ConfirmAction } from "@/web/components/confirm-action";
 import { StatusBadge } from "@/web/components/status-badge";
 import { Button } from "@/web/components/ui/button";
-import { idSettings } from "@/web/i18n/id.settings";
+import { tSettings } from "@/web/i18n/en.settings";
 import { Notice, ReauthNotice } from "@/web/security/security.notice";
 import { ERROR_TOAST_MS } from "@/web/shared/api.action";
 import { ApiError, apiErrorMessage } from "@/web/shared/api.client";
@@ -28,7 +28,7 @@ import {
 } from "./settings.state";
 import { ConnectionTest } from "./settings.test";
 
-const t = idSettings;
+const t = tSettings;
 const DESKTOP_QUERY = "(min-width: 768px)";
 
 /** One settings card: collapsible on phones, fields, connection test, and an atomic "Simpan" for the card. */

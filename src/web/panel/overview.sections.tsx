@@ -8,12 +8,12 @@ import { KeyValue } from "@/web/components/key-value";
 import { RelativeTime } from "@/web/components/relative-time";
 import { Section } from "@/web/components/section";
 import { StatusBadge } from "@/web/components/status-badge";
-import { idOverview } from "@/web/i18n/id.overview";
+import { tOverview } from "@/web/i18n/en.overview";
 import { formatDateTime, formatNumber } from "@/web/shared/format";
 import { countBadge, heldDomains, quietDownServices } from "./overview.state";
 import { TOUCH_HIT } from "./panel.touch";
 
-const t = idOverview;
+const t = tOverview;
 const CARD =
   "relative flex min-h-[5.5rem] flex-col gap-2 rounded-lg border bg-card px-4 py-3 shadow-xs hover:bg-accent/40";
 const LINK = `${TOUCH_HIT} font-medium underline-offset-4 hover:underline`;

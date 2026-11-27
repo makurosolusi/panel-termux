@@ -10,7 +10,7 @@ import {
   AlertDialogTitle,
 } from "@/web/components/ui/alert-dialog";
 import { Button } from "@/web/components/ui/button";
-import { idPanel } from "@/web/i18n/id.panel";
+import { tPanel } from "@/web/i18n/en.panel";
 import { AJAX_HEADERS } from "@/web/shared/api.client";
 import { toast } from "@/web/shared/toast.lazy";
 import { usePoller } from "@/web/shared/use-poller";
@@ -18,7 +18,7 @@ import { CodeText } from "./code.text";
 import { panelUrl } from "./panel.api";
 import { cloudflaredPoll, needsFullReload, panelPoll, RESTART_LIMIT_MS, RESTART_POLL_MS } from "./restart.state";
 
-const r = idPanel.restart;
+const r = tPanel.restart;
 
 /**
  * Plain fetch (not apiFetch): while the panel is away, 401/HTML answers come from Access or the tunnel and must count

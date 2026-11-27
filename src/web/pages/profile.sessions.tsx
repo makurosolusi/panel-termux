@@ -8,12 +8,12 @@ import { Section } from "@/web/components/section";
 import { RowsSkeleton } from "@/web/components/skeletons";
 import { StatusBadge } from "@/web/components/status-badge";
 import { Button } from "@/web/components/ui/button";
-import { idAccount } from "@/web/i18n/id.account";
+import { tAccount } from "@/web/i18n/en.account";
 import { ApiError, apiFetch } from "@/web/shared/api.client";
 import { toast } from "@/web/shared/toast.lazy";
 import { useApiQuery } from "@/web/shared/use-api-query";
 
-const t = idAccount.sessions;
+const t = tAccount.sessions;
 const SESSIONS_URL = "/api/me/sessions";
 /** Device line: the server already sends Indonesian ("Chrome di Android"); missing → "Perangkat tidak dikenal". */
 export const sessionDevice = (userAgent: string | null): string => userAgent || t.unknownDevice;

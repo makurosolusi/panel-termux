@@ -4,7 +4,7 @@ import { Outlet, useLocation, useNavigation } from "react-router";
 import { homeFor } from "@/shared/roles";
 import { ShellPageContext } from "@/web/components/page-header";
 import { TooltipProvider } from "@/web/components/ui/tooltip";
-import { idShell } from "@/web/i18n/id.shell";
+import { tShell } from "@/web/i18n/en.shell";
 import { NavBadgeProvider } from "@/web/panel/nav.badge.provider";
 import { useMe } from "@/web/session/use-me";
 import { AppSidebar } from "./app.sidebar";
@@ -85,7 +85,7 @@ export function AppLayout({ children }: { children?: ReactNode }) {
   const title = shell.title;
 
   useEffect(() => {
-    document.title = documentTitle(title ?? idShell.notFound.title);
+    document.title = documentTitle(title ?? tShell.notFound.title);
   }, [title]);
 
   const toggle = () =>
@@ -103,7 +103,7 @@ export function AppLayout({ children }: { children?: ReactNode }) {
               href={`#${MAIN_ID}`}
               className="sr-only z-50 rounded-md bg-brand px-3 py-2 text-sm font-medium text-brand-foreground focus:not-sr-only focus:fixed focus:top-2 focus:left-2"
             >
-              {idShell.skipToContent}
+              {tShell.skipToContent}
             </a>
             <div className="flex min-h-svh">
               <AppSidebar
@@ -122,7 +122,7 @@ export function AppLayout({ children }: { children?: ReactNode }) {
                   {navigating && (
                     <div
                       role="progressbar"
-                      aria-label={idShell.navigating}
+                      aria-label={tShell.navigating}
                       className="absolute inset-x-0 top-0 h-0.5 animate-in bg-foreground/40 fade-in fill-mode-backwards delay-150 duration-0"
                     />
                   )}

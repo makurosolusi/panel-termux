@@ -2,8 +2,8 @@ import { Loader2Icon, PlayIcon } from "lucide-react";
 import { useState } from "react";
 import type { Service } from "@/shared/panel.types";
 import { Button } from "@/web/components/ui/button";
-import { idPanel } from "@/web/i18n/id.panel";
-import { idServiceStart as t } from "@/web/i18n/id.service-start";
+import { tPanel } from "@/web/i18n/en.panel";
+import { tServiceStart as t } from "@/web/i18n/en.service-start";
 import { postControl } from "@/web/panel/panel.api";
 import { runApiAction } from "./api.action";
 import { ApiError } from "./api.client";
@@ -16,7 +16,7 @@ export type StartableService = "pm2" | "postgres";
  * `onStarted` when the service now runs, and resolves to that.
  */
 export async function startService(service: StartableService, onStarted?: () => void): Promise<boolean> {
-  const codes = { ...idPanel.errorCodes, not_running: t.notRunning(service) };
+  const codes = { ...tPanel.errorCodes, not_running: t.notRunning(service) };
   const ok = await runApiAction(
     async () => {
       const s = (await postControl("services", service, "start")) as Service;

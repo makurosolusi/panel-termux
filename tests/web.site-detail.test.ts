@@ -3,7 +3,7 @@ import type { BackupLastGood } from "@/shared/backup.types";
 import type { JobStep } from "@/shared/job.types";
 import type { Domain } from "@/shared/panel.types";
 import type { Job, SiteCheckResult, SiteDetail } from "@/shared/site.types";
-import { idSiteDetail } from "@/web/i18n/id.site-detail";
+import { tSiteDetail } from "@/web/i18n/en.site-detail";
 import { CLOUDFLARE_TOKENS_URL, dnsRecords, hostsNeedingRecord, manualDnsHosts } from "@/web/site/dns.manual";
 import { applyPaste, parseEnvPaste, pasteApplicable } from "@/web/site/env.paste";
 import {
@@ -275,7 +275,7 @@ describe("DNS record card without a token (PLAN/06 §6.4 A)", () => {
   });
 
   test("missing-from-pm2 copy offers Jalankan lagi, not ssh", () => {
-    const h = idSiteDetail.header;
+    const h = tSiteDetail.header;
     expect(h.runAgain).toBe("Jalankan lagi");
     for (const text of [h.missingFromPm2Help, h.missingFromPm2Adopted]) {
       expect(text).toContain("Jalankan lagi");

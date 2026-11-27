@@ -2,10 +2,10 @@ import type { Integration } from "@/shared/site.types";
 import { CodeText } from "@/web/components/code-text";
 import { CopyButton } from "@/web/components/copy-button";
 import { InlineCode } from "@/web/components/inline-code";
-import { idSite } from "@/web/i18n/id.site";
+import { tSite } from "@/web/i18n/en.site";
 import { editCommand, manualOpen, snippetNeeded } from "./site.adopt";
 
-const t = idSite.setup.manual;
+const t = tSite.setup.manual;
 /** Termux's runit service dir for pm2 (fixed by the Termux layout, `$PREFIX` expands in the user's shell). */
 const PM2_RUN_COMMAND = "nano $PREFIX/var/service/pm2/run";
 const PM2_UP_COMMAND = "sv up pm2";

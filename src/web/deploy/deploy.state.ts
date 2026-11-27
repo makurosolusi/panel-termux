@@ -2,13 +2,13 @@
 // "Dari → Ke" description of a binary.
 
 import type { BinaryInfo, SiteDetail } from "@/shared/site.types";
-import { idDeploy } from "@/web/i18n/id.deploy";
+import { tDeploy } from "@/web/i18n/en.deploy";
 import { ApiError, apiErrorMessage } from "@/web/shared/api.client";
 import { formatBytes } from "@/web/shared/format";
 import { DEPLOY_ERROR_CODES, DeployApiError } from "./deploy.api";
 import { isTransientStatus } from "./deploy.upload";
 
-const t = idDeploy;
+const t = tDeploy;
 
 /** First 12 hex chars of a checksum, enough to tell binaries apart. */
 export const shortSha = (sha256: string): string => sha256.slice(0, 12);

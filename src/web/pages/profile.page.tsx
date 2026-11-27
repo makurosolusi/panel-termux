@@ -6,7 +6,7 @@ import { RoleBadge } from "@/web/components/role-badge";
 import { Section } from "@/web/components/section";
 import { Button } from "@/web/components/ui/button";
 import { UserAvatar } from "@/web/components/user-avatar";
-import { idAccount } from "@/web/i18n/id.account";
+import { tAccount } from "@/web/i18n/en.account";
 import type { Me } from "@/web/session/session.api";
 import { useMe } from "@/web/session/use-me";
 import { canSelfDelete, ProfileDelete } from "./profile.delete";
@@ -14,7 +14,7 @@ import { needsAccess, ProfileNoAccess } from "./profile.no-access";
 import { ProfileSessions } from "./profile.sessions";
 import { ProfileTheme } from "./profile.theme";
 
-const t = idAccount.profile;
+const t = tAccount.profile;
 
 /** /profile: [no-access card for `user`] → account → sessions → theme → [self-delete for `user`] (PLAN/05 §5.6, F8). */
 export function ProfilePage() {

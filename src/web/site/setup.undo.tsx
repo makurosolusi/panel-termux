@@ -4,12 +4,12 @@ import type { FixBackup } from "@/shared/fix.types";
 import { ConfirmAction } from "@/web/components/confirm-action";
 import { RelativeTime } from "@/web/components/relative-time";
 import { Button } from "@/web/components/ui/button";
-import { idSite } from "@/web/i18n/id.site";
+import { tSite } from "@/web/i18n/en.site";
 import { ApiError } from "@/web/shared/api.client";
 import { formatDateTime } from "@/web/shared/format";
 import { FIX_ERROR_CODES, restoreFix } from "./site.api";
 
-const t = idSite.setup;
+const t = tSite.setup;
 
 /** Consequence of restoring `b`, first: managed sites that stop surviving a reboot, then a later hand edit lost. */
 export function undoDescription(b: FixBackup): string {

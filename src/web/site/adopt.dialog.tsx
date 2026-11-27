@@ -15,7 +15,7 @@ import {
 } from "@/web/components/ui/dialog";
 import { Input } from "@/web/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/web/components/ui/select";
-import { idSite } from "@/web/i18n/id.site";
+import { tSite } from "@/web/i18n/en.site";
 import { panelUrl } from "@/web/panel/panel.api";
 import { apiFetch } from "@/web/shared/api.client";
 import { useReturnFocus } from "@/web/shared/focus.return";
@@ -23,7 +23,7 @@ import { FormField } from "./form.field";
 import { type AdoptForm, adoptBody, adoptOptions, adoptPrefill, appFacts, appWarnings } from "./site.adopt";
 import { runSiteAction } from "./site.api";
 
-const t = idSite.adopt;
+const t = tSite.adopt;
 /** Centered dialog from `sm` up; below it a bottom sheet with the safe-area inset (PLAN/03 §6). */
 export const PHONE_SHEET =
   "max-h-[90dvh] overflow-y-auto max-sm:top-auto max-sm:bottom-0 max-sm:max-w-full max-sm:translate-y-0 max-sm:rounded-b-none max-sm:rounded-t-xl max-sm:border-x-0 max-sm:border-b-0 max-sm:pb-[calc(1.5rem+env(safe-area-inset-bottom))] max-sm:data-[state=closed]:slide-out-to-bottom max-sm:data-[state=open]:slide-in-from-bottom";

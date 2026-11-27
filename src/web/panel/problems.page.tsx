@@ -12,14 +12,14 @@ import { Section } from "@/web/components/section";
 import { PROBLEM_TONE } from "@/web/components/status.vocab";
 import { StatusBadge } from "@/web/components/status-badge";
 import { usePageParam } from "@/web/components/use-page-param";
-import { idHistory } from "@/web/i18n/id.history";
-import { idPanel } from "@/web/i18n/id.panel";
+import { tHistory } from "@/web/i18n/en.history";
+import { tPanel } from "@/web/i18n/en.panel";
 import { formatClock, formatDateTime, formatDayLabel, formatDuration } from "@/web/shared/format";
 import { useApiQuery } from "@/web/shared/use-api-query";
 import { panelUrl } from "./panel.api";
 import { TOUCH_HIT } from "./panel.touch";
 
-const t = idHistory.problems;
+const t = tHistory.problems;
 const PAGE_SIZE = 20;
 /** Ringkasan shows the 5 newest closed events; 10 fetched so still-open ones do not leave it short. */
 const RECENT_FETCH = 10;
@@ -122,7 +122,7 @@ export function ProblemsPage() {
       />
       <QueryView
         query={query}
-        codes={idPanel.errorCodes}
+        codes={tPanel.errorCodes}
         empty={<EmptyState icon={HistoryIcon} title={t.empty} description={t.emptyHint} />}
       >
         {(d) => {

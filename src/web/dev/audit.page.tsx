@@ -10,7 +10,7 @@ import { RelativeTime } from "@/web/components/relative-time";
 import { Button } from "@/web/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/web/components/ui/dialog";
 import { usePageParam } from "@/web/components/use-page-param";
-import { idDevAudit } from "@/web/i18n/id.dev.audit";
+import { tDevAudit } from "@/web/i18n/en.dev.audit";
 import { useApiQuery } from "@/web/shared/use-api-query";
 import {
   auditActor,
@@ -22,7 +22,7 @@ import {
 } from "./audit.describe";
 import { AuditFilters } from "./audit.filters";
 
-const t = idDevAudit;
+const t = tDevAudit;
 const PAGE_SIZE = 20;
 
 /** Raw detail of one row (meta as key/value, never a JSON blob). */

@@ -10,7 +10,7 @@ import { StatusBadge } from "@/web/components/status-badge";
 import { Button } from "@/web/components/ui/button";
 import { Progress } from "@/web/components/ui/progress";
 import { INFO_PROGRESS } from "@/web/deploy/upload.progress";
-import { idJob } from "@/web/i18n/id.job";
+import { tJob } from "@/web/i18n/en.job";
 import { panelUrl } from "@/web/panel/panel.api";
 import { useApiQuery } from "@/web/shared/use-api-query";
 import { JobFinal, RecoverButton, RollbackFromJob } from "./job.failure";
@@ -27,7 +27,7 @@ import { JOB_STATUS_KEY } from "./job.status-key";
 import { JobSteps } from "./job.steps";
 import { SITE_ERROR_CODES } from "./site.api";
 
-const t = idJob;
+const t = tJob;
 const sitePath = (job: Job, hash = "") => `/panel/sites/${encodeURIComponent(job.target)}${hash}`;
 
 /** Button of one follow-up action (PLAN/03 §4.9). */

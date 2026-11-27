@@ -5,12 +5,12 @@ import { CodeText } from "@/web/components/code-text";
 import { type DataColumn, DataTable } from "@/web/components/data-table";
 import { Section } from "@/web/components/section";
 import { Button } from "@/web/components/ui/button";
-import { idSite } from "@/web/i18n/id.site";
+import { tSite } from "@/web/i18n/en.site";
 import type { ApiQuery } from "@/web/shared/use-api-query";
 import { AdoptDialog } from "./adopt.dialog";
 import { type DiscoveredRow, discoveredRows } from "./site.adopt";
 
-const t = idSite.discovered;
+const t = tSite.discovered;
 
 const COLUMNS: readonly DataColumn<DiscoveredRow>[] = [
   { key: "hostname", header: t.cols.hostname, mobile: "title", cell: (r) => r.hostname },

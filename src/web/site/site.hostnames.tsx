@@ -6,7 +6,7 @@ import type { HostnamesAddRequest, JobAccepted, SiteDetail } from "@/shared/site
 import { ConfirmAction } from "@/web/components/confirm-action";
 import { Badge } from "@/web/components/ui/badge";
 import { Button } from "@/web/components/ui/button";
-import { idSiteDetail } from "@/web/i18n/id.site-detail";
+import { tSiteDetail } from "@/web/i18n/en.site-detail";
 import { panelUrl } from "@/web/panel/panel.api";
 import { ApiError, apiFetch, type ErrorCodes } from "@/web/shared/api.client";
 import { useApiQuery } from "@/web/shared/use-api-query";
@@ -16,7 +16,7 @@ import { HostLink } from "./site.card";
 import { AddHostnamesDialog } from "./site.hostnames-add";
 import { blinkingHosts } from "./site-detail.state";
 
-const t = idSiteDetail.domains;
+const t = tSiteDetail.domains;
 
 /**
  * Domain list with DNS mode, remove (confirm; a hand-written route needs the domain typed; never the last one) and the
@@ -65,7 +65,7 @@ export function SiteHostnames({ site, busy, codes }: { site: SiteDetail; busy: b
                   {dnsManaged.get(h) && <span>{t.removeDnsNote}</span>}
                 </>
               }
-              confirmLabel={idSiteDetail.domains.remove(h)}
+              confirmLabel={tSiteDetail.domains.remove(h)}
               destructive
               codes={codes}
               onConfirm={(typed) => remove(h, typed)}

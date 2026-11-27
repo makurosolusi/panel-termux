@@ -3,14 +3,14 @@ import { useNavigate } from "react-router";
 import type { JobAccepted, SiteDetail } from "@/shared/site.types";
 import { ConfirmAction } from "@/web/components/confirm-action";
 import { Button } from "@/web/components/ui/button";
-import { idDeploy } from "@/web/i18n/id.deploy";
+import { tDeploy } from "@/web/i18n/en.deploy";
 import { apiFetch } from "@/web/shared/api.client";
 import { formatDateTime } from "@/web/shared/format";
 import { jobPath, siteUrl } from "@/web/site/site.api";
 import { DEPLOY_ERROR_CODES } from "./deploy.api";
 import { binaryLine, canRollback } from "./deploy.state";
 
-const t = idDeploy.rollback;
+const t = tDeploy.rollback;
 
 function Side({ label, value }: { label: string; value: string }) {
   return (

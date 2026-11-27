@@ -2,10 +2,10 @@
 import type { LoadBaseline, OverviewSection, Problem, ProblemKind } from "@/shared/monitor.types";
 import type { App, Battery, Domain } from "@/shared/panel.types";
 import type { StatusTone } from "@/web/components/status.tone";
-import { idOverview } from "@/web/i18n/id.overview";
+import { tOverview } from "@/web/i18n/en.overview";
 import { formatDuration, formatNumber } from "@/web/shared/format";
 
-const t = idOverview;
+const t = tOverview;
 
 /**
  * Problem rows shown before "Tampilkan N lainnya": 3 on a phone so the strip + 4 tiles fit above the fold at 390×844

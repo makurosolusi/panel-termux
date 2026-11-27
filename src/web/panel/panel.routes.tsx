@@ -1,9 +1,9 @@
 import type { RouteObject } from "react-router";
-import { idHistory } from "@/web/i18n/id.history";
-import { idShell } from "@/web/i18n/id.shell";
+import { tHistory } from "@/web/i18n/en.history";
+import { tShell } from "@/web/i18n/en.shell";
 import type { RouteHandle } from "@/web/layout/shell.page";
 
-const n = idShell.nav;
+const n = tShell.nav;
 const h = (title: string): RouteHandle => ({ title });
 
 // Pages load per route (own chunk) so the first /panel load stays within the 200 KB gzip budget (PLAN/01 §3.11).
@@ -16,7 +16,7 @@ export const panelRoutes: RouteObject[] = [
   },
   {
     path: "/panel/problems",
-    handle: h(idHistory.problems.title),
+    handle: h(tHistory.problems.title),
     lazy: { Component: () => import("./problems.page").then((m) => m.ProblemsPage) },
   },
   {

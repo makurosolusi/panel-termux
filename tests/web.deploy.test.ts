@@ -23,8 +23,8 @@ import {
   uploadProgress,
 } from "@/web/deploy/deploy.upload";
 import { fileProblem } from "@/web/deploy/deploy.uploader";
-import { idDeploy } from "@/web/i18n/id.deploy";
-import { idJob } from "@/web/i18n/id.job";
+import { tDeploy } from "@/web/i18n/en.deploy";
+import { tJob } from "@/web/i18n/en.job";
 import { ApiError, apiErrorMessage, errorFromResponse } from "@/web/shared/api.client";
 import {
   BLIP_TOLERANCE_MS,
@@ -106,7 +106,7 @@ describe("chunk plan", () => {
   });
 
   test("picked file: empty and over 300 MB are refused before sending", () => {
-    expect(fileProblem({ size: 0 })).toBe(idDeploy.upload.empty);
+    expect(fileProblem({ size: 0 })).toBe(tDeploy.upload.empty);
     expect(fileProblem({ size: 300 * 1000 * 1000 + 1 })).toContain("batas");
     expect(fileProblem({ size: 89_000_000 })).toBeNull();
   });
@@ -175,7 +175,7 @@ describe("resume plan from server `received`", () => {
 describe("upload failures", () => {
   test("network and 5xx pause with Lanjutkan; chunk_sha_mismatch resumes", () => {
     expect(uploadFailure(new ApiError("network", null, null, null))).toEqual({
-      message: idDeploy.upload.paused,
+      message: tDeploy.upload.paused,
       next: "resume",
     });
     expect(uploadFailure(deployErr(502, {})).next).toBe("resume");
@@ -184,7 +184,7 @@ describe("upload failures", () => {
 
   test("early rejections spell out the fix", () => {
     expect(uploadFailure(deployErr(400, { error: "invalid_binary", reason: "not_aarch64" }))).toEqual({
-      message: idDeploy.invalidBinary.not_aarch64,
+      message: tDeploy.invalidBinary.not_aarch64,
       next: "repick",
     });
     const mismatch = uploadFailure(deployErr(409, { error: "runtime_mismatch", expected: "native", got: "grun" }));
@@ -193,16 +193,16 @@ describe("upload failures", () => {
     const space = uploadFailure(
       deployErr(507, { error: "no_space", needBytes: 300 * 1024 * 1024, freeBytes: 120 * 1024 * 1024 }),
     );
-    expect(space).toEqual({ message: idDeploy.noSpace("300 MB", "120 MB"), next: "retry" });
+    expect(space).toEqual({ message: tDeploy.noSpace("300 MB", "120 MB"), next: "retry" });
     expect(uploadFailure(deployErr(404, { error: "upload_expired" }))).toEqual({
-      message: idDeploy.upload.expired,
+      message: tDeploy.upload.expired,
       next: "repick",
     });
   });
 
   test("deploy codes over site codes", () => {
     expect(apiErrorMessage(errorFromResponse(409, { error: "no_previous" }), DEPLOY_ERROR_CODES)).toBe(
-      idDeploy.errorCodes.no_previous,
+      tDeploy.errorCodes.no_previous,
     );
   });
 });
@@ -217,7 +217,7 @@ describe("rollback + history", () => {
   test("Dari → Ke lines: recorded binary vs untracked", () => {
     const at = () => "26 Nov 22.40";
     expect(binaryLine(bin(), at)).toBe("3f9a2c1b7e0d · app-v2 · 89,2 MB · 26 Nov 22.40");
-    expect(binaryLine(bin({ sha256: null, deployId: null }), at)).toBe(idDeploy.rollback.untracked("89,2 MB", at()));
+    expect(binaryLine(bin({ sha256: null, deployId: null }), at)).toBe(tDeploy.rollback.untracked("89,2 MB", at()));
     expect(shortSha("0123456789abcdef")).toBe("0123456789ab");
   });
 
@@ -286,7 +286,7 @@ describe("stepper state", () => {
         for (const m of src.matchAll(/(?:StepError\(|code: )"([a-z0-9_]+)"/g)) codes.add(m[1] as string);
       }
     }
-    const missing = [...codes].filter((c) => !(c in idJob.outcomes));
+    const missing = [...codes].filter((c) => !(c in tJob.outcomes));
     expect(codes.size).toBeGreaterThan(50);
     expect(missing).toEqual([]);
   });

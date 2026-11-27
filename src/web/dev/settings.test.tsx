@@ -7,13 +7,13 @@ import type { CloudflareVerify } from "@/shared/dev.types";
 import type { TelegramChat, TelegramChats } from "@/shared/monitor.types";
 import { TONE_CLASS } from "@/web/components/status.tone";
 import { Button } from "@/web/components/ui/button";
-import { idSettings } from "@/web/i18n/id.settings";
+import { tSettings } from "@/web/i18n/en.settings";
 import { ApiError } from "@/web/shared/api.client";
 import { devFetch, devUrl } from "./dev.api";
 import type { SettingGroup } from "./settings.registry";
 import { cloudflareOutcome, type Drafts, s3Draft, s3Outcome, type TestOutcome, testFailure } from "./settings.state";
 
-const t = idSettings.test;
+const t = tSettings.test;
 
 /** Cards that have a connection test. */
 const TESTABLE: readonly SettingGroup[] = ["cloudflare", "backup", "alerts"];

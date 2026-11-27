@@ -17,7 +17,7 @@ import {
   type DoctorState,
 } from "../shared/doctor.types";
 import type { IntegrationCheck } from "../shared/site.types";
-import { idSiteSetup } from "../web/i18n/id.site.setup";
+import { tSiteSetup } from "../web/i18n/en.site.setup";
 import type { CliHost } from "./cli.host";
 import type { Command } from "./cli.main";
 import type { CliOut } from "./cli.output";
@@ -71,16 +71,16 @@ export function openDoctorDb(dataDir: string): DoctorDb {
 
 /** One Persiapan card row as a doctor check: same key, state, params and label as the UI (K5). */
 export function siteCheck(c: IntegrationCheck, fixable: ReadonlySet<string>): DoctorCheck {
-  const copy = idSiteSetup.checks[c.key];
+  const copy = tSiteSetup.checks[c.key];
   const text = (c.state === "ok" ? copy.ok : (copy as Record<string, typeof copy.ok>)[c.state]) ?? copy.ok;
   const label = typeof text === "function" ? text(c.params) : text;
   const hint =
     c.state === "ok"
       ? null
       : c.key === "cloudflare_token"
-        ? idSiteSetup.tokenLink
+        ? tSiteSetup.tokenLink
         : fixable.has(c.key)
-          ? `${PERSIAPAN}, tekan ${idSiteSetup.fix}`
+          ? `${PERSIAPAN}, tekan ${tSiteSetup.fix}`
           : PERSIAPAN;
   return {
     group: "situs",

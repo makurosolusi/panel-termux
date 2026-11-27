@@ -1,7 +1,7 @@
-import { idLanding } from "@/web/i18n/id.landing";
+import { tLanding } from "@/web/i18n/en.landing";
 import { InstallCta } from "./cta.link";
 
-const t = idLanding;
+const t = tLanding;
 const FOOTER_LINKS = [
   { href: t.links.license, label: t.footer.license },
   { href: t.links.changelog, label: t.footer.changelog },

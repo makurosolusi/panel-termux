@@ -3,10 +3,10 @@ import { useId } from "react";
 import { Button } from "@/web/components/ui/button";
 import { Input } from "@/web/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/web/components/ui/select";
-import { idDevAudit } from "@/web/i18n/id.dev.audit";
+import { tDevAudit } from "@/web/i18n/en.dev.audit";
 import { AUDIT_PREFIXES, isAuditFiltered } from "./audit.describe";
 
-const t = idDevAudit;
+const t = tDevAudit;
 const ALL = "all";
 
 /** Local calendar date input ("Dari"/"Sampai"); value is YYYY-MM-DD as the API expects. */

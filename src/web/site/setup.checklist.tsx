@@ -7,13 +7,13 @@ import { CodeText } from "@/web/components/code-text";
 import type { StatusKey } from "@/web/components/status.vocab";
 import { StatusIcon } from "@/web/components/status-icon";
 import { Button } from "@/web/components/ui/button";
-import { idSite } from "@/web/i18n/id.site";
+import { tSite } from "@/web/i18n/en.site";
 import { TOUCH_BOX } from "@/web/panel/panel.touch";
 import { useMe } from "@/web/session/use-me";
 import { ServiceStartButton } from "@/web/shared/service-start";
 import { checkText, rowBlocked, rowFix, visibleChecks } from "./site.adopt";
 
-const t = idSite.setup;
+const t = tSite.setup;
 const CHECK_STATE: Record<IntegrationCheck["state"], StatusKey> = { ok: "done", warning: "attention", error: "failed" };
 
 /** Action of a failing row: Perbaiki, Jalankan pm2, or the plain reason the panel cannot fix it. */

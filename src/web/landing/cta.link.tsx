@@ -1,6 +1,6 @@
 import { ArrowDownIcon } from "lucide-react";
 import { Link, useRouteLoaderData } from "react-router";
-import { idLanding } from "@/web/i18n/id.landing";
+import { tLanding } from "@/web/i18n/en.landing";
 import type { MeResult } from "@/web/session/session.api";
 import { ROOT_ROUTE_ID } from "@/web/session/use-me";
 import { landingCta } from "./landing.cta";
@@ -20,7 +20,7 @@ export function InstallCta({ size = "lg", inverted = false }: { size?: keyof typ
       href="#pasang"
       className={`group inline-flex items-center gap-2.5 rounded-full font-lp-mono font-semibold tracking-tight shadow-[0_1px_0_0_rgb(0_0_0/0.25)] transition-transform hover:-translate-y-0.5 focus-visible:outline-2 focus-visible:outline-offset-4 motion-reduce:transition-none motion-reduce:hover:translate-y-0 ${SIZES[size]} ${palette}`}
     >
-      {idLanding.cta.install}
+      {tLanding.cta.install}
       <ArrowDownIcon className="size-4 transition-transform group-hover:translate-y-0.5" aria-hidden />
     </a>
   );

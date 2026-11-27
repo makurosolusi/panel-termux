@@ -1,7 +1,7 @@
-import { idLanding } from "@/web/i18n/id.landing";
+import { tLanding } from "@/web/i18n/en.landing";
 import { SectionHead } from "./section.head";
 
-const t = idLanding.how;
+const t = tLanding.how;
 
 /** How it works: four numbered steps on a rail, with the real command where one is involved. */
 export function StepsSection() {

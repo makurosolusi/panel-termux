@@ -1,11 +1,11 @@
 import type { AssignableRole, DevUser } from "@/shared/dev.types";
 import { ConfirmAction } from "@/web/components/confirm-action";
-import { idApp } from "@/web/i18n/id.app";
-import { idDevUsers } from "@/web/i18n/id.dev.users";
+import { tApp } from "@/web/i18n/en.app";
+import { tDevUsers } from "@/web/i18n/en.dev.users";
 import { AdminTrustNote } from "@/web/security/admin-trust.note";
 import { ACCESS_GUIDE_URL } from "./onboarding.state";
 
-const t = idDevUsers;
+const t = tDevUsers;
 const r = t.roleDialog;
 
 /**
@@ -50,7 +50,7 @@ export function UserRoleDialog({
       }
       confirmLabel={to === "admin" ? r.makeAdmin : r.makeUser}
       codes={t.errorCodes}
-      successToast={t.roleChangedTo(name, idApp.roles[to])}
+      successToast={t.roleChangedTo(name, tApp.roles[to])}
       onConfirm={onConfirm}
     />
   );

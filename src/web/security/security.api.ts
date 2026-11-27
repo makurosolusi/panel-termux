@@ -1,12 +1,12 @@
 import type { RevokedSessions, SecurityStatus } from "@/shared/security.types";
-import { idSecurity } from "@/web/i18n/id.security";
+import { tSecurity } from "@/web/i18n/en.security";
 import { AJAX_HEADERS, ApiError, apiFetch, failedResponse, REAUTH_REQUIRED } from "@/web/shared/api.client";
 
 /** GET: data key state, Access, sessions (super_admin only; never call it for admins, a 403 navigates to /login). */
 export const SECURITY_STATUS_URL = "/api/dev/security";
 
 /** Security error codes → Indonesian messages. */
-export const SECURITY_ERROR_CODES: Readonly<Record<string, string>> = idSecurity.errorCodes;
+export const SECURITY_ERROR_CODES: Readonly<Record<string, string>> = tSecurity.errorCodes;
 
 /** True when the error asks the user to sign in again (shown as a "Masuk ulang" action, not a toast). */
 export const isReauthRequired = (err: unknown): boolean => err instanceof ApiError && err.code === REAUTH_REQUIRED;

@@ -8,7 +8,7 @@ import type {
   Site,
   SiteIssueCode,
 } from "@/shared/site.types";
-import { idSite } from "@/web/i18n/id.site";
+import { tSite } from "@/web/i18n/en.site";
 import { apiErrorMessage, errorFromResponse } from "@/web/shared/api.client";
 import {
   adoptBody,
@@ -139,7 +139,7 @@ describe("wizard target", () => {
       ],
     });
     expect(r.leftoverJobId).toBe("j9");
-    expect(r.name).toEqual([idSite.issues.name_leftover]);
+    expect(r.name).toEqual([tSite.issues.name_leftover]);
     expect(r.hostnames["a.contoh.com"]).toEqual([
       "a.contoh.com sudah diarahkan ke aplikasi lain di config cloudflared.",
     ]);
@@ -162,7 +162,7 @@ describe("wizard target", () => {
         issues: [],
         notes: [{ field: "hostname", hostname: "a.contoh.com", code: "dns_token_missing", params: {} }],
       }),
-    ).toEqual({ "a.contoh.com": [idSite.notes.dns_token_missing] }));
+    ).toEqual({ "a.contoh.com": [tSite.notes.dns_token_missing] }));
 });
 
 describe("wizard create body and summary", () => {
@@ -219,7 +219,7 @@ describe("wizard create body and summary", () => {
       "panel.contoh.com",
     ]);
     expect(blipHosts(["1", "2", "3", "4"], "", [])).toHaveLength(3);
-    expect(idSite.wizard.blip(["x.contoh.com"])).toBe(
+    expect(tSite.wizard.blip(["x.contoh.com"])).toBe(
       "cloudflared dimulai ulang sekali. Semua domain di HP ini terputus 3–10 dtk, termasuk x.contoh.com.",
     );
   });
@@ -239,12 +239,12 @@ describe("belum dikelola", () => {
     expect(discoveredRow(ingress({ blockers: ["wildcard"] }), [app()])).toMatchObject({ adoptable: false });
     expect(discoveredRow(ingress(), [app({ name: "other", blockers: ["outside_sites_dir"] })])).toMatchObject({
       adoptable: false,
-      reason: idSite.discovered.noCandidates,
+      reason: tSite.discovered.noCandidates,
     });
     // the matched app's own blocker explains the row, not "no matching app" (QA m2)
     expect(discoveredRow(ingress(), [app({ blockers: ["no_binary"] })])).toMatchObject({
       adoptable: false,
-      reason: idSite.adopt.blockers.no_binary,
+      reason: tSite.adopt.blockers.no_binary,
     });
   });
 
@@ -268,7 +268,7 @@ describe("adopt dialog", () => {
     expect(adoptOptions(apps)).toEqual([
       { name: "adminneo", disabled: false, reason: null },
       { name: "makuro-solusi", disabled: false, reason: null },
-      { name: "luar", disabled: true, reason: idSite.adopt.blockers.outside_sites_dir },
+      { name: "luar", disabled: true, reason: tSite.adopt.blockers.outside_sites_dir },
     ]));
 
   test("prefill: matched app, else same-port app, else nothing; name follows the app", () => {
@@ -295,12 +295,12 @@ describe("adopt dialog", () => {
       port: "3005 · dari `.env`",
     });
     expect(appFacts(app({ runtime: null, port: null, portSource: null, cwd: null })).port).toBe("tidak diketahui");
-    expect(appWarnings(app({ warnings: ["script_other"] }))).toEqual([idSite.adopt.warnings.script_other]);
+    expect(appWarnings(app({ warnings: ["script_other"] }))).toEqual([tSite.adopt.warnings.script_other]);
   });
 });
 
 describe("persiapan", () => {
-  const allOk = (Object.keys(idSite.setup.checks) as IntegrationCheckKey[]).map((k) => chk(k));
+  const allOk = (Object.keys(tSite.setup.checks) as IntegrationCheckKey[]).map((k) => chk(k));
 
   test("ready + no pm2 warning → card collapses; a pm2 warning keeps it open", () => {
     expect(setupNeeded(integration(allOk))).toBe(false);
@@ -322,11 +322,11 @@ describe("persiapan", () => {
   });
 
   test("check copy per state, with params", () => {
-    expect(checkText(chk("snippet_current", "error"))).toBe(idSite.setup.checks.snippet_current.error);
+    expect(checkText(chk("snippet_current", "error"))).toBe(tSite.setup.checks.snippet_current.error);
     expect(checkText(chk("sites_dir", "error", { path: "/x/sites" }))).toContain("/x/sites");
     expect(checkText(chk("apps_json", "error", { reason: "invalid" }))).toContain("rusak");
     expect(checkText(chk("apps_entries_runnable", "warning", { count: 2 }))).toContain("2 situs");
-    expect(checkText(chk("tunnel"))).toBe(idSite.setup.checks.tunnel.ok);
+    expect(checkText(chk("tunnel"))).toBe(tSite.setup.checks.tunnel.ok);
   });
 
   test("every check key has ok copy and copy for the state the server can send", () => {
@@ -371,10 +371,10 @@ describe("site list", () => {
 
   test("409 busy and adopt codes map to site copy", () => {
     expect(apiErrorMessage(errorFromResponse(409, { error: "busy", message: "x" }), SITE_ERROR_CODES)).toBe(
-      idSite.errorCodes.busy,
+      tSite.errorCodes.busy,
     );
     expect(apiErrorMessage(errorFromResponse(404, { error: "app_not_found", message: "x" }), SITE_ERROR_CODES)).toBe(
-      idSite.errorCodes.app_not_found,
+      tSite.errorCodes.app_not_found,
     );
   });
 

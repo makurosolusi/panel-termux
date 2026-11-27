@@ -10,7 +10,7 @@ import { Section } from "@/web/components/section";
 import { TONE_CLASS } from "@/web/components/status.tone";
 import { StatusBadge } from "@/web/components/status-badge";
 import { StatusIcon } from "@/web/components/status-icon";
-import { idDevHealth } from "@/web/i18n/id.dev.health";
+import { tDevHealth } from "@/web/i18n/en.dev.health";
 import {
   checkRow,
   HEALTH_STATUS_KEY,
@@ -23,7 +23,7 @@ import {
   verdictSentence,
 } from "./health.state";
 
-const t = idDevHealth;
+const t = tDevHealth;
 
 const VERDICT_TONE: Record<HealthStatus, string> = {
   ok: TONE_CLASS.success,

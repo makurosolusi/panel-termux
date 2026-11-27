@@ -6,13 +6,13 @@ import type { Integration } from "@/shared/site.types";
 import { CodeText } from "@/web/components/code-text";
 import { ConfirmAction } from "@/web/components/confirm-action";
 import { Button } from "@/web/components/ui/button";
-import { idSite } from "@/web/i18n/id.site";
+import { tSite } from "@/web/i18n/en.site";
 import { toast } from "@/web/shared/toast.lazy";
 import { UndoRow } from "./setup.undo";
 import { pm2Pending } from "./site.adopt";
 import { FIX_ERROR_CODES, restartPm2, restoreFix } from "./site.api";
 
-const t = idSite.setup;
+const t = tSite.setup;
 /** The restart's 404 means runit has no pm2 service, not a missing backup. */
 const RESTART_CODES = { ...FIX_ERROR_CODES, not_found: t.restartNotFound };
 

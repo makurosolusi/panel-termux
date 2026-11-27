@@ -16,7 +16,7 @@ import {
   STALE_AFTER_MS,
 } from "@/web/backup/backup.state";
 import { backupHeadline, restoreStatusKey, runStatusKey } from "@/web/backup/backup.status-key";
-import { idBackup } from "@/web/i18n/id.backup";
+import { tBackup } from "@/web/i18n/en.backup";
 import { apiErrorMessage, errorFromResponse } from "@/web/shared/api.client";
 
 // test-only fixtures
@@ -91,7 +91,7 @@ describe("run button", () => {
 
   test("every block reason has copy", () => {
     for (const b of ["not_configured", "key_mismatch", "running", "restoring"] as const)
-      expect(idBackup.run.blocked[b]).toBeTruthy();
+      expect(tBackup.run.blocked[b]).toBeTruthy();
   });
 
   test("busy while a run or a restore goes", () => {
@@ -215,9 +215,9 @@ describe("status keys", () => {
     expect(backupHeadline(status({ configured: false })).state).toBe("not_configured");
     expect(backupHeadline(status({ restoring: true }))).toEqual({
       state: "processing",
-      label: idBackup.headline.restoring,
+      label: tBackup.headline.restoring,
     });
-    expect(backupHeadline(status({ lastRun: null })).label).toBe(idBackup.headline.never);
+    expect(backupHeadline(status({ lastRun: null })).label).toBe(tBackup.headline.never);
     expect(backupHeadline(status({ lastRun: run({ status: "partial" }) })).state).toBe("partial");
   });
 });
@@ -236,11 +236,11 @@ describe("backup api", () => {
     [409, "in_use"],
     [400, "confirm_mismatch"],
   ] as const)("%p %p → backup copy", (code, error) =>
-    expect(apiErrorMessage(errorFromResponse(code, { error }), BACKUP_ERROR_CODES)).toBe(idBackup.errorCodes[error]),
+    expect(apiErrorMessage(errorFromResponse(code, { error }), BACKUP_ERROR_CODES)).toBe(tBackup.errorCodes[error]),
   );
   test("copy", () => {
-    expect(idBackup.status.scheduleAt(3)).toBe("Tiap hari pukul 03.00");
-    expect(idBackup.status.retentionValue(14, 3)).toBe("14 hari, minimal 3 cadangan berhasil terakhir");
-    expect(idBackup.restores.done(4)).toBe("Siap: 4 tabel");
+    expect(tBackup.status.scheduleAt(3)).toBe("Tiap hari pukul 03.00");
+    expect(tBackup.status.retentionValue(14, 3)).toBe("14 hari, minimal 3 cadangan berhasil terakhir");
+    expect(tBackup.restores.done(4)).toBe("Siap: 4 tabel");
   });
 });

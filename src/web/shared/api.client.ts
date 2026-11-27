@@ -1,5 +1,5 @@
 import type { ApiErrorBody } from "@/shared/dev.types";
-import { idCommon } from "@/web/i18n/id.common";
+import { tCommon } from "@/web/i18n/en.common";
 import { LOGIN_PATH } from "@/web/session/session.redirect";
 import { reloadOnce } from "./chunk.error";
 
@@ -88,18 +88,18 @@ export function failedResponse(status: number, body: unknown): ApiError {
 
 /** User-facing Indonesian message: known error code first, then server message for 4xx, then per kind. */
 export function apiErrorMessage(err: unknown, codes: ErrorCodes = {}): string {
-  if (!(err instanceof ApiError)) return idCommon.errors.generic;
+  if (!(err instanceof ApiError)) return tCommon.errors.generic;
   const known = err.code ? codes[err.code] : undefined;
   if (known) return known;
-  if (err.kind === "client") return err.serverMessage ?? idCommon.errors.generic;
-  return idCommon.errors[err.kind];
+  if (err.kind === "client") return err.serverMessage ?? tCommon.errors.generic;
+  return tCommon.errors[err.kind];
 }
 
 /** Like apiErrorMessage, but for under an `errorTitles` heading: the per-kind text is only the next step, not a repeat. */
 export function apiErrorDetail(err: unknown, codes: ErrorCodes = {}): string {
   const msg = apiErrorMessage(err, codes);
   const kind = err instanceof ApiError ? err.kind : null;
-  return kind && kind !== "client" && msg === idCommon.errors[kind] ? idCommon.errorSteps[kind] : msg;
+  return kind && kind !== "client" && msg === tCommon.errors[kind] ? tCommon.errorSteps[kind] : msg;
 }
 
 /** Query value; empty strings, null and undefined are dropped. */

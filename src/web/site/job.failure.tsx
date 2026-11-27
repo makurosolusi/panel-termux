@@ -9,7 +9,7 @@ import type { StatusTone } from "@/web/components/status.tone";
 import { TONE_CLASS } from "@/web/components/status.tone";
 import { Button } from "@/web/components/ui/button";
 import { RollbackAction } from "@/web/deploy/deploy.rollback";
-import { idJob } from "@/web/i18n/id.job";
+import { tJob } from "@/web/i18n/en.job";
 import { panelUrl } from "@/web/panel/panel.api";
 import { runApiAction } from "@/web/shared/api.action";
 import { apiFetch } from "@/web/shared/api.client";
@@ -19,7 +19,7 @@ import { DnsManualCard, manualDnsHosts } from "./dns.manual";
 import { finalReason, recoverAction } from "./job.state";
 import { jobPath, siteUrl } from "./site.api";
 
-const t = idJob;
+const t = tJob;
 
 /** Tone of the end-of-job panel; undone and cut-off jobs are warnings (A10, B12). */
 const FINAL_TONE: Record<Exclude<Job["status"], "running">, StatusTone> = {

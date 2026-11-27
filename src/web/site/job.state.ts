@@ -2,7 +2,7 @@
 // announcement, cloudflared-blip tolerance and recover/next-action decisions.
 
 import type { Job, JobNextAction, JobParams, JobStep, JobStepKey, JobStepStatus } from "@/shared/job.types";
-import { idJob } from "@/web/i18n/id.job";
+import { tJob } from "@/web/i18n/en.job";
 import { formatDuration } from "@/web/shared/format";
 
 /** Poll interval of the job progress view while it runs. */
@@ -27,13 +27,13 @@ export function jobProgress(job: Pick<Job, "status" | "steps">): number {
 
 /** Indonesian step label from its key; unknown keys (pre-0007 rows) fall back to the stored legacy label, then the key. */
 export const stepLabel = (step: Pick<JobStep, "key" | "legacyLabel" | "label">): string =>
-  idJob.steps[step.key as JobStepKey] ?? step.legacyLabel ?? step.label ?? step.key;
+  tJob.steps[step.key as JobStepKey] ?? step.legacyLabel ?? step.label ?? step.key;
 
 /** Sentence for an outcome code with its params; null code → null; unknown code → "Hasil: <code>". */
 export function outcomeText(code: string | null | undefined, params: JobParams = {}): string | null {
   if (!code) return null;
-  const fmt = (idJob.outcomes as Record<string, ((p: JobParams) => string) | undefined>)[code];
-  return fmt ? fmt(params) : idJob.unknownOutcome(code);
+  const fmt = (tJob.outcomes as Record<string, ((p: JobParams) => string) | undefined>)[code];
+  return fmt ? fmt(params) : tJob.unknownOutcome(code);
 }
 
 /** "< 1 dtk", "12 dtk", "1 mnt 5 dtk". */
@@ -70,7 +70,7 @@ export function liveAnnouncement(job: Pick<Job, "steps" | "status">): string {
   const i = currentStepIndex(job.steps);
   const step = job.steps[i];
   if (!step) return "";
-  return idJob.liveStep(i + 1, job.steps.length, stepLabel(step), idJob.stepStatuses[shownStepStatus(step, job)]);
+  return tJob.liveStep(i + 1, job.steps.length, stepLabel(step), tJob.stepStatuses[shownStepStatus(step, job)]);
 }
 
 /**
@@ -96,8 +96,8 @@ export type RecoverAction = { mode: "cleanup" | "retry"; label: string; confirm:
 /** Decides the recover button from `recoverMode` (server rules, PLAN/03 §3.5) and the job kind. */
 export function recoverAction(job: Pick<Job, "kind" | "recoverMode" | "resolvedBy">): RecoverAction | null {
   if (!job.recoverMode || job.resolvedBy) return null;
-  if (job.recoverMode === "cleanup") return { mode: "cleanup", label: idJob.recover.cleanup, confirm: false };
-  const label = job.kind === "site.delete" ? idJob.recover.retryDelete : idJob.recover.retryHostname;
+  if (job.recoverMode === "cleanup") return { mode: "cleanup", label: tJob.recover.cleanup, confirm: false };
+  const label = job.kind === "site.delete" ? tJob.recover.retryDelete : tJob.recover.retryHostname;
   return { mode: "retry", label, confirm: true };
 }
 

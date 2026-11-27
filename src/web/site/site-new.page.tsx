@@ -5,7 +5,7 @@ import type { Integration, Site } from "@/shared/site.types";
 import { ActionBar } from "@/web/components/action-bar";
 import { PageHeader } from "@/web/components/page-header";
 import { Button } from "@/web/components/ui/button";
-import { idSite } from "@/web/i18n/id.site";
+import { tSite } from "@/web/i18n/en.site";
 import { panelUrl } from "@/web/panel/panel.api";
 import { useApiQuery } from "@/web/shared/use-api-query";
 import { IntegrationBanner } from "./integration.banner";
@@ -25,7 +25,7 @@ import { WizardOptions } from "./wizard.options";
 import { WizardSummary } from "./wizard.summary";
 import { WizardTarget } from "./wizard.target";
 
-const t = idSite.wizard;
+const t = tSite.wizard;
 const LAST_STEP = t.steps.length - 1;
 
 /** Step list; the current one carries `aria-current="step"`. */
@@ -98,7 +98,7 @@ export function SiteNewPage() {
 
   return (
     <div className="flex max-w-2xl flex-col">
-      <PageHeader title={t.title} description={t.description} back={{ to: "/panel/sites", label: idSite.list.title }} />
+      <PageHeader title={t.title} description={t.description} back={{ to: "/panel/sites", label: tSite.list.title }} />
       <Stepper step={step} />
       <h2 ref={stepHeading} tabIndex={-1} className="sr-only">
         {t.stepOf(step + 1, t.steps.length, t.steps[step] ?? "")}

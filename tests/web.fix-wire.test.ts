@@ -5,15 +5,15 @@ import type { FixBackup, FixEffects, FixPreview } from "@/shared/fix.types";
 import type { Integration, SiteDetail } from "@/shared/site.types";
 import { DeployApiError } from "@/web/deploy/deploy.api";
 import { blockerText, noFolderText, uploadFailure } from "@/web/deploy/deploy.state";
-import { idDeploy } from "@/web/i18n/id.deploy";
-import { idSite } from "@/web/i18n/id.site";
+import { tDeploy } from "@/web/i18n/en.deploy";
+import { tSite } from "@/web/i18n/en.site";
 import { errorFromResponse } from "@/web/shared/api.client";
 import { undoDescription } from "@/web/site/setup.undo";
 import { fixSummary, previewTitle, restartNeeded } from "@/web/site/site.adopt";
 import { hostnameRemoveUrl } from "@/web/site/site.api";
 import { wizardDns } from "@/web/site/site.check";
 
-const dl = idSite.setup.dialog;
+const dl = tSite.setup.dialog;
 
 // test-only fixtures
 const NONE: FixEffects = {
@@ -57,13 +57,13 @@ describe("apps.json rebuild", () => {
       "`apps.json` kembali ke isi lama yang rusak, jadi blog tidak dijalankan pm2 setelah HP dinyalakan ulang. Sekarang tetap berjalan.",
     );
     expect(undoDescription(backup({ changedSince: true }))).toBe(
-      `${idSite.setup.undoBody.apps_json} ${idSite.setup.undoChanged}`,
+      `${tSite.setup.undoBody.apps_json} ${tSite.setup.undoChanged}`,
     );
-    expect(idSite.setup.undoLabel.apps_json).toBe("Batalkan perubahan pada apps.json");
+    expect(tSite.setup.undoLabel.apps_json).toBe("Batalkan perubahan pada apps.json");
   });
 
   test("the broken apps.json row and job step point at Perbaiki, not at ssh", () => {
-    const text = (idSite.setup.checks.apps_json.error as (p: Record<string, string>) => string)({ reason: "invalid" });
+    const text = (tSite.setup.checks.apps_json.error as (p: Record<string, string>) => string)({ reason: "invalid" });
     expect(text).toContain("Tekan Perbaiki");
     expect(text).not.toMatch(/ssh|hapus file/i);
   });
@@ -99,7 +99,7 @@ describe("sites_dir_create: folder + files, or only the ecosystem file", () => {
   });
 
   test("a linked ecosystem names why in plain words", () => {
-    expect(idSite.setup.unfixable.ecosystem_linked).toContain("tidak mengubah atau menimpanya");
+    expect(tSite.setup.unfixable.ecosystem_linked).toContain("tidak mengubah atau menimpanya");
   });
 });
 
@@ -129,16 +129,16 @@ describe("missing site folder (deploy blocker / 409 no_folder)", () => {
     expect(noFolderText(true)).toBe(
       "Folder situs ini hilang. Hapus situs lalu buat ulang, atau pulihkan dari cadangan.",
     );
-    expect(blockerText(site({ deployBlocker: "no_folder" }))).toBe(idDeploy.noFolder.database);
-    expect(blockerText(site({ deployBlocker: "no_folder", managed: false }))).toBe(idDeploy.noFolder.adopted);
-    expect(blockerText(site({ deployBlocker: "pm2_not_running" }))).toBe(idDeploy.errorCodes.pm2_not_running);
+    expect(blockerText(site({ deployBlocker: "no_folder" }))).toBe(tDeploy.noFolder.database);
+    expect(blockerText(site({ deployBlocker: "no_folder", managed: false }))).toBe(tDeploy.noFolder.adopted);
+    expect(blockerText(site({ deployBlocker: "pm2_not_running" }))).toBe(tDeploy.errorCodes.pm2_not_running);
     expect(blockerText(site({}))).toBeNull();
   });
 
   test("the 409 body's database flag picks the copy", () => {
     const err = (database: boolean) =>
       new DeployApiError(errorFromResponse(409, { error: "no_folder", database }), { database });
-    expect(uploadFailure(err(true))).toEqual({ message: idDeploy.noFolder.database, next: "retry" });
-    expect(uploadFailure(err(false)).message).toBe(idDeploy.noFolder.adopted);
+    expect(uploadFailure(err(true))).toEqual({ message: tDeploy.noFolder.database, next: "retry" });
+    expect(uploadFailure(err(false)).message).toBe(tDeploy.noFolder.adopted);
   });
 });

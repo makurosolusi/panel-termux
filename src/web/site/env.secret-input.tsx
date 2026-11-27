@@ -2,9 +2,9 @@ import { EyeIcon, EyeOffIcon } from "lucide-react";
 import { useState } from "react";
 import { Button } from "@/web/components/ui/button";
 import { Input } from "@/web/components/ui/input";
-import { idSiteDetail } from "@/web/i18n/id.site-detail";
+import { tSiteDetail } from "@/web/i18n/en.site-detail";
 
-const t = idSiteDetail.env;
+const t = tSiteDetail.env;
 
 type SecretInputProps = {
   id: string;

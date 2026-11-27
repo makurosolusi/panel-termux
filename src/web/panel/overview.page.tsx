@@ -6,8 +6,8 @@ import { QueryView } from "@/web/components/query-view";
 import { StatTilesSkeleton } from "@/web/components/skeletons";
 import { StatusBadge } from "@/web/components/status-badge";
 import { OnboardingBanner } from "@/web/dev/onboarding.banner";
-import { idOverview } from "@/web/i18n/id.overview";
-import { idPanel } from "@/web/i18n/id.panel";
+import { tOverview } from "@/web/i18n/en.overview";
+import { tPanel } from "@/web/i18n/en.panel";
 import { useMe } from "@/web/session/use-me";
 import { useApiQuery } from "@/web/shared/use-api-query";
 import { DeviceTiles } from "./device.tiles";
@@ -15,7 +15,7 @@ import { ProblemStrip } from "./overview.problems";
 import { AlertsLine, BackupSection, CountCards } from "./overview.sections";
 import { PANEL_REFRESH_MS, panelUrl } from "./panel.api";
 
-const t = idOverview;
+const t = tOverview;
 
 // History blocks load in their own chunks after the first render, keeping /panel within its gzip budget (PLAN/01 §3.11).
 const MetricTrends = lazy(() => import("./sparkline").then((m) => ({ default: m.MetricTrends })));
@@ -73,8 +73,8 @@ export function OverviewPage() {
     <>
       <PageHeader
         title={t.title}
-        status={fake && <StatusBadge tone="warning" label={idPanel.fakeMode} />}
-        description={fake ? idPanel.fakeModeHelp : undefined}
+        status={fake && <StatusBadge tone="warning" label={tPanel.fakeMode} />}
+        description={fake ? tPanel.fakeModeHelp : undefined}
         meta={{
           updatedAt: query.data?.dataAt ?? query.updatedAt,
           onRefresh: query.reload,

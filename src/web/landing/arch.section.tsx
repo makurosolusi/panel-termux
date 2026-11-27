@@ -1,9 +1,9 @@
 import { CloudIcon, GlobeIcon, SmartphoneIcon, WaypointsIcon } from "lucide-react";
 import { Fragment } from "react";
-import { idLanding } from "@/web/i18n/id.landing";
+import { tLanding } from "@/web/i18n/en.landing";
 import { SectionHead } from "./section.head";
 
-const t = idLanding.arch;
+const t = tLanding.arch;
 const ICONS = [SmartphoneIcon, WaypointsIcon, CloudIcon, GlobeIcon];
 
 /** Architecture: phone → cloudflared → Cloudflare → internet, with animated SVG connectors. */

@@ -4,9 +4,9 @@ import type { Problem } from "@/shared/monitor.types";
 import type { App, AppStatus, Domain, DomainHealth, Service } from "@/shared/panel.types";
 import { title as problemTitle } from "@/shared/problem.copy";
 import type { StatusKey } from "@/web/components/status.vocab";
-import { idPanel } from "@/web/i18n/id.panel";
+import { tPanel } from "@/web/i18n/en.panel";
 
-const r = idPanel.domains.reasons;
+const r = tPanel.domains.reasons;
 
 /** Failed probes in a row before a domain counts as a problem (server DOMAIN_FAILS_TO_PROBLEM). */
 export const DOMAIN_FAILS_TO_PROBLEM = 3;
