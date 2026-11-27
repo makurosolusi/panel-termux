@@ -43,7 +43,7 @@ jobs:
 
       - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
         with:
-          bun-version: 1.4.2
+          bun-version: 1.4.5
           no-cache: true # no actions/cache in the release path (cache poisoning)
 
       - run: bun install --frozen-lockfile
@@ -67,6 +67,8 @@ jobs:
           echo "TAG=$TAG" >>"$GITHUB_ENV"
 
       - run: bun run build
+      - name: CLI shell test (native build, PLAN/07 §9.2)
+        run: bun run build:local && sh scripts/cli.test.sh dist/panel
       - name: Package
         run: |
           sh scripts/package-release.sh dist/panel-android-arm64 dist/release "$TAG"

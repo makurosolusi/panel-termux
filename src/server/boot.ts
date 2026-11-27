@@ -47,15 +47,55 @@ function previousPanelVersion(db: Db): string | null {
   return row?.value ?? null;
 }
 
+/** Cap on the instance-guard probe: an accepting-but-silent listener counts as "busy" after this (PLAN/07 §2.4). */
+const GUARD_TIMEOUT_MS = 1000;
+
+/** Thrown by bootPanel when something already answers on PORT; nothing in the data dir was touched (PLAN/07 D2). */
+export class PanelAlreadyRunningError extends Error {
+  constructor(
+    readonly port: number,
+    /** Version reported by the running panel's /api/health, null when the listener is not a panel. */
+    readonly runningVersion: string | null,
+  ) {
+    const who = runningVersion ? ` oleh panel v${runningVersion}` : "";
+    super(`port ${port} sudah dipakai${who}; tidak ada yang diubah`);
+    this.name = "PanelAlreadyRunningError";
+  }
+}
+
+/**
+ * Instance guard (PLAN/07 §2.4): refuses to boot when PORT already answers HTTP or accepts without answering within
+ * 1 s. Connection refused = free. Other connect errors fail open (warn + boot) so an odd network stack on the phone
+ * cannot keep runit's panel down forever; Bun.serve then reports a real conflict itself.
+ * A legitimate `sv restart` is not blocked: runsv starts the new process only after the old one exited, and shutdown
+ * stops the listener first (server.stop before waiting for jobs), so the port already refuses connections.
+ * ponytail: two simultaneous starts can both pass; pidfile + /proc/<pid>/exe check if that ever happens.
+ */
+async function assertNoRunningPanel(port: number): Promise<void> {
+  let res: Response;
+  try {
+    res = await fetch(`http://${LISTEN_HOST}:${port}/api/health`, { signal: AbortSignal.timeout(GUARD_TIMEOUT_MS) });
+  } catch (e) {
+    const err = e as Error & { code?: string };
+    if (err.code === "ConnectionRefused") return;
+    if (err.name === "TimeoutError") throw new PanelAlreadyRunningError(port, null);
+    log.warn(`[panel] instance check on port ${port} failed (${err.code ?? err.message}); booting anyway`);
+    return;
+  }
+  const body = (await res.json().catch(() => null)) as { version?: unknown } | null;
+  throw new PanelAlreadyRunningError(port, typeof body?.version === "string" ? body.version : null);
+}
+
 /** Overrides for tests: system adapters and the exit used by shutdown. */
 export type BootOpts = { system?: SystemAdapters; exit?: (code: number) => void };
 
 /**
- * Boots the panel from a parsed env (PLAN/04 F6/F7 order): secret → DB → pre-migration snapshot → migrations →
+ * Boots the panel from a parsed env (PLAN/04 F6/F7 order): instance guard (skipped for PORT 0) → secret → DB → pre-migration snapshot → migrations →
  * panel_version → data-key check → clean-shutdown marker → services → apps.json + orphan fix candidate → monitor → backup scheduler →
  * HTTP server. Returns the server and the graceful shutdown handler (not yet bound to signals).
  */
 export async function bootPanel(env: Env, opts: BootOpts = {}) {
+  if (env.PORT !== 0) await assertNoRunningPanel(env.PORT);
   const dataDir = resolve(env.PANEL_DATA_DIR);
   const { secret, created } = loadOrCreateSecret(dataDir);
   const db = openDb(dataDir);
@@ -130,9 +170,20 @@ export async function bootPanel(env: Env, opts: BootOpts = {}) {
   return { server, shutdown, db };
 }
 
-/** Process entrypoint: env (exit 1 when invalid) → bootPanel → SIGTERM (runit `sv down`) / SIGINT → graceful stop. */
+/**
+ * Process entrypoint: env (exit 1 when invalid) → bootPanel (exit 1 when a panel already runs) → SIGTERM (runit
+ * `sv down`) / SIGINT → graceful stop.
+ */
 export async function start() {
-  const { server, shutdown } = await bootPanel(loadEnvOrExit());
+  let booted: Awaited<ReturnType<typeof bootPanel>>;
+  try {
+    booted = await bootPanel(loadEnvOrExit());
+  } catch (e) {
+    if (!(e instanceof PanelAlreadyRunningError)) throw e;
+    log.error(`[panel] ${e.message}`);
+    process.exit(1);
+  }
+  const { server, shutdown } = booted;
   for (const sig of ["SIGTERM", "SIGINT"] as const) process.on(sig, () => void shutdown(sig));
   return server;
 }

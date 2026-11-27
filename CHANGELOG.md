@@ -1,5 +1,28 @@
 # Changelog
 
+## [0.5.0] - 2026-11-27
+
+### Added
+
+- Perintah terminal di binary panel (jalankan dari `~/panel`): `panel -h`/`--help`/`--h` untuk bantuan (juga `panel <perintah> --help`) dan `panel -v`/`--version`/`--v` yang mencetak versi, mis. `panel-termux 0.5.0 (android-arm64, bun 1.x)`.
+- `panel doctor [--json]`: memeriksa HP tanpa mengubah apa pun (paket dan hold, Termux:Boot/API, runit, `.env`, panel ganda, file `down` cloudflared, versi PostgreSQL, dan pemeriksaan kartu Persiapan dengan pesan yang sama). Kode keluar 1 hanya bila ada error; peringatan tetap 0. `--json` mencetak laporan lengkap ke stdout.
+- `panel env [--full]`: mencetak template `.env` kosong ke stdout. Disarankan `panel env > .env.new`; menambah ke `.env` yang sudah berisi (`>>`) ditolak. `--full` menambah variabel opsional yang dikomentari dengan nilai bawaannya.
+- `panel docs [google|cloudflare|android|paket]`: panduan offline. Topik `paket` menjelaskan kenapa `cloudflared` dan `postgresql` ditahan dari `pkg upgrade` (upgrade cloudflared dapat mematikan tunnel; PostgreSQL versi mayor baru tidak bisa memakai data lama tanpa dump dan restore) beserta cara upgrade-nya dengan aman.
+- `panel rollback [--db] [--yes]`: kembali ke binary sebelumnya (`panel.prev`) lalu me-restart layanan panel. Penukaran tidak pernah membuat `~/panel/panel` hilang walau HP mati di tengah jalan. Bila database sudah dimigrasi versi baru, rollback memperingatkannya; `--db` memulihkan snapshot terbaru setelah menyimpan database sekarang sebagai `panel.db.before-rollback.<waktu>` (tidak dihapus rotasi snapshot).
+
+### Changed
+
+- `panel` tanpa argumen di terminal kini mencetak bantuan, bukan menyalakan server. Untuk menjalankan server secara manual, pakai `panel serve`. Layanan runit tidak berubah dan tetap menyalakan server.
+- `.env.example` kini dibuat dari daftar variabel yang sama dengan `panel env --full`: `APP_BASE_URL` dan `SUPER_ADMIN_EMAILS` kosong (bukan contoh isian), `PORT` dan `PANEL_DATA_DIR` dikomentari.
+- Installer hanya mengganti `panel.prev` bila panel yang terpasang sehat (atau `panel.prev` belum ada), sehingga versi terakhir yang sehat tetap tersedia untuk rollback. Petunjuk rollback dari installer kini `panel rollback [--db]`.
+- Build dan CI kini menguji runtime Bun yang sama dengan yang dikirim di binary (1.4.5); build memeriksa versi runtime yang di-embed dan gagal bila berbeda.
+- Installer dan `panel doctor` menghitung contoh isian lama dari `.env.example` (mis. `https://panel.example.com`) sebagai kosong.
+
+### Fixed
+
+- Panel kedua yang dinyalakan saat panel lain sudah menjawab di port yang sama kini keluar dengan kode 1 sebelum menyentuh kunci data atau database.
+- Program yang dijalankan perintah CLI tidak lagi menerima nilai rahasia dari `.env` panel.
+
 ## [0.4.0] - 2026-11-27
 
 ### Added

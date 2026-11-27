@@ -8,10 +8,16 @@ if (!target || !outfile) {
   process.exit(2);
 }
 
+// The runtime embedded is the one of the bun running this script. Under `bun run` that is node_modules/.bin/bun
+// (bun@ from bun.lock, a peer of bun-plugin-tailwind), not the bun on PATH. Pinning `-v<Bun.version>` keeps a
+// cross target from ever resolving to another version; "local" embeds the running executable itself.
+const compileTarget = target === "local" ? undefined : (`${target}-v${Bun.version}` as Bun.Build.CompileTarget);
+
 const result = await Bun.build({
-  entrypoints: ["./src/server/index.ts"],
+  // PLAN/07 K1: thin entry; CLI commands load lazily and never evaluate the server bundle (lab L5)
+  entrypoints: ["./src/server/main.ts"],
   compile: {
-    ...(target === "local" ? {} : { target: target as Bun.Build.CompileTarget }),
+    ...(compileTarget ? { target: compileTarget } : {}),
     outfile,
     autoloadBunfig: false,
   },
@@ -27,4 +33,10 @@ if (!result.success) {
   for (const log of result.logs) console.error(log);
   process.exit(1);
 }
-console.info(`built ${outfile} (${target})`);
+// Every runtime carries `Bun v<version> (<revision>)`; refuse a binary whose runtime is not the one asked for.
+const marker = `Bun v${Bun.version} (`;
+if (!Buffer.from(await Bun.file(outfile).arrayBuffer()).includes(marker)) {
+  console.error(`build ${outfile}: embedded runtime is not bun ${Bun.version} ("${marker}" not found)`);
+  process.exit(1);
+}
+console.info(`built ${outfile} (${target}, bun ${Bun.version})`);

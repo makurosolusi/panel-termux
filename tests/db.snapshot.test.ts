@@ -63,6 +63,20 @@ describe("snapshotBeforeMigrations", () => {
     ]);
   });
 
+  test("before-rollback copies are neither counted among the 3 kept nor pruned", async () => {
+    const { db, dir } = pendingDb();
+    mkdirSync(join(dir, "snapshots"));
+    const rollbacks = ["panel.db.before-rollback.20261127110000", "panel.db.before-rollback.20261127110001"];
+    for (const f of rollbacks) writeFileSync(join(dir, "snapshots", f), ""); // test-only
+    for (let s = 1; s <= 4; s++) await snapshotBeforeMigrations(db, dir, "0.4.0", at(s));
+    expect(readdirSync(join(dir, "snapshots")).sort()).toEqual([
+      "panel.db.0.4.0.20261127100002",
+      "panel.db.0.4.0.20261127100003",
+      "panel.db.0.4.0.20261127100004",
+      ...rollbacks,
+    ]);
+  });
+
   test("failure throws with context", async () => {
     const { db, dir } = pendingDb();
     writeFileSync(join(dir, "snapshots"), "not a directory");
