@@ -10,6 +10,8 @@ import { type EnvFileValues, readEnvFile } from "./env.file";
 
 /** dpkg packages doctor asks about. */
 export const PROBED_PACKAGES = ["termux-services", "cloudflared", "postgresql", "termux-api"] as const;
+/** dpkg state of a package: `broken` = present but not fully installed (half-installed, unpacked, …). */
+export type PackageState = "installed" | "broken" | "missing";
 /** Packages that must be held (`apt-mark hold`, C15). */
 export const HELD_PACKAGES = ["cloudflared", "postgresql"] as const;
 /** Android apps checked with `cmd package list packages`. */
@@ -38,7 +40,7 @@ export type DoctorProbe = {
   isTermux: boolean;
   freeBytes: number | null;
   files: { apt: boolean; pacman: boolean; node: boolean; pm2Runtime: boolean; binary: boolean; cfCert: boolean };
-  packages: Record<(typeof PROBED_PACKAGES)[number], boolean>;
+  packages: Record<(typeof PROBED_PACKAGES)[number], PackageState>;
   held: string[] | null;
   apps: Record<keyof typeof ANDROID_APPS, boolean | null>;
   pgDataMajor: string | null;
@@ -86,9 +88,12 @@ async function tryExec(host: CliHost, tool: string, args: string[], timeoutMs?: 
   }
 }
 
-async function dpkgInstalled(host: CliHost, pkg: string): Promise<boolean> {
+/** `Status: <want> <flag> <state>`: a held package reads `hold ok installed`, still installed. */
+async function dpkgState(host: CliHost, pkg: string): Promise<PackageState> {
   const r = await tryExec(host, "dpkg", ["-s", pkg]);
-  return r?.code === 0 && /^Status: install ok installed$/m.test(r.stdout);
+  const status = r?.code === 0 ? /^Status: (\S+) (\S+) (\S+)$/m.exec(r.stdout) : null;
+  if (!status || status[3] === "not-installed" || status[3] === "config-files") return "missing";
+  return status[2] === "ok" && status[3] === "installed" ? "installed" : "broken";
 }
 
 async function androidApp(host: CliHost, id: string): Promise<boolean | null> {
@@ -142,7 +147,7 @@ export async function collectDoctorProbe(host: CliHost): Promise<DoctorProbe> {
   const svc = (name: string) => join(paths.svdir, name);
   const publicHost = publicHostOf(env?.APP_BASE_URL);
   const [packages, held, boot, api, binMajor, services, health, pub] = await Promise.all([
-    Promise.all(PROBED_PACKAGES.map(async (k) => [k, await dpkgInstalled(host, k)] as const)),
+    Promise.all(PROBED_PACKAGES.map(async (k) => [k, await dpkgState(host, k)] as const)),
     tryExec(host, "apt-mark", ["showhold"]),
     androidApp(host, ANDROID_APPS.boot),
     androidApp(host, ANDROID_APPS.api),

@@ -14,7 +14,17 @@ BUNX() { BUN_BE_BUN=1 "$BIN" "$@"; }
 
 T=$(mktemp -d)
 SRV=
-trap '[ -z "$SRV" ] || { kill "$SRV" && wait "$SRV"; } 2>/dev/null || true; rm -rf "$T"' EXIT
+# stop_srv: kill the stub health server (a PID this script started) and reap it; idempotent.
+stop_srv() {
+  [ -n "$SRV" ] || return 0
+  kill "$SRV" 2>/dev/null || true
+  wait "$SRV" 2>/dev/null || true
+  SRV=
+}
+cleanup() { stop_srv; rm -rf "$T"; }
+trap cleanup EXIT
+trap 'cleanup; trap - EXIT; exit 130' INT
+trap 'cleanup; trap - EXIT; exit 143' TERM
 # $T/box is the sandbox the panel sees (HOME, PREFIX, cwd); test outputs live in $T/o, outside it.
 BOX="$T/box"
 O="$T/o"
@@ -148,7 +158,9 @@ has err "dikosongkan"
 cmp -s .env "$O/env" || fail "env > .env did not write the template"
 
 # --- D2: serve and no-arg (not a TTY) refuse when PORT already answers /api/health ---
-BUNX -e 'const s = Bun.serve({ hostname: "127.0.0.1", port: 0, fetch: () => Response.json({ version: "0.0.0" }) });
+# Start the binary itself in the background (not via BUNX): $! must be the server, not a subshell that
+# `kill` would stop while leaving the server orphaned.
+BUN_BE_BUN=1 "$BIN" -e 'const s = Bun.serve({ hostname: "127.0.0.1", port: 0, fetch: () => Response.json({ version: "0.0.0" }) });
 await Bun.write(process.argv[1], String(s.port));' "$O/port" &
 SRV=$!
 i=0
@@ -167,5 +179,9 @@ for args in serve ""; do
   has err "sudah dipakai"
   [ ! -e data ] || fail "panel $args created the data dir"
 done
+
+pid=$SRV
+stop_srv
+if kill -0 "$pid" 2>/dev/null; then fail "stub health server $pid still running after stop"; fi
 
 echo "cli.test.sh: all passed ($("$BIN" -v </dev/null))"
