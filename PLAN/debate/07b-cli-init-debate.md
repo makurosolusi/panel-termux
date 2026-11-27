@@ -13,11 +13,11 @@ POCO hanya dibaca (`ssh poco`: `ls`, `stat`, `dpkg -s`, `apt-mark showhold`, `sv
 
 ## 1. Ringkasan
 
-| Severity | Jumlah | Nomor           |
-| -------- | ------ | --------------- |
-| BLOCKER  | 2      | E1, E2          |
-| MAJOR    | 6      | E3–E8           |
-| MINOR    | 10     | E9–E18          |
+| Severity | Jumlah | Nomor  |
+| -------- | ------ | ------ |
+| BLOCKER  | 2      | E1, E2 |
+| MAJOR    | 6      | E3–E8  |
+| MINOR    | 10     | E9–E18 |
 
 Inti: penggantian `install.sh` oleh `init` masuk akal dan lebih sederhana. Penukaran binary yang sedang dipakai runit
 aman (lihat §4 "lolos"). Dua hal menggagalkan rencana apa adanya. **E1:** setiap pasang ulang (termasuk wipe fase B/D
@@ -329,29 +329,29 @@ terputus dilanjutkan dengan aturan HP lama yang lebih ketat sehingga butuh perin
 
 ## 3. Status temuan debat sebelumnya
 
-| #       | Status di revisi 4                                                                                                          |
-| ------- | --------------------------------------------------------------------------------------------------------------------------- |
-| D1      | Dipenuhi (K13).                                                                                                             |
-| D2      | Dipenuhi dan terbangun (`boot.ts:78-87` `assertNoRunningPanel`).                                                            |
-| D3      | Dipenuhi (K11b). Bukti HP tinggal L7.                                                                                       |
-| D4      | Dipenuhi (§4.4 tanpa `-o`, token lewat fd).                                                                                  |
-| D5      | **Sebagian:** desain benar, tetapi POCO saat ini tanpa hold cloudflared (E7).                                                |
-| D6      | Dipenuhi (snippet di shim §8.2).                                                                                            |
-| D7      | Dipenuhi (K17 `placeholders`).                                                                                              |
-| D8      | Dipenuhi (doctor `env_extra_files`).                                                                                        |
-| D9      | **Sebagian:** aturannya ada, tetapi gerbang "HP baru" salah (E2).                                                           |
-| D10     | Dipenuhi (`config.yml` hanya bila panel tidak `run`).                                                                       |
-| D11     | **Sebagian:** `pkg upgrade` di Termux berisi PostgreSQL yang dianggap HP baru (E2).                                         |
-| D12     | **Sebagian:** syarat "versi health = binary terpasang" hilang (E3). `upgrade` tetap ditunda (dipenuhi).                     |
-| D13     | Dipenuhi (L5 lulus).                                                                                                        |
-| D14     | Dipenuhi (§4.4 langkah 1 stdout di-pipe).                                                                                   |
-| D15     | Dipenuhi.                                                                                                                   |
-| m1–m8   | Dipenuhi. m7: lock basi benar, tetapi lokasi lock bermasalah (E2).                                                          |
-| m9      | Diubah C18 untuk panel. **Teks tidak konsisten** (E4).                                                                      |
-| m10     | Dipenuhi.                                                                                                                   |
-| m11     | Dipenuhi untuk HP baru. Upgrade tanpa TTY bisa memicu dialog (E5).                                                          |
-| m12     | **Sebagian:** pola folder harus `v*` (E11).                                                                                 |
-| m13–m18 | Dipenuhi.                                                                                                                   |
+| #       | Status di revisi 4                                                                                      |
+| ------- | ------------------------------------------------------------------------------------------------------- |
+| D1      | Dipenuhi (K13).                                                                                         |
+| D2      | Dipenuhi dan terbangun (`boot.ts:78-87` `assertNoRunningPanel`).                                        |
+| D3      | Dipenuhi (K11b). Bukti HP tinggal L7.                                                                   |
+| D4      | Dipenuhi (§4.4 tanpa `-o`, token lewat fd).                                                             |
+| D5      | **Sebagian:** desain benar, tetapi POCO saat ini tanpa hold cloudflared (E7).                           |
+| D6      | Dipenuhi (snippet di shim §8.2).                                                                        |
+| D7      | Dipenuhi (K17 `placeholders`).                                                                          |
+| D8      | Dipenuhi (doctor `env_extra_files`).                                                                    |
+| D9      | **Sebagian:** aturannya ada, tetapi gerbang "HP baru" salah (E2).                                       |
+| D10     | Dipenuhi (`config.yml` hanya bila panel tidak `run`).                                                   |
+| D11     | **Sebagian:** `pkg upgrade` di Termux berisi PostgreSQL yang dianggap HP baru (E2).                     |
+| D12     | **Sebagian:** syarat "versi health = binary terpasang" hilang (E3). `upgrade` tetap ditunda (dipenuhi). |
+| D13     | Dipenuhi (L5 lulus).                                                                                    |
+| D14     | Dipenuhi (§4.4 langkah 1 stdout di-pipe).                                                               |
+| D15     | Dipenuhi.                                                                                               |
+| m1–m8   | Dipenuhi. m7: lock basi benar, tetapi lokasi lock bermasalah (E2).                                      |
+| m9      | Diubah C18 untuk panel. **Teks tidak konsisten** (E4).                                                  |
+| m10     | Dipenuhi.                                                                                               |
+| m11     | Dipenuhi untuk HP baru. Upgrade tanpa TTY bisa memicu dialog (E5).                                      |
+| m12     | **Sebagian:** pola folder harus `v*` (E11).                                                             |
+| m13–m18 | Dipenuhi.                                                                                               |
 
 ## 4. Yang diserang dan lolos
 

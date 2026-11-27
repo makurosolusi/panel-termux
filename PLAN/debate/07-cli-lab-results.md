@@ -86,11 +86,11 @@ Kondisi awal (semua sehat): `sv status` cloudflared/panel/pm2/postgres/sshd `run
 
 ## Ringkasan
 
-| Lab | Hasil | Inti |
-| --- | ----- | ---- |
-| L4  | **LULUS** | `-v`/`env`/`docs` median 55–61 ms, `doctor` median 1,3–1,4 s; dari `~` dan `$PREFIX/tmp` sama |
+| Lab | Hasil              | Inti                                                                                                                                                                                                                                                              |
+| --- | ------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| L4  | **LULUS**          | `-v`/`env`/`docs` median 55–61 ms, `doctor` median 1,3–1,4 s; dari `~` dan `$PREFIX/tmp` sama                                                                                                                                                                     |
 | L8  | **LULUS sebagian** | hold tercatat di dpkg; format `apt-get -s` stabil dan bisa di-parse; `dpkg --audit` bersih = stdout kosong, rc 0. Hold vs versi baru **belum terbukti** (repo tidak punya versi lebih baru cloudflared/postgresql hari ini). Hold **tidak** menahan `--reinstall` |
-| L2  | **LULUS** | reinstall → tunnel mati (solusi 530), yang tersisa persis `down` (0 byte) + template `--token-file`; template + token file memakai ingress `config.yml` lokal (dua hostname 200). Rekomendasi: **opsi A (run script kita + hold)** |
+| L2  | **LULUS**          | reinstall → tunnel mati (solusi 530), yang tersisa persis `down` (0 byte) + template `--token-file`; template + token file memakai ingress `config.yml` lokal (dua hostname 200). Rekomendasi: **opsi A (run script kita + hold)**                                |
 
 ## L4 — waktu perintah di HP: **LULUS**
 
@@ -99,12 +99,12 @@ Kondisi awal (semua sehat): `sv status` cloudflared/panel/pm2/postgres/sshd `run
 for dir in ~ $PREFIX/tmp; do cd $dir; for c in -v doctor env docs; do 5x t $P $c; done; done
 ```
 
-| Perintah | dir `~` (ms, 5 run)        | median | dir `$PREFIX/tmp` (ms)      | median | exit |
-| -------- | -------------------------- | ------ | --------------------------- | ------ | ---- |
-| `-v`     | 51 55 60 58 52             | 55     | 63 58 61 64 60              | 61     | 0    |
-| `doctor` | 1406 1290 1750 1242 1515   | 1406   | 1324 1330 1293 2003 1299    | 1324   | 1    |
-| `env`    | 57 56 52 52 55             | 55     | 51 63 59 61 58              | 59     | 0    |
-| `docs`   | 63 59 52 66 57             | 59     | 53 63 54 55 60              | 55     | 0    |
+| Perintah | dir `~` (ms, 5 run)      | median | dir `$PREFIX/tmp` (ms)   | median | exit |
+| -------- | ------------------------ | ------ | ------------------------ | ------ | ---- |
+| `-v`     | 51 55 60 58 52           | 55     | 63 58 61 64 60           | 61     | 0    |
+| `doctor` | 1406 1290 1750 1242 1515 | 1406   | 1324 1330 1293 2003 1299 | 1324   | 1    |
+| `env`    | 57 56 52 52 55           | 55     | 51 63 59 61 58           | 59     | 0    |
+| `docs`   | 63 59 52 66 57           | 59     | 53 63 54 55 60           | 55     | 0    |
 
 - `doctor` exit 1 karena satu ❌ nyata di POCO: "Sebelum situs pertama dibuat, panel perlu menghubungkannya ke pm2"
   (plus ⚠️ pm2 bisa berhenti sendiri, ⚠️ token API Cloudflare kosong). Bukan masalah CLI.
@@ -333,13 +333,13 @@ dibiarkan di HP sebagai cadangan (tanpa rahasia; hapus kapan saja).
 
 ### Kesimpulan L2 / Q4: **opsi A (run script kita + hold)**
 
-| | A: run script kita + hold | B: template paket + `~/.cloudflared/token` |
-| --- | --- | --- |
-| Ingress lokal | ya (sekarang) | ya (terbukti) |
-| Setelah upgrade/reinstall | pulihkan `run` + hapus `down` | hapus `down` saja (template = isi yang sama) |
-| Autoupdate | `--no-autoupdate` | **aktif** (template tanpa flag; bisa mengganti binary dpkg) |
-| Rahasia di disk | kredensial `<uuid>.json` saja | kredensial + **token kedua** (cukup untuk menjalankan tunnel dari mana pun) |
-| Kode/doctor yang ada | cocok (`Run script … memakai tunnel lokal`) | doctor menganggapnya ⚠️ |
+|                           | A: run script kita + hold                   | B: template paket + `~/.cloudflared/token`                                  |
+| ------------------------- | ------------------------------------------- | --------------------------------------------------------------------------- |
+| Ingress lokal             | ya (sekarang)                               | ya (terbukti)                                                               |
+| Setelah upgrade/reinstall | pulihkan `run` + hapus `down`               | hapus `down` saja (template = isi yang sama)                                |
+| Autoupdate                | `--no-autoupdate`                           | **aktif** (template tanpa flag; bisa mengganti binary dpkg)                 |
+| Rahasia di disk           | kredensial `<uuid>.json` saja               | kredensial + **token kedua** (cukup untuk menjalankan tunnel dari mana pun) |
+| Kode/doctor yang ada      | cocok (`Run script … memakai tunnel lokal`) | doctor menganggapnya ⚠️                                                     |
 
 B hanya menang satu langkah pemulihan, tetapi menambah satu rahasia dan menyalakan autoupdate. A sudah teruji di
 POCO dan sesuai doctor. Maka `init` memakai A: tulis run script server-termux (`export HOME=…`, `exec cloudflared
