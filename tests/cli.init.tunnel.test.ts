@@ -110,7 +110,10 @@ async function init(h: FakeHost, flags: Record<string, unknown> = {}) {
   let code: number;
   try {
     code = await runInit(
-      { values: { yes: false, "dry-run": false, "skip-verify": false, ...flags } as never, positionals: [] },
+      {
+        values: { yes: false, "dry-run": false, "skip-verify": false, lang: "en", ...flags } as never,
+        positionals: [],
+      },
       { out, host: async () => h },
       { steps: [tunnelStep] },
     );

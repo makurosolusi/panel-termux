@@ -18,8 +18,10 @@ if (import.meta.main) {
   if (entryRoute(argv, process.stdin.isTTY === true) === "serve") {
     await (await import("./boot")).start();
   } else {
+    // PANEL_LANG is a panel variable (scrubbed for children) but picks the CLI language (E12): keep it for runCli.
+    const lang = process.env.PANEL_LANG;
     scrubPanelEnv();
     const { runCli } = await import("../cli/cli.main");
-    process.exitCode = await runCli(argv);
+    process.exitCode = await runCli(argv, { env: { ...process.env, PANEL_LANG: lang } });
   }
 }

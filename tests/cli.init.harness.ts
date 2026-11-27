@@ -51,7 +51,8 @@ export function snapshot(dir: string): string[] {
 }
 
 type Flags = Record<string, string | boolean | string[] | undefined>;
-const FLAGS: Flags = { yes: false, "dry-run": false, "skip-verify": false };
+// `lang` = what `--lang en` gives: skips the language question, which cli.init.test.ts covers on its own.
+const FLAGS: Flags = { yes: false, "dry-run": false, "skip-verify": false, lang: "en" };
 
 /** runInit with collected output; `steps` default = recording stubs that always plan one action. */
 export async function init(h: Host, flags: Flags = {}, steps: readonly InitStep[] = stubs().steps) {

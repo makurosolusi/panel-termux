@@ -9,6 +9,7 @@ import { CliExit } from "./cli.output";
 import { binaryStep } from "./init.binary";
 import { bootStep } from "./init.boot";
 import { envStep } from "./init.env";
+import { chooseInitLanguage } from "./init.language";
 import { detectMode, SELF_VERSION } from "./init.mode";
 import { packagesStep } from "./init.packages";
 import { panelSvStep } from "./init.panel-sv";
@@ -174,6 +175,13 @@ export async function runInit(parsed: ParsedArgs, io: CliIo, opts: InitOpts = {}
   if (!args.dryRun) process.on("SIGINT", onSigint);
   try {
     const decision = await detectMode(host);
+    await chooseInitLanguage({
+      host,
+      lang: parsed.values.lang,
+      yes: args.yes,
+      dryRun: args.dryRun,
+      say: (t) => out.note(t),
+    });
     out.line(`Panel Termux ${SELF_VERSION} — penyiapan HP${args.dryRun ? " (--dry-run: tidak ada yang diubah)" : ""}`);
     out.line();
     if (decision.mode === "downgrade")

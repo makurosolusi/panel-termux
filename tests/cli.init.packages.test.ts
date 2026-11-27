@@ -73,7 +73,7 @@ async function init(h: FakeHost, flags: Record<string, string | boolean | string
   let code: number;
   try {
     code = await runInit(
-      { values: { yes: false, "dry-run": false, "skip-verify": false, ...flags }, positionals: [] },
+      { values: { yes: false, "dry-run": false, "skip-verify": false, lang: "en", ...flags }, positionals: [] },
       { out, host: async () => h },
       { steps: [packagesStep] },
     );

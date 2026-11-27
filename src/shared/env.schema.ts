@@ -77,6 +77,14 @@ export const ENV_VARS = [
       "1 = migrasi tetap jalan walau snapshot panel.db gagal (mis. disk penuh). Hanya untuk satu kali start, lalu hapus.",
     secret: false,
   },
+  {
+    // Read only by the CLI (cli.locale.ts, DECISIONS E12); the server ignores it, site processes never get it.
+    name: "PANEL_LANG",
+    required: false,
+    default: "en",
+    description: "Bahasa CLI panel: en (English) atau id (Bahasa Indonesia). panel init menanyakannya sekali.",
+    secret: false,
+  },
 ] as const satisfies readonly EnvVar[];
 
 /** Name of a panel config variable. */

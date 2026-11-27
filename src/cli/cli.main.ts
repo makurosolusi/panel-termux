@@ -1,10 +1,15 @@
 // CLI dispatcher (PLAN/07 K2, K3, §2.1, §2.2). Static imports stay in src/cli + src/shared + package.json so
 // `-v`/`--help` evaluate nothing of the server; commands and CliHost load on demand (lab L5).
+import { homedir } from "node:os";
+import { join } from "node:path";
 import { type ParseArgsConfig, parseArgs } from "node:util";
 import pkg from "../../package.json" with { type: "json" };
+import { LOCALES, type Locale } from "../shared/locale";
 import { COMMAND_HELP, COMMAND_NAMES, type CommandName, GENERAL_HELP, SERVE_HINT, UPGRADE_HINT } from "./cli.help";
 import type { CliHost } from "./cli.host";
+import { cliLocale, setCliLocale } from "./cli.locale";
 import { CliExit, type CliOut, createCliOut } from "./cli.output";
+import { type EnvFileValues, readEnvFile } from "./env.file";
 
 /** Parsed flags and positionals of one command (node:util parseArgs, strict). */
 export type ParsedArgs = {
@@ -18,7 +23,8 @@ export type Command = (args: ParsedArgs, io: CliIo) => Promise<number>;
 
 type Spec = { options: NonNullable<ParseArgsConfig["options"]>; maxPositionals: number; load: () => Promise<Command> };
 
-const HELP = { help: { type: "boolean", short: "h" } } as const;
+/** Options every command accepts: help and the output language (E12). */
+const HELP = { help: { type: "boolean", short: "h" }, lang: { type: "string" } } as const;
 const GLOBAL = { options: { ...HELP, version: { type: "boolean", short: "v" } }, maxPositionals: 0 } as const;
 const USAGE = 2;
 const FAILED = 1;
@@ -96,6 +102,13 @@ function parse(args: string[], spec: Pick<Spec, "options" | "maxPositionals">, h
     const arg = /'([^']+)'/.exec((e as Error).message)?.[1] ?? args.join(" ");
     throw new CliExit(USAGE, `${what}: ${arg}`, `lihat: ${helpRef} --help`);
   }
+  const lang = parsed.values.lang;
+  if (lang !== undefined && !LOCALES.includes(lang as Locale))
+    throw new CliExit(
+      USAGE,
+      `${PARSE_ERRORS.ERR_PARSE_ARGS_INVALID_OPTION_VALUE}: --lang ${lang} (en, id)`,
+      `lihat: ${helpRef} --help`,
+    );
   const extra = parsed.positionals[spec.maxPositionals];
   if (extra !== undefined) throw new CliExit(USAGE, `Argumen tidak dikenal: ${extra}`, `lihat: ${helpRef} --help`);
   return parsed;
@@ -145,8 +158,25 @@ async function dispatch(argv: string[], out: CliOut, host: () => Promise<CliHost
   }
 }
 
-/** Runs the CLI for `argv` (without the binary name) and returns the exit code; never serves (main.ts does). */
-export async function runCli(argv: readonly string[], io: Partial<CliIo> = {}): Promise<number> {
+/** ~/panel/.env values for the language lookup; an unreadable file only means "no PANEL_LANG there" (doctor reports it). */
+function panelEnvFile(env: Record<string, string | undefined>): EnvFileValues | null {
+  try {
+    return readEnvFile(join(env.HOME || homedir(), "panel", ".env"));
+  } catch {
+    return null; // readEnvFile already threw with the path; the language falls back to the shell locale
+  }
+}
+
+/**
+ * Runs the CLI for `argv` (without the binary name) and returns the exit code; never serves (main.ts does). `env`
+ * (default process.env) picks the language once per run (cli.locale.ts).
+ */
+export async function runCli(
+  argv: readonly string[],
+  io: Partial<CliIo> & { env?: Record<string, string | undefined> } = {},
+): Promise<number> {
+  const env = io.env ?? process.env;
+  setCliLocale(cliLocale(env, argv, () => panelEnvFile(env)));
   const out = io.out ?? createCliOut();
   let cached: Promise<CliHost> | undefined;
   const host = io.host ?? (() => (cached ??= detectHost()));

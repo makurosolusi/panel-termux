@@ -21,6 +21,7 @@ Perintah:
 Opsi:
   -h, --help              Bantuan ini, atau bantuan satu perintah: panel <perintah> --help
   -v, --version           Versi panel.
+  --lang <en|id>          Bahasa keluaran (bawaan: PANEL_LANG, lalu LANG, lalu en).
 
 Memasang atau memperbarui panel: jalankan lagi baris pasang (README), atau <binary baru> init.
 Kode keluar: 0 berhasil, 1 gagal, 2 salah pakai, 3 butuh tindakan lalu ulangi, 4 dibatalkan.`;

@@ -89,6 +89,12 @@ describe("isEnvValueMissing", () => {
   });
 });
 
+test("PANEL_LANG: optional, default en; parseEnv never fails on it (the server does not use it, E12)", () => {
+  expect(byName("PANEL_LANG")).toMatchObject({ required: false, default: "en", secret: false });
+  expect(parseEnv({ ...valid, PANEL_LANG: "id" }).PANEL_LANG).toBe("id");
+  expect(parseEnv({ ...valid, PANEL_LANG: "klingon" }).PANEL_LANG).toBeUndefined();
+});
+
 describe("renderEnvTemplate", () => {
   const minimal = [
     "# Panel Termux — .env minimal. Isi nilai yang kosong, simpan sebagai ~/panel/.env (chmod 600).",
@@ -114,6 +120,8 @@ describe("renderEnvTemplate", () => {
     "# PANEL_CONNECTIVITY_URL=https://www.gstatic.com/generate_204",
     "# 1 = migrasi tetap jalan walau snapshot panel.db gagal (mis. disk penuh). Hanya untuk satu kali start, lalu hapus.",
     "# PANEL_SKIP_SNAPSHOT=0",
+    "# Bahasa CLI panel: en (English) atau id (Bahasa Indonesia). panel init menanyakannya sekali.",
+    "# PANEL_LANG=en",
   ];
 
   test("minimal = PLAN §6.2 text: 4 required keys, empty values", () => {

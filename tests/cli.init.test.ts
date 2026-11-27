@@ -1,12 +1,14 @@
 import { Database } from "bun:sqlite";
 import { describe, expect, test } from "bun:test";
-import { existsSync, mkdirSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { type FakeScenarioName, probePaths } from "@/cli/cli.host";
 import { FAKE_NEW_VERSION, FAKE_OLD_VERSION } from "@/cli/cli.host.fake";
+import { activeCliLocale, setCliLocale } from "@/cli/cli.locale";
 import { runCli } from "@/cli/cli.main";
 import { CliExit, createCliOut } from "@/cli/cli.output";
 import { INIT_STEPS } from "@/cli/init.command";
+import { languageAnswer } from "@/cli/init.language";
 import { detectMode } from "@/cli/init.mode";
 import {
   defineStep,
@@ -243,5 +245,79 @@ describe("problems left at the end (M1) and the postponed tunnel exit 3 (MINOR 6
     const stopped = await init(host("fresh"), { yes: true }, e.steps);
     expect(stopped.code).toBe(3);
     expect(e.applied).toEqual(["env"]);
+  });
+});
+
+describe("language question (E12)", () => {
+  const ask = { lang: undefined }; // no --lang: the question may be asked
+  const envText = (h: ReturnType<typeof host>) => readFileSync(probePaths(h.paths).envFile, "utf8");
+  const reset = () => setCliLocale({ locale: "en", source: "default" });
+
+  test("answers: Enter/1 → en, 2 → id, en/id accepted, anything else asks again", () => {
+    expect(["", " 1 ", "en", "2", "id", "3", "fr"].map(languageAnswer)).toEqual([
+      "en",
+      "en",
+      "en",
+      "id",
+      "id",
+      null,
+      null,
+    ]);
+  });
+
+  test("TTY without .env: asked first, PANEL_LANG=id written (mode 600) from the template, locale switched", async () => {
+    reset();
+    const h = host("fresh", { tty: true, answers: ["2", false] });
+    const r = await init(h, ask);
+    expect(r.code).toBe(4); // the second answer declined the plan question: the question did not eat it
+    expect(r.stdout).toContain("Dibatalkan");
+    const text = envText(h);
+    expect(text).toMatch(/^PANEL_LANG=id$/m);
+    expect(text).toContain("APP_BASE_URL=");
+    expect(statSync(probePaths(h.paths).envFile).mode & 0o777).toBe(0o600);
+    expect(activeCliLocale()).toEqual({ locale: "id", source: "env-file" });
+    reset();
+  });
+
+  test("existing .env: other lines kept, invalid answer asks again, Enter = English", async () => {
+    reset();
+    const h = host("fresh", { tty: true, answers: ["x", "", false] });
+    const file = probePaths(h.paths).envFile;
+    mkdirSync(join(file, ".."), { recursive: true });
+    writeFileSync(file, "APP_BASE_URL=https://panel.contoh.test\n", { mode: 0o644 }); // test-only
+    const r = await init(h, ask);
+    expect(r.code).toBe(4);
+    expect(r.stderr).toContain("1 = English, 2 = Bahasa Indonesia");
+    expect(envText(h)).toBe("APP_BASE_URL=https://panel.contoh.test\nPANEL_LANG=en\n");
+    expect(statSync(file).mode & 0o777).toBe(0o600);
+  });
+
+  test("skipped with --lang, PANEL_LANG in .env, --yes or no TTY; --dry-run asks but writes nothing", async () => {
+    reset();
+    const lang = host("fresh", { tty: true, answers: [false] });
+    expect((await init(lang, { lang: "id" })).code).toBe(4); // the only answer went to the plan question
+    expect(existsSync(probePaths(lang.paths).envFile)).toBe(false);
+
+    const stored = host("fresh", { tty: true, answers: [false] });
+    const file = probePaths(stored.paths).envFile;
+    mkdirSync(join(file, ".."), { recursive: true });
+    writeFileSync(file, "PANEL_LANG=id\n"); // test-only
+    expect((await init(stored, ask)).code).toBe(4);
+    expect(envText(stored)).toBe("PANEL_LANG=id\n");
+
+    for (const [h, flags] of [
+      [host("fresh", { tty: true, answers: [] }), { ...ask, yes: true }],
+      [host("fresh"), ask],
+    ] as const) {
+      const s = stubs(new Set());
+      expect((await init(h, flags, s.steps)).code).toBe(0);
+      expect(existsSync(probePaths(h.paths).envFile)).toBe(false);
+    }
+
+    const dry = host("fresh", { tty: true, answers: ["2"] });
+    expect((await init(dry, { ...ask, "dry-run": true })).code).toBe(0);
+    expect(existsSync(probePaths(dry.paths).envFile)).toBe(false);
+    expect(activeCliLocale().locale).toBe("id"); // used for the rest of the run
+    reset();
   });
 });
