@@ -1,22 +1,22 @@
-// The ecosystem snippet (PLAN/03 §3.6, B18) evaluated by real node against apps.json states seen in the POCO lab.
+// The marked ecosystem block (PLAN/06 §3.1) evaluated by real node against apps.json states seen in the POCO lab.
 import { afterAll, describe, expect, test } from "bun:test";
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { ECOSYSTEM_SNIPPET, snippetCurrent } from "@/server/sites/integration.service";
+import { BLOCK_VERSION, ecosystemBlock, legacyCurrent, snippetCurrent } from "@/server/sites/ecosystem.patch";
 
 const node = Bun.which("node");
 const root = mkdtempSync(join(tmpdir(), "panel-eco-"));
 afterAll(() => rmSync(root, { recursive: true, force: true }));
 
 let seq = 0;
-/** A sites dir with the snippet + one hand-written app, `apps.json` written by `setup`; returns pm2's app names. */
+/** A sites dir with one hand-written app + the block at the end, `apps.json` written by `setup`; returns pm2's app names. */
 async function namesFor(setup: (dir: string) => void): Promise<{ names: string[]; stderr: string }> {
   const dir = join(root, `s${++seq}`);
   mkdirSync(dir);
   writeFileSync(
     join(dir, "ecosystem.config.js"),
-    `${ECOSYSTEM_SNIPPET}\nmodule.exports = { apps: [{ name: "hand", script: "/bin/sh" }, ...panelApps] };\n`,
+    `module.exports = { apps: [{ name: "hand", script: "/bin/sh" }] };\n\n${ecosystemBlock("/usr")}`,
   );
   setup(dir);
   const p = Bun.spawn(
@@ -43,7 +43,7 @@ const site = (dir: string, name: string, files: string[]) => {
 };
 const apps = (dir: string, list: unknown) => writeFileSync(join(dir, "apps.json"), JSON.stringify(list));
 
-describe.skipIf(!node)("snippet under node", () => {
+describe.skipIf(!node)("block under node", () => {
   test.each([
     ["apps.json missing", (_d: string) => {}],
     ["apps.json empty", (d: string) => writeFileSync(join(d, "apps.json"), "")],
@@ -76,6 +76,17 @@ describe.skipIf(!node)("snippet under node", () => {
     expect(r.names).toEqual(["hand"]);
   });
 
+  test("entry without a non-empty string script is skipped (path.resolve(cwd, '') would be cwd)", async () => {
+    const r = await namesFor((d) =>
+      apps(d, [
+        { name: "noscript", cwd: site(d, "noscript", ["run"]) },
+        { name: "empty", cwd: site(d, "empty", ["run"]), script: "" },
+        { name: "numeric", cwd: site(d, "numeric", ["run"]), script: 1 },
+      ]),
+    );
+    expect(r.names).toEqual(["hand"]);
+  });
+
   test("grun entry with ./app missing is NOT filtered (script = grun exists; only that app crash-loops, E1f)", async () => {
     const grun = join(root, "grun");
     writeFileSync(grun, "#!/bin/sh\n");
@@ -98,11 +109,30 @@ describe.skipIf(!node)("snippet under node", () => {
   });
 });
 
-describe("snippet text", () => {
-  test("current = panelApps block with the existsSync filter; the 0.2.x spread is old", () => {
-    expect(snippetCurrent(ECOSYSTEM_SNIPPET)).toBe(true);
+describe("block text and snippetCurrent", () => {
+  const block = ecosystemBlock("/usr");
+  test("block keeps the existsSync filter (E1e/E5) and uses the file's EOL", () => {
+    expect(block).toContain(
+      'typeof a.script === "string" && a.script !== "" && fs.existsSync(path.resolve(a.cwd || __dirname, a.script))',
+    );
+    expect(block.split("\n")[0]).toBe(
+      `// >>> panel-termux:apps v${BLOCK_VERSION} (dikelola Panel Termux; panel mengganti blok ini utuh, jangan diedit)`,
+    );
+    expect(block.split("\n").length).toBe(33);
+    expect(ecosystemBlock("/usr", "\r\n")).toBe(block.replaceAll("\n", "\r\n"));
+  });
+
+  test("current = one marked block of this version, or the unmarked 0.3.0 template block", () => {
+    const tpl =
+      "const panelApps = list.filter((a) => fs.existsSync(a.script));\nmodule.exports = { apps: [...panelApps] };";
+    expect(snippetCurrent(`module.exports = [];\n${block}`)).toBe(true);
+    expect(snippetCurrent(tpl)).toBe(true);
+    expect(legacyCurrent(tpl)).toBe(true);
+    expect(legacyCurrent(`${tpl}\n${block}`)).toBe(false);
+    expect(snippetCurrent(block.replace(`v${BLOCK_VERSION} `, "v0 "))).toBe(false);
+    expect(snippetCurrent(`${block}${block}`)).toBe(false);
+    expect(snippetCurrent(block.replace("// <<< panel-termux:apps", ""))).toBe(false);
     expect(snippetCurrent('module.exports = { apps: [...require("./apps.json")] };')).toBe(false);
     expect(snippetCurrent(null)).toBe(false);
-    expect(ECOSYSTEM_SNIPPET).toContain('fs.existsSync(path.resolve(a.cwd || __dirname, a.script || ""))');
   });
 });

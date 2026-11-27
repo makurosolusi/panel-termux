@@ -4,11 +4,27 @@ import { runTermux, TermuxExecError, termuxPrefix } from "../exec/termux.exec";
 import { redactLines } from "../system/log.redact";
 import type { SystemAdapters } from "../system/system.types";
 
-/** What the probe saw: did the file require apps.json, which app names it exports, and their `env` key names. */
+/** Block marker the panel's ecosystem block leaves on `globalThis` when it ran to the end (PLAN/06 §3.1). */
+export type EcosystemBlockSeen = { v: number; listed: boolean };
+/**
+ * What the probe saw: did the file require apps.json, which app names it exports (hand-written ones: apps.json is
+ * replaced by the sentinel), their `env` key names, whether the sentinel reached the list (`spreads`), the panel
+ * block marker, and a digest per app (sha256 of the entry with sorted keys; `env` values hashed, never printed).
+ */
 export type EcosystemProbe =
-  | { ok: true; loadedAppsJson: boolean; names: string[]; envKeys: Record<string, string[]> }
+  | {
+      ok: true;
+      loadedAppsJson: boolean;
+      names: string[];
+      envKeys: Record<string, string[]>;
+      spreads: boolean;
+      block: EcosystemBlockSeen | null;
+      digests: Record<string, string>;
+    }
   | { ok: false; reason: "syntax" | "node_missing" | "timeout" | "not_config_js"; detail: string | null };
 
+/** App name the probe serves as the only apps.json entry (debat C3); removed from every result field. */
+export const PROBE_SENTINEL = "__panel_probe__";
 /** The only environment the probe's node sees (no panel secrets, C14). */
 export const PROBE_ENV_KEYS = ["PATH", "HOME", "PREFIX", "PM2_HOME", "LANG"] as const;
 const PROBE_TIMEOUT_MS = 15_000;
@@ -17,11 +33,18 @@ const MARK = "PANEL_PROBE ";
 /** pm2 treats only `*.config.js` (and json/yaml) as an ecosystem; any other file is run as a script (lab E7). */
 const CONFIG_JS = /\.config\.js$/;
 
-// Runs in node: records any require that resolves to <dir>/apps.json, then prints one marked JSON line.
+// Runs in node: <dir>/apps.json is served from require.cache holding only the sentinel, so the real list is never
+// read. Resolution is untouched: a missing apps.json fails exactly as under pm2. Then prints one marked JSON line.
 const PROBE = `
-const Module = require("module"), path = require("path"), fs = require("fs");
+const Module = require("module"), path = require("path"), fs = require("fs"), crypto = require("crypto");
 const eco = fs.realpathSync(path.resolve(process.argv[1]));
 const appsJson = path.join(path.dirname(eco), "apps.json");
+const sentinel = new Module(appsJson);
+sentinel.filename = appsJson;
+sentinel.loaded = true;
+sentinel.exports = [{ name: "${PROBE_SENTINEL}", script: process.execPath, interpreter: "none" }];
+require.cache[appsJson] = sentinel;
+if (fs.existsSync(appsJson)) require.cache[fs.realpathSync(appsJson)] = sentinel;
 let loadedAppsJson = false;
 const orig = Module._resolveFilename;
 Module._resolveFilename = function (req, parent, ...rest) {
@@ -30,12 +53,23 @@ Module._resolveFilename = function (req, parent, ...rest) {
   if (t === appsJson || t + ".json" === appsJson) loadedAppsJson = true;
   return orig.call(this, req, parent, ...rest);
 };
+const canon = (v) =>
+  Array.isArray(v) ? "[" + v.map(canon).join(",") + "]"
+  : v && typeof v === "object" ? "{" + Object.keys(v).sort().map((k) => JSON.stringify(k) + ":" + canon(v[k])).join(",") + "}"
+  : JSON.stringify(v) ?? "null";
 const cfg = require(eco);
 const apps = Array.isArray(cfg) ? cfg : cfg && Array.isArray(cfg.apps) ? cfg.apps : [];
-const named = apps.filter((a) => a && typeof a.name === "string");
-const envKeys = {};
-for (const a of named) envKeys[a.name] = a.env && typeof a.env === "object" ? Object.keys(a.env) : [];
-process.stdout.write("\\n${MARK}" + JSON.stringify({ loadedAppsJson, names: named.map((a) => a.name), envKeys }) + "\\n");
+const all = apps.filter((a) => a && typeof a.name === "string");
+const named = all.filter((a) => a.name !== "${PROBE_SENTINEL}");
+const envKeys = {}, digests = {};
+for (const a of named) {
+  envKeys[a.name] = a.env && typeof a.env === "object" ? Object.keys(a.env) : [];
+  digests[a.name] = crypto.createHash("sha256").update(canon(a)).digest("hex");
+}
+const b = globalThis.__panelTermuxApps;
+const block = b && typeof b.v === "number" ? { v: b.v, listed: b.listed === true } : null;
+const spreads = all.length !== named.length;
+process.stdout.write("\\n${MARK}" + JSON.stringify({ loadedAppsJson, names: named.map((a) => a.name), envKeys, spreads, block, digests }) + "\\n");
 `;
 
 const cut = (text: string) => {
@@ -78,7 +112,15 @@ export async function probeEcosystem(
   if (r.code !== 0 || !line) return { ok: false, reason: "syntax", detail: cut(r.stderr) };
   try {
     const v = JSON.parse(line.slice(MARK.length)) as Omit<Extract<EcosystemProbe, { ok: true }>, "ok">;
-    return { ok: true, loadedAppsJson: v.loadedAppsJson === true, names: v.names, envKeys: v.envKeys };
+    return {
+      ok: true,
+      loadedAppsJson: v.loadedAppsJson === true,
+      names: v.names,
+      envKeys: v.envKeys,
+      spreads: v.spreads === true,
+      block: v.block ?? null,
+      digests: v.digests ?? {},
+    };
   } catch (e) {
     return { ok: false, reason: "syntax", detail: cut(`probe output unreadable: ${(e as Error).message}`) };
   }

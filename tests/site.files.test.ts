@@ -1,4 +1,5 @@
-import { afterAll, describe, expect, test } from "bun:test";
+import { afterAll, describe, expect, spyOn, test } from "bun:test";
+import * as fs from "node:fs";
 import { chmodSync, mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -19,7 +20,7 @@ import {
   readTunnelId,
   removeIngressRule,
 } from "@/server/sites/ingress.editor";
-import { readTextOrNull, restoreText, writeAtomic } from "@/server/sites/site.files";
+import { decodeUtf8, readBytesOrNull, readTextOrNull, restoreText, writeAtomic } from "@/server/sites/site.files";
 import { createTermuxPostgres } from "@/server/system/postgres.termux";
 import { encodeEnvLine } from "@/shared/env.codec";
 
@@ -191,6 +192,68 @@ describe("apps.json + atomic files", () => {
     expect(readTextOrNull(p)).toBe("one");
     restoreText(p, null);
     expect(readTextOrNull(p)).toBeNull();
+  });
+});
+
+describe("durable writes (PLAN/06 F2, debat C1/C2)", () => {
+  const { openSync: openReal, fsyncSync: fsyncReal, renameSync: renameReal } = fs;
+  test("writeAtomic: fsync of the temp file before rename, then fsync of the directory; mode kept", () => {
+    const dir = join(sandbox, "durable");
+    mkdirSync(dir);
+    const p = join(dir, "eco.config.js");
+    writeFileSync(p, "old");
+    const calls: string[] = [];
+    const opened = new Map<number, string>();
+    const open = spyOn(fs, "openSync").mockImplementation(((path: string, ...rest: unknown[]) => {
+      const fd = (openReal as (...a: unknown[]) => number)(path, ...rest);
+      opened.set(fd, path);
+      return fd;
+    }) as typeof fs.openSync);
+    const fsync = spyOn(fs, "fsyncSync").mockImplementation(((fd: number) => {
+      calls.push(`fsync ${opened.get(fd)}`);
+      fsyncReal(fd);
+    }) as typeof fs.fsyncSync);
+    const rename = spyOn(fs, "renameSync").mockImplementation(((a: string, b: string) => {
+      calls.push(`rename ${b}`);
+      renameReal(a, b);
+    }) as typeof fs.renameSync);
+    try {
+      writeAtomic(p, Buffer.from("new"), { mode: 0o600 });
+    } finally {
+      open.mockRestore();
+      fsync.mockRestore();
+      rename.mockRestore();
+    }
+    expect(calls).toEqual([`fsync ${join(dir, ".eco.config.js.panel-tmp")}`, `rename ${p}`, `fsync ${dir}`]);
+    expect(readFileSync(p, "utf8")).toBe("new");
+    expect(statSync(p).mode & 0o777).toBe(0o600);
+  });
+
+  test("failed write leaves the old file and no temp file; error names the path and keeps the cause", () => {
+    const p = join(sandbox, "keep.txt");
+    writeFileSync(p, "old");
+    const rename = spyOn(fs, "renameSync").mockImplementation(() => {
+      throw Object.assign(new Error("no space left on device"), { code: "ENOSPC" });
+    });
+    try {
+      expect(() => writeAtomic(p, "new")).toThrow(`write ${p}`);
+    } finally {
+      rename.mockRestore();
+    }
+    expect(readFileSync(p, "utf8")).toBe("old");
+    expect(fs.existsSync(join(sandbox, ".keep.txt.panel-tmp"))).toBe(false);
+  });
+
+  test("readBytesOrNull keeps invalid UTF-8 bytes; decodeUtf8 refuses them and keeps a BOM", () => {
+    const p = join(sandbox, "latin1.js");
+    writeFileSync(p, Buffer.from([0x63, 0x61, 0x66, 0xe9]));
+    const b = readBytesOrNull(p) as Buffer;
+    expect([...b]).toEqual([0x63, 0x61, 0x66, 0xe9]);
+    expect(b.toString("latin1")).not.toContain("\uFFFD");
+    expect(decodeUtf8(b)).toBeNull();
+    expect(readBytesOrNull(join(sandbox, "absent"))).toBeNull();
+    const bom = Buffer.from([0xef, 0xbb, 0xbf, 0x78]);
+    expect(Buffer.from(decodeUtf8(bom) as string, "utf8").equals(bom)).toBe(true);
   });
 });
 

@@ -1,5 +1,6 @@
 // Contract of the site management API under /api/panel (role ≥ admin, PLAN/03 §3.1). Errors: { error, message, ...extra }.
 // Fields marked "0.3.0" are optional until their producers land, "0.2.x" ones go away; both settle in W7 (schedule §1.4).
+import type { FixAvailability, FixBackup } from "./fix.types";
 import type { JobKind, JobParams } from "./job.types";
 import type { AppStatus } from "./panel.types";
 
@@ -263,6 +264,10 @@ export type Integration = {
   appNames?: string[];
   /** 0.3.0 */
   checkedAt?: string;
+  /** 0.4.0: fixes the panel can apply, per check (PLAN/06 §5.1). */
+  fixes?: FixAvailability[];
+  /** 0.4.0: newest panel backup of any fixed file. */
+  lastFix?: FixBackup | null;
   /** 0.2.x */
   ecosystemIncludesAppsJson: boolean;
   /** 0.2.x */
