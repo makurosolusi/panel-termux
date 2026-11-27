@@ -44,11 +44,11 @@ import {
 describe("navigation by role", () => {
   const links = (role: Role) => navGroupsFor(role).map((g) => [g.key, g.items.map((i) => i.to)]);
 
-  test("user sees only Profil", () => {
+  test("user sees only Profile", () => {
     expect(links("user")).toEqual([["account", ["/profile"]]]);
   });
 
-  test("admin sees Server + Profil, never Administrasi", () => {
+  test("admin sees Server + Profile, never Administration", () => {
     const groups = links("admin");
     expect(groups.map(([k]) => k)).toEqual(["server", "account"]);
     expect(groups[0]?.[1]).toEqual([
@@ -120,7 +120,7 @@ describe("route meta", () => {
   });
 
   test("document title", () => {
-    expect(documentTitle("Situs")).toBe("Situs · Panel Termux");
+    expect(documentTitle("Sites")).toBe("Sites · Panel Termux");
   });
 });
 
@@ -137,13 +137,13 @@ describe("phone navigation", () => {
     ]);
   });
 
-  test("super_admin: Administrasi first in the sheet, then Domain/Database/Cadangan; Akun never a group", () => {
+  test("super_admin: Administration first in the sheet, then Domains/Databases/Backups; Account never a group", () => {
     const { primary, more } = mobileNavFor("super_admin");
     expect(primary).toHaveLength(4);
     expect(more.map((g) => g.key)).toEqual(["admin", "server"]);
   });
 
-  test("'Lainnya' marks pages that live in the sheet", () => {
+  test("'More' marks pages that live in the sheet", () => {
     const { more } = mobileNavFor("super_admin");
     expect(activeInMore("/dev/users", more)).toBe(true);
     expect(activeInMore("/panel/backups", more)).toBe(true);

@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { homeFor, isProtectedPath, type Role } from "@/shared/roles";
+import { tSession } from "@/web/i18n/en.session";
 import { syncStoredLocale } from "@/web/session/locale.sync";
 import type { MeResult } from "@/web/session/session.api";
 import { sessionErrorKind } from "@/web/session/session.error";
@@ -64,7 +65,7 @@ describe("areas, home, 404 and root errors", () => {
     expect(isProtectedPath("/login")).toBe(false);
   });
 
-  test("super_admin lands on Ringkasan (A11)", () => expect(homeFor("super_admin")).toBe("/panel"));
+  test("super_admin lands on Overview (A11)", () => expect(homeFor("super_admin")).toBe("/panel"));
 
   test("unknown path: guests get the public 404, signed-in users the shell 404", () => {
     expect(notFoundKind(anon)).toBe("public");
@@ -77,6 +78,10 @@ describe("areas, home, 404 and root errors", () => {
     expect(sessionErrorKind(new ApiError("network", null, null, null))).toBe("network");
     expect(sessionErrorKind(new ApiError("server", 502, null, null))).toBe("server");
     expect(sessionErrorKind(new Error("boom"))).toBe("server");
+  });
+
+  test("the root error screen is English by default", () => {
+    expect(tSession.errorTitle).toBe("Can't connect to Panel Termux");
   });
 });
 

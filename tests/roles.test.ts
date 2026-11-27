@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test";
 import { canAccess, homeFor, isKnownSpaPath, isProtectedPath } from "@/shared/roles";
 
 describe("roles", () => {
-  test("homeFor maps each role to its landing page (super_admin → Ringkasan, A11)", () => {
+  test("homeFor maps each role to its landing page (super_admin → Overview, A11)", () => {
     expect(homeFor("user")).toBe("/profile");
     expect(homeFor("admin")).toBe("/panel");
     expect(homeFor("super_admin")).toBe("/panel");

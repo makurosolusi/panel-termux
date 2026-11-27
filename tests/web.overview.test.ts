@@ -1,4 +1,4 @@
-// Ringkasan follow-ups of QA fix-04: started rows hide until a new sample, the Layanan tile counts quiet stops.
+// Overview follow-ups of QA fix-04: started rows hide until a new sample, the Services tile counts quiet stops.
 import { describe, expect, test } from "bun:test";
 import type { Problem } from "@/shared/monitor.types";
 import { countBadge, quietDownServices, withoutStarted } from "@/web/panel/overview.state";

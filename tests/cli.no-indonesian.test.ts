@@ -1,7 +1,7 @@
 // Guard (PLAN/08 §8, acceptance 8): with an English locale the representative CLI commands print no Indonesian.
 // Runs runCli in-process on fake hosts (the source the binary is built from), stdout + stderr together.
 import { afterAll, describe, expect, test } from "bun:test";
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { FakeScenarioName } from "@/cli/cli.host";
@@ -22,8 +22,24 @@ async function run(argv: string[], scenario: FakeScenarioName) {
   const host = createFakeHost(scenario, { root, tty: false, answers: [], selfPath: self });
   let text = "";
   const out = createCliOut({ stdout: (t) => (text += t), stderr: (t) => (text += t) });
-  const code = await runCli(argv, { out, env: { HOME: host.paths.home, LANG: "en_US.UTF-8" }, host: async () => host });
-  return { code, text };
+  // `panel env` stats ./.env and ~/panel/.env from the real process (it takes no cwd and never asks the host):
+  // run from an empty sandbox folder with HOME on the sandbox so the developer's own files never show up.
+  const cwd = join(tmp, `cwd-${n}`);
+  mkdirSync(cwd);
+  const [oldCwd, oldHome] = [process.cwd(), process.env.HOME];
+  process.chdir(cwd);
+  process.env.HOME = host.paths.home;
+  try {
+    const code = await runCli(argv, {
+      out,
+      env: { HOME: host.paths.home, LANG: "en_US.UTF-8" },
+      host: async () => host,
+    });
+    return { code, text };
+  } finally {
+    process.chdir(oldCwd);
+    process.env.HOME = oldHome;
+  }
 }
 
 describe("no Indonesian in English CLI output", () => {
