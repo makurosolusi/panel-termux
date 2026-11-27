@@ -1,10 +1,10 @@
 // test-only: already carries the current block (prefix of the Termux phone)
 module.exports = { apps: [{ name: "hand", script: "/bin/sh" }] };
 
-// >>> panel-termux:apps v1 (dikelola Panel Termux; panel mengganti blok ini utuh, jangan diedit)
-// Menambahkan situs buatan panel dari apps.json ke daftar apps di atas. Entri yang binary-nya belum ada dilewati,
-// karena satu script yang hilang membuat pm2-runtime menghentikan semua aplikasi. Bila tidak ada aplikasi tulisan
-// tangan, penjaga pm2-guard ditambahkan agar pm2-runtime tidak keluar. Blok ini tidak pernah menggagalkan file.
+// >>> panel-termux:apps v2 (managed by Panel Termux; the panel replaces this block as a whole, do not edit it)
+// Adds the sites created by the panel from apps.json to the apps list above. Entries whose binary does not exist yet are skipped,
+// because one missing script makes pm2-runtime stop every app. When there is no hand-written app, the pm2-guard
+// keeper is added so pm2-runtime does not exit. This block never breaks the file.
 ;{
   try {
     const fs = require("fs");
@@ -27,7 +27,7 @@ module.exports = { apps: [{ name: "hand", script: "/bin/sh" }] };
       if (!handWritten && !names.has("pm2-guard"))
         list.push({ name: "pm2-guard", script: "/data/data/com.termux/files/usr/bin/sleep", args: "infinity", interpreter: "none", autorestart: true });
     }
-    globalThis.__panelTermuxApps = { v: 1, listed: list !== null };
+    globalThis.__panelTermuxApps = { v: 2, listed: list !== null };
   } catch (e) {
     console.error("[ecosystem] blok panel dilewati: " + e.message);
   }

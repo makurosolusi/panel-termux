@@ -3,7 +3,13 @@ import { afterAll, describe, expect, test } from "bun:test";
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { BLOCK_VERSION, ecosystemBlock, legacyCurrent, snippetCurrent } from "@/server/sites/ecosystem.patch";
+import {
+  BLOCK_VERSION,
+  ecosystemBlock,
+  legacyCurrent,
+  snippetCurrent,
+  snippetOutdated,
+} from "@/server/sites/ecosystem.patch";
 
 const node = Bun.which("node");
 const root = mkdtempSync(join(tmpdir(), "panel-eco-"));
@@ -116,7 +122,7 @@ describe("block text and snippetCurrent", () => {
       'typeof a.script === "string" && a.script !== "" && fs.existsSync(path.resolve(a.cwd || __dirname, a.script))',
     );
     expect(block.split("\n")[0]).toBe(
-      `// >>> panel-termux:apps v${BLOCK_VERSION} (dikelola Panel Termux; panel mengganti blok ini utuh, jangan diedit)`,
+      `// >>> panel-termux:apps v${BLOCK_VERSION} (managed by Panel Termux; the panel replaces this block as a whole, do not edit it)`,
     );
     expect(block.split("\n").length).toBe(33);
     expect(ecosystemBlock("/usr", "\r\n")).toBe(block.replaceAll("\n", "\r\n"));
@@ -130,9 +136,21 @@ describe("block text and snippetCurrent", () => {
     expect(legacyCurrent(tpl)).toBe(true);
     expect(legacyCurrent(`${tpl}\n${block}`)).toBe(false);
     expect(snippetCurrent(block.replace(`v${BLOCK_VERSION} `, "v0 "))).toBe(false);
+    expect(snippetCurrent(block.replace(`v${BLOCK_VERSION} `, "v1 "))).toBe(false);
     expect(snippetCurrent(`${block}${block}`)).toBe(false);
     expect(snippetCurrent(block.replace("// <<< panel-termux:apps", ""))).toBe(false);
     expect(snippetCurrent('module.exports = { apps: [...require("./apps.json")] };')).toBe(false);
     expect(snippetCurrent(null)).toBe(false);
+  });
+
+  test("outdated = one marked block of an older version from v1 on (v0 and old spreads are not)", () => {
+    expect(snippetOutdated(block.replace(`v${BLOCK_VERSION} `, "v1 "))).toBe(true);
+    expect(snippetOutdated(block)).toBe(false);
+    expect(snippetOutdated(block.replace(`v${BLOCK_VERSION} `, "v0 "))).toBe(false);
+    expect(snippetOutdated(block.replace(`v${BLOCK_VERSION} `, "v1 ").replace("// <<< panel-termux:apps", ""))).toBe(
+      false,
+    );
+    expect(snippetOutdated('module.exports = { apps: [...require("./apps.json")] };')).toBe(false);
+    expect(snippetOutdated(null)).toBe(false);
   });
 });

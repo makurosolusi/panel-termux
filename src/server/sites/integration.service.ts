@@ -5,7 +5,7 @@ import type { Integration, IntegrationCheck, IntegrationCheckKey, JobParams } fr
 import { describeSetting } from "../settings.service";
 import { Pm2UnavailableError } from "../system/system.types";
 import { ensureAppsJson, parseApps } from "./apps.file";
-import { ecosystemBlock, snippetCurrent } from "./ecosystem.patch";
+import { ecosystemBlock, snippetCurrent, snippetOutdated } from "./ecosystem.patch";
 import { type EcosystemProbe, probeEcosystem } from "./ecosystem.probe";
 import { type FixCtx, lastFixesOf, onlinePm2Apps, prefixOf, runnablePanelApps, runScriptPath } from "./fix.plan";
 import { fixAvailability } from "./fix.planners";
@@ -63,6 +63,8 @@ async function compute(ctx: FixCtx, probe: EcosystemProbe): Promise<Integration>
   const runnable = runnablePanelApps(ctx);
   const panelNames = new Set((apps ?? []).map((a) => a.name as string));
   const snippet = snippetCurrent(eco);
+  // An older marked block still skips missing binaries: a warning that its text is out of date, not the old way.
+  const outdated = snippetOutdated(eco);
   let tunnelId: string | null = null;
   let tunnelDetail: string | null = null;
   try {
@@ -105,8 +107,8 @@ async function compute(ctx: FixCtx, probe: EcosystemProbe): Promise<Integration>
     check("ecosystem_file", eco !== null, "error", { path: p.ecosystem }),
     loads,
     check("ecosystem_spreads_apps_json", spreads, "error", noSites),
-    check("snippet_current", snippet, "error"),
-    check("apps_entries_runnable", runnable.length === (apps ?? []).length, snippet ? "warning" : "error", {
+    check("snippet_current", snippet, outdated ? "warning" : "error"),
+    check("apps_entries_runnable", runnable.length === (apps ?? []).length, snippet || outdated ? "warning" : "error", {
       count: (apps ?? []).length - runnable.length,
     }),
     check("pm2_runtime", pm2Reason === null, "error", pm2Reason ? { reason: pm2Reason } : {}),

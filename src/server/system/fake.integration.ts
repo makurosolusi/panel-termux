@@ -4,15 +4,17 @@ import { chmodSync, existsSync, mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 // @ts-expect-error TS2307: Bun embeds the shipped runit script as text; tsc cannot resolve an extensionless module.
 import PM2_RUN_TEMPLATE from "../../../deploy/pm2/run" with { type: "text" };
+import { BLOCK_VERSION, ecosystemBlock } from "../sites/ecosystem.patch";
 import { ecosystemFromTemplate } from "../sites/ecosystem.template";
 
 /**
  * Persiapan state of the sandbox: `ready` = shipped template + run script (all checks pass); `poco` = POCO's
  * hand-written ecosystem (2 apps, no panel block) + run script without `--no-auto-exit`; `old_spread` = 0.2.x
  * `...require('./apps.json')`; `exotic` = POCO file with a Latin-1 byte (not UTF-8, panel refuses); `broken` =
- * ecosystem that does not load; `no_sites_dir` = no sites folder at all.
+ * ecosystem that does not load; `no_sites_dir` = no sites folder at all; `block_v1` = POCO file carrying the 0.3.x
+ * v1 panel block (Indonesian comments), which the fix replaces with the current block.
  */
-export type FakeIntegration = "ready" | "poco" | "old_spread" | "exotic" | "broken" | "no_sites_dir";
+export type FakeIntegration = "ready" | "poco" | "old_spread" | "exotic" | "broken" | "no_sites_dir" | "block_v1";
 /** Every scenario name (demo-seed `--integration` validation). */
 export const FAKE_INTEGRATIONS: readonly FakeIntegration[] = [
   "ready",
@@ -21,6 +23,7 @@ export const FAKE_INTEGRATIONS: readonly FakeIntegration[] = [
   "exotic",
   "broken",
   "no_sites_dir",
+  "block_v1",
 ];
 
 /**
@@ -51,6 +54,20 @@ export PM2_HOME=$HOME/.pm2
 exec node /data/data/com.termux/files/usr/lib/node_modules/pm2/bin/pm2-runtime $HOME/sites/ecosystem.config.js 2>&1
 `;
 
+/** Comment lines of the 0.3.x v1 block (test-only fixture text); the code lines are the same as the current block. */
+const V1_COMMENTS = [
+  "// >>> panel-termux:apps v1 (dikelola Panel Termux; panel mengganti blok ini utuh, jangan diedit)",
+  "// Menambahkan situs buatan panel dari apps.json ke daftar apps di atas. Entri yang binary-nya belum ada dilewati,",
+  "// karena satu script yang hilang membuat pm2-runtime menghentikan semua aplikasi. Bila tidak ada aplikasi tulisan",
+  "// tangan, penjaga pm2-guard ditambahkan agar pm2-runtime tidak keluar. Blok ini tidak pernah menggagalkan file.",
+];
+/** The v1 block as 0.3.x wrote it, for `prefix`. */
+const blockV1 = (prefix: string) => {
+  const lines = ecosystemBlock(prefix).split("\n");
+  lines.splice(0, V1_COMMENTS.length, ...V1_COMMENTS);
+  return lines.join("\n").replace(`{ v: ${BLOCK_VERSION}, listed`, "{ v: 1, listed");
+};
+
 /** Ecosystem bytes of a scenario (null = no file: `no_sites_dir`). */
 function ecosystemOf(home: string, scenario: FakeIntegration): string | Buffer | null {
   switch (scenario) {
@@ -67,6 +84,8 @@ function ecosystemOf(home: string, scenario: FakeIntegration): string | Buffer |
       return pocoEcosystem(home).replace("module.exports = {", "module.exports = {{");
     case "no_sites_dir":
       return null;
+    case "block_v1":
+      return `${pocoEcosystem(home)}\n${blockV1(join(home, "usr"))}`;
   }
 }
 

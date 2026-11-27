@@ -6,7 +6,7 @@ import { existsSync, lstatSync, mkdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 // @ts-expect-error TS2307: Bun embeds the shipped run script as text (`type: "text"`); tsc has no module for it.
 import PM2_RUN from "../../deploy/pm2/run" with { type: "text" };
-import { snippetCurrent } from "../server/sites/ecosystem.patch";
+import { snippetCurrent, snippetOutdated } from "../server/sites/ecosystem.patch";
 import { ecosystemFromTemplate } from "../server/sites/ecosystem.template";
 import { planRunScriptFix } from "../server/sites/runscript.patch";
 import { writeAtomic } from "../server/sites/site.files";
@@ -83,10 +83,15 @@ function integrationLines(ctx: InitContext, s: Pm2State): PlanLine[] {
   if (s.ecosystem !== null && !snippetCurrent(s.ecosystem))
     lines.push({
       kind: "warning",
-      text: tr(
-        "ecosystem.config.js does not load the sites made by the panel yet (apps.json)",
-        "ecosystem.config.js belum memuat situs buatan panel (apps.json)",
-      ),
+      text: snippetOutdated(s.ecosystem)
+        ? tr(
+            "The panel block in ecosystem.config.js is from an older version",
+            "Blok panel di ecosystem.config.js versi lama",
+          )
+        : tr(
+            "ecosystem.config.js does not load the sites made by the panel yet (apps.json)",
+            "ecosystem.config.js belum memuat situs buatan panel (apps.json)",
+          ),
       hint: setupHint(),
     });
   if (

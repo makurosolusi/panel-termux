@@ -1,7 +1,7 @@
 // panel init step 7, pm2 without pm2-runtime (M2): our setup goes in only when pm2-runtime is installed or step 2
 // (which installs it) runs in this mode/TTY; otherwise only a warning, nothing written.
 import { afterAll, describe, expect, test } from "bun:test";
-import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { probePaths } from "@/cli/cli.host";
@@ -61,6 +61,17 @@ describe("pm2 without pm2-runtime (M2)", () => {
       ["repair", false, true],
     ] as const)
       expect(kinds(await planOf(ctxOf(mode, tty, runtime)))).toEqual(["action"]);
+  });
+
+  test("hand-made ecosystem with the v1 panel block → 'older version' warning, not 'does not load'", async () => {
+    const ctx = ctxOf("repair", false, true);
+    const sites = join(ctx.host.paths.home, "sites");
+    mkdirSync(sites, { recursive: true });
+    const v1 = readFileSync(join(import.meta.dir, "fixtures", "ecosystem", "marked-v1.config.js"), "utf8");
+    writeFileSync(join(sites, "ecosystem.config.js"), v1);
+    const texts = (await planOf(ctx)).map((l) => (l as { text: string }).text);
+    expect(texts).toContain("The panel block in ecosystem.config.js is from an older version");
+    expect(texts).not.toContain("ecosystem.config.js does not load the sites made by the panel yet (apps.json)");
   });
 
   test("with pm2-runtime, repair without TTY writes the setup and starts it", async () => {

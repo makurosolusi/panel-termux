@@ -146,6 +146,23 @@ describe.skipIf(!node)("fixtures under node", () => {
     expect(r.changes.at(-1)).toMatchObject({ kind: "add", afterLine: 3 });
   });
 
+  test("v1 block (Indonesian comments) replaced whole by the v2 block; nothing else changes", async () => {
+    const { p, bytes } = await plan("marked-v1");
+    const r = patched(p);
+    const text = bytes.toString("utf8");
+    const from = text.indexOf("// >>>");
+    expect(text.slice(from)).toStartWith("// >>> panel-termux:apps v1 ");
+    expect(r.candidate.toString("utf8")).toBe(text.slice(0, from) + ecosystemBlock(PREFIX));
+    expect(r.effects).toMatchObject({ keepApps: ["hand"], oldSpread: false });
+    // Only the comment lines and the version marker differ between v1 and v2.
+    const oldLines = text.slice(from).split("\n");
+    const diff = ecosystemBlock(PREFIX)
+      .split("\n")
+      .map((l, i) => (l === oldLines[i] ? null : i))
+      .filter((i) => i !== null);
+    expect(diff).toEqual([0, 1, 2, 3, 26]);
+  });
+
   test("BOM kept as the first bytes; CRLF file gets a CRLF block", async () => {
     const bom = patched((await plan("bom")).p);
     expect([...bom.candidate.subarray(0, 3)]).toEqual([0xef, 0xbb, 0xbf]);
@@ -220,7 +237,7 @@ describe("ecosystemBlock", () => {
   test("guard script inserted via JSON.stringify, not raw", () => {
     const b = ecosystemBlock('/p/we"ird');
     expect(b).toContain('script: "/p/we\\"ird/bin/sleep"');
-    expect(b.startsWith("// >>> panel-termux:apps v1 ")).toBe(true);
+    expect(b.startsWith("// >>> panel-termux:apps v2 (managed by Panel Termux;")).toBe(true);
     expect(b.endsWith("// <<< panel-termux:apps\n")).toBe(true);
   });
 });

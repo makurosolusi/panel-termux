@@ -73,6 +73,7 @@ export const tSiteSetup = msg("site.setup", {
     },
     snippet_current: {
       ok: "Panel sites are loaded the current way",
+      warning: "The panel block in ecosystem.config.js is from an older version. Press Fix to replace it; your apps are not changed.",
       error: "pm2 loads the panel's sites the old way: if one site is broken, every app can stop.",
     },
     apps_entries_runnable: {

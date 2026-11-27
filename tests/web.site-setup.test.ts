@@ -40,7 +40,7 @@ const integration = (checks: IntegrationCheck[], fixes?: FixAvailability[], over
     fixes,
     lastFixes: [],
     appNames: ["makuro-solusi", "adminneo"],
-    snippet: "// >>> panel-termux:apps v1",
+    snippet: "// >>> panel-termux:apps v2",
     ecosystemPath: "/data/sites/ecosystem.config.js",
     ecosystemIncludesAppsJson: false,
     appsJsonExists: true,

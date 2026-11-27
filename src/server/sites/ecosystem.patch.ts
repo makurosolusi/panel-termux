@@ -5,7 +5,7 @@ import type { EcosystemProbe } from "./ecosystem.probe";
 import { decodeUtf8 } from "./site.files";
 
 /** Version written in the start marker; bump when the block text changes. */
-export const BLOCK_VERSION = 1;
+export const BLOCK_VERSION = 2;
 /** Candidate file name next to the ecosystem (must end in `.config.js`, same folder for `./apps.json`). */
 export const ECOSYSTEM_CANDIDATE = ".ecosystem.panel-candidate.config.js";
 /** Larger files are left to the owner. */
@@ -21,10 +21,10 @@ const CONFIG_JS = /\.config\.js$/;
 export function ecosystemBlock(prefix: string, eol: "\n" | "\r\n" = "\n"): string {
   const guard = JSON.stringify(`${prefix}/bin/sleep`);
   const lines = [
-    `// >>> panel-termux:apps v${BLOCK_VERSION} (dikelola Panel Termux; panel mengganti blok ini utuh, jangan diedit)`,
-    "// Menambahkan situs buatan panel dari apps.json ke daftar apps di atas. Entri yang binary-nya belum ada dilewati,",
-    "// karena satu script yang hilang membuat pm2-runtime menghentikan semua aplikasi. Bila tidak ada aplikasi tulisan",
-    "// tangan, penjaga pm2-guard ditambahkan agar pm2-runtime tidak keluar. Blok ini tidak pernah menggagalkan file.",
+    `// >>> panel-termux:apps v${BLOCK_VERSION} (managed by Panel Termux; the panel replaces this block as a whole, do not edit it)`,
+    "// Adds the sites created by the panel from apps.json to the apps list above. Entries whose binary does not exist yet are skipped,",
+    "// because one missing script makes pm2-runtime stop every app. When there is no hand-written app, the pm2-guard",
+    "// keeper is added so pm2-runtime does not exit. This block never breaks the file.",
     ";{",
     "  try {",
     '    const fs = require("fs");',
@@ -66,6 +66,16 @@ export function snippetCurrent(text: string | null): boolean {
   if (text === null) return false;
   const v = [...text.matchAll(START)].map((m) => Number(m[1]));
   return (v.length === 1 && v[0] === BLOCK_VERSION && count(END, text) === 1) || legacyCurrent(text);
+}
+
+/**
+ * One marked block of an older version that already skips missing binaries (v1 differs from v2 only in its comments):
+ * it works, the Fix just brings its text up to date (DECISIONS E18).
+ */
+export function snippetOutdated(text: string | null): boolean {
+  if (text === null || count(END, text) !== 1) return false;
+  const v = [...text.matchAll(START)].map((m) => Number(m[1]));
+  return v.length === 1 && (v[0] as number) >= 1 && (v[0] as number) < BLOCK_VERSION;
 }
 
 /** Input of planEcosystemFix; `bytes` null = file missing, `realDir` = folder of realpath(ecosystem). */

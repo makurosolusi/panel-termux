@@ -214,7 +214,7 @@ describe("integration scenarios (PLAN/06 §8)", () => {
     expect(readFileSync(join(sys.home, "sites", "apps.json"), "utf8")).toBe("[]\n");
   });
 
-  test("old_spread, exotic, broken, no_sites_dir, ready write their fixture", () => {
+  test("old_spread, exotic, broken, no_sites_dir, ready, block_v1 write their fixture", () => {
     const of = (integration: (typeof FAKE_INTEGRATIONS)[number]) => {
       const sys = fake({ integration });
       return { home: sys.home, ...files(sys.home) };
@@ -231,7 +231,10 @@ describe("integration scenarios (PLAN/06 §8)", () => {
     const ready = of("ready");
     expect(ready.eco?.toString()).toBe(fakeEcosystem(ready.home));
     expect(autoExitOff(ready.run)).toBe(true);
-    expect(FAKE_INTEGRATIONS).toHaveLength(6);
+    const v1 = of("block_v1").eco?.toString() ?? "";
+    expect(v1).toContain("// >>> panel-termux:apps v1 (dikelola Panel Termux;");
+    expect(v1).toContain("__panelTermuxApps = { v: 1, listed");
+    expect(FAKE_INTEGRATIONS).toHaveLength(7);
   });
 
   test("the scenario file wins over the option; existing files are kept on the next start", () => {
