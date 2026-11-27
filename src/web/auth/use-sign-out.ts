@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { tApp } from "@/web/i18n/en.app";
 
-/** Sign-out handler with pending flag and an Indonesian error message on failure. */
+/** Sign-out handler with pending flag and an error message on failure. */
 export function useSignOut() {
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);

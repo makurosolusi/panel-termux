@@ -15,16 +15,16 @@ import {
 } from "@/web/components/ui/dropdown-menu";
 import { UserAvatar } from "@/web/components/user-avatar";
 import { tApp } from "@/web/i18n/en.app";
+import { tLayout } from "@/web/i18n/en.layout";
 import { tShell } from "@/web/i18n/en.shell";
 import type { Me } from "@/web/session/session.api";
 import { parsePreference } from "@/web/theme/theme.preference";
 import { setThemePreference, useTheme } from "@/web/theme/theme.store";
 
-const t = tShell;
 const THEME_OPTIONS = [
-  { value: "system", label: t.theme.system, icon: MonitorIcon },
-  { value: "light", label: t.theme.light, icon: SunIcon },
-  { value: "dark", label: t.theme.dark, icon: MoonIcon },
+  { value: "system", label: tLayout.theme.system, icon: MonitorIcon },
+  { value: "light", label: tLayout.theme.light, icon: SunIcon },
+  { value: "dark", label: tLayout.theme.dark, icon: MoonIcon },
 ] as const;
 
 /**
@@ -45,7 +45,7 @@ export function UserMenu({
   return (
     <DropdownMenu>
       <DropdownMenuTrigger
-        aria-label={t.account}
+        aria-label={tShell.account}
         className={cn(
           "flex w-full items-center gap-2.5 rounded-md p-1.5 text-left transition-colors hover:bg-accent",
           compact && "w-auto justify-center",
@@ -69,7 +69,9 @@ export function UserMenu({
           <RoleBadge role={me.role} className="mt-1" />
         </DropdownMenuLabel>
         <DropdownMenuSeparator />
-        <DropdownMenuLabel className="text-xs font-normal text-muted-foreground">{t.theme.label}</DropdownMenuLabel>
+        <DropdownMenuLabel className="text-xs font-normal text-muted-foreground">
+          {tLayout.theme.label}
+        </DropdownMenuLabel>
         <DropdownMenuRadioGroup value={preference} onValueChange={(v) => setThemePreference(parsePreference(v))}>
           {THEME_OPTIONS.map(({ value, label, icon: Icon }) => (
             <DropdownMenuRadioItem key={value} value={value} onSelect={(e) => e.preventDefault()}>
@@ -82,7 +84,7 @@ export function UserMenu({
         <DropdownMenuItem asChild>
           <Link to="/profile">
             <UserIcon aria-hidden />
-            {t.nav.profile}
+            {tShell.nav.profile}
           </Link>
         </DropdownMenuItem>
         <DropdownMenuItem

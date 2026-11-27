@@ -24,7 +24,7 @@ export const formatTemperature = (c: number | null): string => base.formatTemper
 /** Uptime of a process/device; same format as `formatDuration`. */
 export const formatUptime = formatDuration;
 
-/** Whole local calendar days between two instants ("kemarin" = previous calendar day, not 24-48 h ago). */
+/** Whole local calendar days between two instants ("yesterday" = previous calendar day, not 24-48 h ago). */
 const calendarDays = (from: Date, to: Date): number =>
   Math.round(
     (new Date(to.getFullYear(), to.getMonth(), to.getDate()).getTime() -
@@ -33,9 +33,9 @@ const calendarDays = (from: Date, to: Date): number =>
   );
 
 /**
- * Relative time (PLAN/01 D16): within a minute either way "baru saja"; under a day up to two units without
- * seconds ("3 mnt lalu", "2 jam 5 mnt lalu"; future "dalam 57 mnt"); then by local calendar day "kemarin",
- * "4 hari lalu"; a week or older (or a future beyond a day) → "26 Nov 2026".
+ * Relative time (PLAN/01 D16): within a minute either way "just now"; under a day up to two units without
+ * seconds ("3 min ago", "2 h 5 min ago"; future "in 57 min"); then by local calendar day "yesterday",
+ * "4 days ago"; a week or older (or a future beyond a day) → "Nov 26, 2026".
  */
 export function formatRelative(at: string | Date | null, now: Date = new Date()): string {
   if (at === null) return "–";
@@ -52,7 +52,7 @@ export function formatRelative(at: string | Date | null, now: Date = new Date())
   return d.toLocaleDateString(tag(), { dateStyle: "medium" });
 }
 
-/** Local weekday + date for log day separators: "Kamis, 26 Nov 2026"; "" for null/invalid. */
+/** Local weekday + date for log day separators: "Thursday, Nov 26, 2026"; "" for null/invalid. */
 export function formatDayLabel(iso: string | null): string {
   const d = iso ? new Date(iso) : null;
   if (!d || Number.isNaN(d.getTime())) return "";

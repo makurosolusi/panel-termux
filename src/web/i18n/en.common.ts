@@ -2,36 +2,29 @@ import { msg } from "@/shared/i18n";
 
 /** UI strings shared by every section (imported directly, DECISIONS B30). Wording follows docs/content-guide.md. */
 export const tCommon = msg("common", {
-  retry: "Coba lagi",
-  cancel: "Batal",
-  close: "Tutup",
-  /** "Diperbarui 3 mnt lalu" — replaces the static "Diperbarui otomatis tiap N detik" lines; relative pieces live in `id.shell.time`. */
-  updatedAgo: (rel: string) => `Diperbarui ${rel}`,
-  /** Short heading per ApiErrorKind (ErrorState title); the sentence below it comes from `errors`. */
+  retry: "Try again",
+  cancel: "Cancel",
+  close: "Close",
+  /** "Updated 3 min ago" — replaces static "updates every N seconds" lines; relative pieces live in `tShell.time`. */
+  updatedAgo: (rel: string) => `Updated ${rel}`,
+  /** Short heading per ApiErrorKind (ErrorState title, first sentence of toasts); no final period. */
   errorTitles: {
-    network: "Tidak bisa terhubung ke server",
-    unauthorized: "Sesi kamu sudah berakhir",
-    access: "Perlu masuk lewat Cloudflare Access",
-    forbidden: "Kamu tidak punya akses",
-    client: "Permintaan tidak berhasil",
-    server: "Server sedang bermasalah",
+    network: "Can't reach the server",
+    unauthorized: "Your session has expired",
+    access: "Cloudflare Access sign-in needed",
+    forbidden: "You don't have access",
+    client: "The request didn't go through",
+    server: "The server is having problems",
   },
-  /** Next step only, shown under `errorTitles` (the title already says what happened). */
+  /** Next step, shown under `errorTitles` (the title already says what happened) and after it in toasts. */
   errorSteps: {
-    network: "Periksa koneksi internet, lalu coba lagi.",
-    unauthorized: "Mengalihkan ke halaman masuk…",
+    network: "Check your internet connection, then try again.",
+    unauthorized: "Taking you to the sign-in page…",
     access:
-      "Buka alamat panel langsung di address bar untuk masuk lewat Access. Bila tetap ditolak, minta admin memastikan email kamu diizinkan di kebijakan Access.",
-    forbidden: "Minta Super Admin mengubah peranmu bila perlu.",
-    server: "Coba lagi beberapa saat lagi.",
+      "Open the panel address in the address bar to sign in. If you're still blocked, ask an admin to add your email to the Access policy.",
+    forbidden: "Ask a Super Admin to change your role if you need this page.",
+    server: "Try again in a moment.",
   },
-  errors: {
-    network: "Tidak bisa terhubung ke server. Periksa koneksi internet, lalu coba lagi.",
-    unauthorized: "Sesi kamu sudah berakhir. Mengalihkan ke halaman masuk…",
-    access:
-      "Sesi Cloudflare Access belum ada atau sudah berakhir. Buka alamat panel langsung di address bar untuk masuk lewat Access. Bila tetap ditolak, minta admin memastikan email kamu diizinkan di kebijakan Access.",
-    forbidden: "Peran kamu tidak punya akses ke halaman ini. Minta Super Admin mengubah peranmu bila perlu.",
-    server: "Server sedang mengalami gangguan. Coba lagi beberapa saat lagi.",
-    generic: "Permintaan tidak berhasil. Coba lagi; bila terus gagal, muat ulang halaman.",
-  },
+  /** Fallback when the request failed for a reason without its own text; per-kind toasts are `title. step`. */
+  genericError: "The request didn't go through. Try again; if it keeps failing, reload the page.",
 } as const);

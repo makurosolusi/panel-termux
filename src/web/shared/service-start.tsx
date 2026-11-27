@@ -8,7 +8,7 @@ import { postControl } from "@/web/panel/panel.api";
 import { runApiAction } from "./api.action";
 import { ApiError } from "./api.client";
 
-/** Core services the panel offers to start wherever "… tidak berjalan" is shown. */
+/** Core services the panel offers to start wherever "… is not running" is shown. */
 export type StartableService = "pm2" | "postgres";
 
 /**
@@ -29,7 +29,7 @@ export async function startService(service: StartableService, onStarted?: () => 
   return ok;
 }
 
-/** "Jalankan pm2" / "Jalankan postgres" button; `onStarted` runs after a successful start (e.g. re-check). */
+/** "Start pm2" / "Start postgres" button; `onStarted` runs after a successful start (e.g. re-check). */
 export function ServiceStartButton({ service, onStarted }: { service: StartableService; onStarted?: () => void }) {
   const [busy, setBusy] = useState(false);
   const start = async () => {

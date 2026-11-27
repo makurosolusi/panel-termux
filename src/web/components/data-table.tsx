@@ -2,11 +2,11 @@ import { cn } from "cn";
 import { Fragment, type ReactNode } from "react";
 import { Link } from "react-router";
 import { TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/web/components/ui/table";
-import { tShell } from "@/web/i18n/en.shell";
+import { tLayout } from "@/web/i18n/en.layout";
 import { type DataPagination, PaginationFooter } from "./pagination-footer";
 import type { StatusTone } from "./status.tone";
 
-const t = tShell.table;
+const t = tLayout.table;
 
 /** One column. `mobile` = its slot in the phone card (default "meta"); `align` for numbers. */
 export type DataColumn<T> = {

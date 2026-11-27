@@ -7,6 +7,7 @@ import { RoleBadge } from "@/web/components/role-badge";
 import { Sheet, SheetContent, SheetTitle } from "@/web/components/ui/sheet";
 import { UserAvatar } from "@/web/components/user-avatar";
 import { tApp } from "@/web/i18n/en.app";
+import { tLayout } from "@/web/i18n/en.layout";
 import { tShell } from "@/web/i18n/en.shell";
 import type { Me } from "@/web/session/session.api";
 import type { ThemePreference } from "@/web/theme/theme.preference";
@@ -14,17 +15,16 @@ import { setThemePreference, useTheme } from "@/web/theme/theme.store";
 import type { NavGroup } from "./nav.items";
 import { SidebarNav } from "./sidebar.nav";
 
-const t = tShell;
 const THEMES: readonly { value: ThemePreference; label: string; icon: typeof SunIcon }[] = [
-  { value: "system", label: t.theme.system, icon: MonitorIcon },
-  { value: "light", label: t.theme.light, icon: SunIcon },
-  { value: "dark", label: t.theme.dark, icon: MoonIcon },
+  { value: "system", label: tLayout.theme.system, icon: MonitorIcon },
+  { value: "light", label: tLayout.theme.light, icon: SunIcon },
+  { value: "dark", label: tLayout.theme.dark, icon: MoonIcon },
 ];
 const ROW = "flex h-12 items-center gap-2.5 rounded-md px-2.5 text-base hover:bg-accent";
 
 /**
- * "Lainnya" bottom sheet (phones): remaining nav groups in 48 px rows, then the account block (avatar, name, role),
- * theme switch, Profil and Keluar. Closes on navigation and on any link tap (also the page already open).
+ * "More" bottom sheet (phones): remaining nav groups in 48 px rows, then the account block (avatar, name, role),
+ * theme switch, Profile and Sign out. Closes on navigation and on any link tap (also the page already open).
  */
 export function MobileMore({
   open,
@@ -53,10 +53,10 @@ export function MobileMore({
         aria-describedby={undefined}
         onCloseAutoFocus={(e) => e.preventDefault()}
       >
-        <SheetTitle className="sr-only">{t.mobileNav.moreTitle}</SheetTitle>
+        <SheetTitle className="sr-only">{tLayout.mobileNav.moreTitle}</SheetTitle>
         {/* biome-ignore lint/a11y/useKeyWithClickEvents: delegated close for link taps; links handle their own keys */}
         <nav
-          aria-label={t.mobileNav.moreTitle}
+          aria-label={tLayout.mobileNav.moreTitle}
           className="flex flex-col gap-4 px-3 pt-4"
           onClick={(e) => {
             if ((e.target as Element).closest("a")) onOpenChange(false);
@@ -72,7 +72,7 @@ export function MobileMore({
               </div>
             </div>
             <fieldset className="mx-2.5 mb-2 grid grid-cols-3 gap-1 rounded-lg bg-muted p-1">
-              <legend className="sr-only">{t.theme.label}</legend>
+              <legend className="sr-only">{tLayout.theme.label}</legend>
               {THEMES.map(({ value, label, icon: Icon }) => (
                 <button
                   key={value}
@@ -91,7 +91,7 @@ export function MobileMore({
             </fieldset>
             <Link to="/profile" className={ROW}>
               <UserIcon className="size-4 text-muted-foreground" aria-hidden />
-              {t.nav.profile}
+              {tShell.nav.profile}
             </Link>
             <button
               type="button"

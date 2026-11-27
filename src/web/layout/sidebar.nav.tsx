@@ -18,7 +18,7 @@ export function SidebarNav({
   groups: readonly NavGroup[];
   collapsed?: boolean;
   onNavigate?: () => void;
-  /** 48 px rows (phone "Lainnya" sheet). */
+  /** 48 px rows (phone "More" sheet). */
   tall?: boolean;
 }) {
   const current = activeNavTo(useLocation().pathname);

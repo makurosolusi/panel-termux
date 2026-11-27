@@ -1,9 +1,12 @@
-import { ArrowLeftIcon } from "lucide-react";
+import { ArrowLeftIcon, LanguagesIcon } from "lucide-react";
 import { useState } from "react";
 import { useSearchParams } from "react-router";
+import { activeLocale } from "@/shared/i18n";
+import { LANGUAGE_NAMES, type Locale } from "@/shared/locale";
 import { signInWithGoogle } from "@/web/auth/auth.client";
 import { Button } from "@/web/components/ui/button";
 import { tAccount } from "@/web/i18n/en.account";
+import { LANG_QUERY_PARAM } from "@/web/i18n/locale.detect";
 import { LogoMark } from "@/web/layout/brand.logo";
 import { useDocumentTitle } from "@/web/layout/document.title";
 import { loginErrorMessage } from "./login.error";
@@ -72,8 +75,28 @@ export function LoginPage() {
             {t.ownLink}
           </a>
         </p>
+        <LanguageSwitch />
       </div>
     </main>
+  );
+}
+
+/**
+ * "Bahasa Indonesia" / "English" link to the other language, written in its own language. No account needed and the
+ * server value is never touched: the boot saves `?lang=` to localStorage and drops it from the URL (PLAN/08 §3.1-3.2).
+ */
+function LanguageSwitch() {
+  const other: Locale = activeLocale() === "en" ? "id" : "en";
+  return (
+    <a
+      href={`?${LANG_QUERY_PARAM}=${other}`}
+      lang={other}
+      hrefLang={other}
+      className="inline-flex min-h-11 items-center gap-1.5 hover:text-foreground"
+    >
+      <LanguagesIcon className="size-4" aria-hidden />
+      {LANGUAGE_NAMES[other]}
+    </a>
   );
 }
 

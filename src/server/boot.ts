@@ -57,8 +57,8 @@ export class PanelAlreadyRunningError extends Error {
     /** Version reported by the running panel's /api/health, null when the listener is not a panel. */
     readonly runningVersion: string | null,
   ) {
-    const who = runningVersion ? ` oleh panel v${runningVersion}` : "";
-    super(`port ${port} sudah dipakai${who}; tidak ada yang diubah`);
+    const who = runningVersion ? ` by panel v${runningVersion}` : "";
+    super(`port ${port} is already in use${who}; nothing was changed`);
     this.name = "PanelAlreadyRunningError";
   }
 }

@@ -32,7 +32,7 @@ describe("Cloudflare Access 401 vs panel 401", () => {
     const access = errorFromResponse(401, null);
     expect(access.kind).toBe("access");
     expect(redirectFor(access)).toBeNull();
-    expect(apiErrorMessage(access)).toBe(tCommon.errors.access);
+    expect(apiErrorMessage(access)).toBe(`${tCommon.errorTitles.access}. ${tCommon.errorSteps.access}`);
 
     const forbidden = errorFromResponse(403, { error: "forbidden" });
     expect(forbidden.kind).toBe("forbidden");
@@ -53,10 +53,13 @@ describe("Cloudflare Access 401 vs panel 401", () => {
     const network = new ApiError("network", null, null, null);
     expect(apiErrorDetail(network)).toBe(tCommon.errorSteps.network);
     expect(apiErrorDetail(network)).not.toContain(tCommon.errorTitles.network);
-    expect(apiErrorMessage(network)).toBe(tCommon.errors.network); // toasts keep the full sentence
+    // toasts keep the full sentence: title + next step
+    expect(apiErrorMessage(network)).toBe("Can't reach the server. Check your internet connection, then try again.");
     expect(apiErrorDetail(errorFromResponse(503, null))).toBe(tCommon.errorSteps.server);
-    expect(apiErrorDetail(errorFromResponse(409, { error: "busy" }), { busy: "Sedang sibuk." })).toBe("Sedang sibuk.");
-    expect(apiErrorDetail(new Error("x"))).toBe(tCommon.errors.generic);
+    expect(apiErrorDetail(errorFromResponse(409, { error: "busy" }), { busy: "Busy right now." })).toBe(
+      "Busy right now.",
+    );
+    expect(apiErrorDetail(new Error("x"))).toBe(tCommon.genericError);
   });
 
   test("AJAX header asks Access for a 401 instead of a redirect", () => {
@@ -73,10 +76,10 @@ describe("error copy", () => {
 
   test("known code first, then 4xx server message, then per kind", () => {
     const conflict = errorFromResponse(409, { error: "name_taken", message: "Name taken" });
-    expect(apiErrorMessage(conflict, { name_taken: "Nama sudah dipakai." })).toBe("Nama sudah dipakai.");
+    expect(apiErrorMessage(conflict, { name_taken: "That name is taken." })).toBe("That name is taken.");
     expect(apiErrorMessage(conflict)).toBe("Name taken");
-    expect(apiErrorMessage(errorFromResponse(503, null))).toBe(tCommon.errors.server);
-    expect(apiErrorMessage(new Error("x"))).toBe(tCommon.errors.generic);
+    expect(apiErrorMessage(errorFromResponse(503, null))).toBe("The server is having problems. Try again in a moment.");
+    expect(apiErrorMessage(new Error("x"))).toBe(tCommon.genericError);
   });
 });
 

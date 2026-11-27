@@ -1,17 +1,19 @@
 import { cn } from "cn";
 import { EllipsisIcon } from "lucide-react";
-import { useState } from "react";
+import { lazy, Suspense, useState } from "react";
 import { NavLink, useLocation } from "react-router";
-import { tShell } from "@/web/i18n/en.shell";
+import { tLayout } from "@/web/i18n/en.layout";
 import { NavBadge } from "@/web/panel/nav.badge.provider";
 import type { Me } from "@/web/session/session.api";
-import { MobileMore } from "./mobile.more";
 import { activeInMore, activeNavTo, type NavGroup, type NavItem } from "./nav.items";
 
-const t = tShell.mobileNav;
+/** The sheet (Radix Dialog) stays off the initial path: rendered right away, so its chunk loads just after the shell. */
+const MobileMore = lazy(() => import("./mobile.more").then((m) => ({ default: m.MobileMore })));
+
+const t = tLayout.mobileNav;
 const SLOT = "flex min-w-0 flex-1 flex-col items-center justify-center gap-0.5 text-[11px] leading-none";
 
-/** Phone bottom bar (< md): four primary destinations + "Lainnya" (sheet with the rest and the account). */
+/** Phone bottom bar (< md): four primary destinations + "More" (sheet with the rest and the account). */
 export function MobileNav({ primary, more, me }: { primary: readonly NavItem[]; more: readonly NavGroup[]; me: Me }) {
   const [open, setOpen] = useState(false);
   const { pathname } = useLocation();
@@ -64,7 +66,9 @@ export function MobileNav({ primary, more, me }: { primary: readonly NavItem[]; 
           </button>
         </li>
       </ul>
-      <MobileMore open={open} onOpenChange={setOpen} groups={more} me={me} />
+      <Suspense fallback={null}>
+        <MobileMore open={open} onOpenChange={setOpen} groups={more} me={me} />
+      </Suspense>
     </nav>
   );
 }

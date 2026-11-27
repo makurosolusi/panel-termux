@@ -18,6 +18,7 @@ import {
 } from "lucide-react";
 import { canAccess, type Role } from "@/shared/roles";
 import { tHistory } from "@/web/i18n/en.history";
+import { tLayout } from "@/web/i18n/en.layout";
 import { tShell } from "@/web/i18n/en.shell";
 
 const n = tShell.nav;
@@ -39,13 +40,13 @@ export type NavItem = {
 };
 
 /** Titled group of sidebar links. */
-export type NavGroup = { key: keyof typeof tShell.groups; label: string; items: readonly NavItem[] };
+export type NavGroup = { key: keyof typeof tLayout.groups; label: string; items: readonly NavItem[] };
 
 /** Full navigation; access per item comes from `canAccess` (shared with the server's area rules). */
 export const NAV_GROUPS: readonly NavGroup[] = [
   {
     key: "server",
-    label: tShell.groups.server,
+    label: tLayout.groups.server,
     items: [
       { to: "/panel", label: n.overview, icon: LayoutDashboardIcon, end: true },
       { to: "/panel/sites", label: n.sites, icon: LayersIcon },
@@ -58,7 +59,7 @@ export const NAV_GROUPS: readonly NavGroup[] = [
   },
   {
     key: "admin",
-    label: tShell.groups.admin,
+    label: tLayout.groups.admin,
     items: [
       { to: "/dev", label: n.health, icon: HeartPulseIcon, end: true },
       { to: "/dev/users", label: n.users, icon: UsersIcon },
@@ -69,7 +70,7 @@ export const NAV_GROUPS: readonly NavGroup[] = [
   },
   {
     key: "account",
-    label: tShell.groups.account,
+    label: tLayout.groups.account,
     items: [{ to: "/profile", label: n.profile, icon: UserIcon, width: "narrow" }],
   },
 ];
@@ -80,7 +81,7 @@ const HIDDEN_PAGES: readonly NavItem[] = [
   { to: "/panel/problems", label: tHistory.problems.title, icon: HistoryIcon, parent: "/panel" },
 ];
 
-/** Phone bottom bar slots 1–4 (PLAN/01 §3.7); slot 5 is the "Lainnya" sheet with everything else. */
+/** Phone bottom bar slots 1–4 (PLAN/01 §3.7); slot 5 is the "More" sheet with everything else. */
 export const MOBILE_PRIMARY: readonly string[] = ["/panel", "/panel/sites", "/panel/services", "/panel/apps"];
 
 /** Groups and links the role may open; empty groups are dropped. */
@@ -89,7 +90,7 @@ export const navGroupsFor = (role: Role): NavGroup[] =>
     (g) => g.items.length > 0,
   );
 
-/** Phone navigation: bottom bar items (empty → no bar) and the "Lainnya" groups (Administrasi first, no Akun). */
+/** Phone navigation: bottom bar items (empty → no bar) and the "More" groups (Administration first, no Account). */
 export function mobileNavFor(role: Role): { primary: NavItem[]; more: NavGroup[] } {
   const groups = navGroupsFor(role);
   const primary = groups.flatMap((g) => g.items).filter((i) => MOBILE_PRIMARY.includes(i.to));
@@ -122,7 +123,7 @@ export function activeNavTo(pathname: string): string | null {
   return item ? (item.parent ?? item.to) : null;
 }
 
-/** Whether the current page lives in the "Lainnya" sheet (its nav item, or Profil in the account block). */
+/** Whether the current page lives in the "More" sheet (its nav item, or Profile in the account block). */
 export function activeInMore(pathname: string, more: readonly NavGroup[]): boolean {
   const current = activeNavTo(pathname);
   if (current === "/profile") return true;

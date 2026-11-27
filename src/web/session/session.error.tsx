@@ -4,7 +4,7 @@ import { Button } from "@/web/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/web/components/ui/card";
 import { tSession } from "@/web/i18n/en.session";
 import { tShell } from "@/web/i18n/en.shell";
-import { ApiError } from "@/web/shared/api.client";
+import { ApiError } from "@/web/shared/api.error";
 import { isChunkLoadError } from "@/web/shared/chunk.error";
 import { useChunkRecovery } from "@/web/shared/use-chunk-recovery";
 
@@ -49,7 +49,7 @@ export function SessionError() {
         <CardContent>
           {kind === "chunk" ? (
             <Button className="w-full" disabled={recovery.state === "checking"} onClick={recovery.retry}>
-              {offline ? c.retry : c.reload}
+              {offline ? tSession.retry : c.reload}
             </Button>
           ) : (
             <Button

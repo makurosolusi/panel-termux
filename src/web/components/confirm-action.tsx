@@ -14,27 +14,27 @@ import {
 import { Button } from "@/web/components/ui/button";
 import { Input } from "@/web/components/ui/input";
 import { tCommon } from "@/web/i18n/en.common";
-import { tShell } from "@/web/i18n/en.shell";
+import { tLayout } from "@/web/i18n/en.layout";
 import { apiErrorMessage, type ErrorCodes } from "@/web/shared/api.client";
 import { useDoneFocus } from "@/web/shared/focus.return";
 import { toast } from "@/web/shared/toast.lazy";
 
-const t = tShell.confirm;
+const t = tLayout.confirm;
 
 type ConfirmBase = {
-  /** The question: "Hapus situs blog?" */
+  /** The question: "Delete site blog?" */
   title: string;
   /** Consequence first, then what stays safe. */
   description: ReactNode;
-  /** Verb + object, same verb as the title: "Hapus situs blog". */
+  /** Verb + object, same verb as the title: "Delete site blog". */
   confirmLabel: string;
   destructive?: boolean;
   codes?: ErrorCodes;
   /** Receives the trimmed typed value (tier typed) for `?confirm=` / `ControlBody.confirm`. Reject = stay open + inline error. */
   onConfirm: (typed?: string) => Promise<unknown>;
-  /** Button text while `onConfirm` runs, for waits longer than a moment ("Menunggu aplikasi berjalan lagi…"). */
+  /** Button text while `onConfirm` runs, for waits longer than a moment ("Waiting for the app to run again…"). */
   pendingLabel?: string;
-  /** "Situs blog dihapus." */
+  /** "Site blog deleted." */
   successToast?: string;
   /** Omitted when the dialog is opened from a "⋯" menu (then use `open`/`onOpenChange`). */
   trigger?: ReactElement;
@@ -178,7 +178,7 @@ export function ConfirmAction(props: ConfirmActionProps) {
   );
 }
 
-/** "Ketik <code>blog</code> untuk konfirmasi": the i18n sentence with the value rendered as code. */
+/** "Type <code>blog</code> to confirm": the i18n sentence with the value rendered as code. */
 function TypedLabel({ value }: { value: string }) {
   const text = t.typedLabel(value);
   const at = text.indexOf(value);

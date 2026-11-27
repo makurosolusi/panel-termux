@@ -3,9 +3,9 @@ import { type StatusTone, TONE_CLASS, TONE_FILL } from "./status.tone";
 import { type StatusKey, statusView } from "./status.vocab";
 
 /**
- * Status pill with a leading dot, e.g. "● Berjalan". Pass `state` (canonical key: label, tone and pulse from the
- * status vocabulary; `label` may override the text, e.g. "Gagal · 3×"), or `tone` + `label` for a badge that is not a
- * status (role, "Mode contoh"). `pulse` animates the dot (static under reduced motion).
+ * Status pill with a leading dot, e.g. "● Running". Pass `state` (canonical key: label, tone and pulse from the
+ * status vocabulary; `label` may override the text, e.g. "Failed · 3×"), or `tone` + `label` for a badge that is not a
+ * status (role, "Demo mode"). `pulse` animates the dot (static under reduced motion).
  */
 export function StatusBadge({
   state,

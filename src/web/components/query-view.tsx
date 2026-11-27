@@ -2,7 +2,7 @@ import { TriangleAlertIcon } from "lucide-react";
 import type { ReactNode } from "react";
 import { Button } from "@/web/components/ui/button";
 import { tCommon } from "@/web/i18n/en.common";
-import { tShell } from "@/web/i18n/en.shell";
+import { tLayout } from "@/web/i18n/en.layout";
 import { apiErrorDetail, type ErrorCodes } from "@/web/shared/api.client";
 import type { ApiQuery } from "@/web/shared/use-api-query";
 import { ErrorState } from "./error-state";
@@ -96,11 +96,11 @@ export function StaleNotice({
       <TriangleAlertIcon className="size-4 shrink-0 text-warning" aria-hidden />
       <div className="min-w-0 flex-1">
         <p role="status" className="font-medium text-warning">
-          {tShell.staleTitle}
+          {tLayout.staleTitle}
         </p>
         {updatedAt && (
           <p className="text-xs text-foreground/80">
-            <RelativeTime at={updatedAt} format={tShell.staleSince} />
+            <RelativeTime at={updatedAt} format={tLayout.staleSince} />
           </p>
         )}
       </div>

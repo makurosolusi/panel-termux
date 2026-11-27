@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { homeFor, isProtectedPath, type Role } from "@/shared/roles";
+import { syncStoredLocale } from "@/web/session/locale.sync";
 import type { MeResult } from "@/web/session/session.api";
 import { sessionErrorKind } from "@/web/session/session.error";
 import { needsFullLoad, notFoundKind, resolveRedirect } from "@/web/session/session.redirect";
@@ -98,5 +99,45 @@ describe("needsFullLoad", () => {
       expect(needsFullLoad("/login", to as string)).toBe(true);
       expect(resolveRedirect(as(role), to as string)).toBeNull(); // landing on home redirects no further
     }
+  });
+});
+
+describe("syncStoredLocale (sign-in completion, DECISIONS E2)", () => {
+  const storage = (initial: string | null) => {
+    const store = new Map<string, string>(initial ? [["panel-termux:lang", initial]] : []);
+    return {
+      store,
+      getItem: (k: string) => store.get(k) ?? null,
+      setItem: (k: string, v: string) => void store.set(k, v),
+      removeItem: (k: string) => void store.delete(k),
+    };
+  };
+  test("account language differs from the cached one → cached for the next boot", () => {
+    const s = storage("en");
+    expect(syncStoredLocale({ locale: "id" }, s)).toBe(true);
+    expect(s.store.get("panel-termux:lang")).toBe("id");
+  });
+  test("nothing cached yet → written", () => {
+    const s = storage(null);
+    expect(syncStoredLocale({ locale: "en" }, s)).toBe(true);
+    expect(s.store.get("panel-termux:lang")).toBe("en");
+  });
+  test("same value or account follows the device → storage untouched", () => {
+    const same = storage("id");
+    expect(syncStoredLocale({ locale: "id" }, same)).toBe(false);
+    const device = storage("id");
+    expect(syncStoredLocale({ locale: null }, device)).toBe(false);
+    expect(device.store.get("panel-termux:lang")).toBe("id");
+  });
+  test("unavailable or throwing storage is not an error", () => {
+    expect(syncStoredLocale({ locale: "id" }, undefined)).toBe(false);
+    const broken = {
+      getItem: () => null,
+      setItem: () => {
+        throw new Error("QuotaExceededError");
+      },
+      removeItem: () => {},
+    };
+    expect(syncStoredLocale({ locale: "id" }, broken)).toBe(false);
   });
 });

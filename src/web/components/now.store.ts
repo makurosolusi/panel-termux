@@ -2,7 +2,7 @@
 // visible. The only `setInterval` allowed in src/web (guard test W7).
 import { useSyncExternalStore } from "react";
 
-/** How often relative times ("3 mnt lalu") re-render. */
+/** How often relative times ("3 min ago") re-render. */
 export const NOW_TICK_MS = 15_000;
 
 let now = new Date();

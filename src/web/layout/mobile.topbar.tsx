@@ -1,7 +1,7 @@
 import { ChevronLeftIcon } from "lucide-react";
 import { Link } from "react-router";
 import type { PageBack } from "@/web/components/page-header";
-import { tShell } from "@/web/i18n/en.shell";
+import { tLayout } from "@/web/i18n/en.layout";
 import type { Me } from "@/web/session/session.api";
 import { UserMenu } from "./user.menu";
 
@@ -26,7 +26,7 @@ export function MobileTopBar({
         {back ? (
           <Link
             to={back.to}
-            aria-label={tShell.mobileNav.back(back.label)}
+            aria-label={tLayout.mobileNav.back(back.label)}
             className="flex size-11 shrink-0 items-center justify-center rounded-md text-muted-foreground hover:bg-accent hover:text-foreground"
           >
             <ChevronLeftIcon className="size-5" aria-hidden />

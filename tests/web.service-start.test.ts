@@ -1,4 +1,4 @@
-// "Jalankan pm2/postgres" button (PLAN/06 §6.1): endpoint, toasts, onStarted.
+// "Start pm2/postgres" button (PLAN/06 §6.1): endpoint, toasts, onStarted.
 import { afterAll, afterEach, describe, expect, mock, spyOn, test } from "bun:test";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
@@ -41,7 +41,7 @@ describe("startService", () => {
     expect(onStarted).toHaveBeenCalledTimes(1);
     expect(calls).toEqual(["POST /api/panel/services/pm2/start"]);
     expect(success).toHaveBeenCalledWith(tServiceStart.started("pm2"));
-    expect(tServiceStart.started("pm2")).toBe("pm2 berjalan lagi dan menyala otomatis saat HP dinyalakan ulang.");
+    expect(tServiceStart.started("pm2")).toBe("pm2 is running again and starts automatically when the phone restarts.");
   });
 
   test("started but still down → error toast, not success", async () => {
@@ -63,7 +63,7 @@ describe("startService", () => {
 describe("ServiceStartButton", () => {
   test("renders the service-specific label", () => {
     const html = (service: "pm2" | "postgres") => renderToStaticMarkup(createElement(ServiceStartButton, { service }));
-    expect(html("pm2")).toContain("Jalankan pm2");
-    expect(html("postgres")).toContain("Jalankan postgres");
+    expect(html("pm2")).toContain("Start pm2");
+    expect(html("postgres")).toContain("Start postgres");
   });
 });

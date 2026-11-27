@@ -91,7 +91,7 @@ describe("PaginationFooter", () => {
     expect(renderToStaticMarkup(createElement(PaginationFooter, { p: p(1) }))).toBe("");
   });
   test("shows position with total", () => {
-    expect(renderToStaticMarkup(createElement(PaginationFooter, { p: p(3) }))).toContain("Halaman 2 dari 3 · 40 entri");
+    expect(renderToStaticMarkup(createElement(PaginationFooter, { p: p(3) }))).toContain("Page 2 of 3 · 40 entries");
   });
 });
 
@@ -148,7 +148,7 @@ describe("QueryView root stays the same element between content and stale", () =
     expect(kids(stale).length).toBe(kids(content).length);
     expect(kids(content)[0]).toBeFalsy(); // StaleNotice slot is kept empty, not dropped
     expect((kids(stale)[1] as { type: unknown }).type).toBe((kids(content)[1] as { type: unknown }).type);
-    expect(renderToStaticMarkup(stale)).toContain("Coba lagi");
+    expect(renderToStaticMarkup(stale)).toContain("Try again");
   });
 });
 

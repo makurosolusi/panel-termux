@@ -47,7 +47,7 @@ describe("instance guard (PLAN/07 §2.4, D2)", () => {
     try {
       const err = await bootRejection(env);
       expect(err.runningVersion).toBe("0.4.0");
-      expect(err.message).toBe(`port ${fake.port} sudah dipakai oleh panel v0.4.0; tidak ada yang diubah`);
+      expect(err.message).toBe(`port ${fake.port} is already in use by panel v0.4.0; nothing was changed`);
       expect(untouched(env)).toBe(true);
     } finally {
       fake.stop(true);

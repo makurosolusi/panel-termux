@@ -9,14 +9,14 @@ import { RelativeTime } from "./relative-time";
 
 const t = tShell.time;
 
-/** Freshness line for live pages: live dot + "Diperbarui 3 mnt lalu" + refresh button. */
+/** Freshness line for live pages: live dot + "Updated 3 min ago" + refresh button. */
 export type PageMeta = {
   updatedAt?: string | Date | null;
   onRefresh?: () => void;
   refreshing?: boolean;
   /** Auto-refresh is on: shows a pulsing dot. */
   live?: boolean;
-  /** The last refresh failed (pass `!!query.error`): warning dot + "gagal memperbarui" instead of the live dot. */
+  /** The last refresh failed (pass `!!query.error`): warning dot + "Refresh failed" instead of the live dot. */
   stale?: boolean;
 };
 

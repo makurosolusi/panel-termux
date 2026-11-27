@@ -9,7 +9,7 @@ import { LANDING_PATH, LOGIN_PATH } from "@/web/session/session.redirect";
 
 const t = tShell.publicNotFound;
 
-/** Guest 404 (DECISIONS A7, copy PLAN/05 §5.7): compact header with logo + "Masuk", then home/sign-in actions. */
+/** Guest 404 (DECISIONS A7, copy PLAN/05 §5.7): compact header with logo + "Sign in", then home/sign-in actions. */
 export function PublicNotFoundPage() {
   useDocumentTitle(t.title);
   return (
