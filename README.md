@@ -26,7 +26,7 @@ Peran lebih tinggi bisa membuka semua halaman peran di bawahnya. Super admin jug
 ## Kebutuhan
 
 - Development: [Bun](https://bun.sh) (versi yang ada di `bun.lock`/`@types/bun`), macOS/Linux.
-- HP: Android 64-bit (arm64), Termux dari F-Droid/GitHub dengan `termux-services` (runit) dan Termux:API (untuk baterai), `pm2` yang dijalankan runit dan membaca `~/sites/ecosystem.config.js` (lihat [Integrasi pm2](#integrasi-pm2-appsjson)), `cloudflared` sebagai service runit dengan `~/.cloudflared/config.yml`, PostgreSQL lokal (role `postgres`, atau set `PGUSER`), `curl`. `grun` hanya perlu untuk site dengan binary glibc. Repo [server-termux](https://github.com/makurosolusi/server-termux) memasang semua ini.
+- HP: Android 64-bit (arm64), Termux dari F-Droid/GitHub dengan `termux-services` (runit) dan Termux:API (untuk baterai), `pm2` yang dijalankan runit dan membaca `~/sites/ecosystem.config.js` (lihat [Integrasi pm2](#integrasi-pm2-appsjson)), `cloudflared` sebagai service runit dengan `~/.cloudflared/config.yml`, PostgreSQL lokal (role `postgres`, atau set `PGUSER`), `curl`. `grun` hanya perlu untuk site dengan binary glibc. `panel init` ([Instal di HP](#instal-di-hp)) memasang semua ini; repo [server-termux](https://github.com/makurosolusi/server-termux) juga bisa.
 - Akun Google Cloud (OAuth client) dan domain di Cloudflare.
 
 ## Google OAuth client
@@ -109,8 +109,8 @@ bun test
 bun run lint        # biome check .
 bun run typecheck   # tsc --noEmit
 bun run bundle:check                  # anggaran ukuran bundle per halaman
-sh scripts/install-phone.test.sh      # uji install-phone.sh dengan stub sv/curl
-sh scripts/install-release.test.sh    # uji install.sh rilis
+sh scripts/install-release.test.sh    # uji shim install.sh rilis
+sh scripts/cli.test.sh dist/panel     # uji CLI binary (setelah bun run build:local)
 sh scripts/package-release.test.sh    # uji pembuatan aset rilis
 ```
 
@@ -125,38 +125,60 @@ Binary Android jalan langsung di Termux tanpa `grun` (sekitar 65 MB RSS).
 
 ### Rilis
 
-Rilis dibuat oleh `.github/workflows/release.yml` saat tag `v*` di-push: typecheck, lint, test, `bun audit`, test shell, cek bahwa tag = `v` + versi `package.json` dan `CHANGELOG.md` punya `## [<versi>]`, build Android, lalu `scripts/package-release.sh` membuat tiga aset: `panel-termux-android-arm64.tar.gz`, `install.sh`, dan `SHA256SUMS`, plus attestation asal build.
+Rilis dibuat oleh `.github/workflows/release.yml` saat tag `v*` di-push: typecheck, lint, test, `bun audit`, test shell, cek bahwa tag = `v` + versi `package.json` dan `CHANGELOG.md` punya `## [<versi>]`, build Android, lalu `scripts/package-release.sh` membuat aset `panel` (binary Android mentah), `install.sh` (shim), `panel-termux-android-arm64.tar.gz`, dan `SHA256SUMS`, plus attestation asal build. Tag `v<versi>-rc.<n>` dirilis sebagai prerelease untuk uji akhir di Termux bersih.
 
 Sebelum membuat tag, jalankan workflow itu sekali lewat **Actions → release → Run workflow** dengan `dry_run` = `true` (default): semua langkah jalan dengan tag `v0.0.0-dryrun` tanpa membuat rilis.
 
 ## Instal di HP
 
-1. Di Termux, unduh dan jalankan installer rilis terbaru:
+1. Di Termux, jalankan satu baris ini. Baris yang sama dipakai untuk memasang di HP baru, memperbarui, dan memperbaiki:
 
    ```sh
-   curl -fsSLo install.sh https://github.com/makurosolusi/panel-termux/releases/latest/download/install.sh && sh install.sh
+   cd && curl -fL --retry 3 -o panel-termux https://github.com/makurosolusi/panel-termux/releases/latest/download/panel && chmod +x panel-termux && ./panel-termux init
    ```
 
-   Installer memeriksa HP (arm64, `termux-services`, ruang kosong minimal 400 MB; tanpa `cloudflared` hanya peringatan), mengunduh `panel-termux-android-arm64.tar.gz`, memeriksanya terhadap `SHA256SUMS`, mengekstraknya ke `~/panel-src/<versi>`, lalu menjalankan `scripts/install-phone.sh`. Versi tertentu: `PANEL_VERSION=v0.3.0 sh install.sh`. Untuk memastikan asal rilis (opsional, di komputer): `gh attestation verify panel-termux-android-arm64.tar.gz --repo makurosolusi/panel-termux`.
+   Baris ini baru jalan setelah v0.5.1 dirilis (aset `panel` belum ada di rilis sebelumnya). Untuk versi tertentu, ganti `latest/download` dengan `download/<tag>`. Mau melihat rencananya dulu tanpa mengubah apa pun: `./panel-termux init --dry-run`.
 
-   `install-phone.sh` idempotent: memasang binary ke `~/panel/panel` (binary lama disimpan sebagai `panel.prev` hanya bila panel yang terpasang sehat atau `panel.prev` belum ada, sehingga versi terakhir yang sehat tidak tertimpa), membuat `~/panel/data` (700), membuat `~/panel/.env` dari `.env.example` bila belum ada (600), memasang service runit `$PREFIX/var/service/panel` (log lewat svlogger termux-services ke `$PREFIX/var/log/sv/panel/`). Di HP yang belum punya pm2 sama sekali (tidak ada `~/sites/ecosystem.config.js` dan tidak ada service runit `pm2`), skrip juga memasang template pm2 dari `deploy/pm2/` (lihat [Integrasi pm2](#integrasi-pm2-appsjson)); setup pm2 yang sudah ada tidak disentuh.
+   `panel init` memasang binary ke `~/panel/panel`, lalu menyiapkan paket, runit, PostgreSQL, `~/panel/.env`, layanan panel, pm2, tunnel cloudflared, Termux:Boot, dan menyalakan panel. Sebelum mengubah apa pun, init mencetak rencananya dan meminta persetujuan. Aman dijalankan ulang: yang sudah ada tidak ditimpa. Yang ditanyakan (hanya yang masih kosong):
+   - **alamat panel**, mis. `panel.contoh.com` (menjadi `APP_BASE_URL`);
+   - **email Google admin** (`SUPER_ADMIN_EMAILS`);
+   - **Google Client ID dan secret**. Init mencetak redirect URI yang harus ditempel di "Authorized redirect URIs" OAuth client ([cara membuat client](#google-oauth-client)), yaitu `https://<alamat>/api/auth/callback/google`;
+   - **login Cloudflare**: init mencetak tautan login cloudflared; buka, klik, dan pilih domain. Init lalu membuat atau memakai ulang tunnel, menambah hostname panel ke `~/.cloudflared/config.yml`, dan membuat DNS-nya.
 
-2. Buat OAuth client Google ([langkah di atas](#google-oauth-client)), isi `~/panel/.env`, lalu jalankan `sh install.sh` lagi. Contoh isian lama dari `.env.example` versi ≤ 0.4.0 (mis. `https://panel.example.com`) dihitung kosong. Selama `.env` belum lengkap, service ditahan dengan file `down` dan skrip keluar dengan kode 3 sambil menyebut variabel yang masih kosong. Setelah lengkap, skrip menjalankan `sv restart panel` dan menunggu `http://127.0.0.1:<PORT>/api/health`.
+   Jawaban `.env` langsung disimpan (mode 600) dan nilainya tidak pernah dicetak. Bila terputus di tengah, jalankan baris yang sama lagi: init melanjutkan dari yang belum ada.
 
-   Bila ada perubahan situs yang sedang berjalan (deploy, buat situs, dll.), `sv restart panel` menunggu perubahan itu selesai, **sampai 2 menit**. Selama itu panel tidak terjangkau. Perubahan yang belum selesai setelah 2 menit terputus dan tampil sebagai "Terputus" di Riwayat perubahan, dengan tombol **Pulihkan** untuk membereskannya.
+   Opsi:
 
-   Upgrade = jalankan perintah langkah 1 lagi (belum ada `panel upgrade`). Setelah upgrade, buka **Situs → Persiapan**: bila ada yang perlu disesuaikan (mis. snippet ecosystem lama), tekan **Perbaiki semua** di sana, tanpa membuka Termux. Rollback: lihat [Rollback](#rollback).
+   | Opsi                              | Fungsi                                                                                                |
+   | --------------------------------- | ----------------------------------------------------------------------------------------------------- |
+   | `-y`, `--yes`                     | Jawab ya untuk rencana, termasuk restart panel saat upgrade (untuk skrip tanpa terminal).             |
+   | `--dry-run`                       | Hanya mencetak rencana; tidak ada yang diubah.                                                        |
+   | `--hostname <domain>`             | Alamat panel, tidak ditanya lagi.                                                                     |
+   | `--admin-email <email>`           | Email Google super admin; boleh diulang.                                                              |
+   | `--skip <postgres\|tunnel\|boot>` | Lewati satu bagian; boleh diulang.                                                                    |
+   | `--ssh-key <https-url\|file\|->`  | Tambah kunci SSH dari URL `https://`, file, atau `-` (tempel), lalu nyalakan sshd hanya dengan kunci. |
+   | `--skip-verify`                   | Lewati cek diri terhadap `SHA256SUMS` rilis. Hanya di terminal, dengan konfirmasi.                    |
 
-3. Tambahkan hostname panel ke tunnel cloudflared HP, mis. di `~/.cloudflared/config.yml` sebelum aturan catch-all:
+   Mode dipilih sendiri dari keadaan HP:
+   - **HP baru** (belum ada PostgreSQL, `~/.cloudflared`, `~/.pm2`, `~/sites`, atau `panel.db`): semua langkah.
+   - **Upgrade** (binary ini lebih baru dari yang terpasang): cukup jalankan baris yang sama lagi. Hanya binary yang ditukar (versi lama disimpan sebagai `panel.prev`) dan layanan panel di-restart. Setelah itu buka **Situs → Persiapan**: bila ada yang perlu disesuaikan (mis. snippet ecosystem lama), tekan **Perbaiki semua** di sana, tanpa membuka Termux.
+   - **Perbaiki** (versi sama): hanya melengkapi yang belum ada. Paket, PostgreSQL, dan Termux:Boot butuh terminal.
 
-   ```yaml
-   - hostname: panel.<domain>
-     service: http://localhost:3200
-   ```
+   Binary yang lebih lama dari yang terpasang ditolak; untuk kembali pakai [`panel rollback`](#rollback).
 
-   buat DNS-nya (`cloudflared tunnel route dns <tunnel> panel.<domain>`) lalu `sv restart cloudflared`.
+   Yang dijaga init:
+   - `pkg upgrade` hanya di HP baru tanpa PostgreSQL. Bila data PostgreSQL ada, tidak pernah ada `pkg upgrade`, dan pemasangan paket yang akan mengganti `cloudflared`, `postgresql`, atau `nodejs` ditolak. `cloudflared` dan `postgresql` ditahan (hold) dari `pkg upgrade`, lihat `panel docs paket`.
+   - `ecosystem.config.js` tulisan tangan dan setup pm2 yang sudah ada tidak disentuh. Yang perlu disesuaikan dikerjakan lewat **Situs → Persiapan → Perbaiki**.
+   - Record DNS yang mengarah ke tunnel lain hanya dipindah setelah kamu menjawab ya di terminal.
+   - pm2 tidak pernah di-restart. Panel hanya di-restart saat upgrade; di mode lain panel yang sedang jalan dibiarkan.
 
-4. Set `APP_BASE_URL` = `https://panel.<domain>`, lalu lindungi **path privat** panel dengan **Cloudflare Access**. Landing page `/`, alur login Google, dan `/profile` sengaja tetap publik.
+   Bila ada perubahan situs yang sedang berjalan (deploy, buat situs, dll.), restart panel saat upgrade menunggu perubahan itu selesai, **sampai 2 menit**. Selama itu panel tidak terjangkau. Perubahan yang belum selesai setelah 2 menit terputus dan tampil sebagai "Terputus" di Riwayat perubahan, dengan tombol **Pulihkan** untuk membereskannya.
+
+   **Cek diri**: sebelum memasang, init mencocokkan dirinya dengan baris `panel` di `SHA256SUMS` rilisnya (diunduh lewat HTTPS). Ini membuktikan unduhan utuh, bukan asal rilis. Untuk memastikan asal rilis (opsional, di komputer): `gh attestation verify panel --repo makurosolusi/panel-termux`.
+
+   `install.sh` dari rilis lama masih ada satu rilis lagi sebagai shim: ia mengunduh `panel`, mencocokkannya dengan `SHA256SUMS`, lalu menjalankan `panel init` (dihapus di 0.6.0). `scripts/install-phone.sh` sudah dihapus.
+
+2. Lindungi **path privat** panel dengan **Cloudflare Access**. Landing page `/`, alur login Google, dan `/profile` sengaja tetap publik.
 
    Di Cloudflare dashboard: **Zero Trust → Access controls → Applications → Create new application → Self-hosted and private**. Buat **satu** aplikasi, lalu **Add public hostname** sekali per path (domain `panel.<domain>` sama semua):
 
@@ -184,13 +206,14 @@ Sebelum membuat tag, jalankan workflow itu sekali lewat **Actions → release �
 
 ### Instal dari source
 
-Tanpa rilis (mis. untuk menguji build sendiri), salin binary dan file deploy dengan struktur folder tetap (`-R`), lalu jalankan `install-phone.sh` di HP:
+Tanpa rilis (mis. untuk menguji build sendiri), salin binary ke HP lalu jalankan `init` dari sana:
 
 ```sh
 bun run build
-rsync -avR --partial dist/panel-android-arm64 scripts/install-phone.sh deploy/sv/panel/run deploy/pm2 .env.example <hp>:panel-src/
-ssh <hp> 'cd ~/panel-src && sh scripts/install-phone.sh ./dist/panel-android-arm64'
+rsync --partial dist/panel-android-arm64 poco: && ssh poco ./panel-android-arm64 init --yes
 ```
+
+Build lokal tidak punya tag rilis, jadi cek diri dilewati. `--yes` menyetujui rencana dan restart panel tanpa terminal; pertanyaan `.env` yang belum terisi tetap kosong dan panel ditahan dengan file `down` sampai kamu menjalankan `init` di terminal.
 
 ### Perintah CLI
 
@@ -200,6 +223,7 @@ Binary yang sama juga punya perintah untuk terminal. Jalankan dari `~/panel` (`c
 | ------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
 | `panel -h`, `--help`, `--h`     | Bantuan; `panel <perintah> --help` untuk satu perintah.                                                                                                                                                |
 | `panel -v`, `--version`, `--v`  | Versi, mis. `panel-termux 0.5.0 (android-arm64, bun 1.x)`.                                                                                                                                             |
+| `panel init [opsi]`             | Pasang, perbarui, atau perbaiki panel di HP ini, lihat [Instal di HP](#instal-di-hp). Coba dulu `--dry-run`.                                                                                           |
 | `panel serve`                   | Menjalankan server. runit tetap menjalankan `panel` tanpa argumen; di terminal, `panel` tanpa argumen hanya mencetak bantuan.                                                                          |
 | `panel doctor [--json]`         | Memeriksa HP tanpa mengubah apa pun: paket dan hold, Termux:Boot/API, runit, `.env`, panel ganda, kartu Persiapan (dengan pesan yang sama), tunnel, versi PostgreSQL. Kode keluar 1 hanya bila ada ❌. |
 | `panel env [--full]`            | Mencetak template `.env` kosong ke stdout. Tulis ke file baru (`panel env > .env.new`); menambah ke `.env` yang sudah berisi (`>>`) ditolak.                                                           |
@@ -212,14 +236,14 @@ Bila ada yang tidak beres: jalankan `panel doctor` dulu. Bila `panel serve` kelu
 
 ### Rollback
 
-`install-phone.sh` mencetak petunjuk ini bila panel baru gagal menyala:
+`panel init` mencetak petunjuk ini bila panel baru gagal menyala:
 
 ```sh
 ~/panel/panel rollback        # tukar panel <-> panel.prev, lalu restart layanan panel
 ~/panel/panel rollback --db   # juga pulihkan panel.db dari snapshot terbaru
 ```
 
-Penukaran tidak pernah membuat `~/panel/panel` hilang, walau HP mati di tengah jalan, dan `panel.prev` tidak pernah dieksekusi. Rollback dua kali = kembali ke versi baru. Bila database sudah dimigrasi versi baru, `panel rollback` memperingatkannya; `--db` menyalin snapshot terbaru ke `panel.db` (perubahan data setelah waktu snapshot hilang), setelah lebih dulu menyimpan `panel.db` sekarang sebagai `snapshots/panel.db.before-rollback.<waktu>`. Salinan `before-rollback` tidak ikut dihapus rotasi snapshot; hapus sendiri bila tidak perlu. Tanpa terminal (skrip), tambahkan `--yes`. Setelah kembali ke 0.4.0 atau lebih lama, jangan jalankan `~/panel/panel` dengan argumen apa pun: binary lama mengabaikannya dan menyalakan panel kedua. Untuk naik lagi, jalankan perintah `install.sh`.
+Penukaran tidak pernah membuat `~/panel/panel` hilang, walau HP mati di tengah jalan, dan `panel.prev` tidak pernah dieksekusi. Rollback dua kali = kembali ke versi baru. Bila database sudah dimigrasi versi baru, `panel rollback` memperingatkannya; `--db` menyalin snapshot terbaru ke `panel.db` (perubahan data setelah waktu snapshot hilang), setelah lebih dulu menyimpan `panel.db` sekarang sebagai `snapshots/panel.db.before-rollback.<waktu>`. Salinan `before-rollback` tidak ikut dihapus rotasi snapshot; hapus sendiri bila tidak perlu. Tanpa terminal (skrip), tambahkan `--yes`. Setelah kembali ke 0.4.0 atau lebih lama, jangan jalankan `~/panel/panel` dengan argumen apa pun: binary lama mengabaikannya dan menyalakan panel kedua. Untuk naik lagi, jalankan lagi baris pasang di [Instal di HP](#instal-di-hp).
 
 Panel membuat snapshot `panel.db.<versi lama>.<waktu>` di `<PANEL_DATA_DIR>/snapshots/` (mode 600) setiap kali boot menemukan migrasi baru untuk database yang sudah ada, dan menyimpan 3 yang terbaru. Bila snapshot gagal (biasanya penyimpanan penuh), migrasi tidak dijalankan, log menyebut penyebabnya, dan panel keluar setelah 60 detik agar runit tidak berputar cepat. Kosongkan ruang, atau tambahkan `PANEL_SKIP_SNAPSHOT=1` ke `~/panel/.env` untuk satu kali start tanpa snapshot, lalu hapus lagi.
 
@@ -484,7 +508,7 @@ Asumsi: HP baru bersih, kamu punya akun Cloudflare (dashboard + R2), akun Google
 
 ## Keamanan
 
-- Login terbuka untuk semua akun Google, tetapi akun baru hanya mendapat peran `user` (cuma `/profile`). Karena siapa pun bisa login, pasang **Cloudflare Access** di depan path privat (`/panel`, `/dev`, `/api/panel`, `/api/dev`) agar hanya email yang kamu izinkan yang sampai ke sana (resep di [Instal di HP](#instal-di-hp) langkah 4). Landing page `/`, `/login`, `/profile`, `/api/auth/*`, `/api/me`, `/api/health`, dan aset bundle sengaja tetap publik. `/api/panel/*` dan `/api/dev/*` tetap dijaga peran di server, jadi Access adalah lapisan tambahan, bukan satu-satunya penjaga.
+- Login terbuka untuk semua akun Google, tetapi akun baru hanya mendapat peran `user` (cuma `/profile`). Karena siapa pun bisa login, pasang **Cloudflare Access** di depan path privat (`/panel`, `/dev`, `/api/panel`, `/api/dev`) agar hanya email yang kamu izinkan yang sampai ke sana (resep di [Instal di HP](#instal-di-hp) langkah 2). Landing page `/`, `/login`, `/profile`, `/api/auth/*`, `/api/me`, `/api/health`, dan aset bundle sengaja tetap publik. `/api/panel/*` dan `/api/dev/*` tetap dijaga peran di server, jadi Access adalah lapisan tambahan, bukan satu-satunya penjaga.
 - **Model kepercayaan**: super admin dan admin sama-sama setara pemilik HP (lihat [Login dan peran](#login-dan-peran)). Program situs yang kamu deploy juga berjalan dengan akses yang sama seperti panel.
 - **Akun Google super admin adalah kunci utama.** Nyalakan 2-Step Verification atau passkey di akun itu. Bila memungkinkan, tambahkan faktor kedua di policy Access (mis. One-time PIN ke email lain).
 - Permintaan API yang mengubah data (`POST`/`PUT`/`PATCH`/`DELETE` di `/api/*`, kecuali `/api/auth/*` yang dijaga Better Auth) hanya diterima dari halaman panel sendiri: header `Origin` harus sama dengan `APP_BASE_URL`, `Sec-Fetch-Site` (bila ada) harus `same-origin`, dan header `X-Requested-With: XMLHttpRequest` wajib ada; selain itu dijawab `403 { "error": "forbidden_origin" }`. Ini menutup serangan CSRF dari site lain di domain yang sama (mis. `solusi.<domain>`), yang tetap ikut membawa cookie sesi panel. Klien non-browser (curl/skrip) cukup mengirim `X-Requested-With: XMLHttpRequest`. Permintaan dengan header `Host` asing dijawab `421`.
