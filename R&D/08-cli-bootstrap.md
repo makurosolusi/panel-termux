@@ -10,6 +10,12 @@ verifikasi)**.
 Di tengah riset, `ssh poco` mulai timeout (Tailscale). Hal yang belum sempat dicek di POCO ditandai **(belum dicek di
 POCO)**.
 
+**Koreksi 2026-11-27 (`wkr-cli-plan-03`)** setelah debat `PLAN/debate/07-cli-bootstrap-debate.md`. Klaim yang
+dibantah debat diperbaiki langsung di tempatnya dan ditandai **(dikoreksi, debat Dn/mn)**: deteksi Termux:Boot/API
+(#1 tabel), opsi A cloudflared (§5.3), `tunnel create -o json` mencetak token (§3.3), `apt install` meng-upgrade
+dependensi (§3.1), mode fake `selectSystem` di Termux kosong (§5.1), pewarisan env (temuan 3). Temuan baru: temuan
+10–12. Keputusan lingkup (0.5.0 = P0, `init` 0.5.1, `upgrade` ditunda) ada di `PLAN/DECISIONS.md` C12–C16.
+
 ## 0. Masukan pemilik
 
 > "project ini harusnya cerdas dapat mendeteksi dan membuatkan / mengisi celah yang belum ada ... aplikasi ini sudah
@@ -19,7 +25,9 @@ POCO)**.
 > melengkapinya dengan kemampuan cli --h -h, -v --v, init, docs dan lainnya yang diperlukan untuk setup awal"
 
 Usulan koordinator yang disetujui: `panel` (tanpa argumen = serve, tidak berubah), `-h/--help`, `-v/--version`,
-`doctor`, `init`, `docs`, `upgrade`/`rollback`; `install.sh` menjadi bootstrap tipis.
+`doctor`, `init`, `docs`, `upgrade`/`rollback`; `install.sh` menjadi bootstrap tipis. **Diubah setelah debat
+(C12–C14):** `panel` tanpa argumen di TTY = bantuan (serve hanya tanpa TTY atau `panel serve`); `init` dan
+`install.sh` tipis pindah ke 0.5.1; `upgrade` ditunda.
 
 ## 1. Ringkasan temuan
 
@@ -33,20 +41,31 @@ Usulan koordinator yang disetujui: `panel` (tanpa argumen = serve, tidak berubah
 3. **Binary memuat `.env` dari working directory** (default `autoloadDotenv: true`, `bun-types` `CompileBuildOptions`).
    Dicoba: binary yang dijalankan di folder berisi `.env` asing mendapat variabelnya di `process.env`. Jalur serve
    _bergantung_ pada ini (run script `cd ~/panel && exec ./panel`), jadi jangan dimatikan; CLI harus membaca
-   `~/panel/.env` secara eksplisit dan tidak percaya `process.env` untuk variabel panel.
+   `~/panel/.env` secara eksplisit dan tidak percaya `process.env` untuk variabel panel. **(dikoreksi, debat D3/D8)**
+   Membaca saja tidak cukup: variabel itu ikut **diwariskan** ke setiap proses anak (`runTermux` memakai `opts.env ??
+   process.env`), termasuk runsvdir yang dinyalakan CLI, sehingga cabang CLI harus menghapus kunci `ENV_VARS` dari
+   `process.env`. Bun juga memuat `.env.local` (prioritas tertinggi), `.env.development` (karena `NODE_ENV` runtime =
+   `development` bila tidak diset), dan `.env.production`; `--no-compile-autoload-dotenv` + `--env-file=.env` tidak
+   memuat apa pun, jadi autoload tidak bisa diganti lewat build.
 4. **`import()` dinamis ikut ter-bundle di binary** (dicoba: modul berat hanya dievaluasi saat cabang serve). Dengan
    entry tipis, `panel -v` tidak perlu mengevaluasi Elysia/Better Auth/Drizzle. Binary sekarang butuh ±0,1–0,3 dtk
    (Mac, hangat) sampai validasi env; di HP lebih lambat (belum diukur).
 5. **"Tutup dan buka lagi Termux" bisa dihindari.** termux-services memulai runsvdir dari
    `$PREFIX/etc/profile.d/start-services.sh` (`export SVDIR=…; (service-daemon start >/dev/null 2>&1 &)`), yang hanya
    jalan saat shell login baru. `service-daemon start` idempoten (pidfile) dan bisa dipanggil langsung oleh `init`.
-   `sv-enable` hanya `rm -f $SVDIR/<s>/down; sv up <s>`.
+   `sv-enable` hanya `rm -f $SVDIR/<s>/down; sv up <s>`. **(dikoreksi, debat m4/m5)** "Idempoten" berarti tidak
+   menyalakan runsvdir kedua, tetapi perintahnya **keluar 1** bila sudah jalan (`start-stop-daemon -S` tanpa `-o`,
+   `set -e`); cek pidfile + `kill -0` dulu. `svlogger` butuh `LOGDIR` (`mkdir -p "$LOGDIR/sv/$service"`), jadi skrip
+   boot dan panggilan dari CLI meng-export `SVDIR` **dan** `LOGDIR`.
 6. **Paket `cloudflared` Termux memiliki folder layanannya sendiri dan menghapusnya saat upgrade.** `prerm` paket
    (POCO, `$PREFIX/var/lib/dpkg/info/cloudflared.prerm`) menjalankan `sv-disable cloudflared; sv down cloudflared; rm -rf
    $SVDIR/cloudflared` tanpa memeriksa argumen, jadi juga saat `pkg upgrade`. Paket baru memasang ulang run script dari
    template `exec cloudflared tunnel run --token-file $HOME/.cloudflared/token` plus file `down`. Run script POCO (`exec
    cloudflared tunnel --no-autoupdate run poco`, ditulis server-termux) **akan hilang dan tunnel mati** pada upgrade
-   cloudflared berikutnya. Ini risiko produksi POCO sekarang, bukan hanya untuk CLI (§5.3).
+   cloudflared berikutnya. Ini risiko produksi POCO sekarang, bukan hanya untuk CLI (§5.3). Paket tidak punya
+   `conffiles` maupun `postinst`; `cloudflared.list` memuat `var/service/cloudflared/down` dan `.../run`. Mitigasi yang
+   dipilih: `apt-mark hold cloudflared postgresql` (`pkg upgrade` = `apt full-upgrade`, yang menghormati hold). **Sudah
+   dijalankan di POCO 2026-11-27 dengan izin pemilik (C15).**
 7. **`pkg upgrade` di HP yang sudah jalan berbahaya:** selain #6, upgrade mayor `postgresql` mengubah format data
    (`$PREFIX/var/lib/postgresql`) sehingga postgres tidak start sampai `pg_upgrade`. server-termux sudah memegang aturan
    yang sama ("a repair rerun must not upgrade openssh/postgres under a live server"): pasang **hanya paket yang
@@ -58,6 +77,16 @@ Usulan koordinator yang disetujui: `panel` (tanpa argumen = serve, tidak berubah
    template ecosystem `put_once`, cloudflared `tunnel create` + `config.yml`, Termux:Boot, watchdog
    `termux-job-scheduler`, `sv -w 30 check`. CLI panel sebaiknya mengikuti urutan dan aturan yang sama, tanpa bagian
    yang khusus pemilik (sshd key-only, `authorized_keys`, Tailscale, docs `~/CLAUDE.md`).
+10. **(baru, debat §1)** Binary Android hanya bergantung pada bionic sistem (`NEEDED libc.so libm.so libdl.so`, interp
+    `/system/bin/linker64`, `objdump` pada `dist/panel-android-arm64`). `pkg upgrade` tidak bisa merusak binary panel
+    yang sedang jalan.
+11. **(baru, debat D1/m1)** Di Termux kosong `sv` belum ada (paket `termux-services`), jadi aturan "tanpa
+    `$PREFIX/bin/sv` = fake" salah untuk CLI. Tanda Termux yang andal: `$PREFIX/bin/pkg` atau `$PREFIX/bin/apt`, atau
+    `TERMUX_VERSION` (diset di POCO walau lewat ssh). `TERMUX_APP_PACKAGE_MANAGER` **tidak** diset lewat ssh, jadi
+    manajer paket dideteksi dari file (`$PREFIX/bin/apt`/`pacman`).
+12. **(baru, debat D11)** Repo Termux hanya membawa satu versi `postgresql` (POCO: `PG_VERSION` 18, `postgres` 18.7).
+    Setelah upgrade mayor, `pg_upgrade` tidak bisa dijalankan karena binary lama tidak ada; satu-satunya jalan adalah
+    `pg_dumpall` **sebelum** upgrade. Karena itu `postgresql` ikut di-hold.
 
 ## 2. Inventaris alur sekarang: Termux kosong → panel jalan
 
@@ -66,35 +95,35 @@ Sumber: README "Instal di HP", `id.landing.ts` (`install`, `how`), `scripts/inst
 mengerjakannya penuh; **sebagian** = semua kecuali satu bagian milik pengguna (login akun, rahasia, aplikasi Android);
 **tidak** = di luar Termux.
 
-| #   | Langkah manual sekarang                                                                                                     | Sumber                                                 | Binary bisa? | Kendala / catatan                                                                                                                                                                                                                   |
-| --- | --------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------ | ------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| 1   | Pasang Termux, Termux:API, Termux:Boot dari F-Droid/GitHub (bukan Play Store)                                               | landing prereqs; server-termux README 1                | **tidak**    | Aplikasi Android. `doctor` bisa mendeteksi Termux:API (`termux-battery-status` dengan timeout; sudah ada di `device.termux.ts`) dan Termux:Boot (hanya bila `~/.termux/boot/` ada — aplikasinya sendiri tak terdeteksi dari Termux) |
-| 2   | Pengaturan Android: matikan pembatas proses anak (Android 12+), baterai "tanpa batasan", autostart, buka Termux:Boot sekali | server-termux README 4                                 | **tidak**    | Tidak bisa dibaca dari Termux tanpa adb. `init` mencetak daftar ini di akhir; `docs` memuatnya                                                                                                                                      |
-| 3   | `pkg upgrade` pertama kali                                                                                                  | server-termux README 2                                 | **ya**       | Hanya di HP baru (§5.2). Mirror dipilih otomatis oleh `pkg` (`select_mirror`, cache 6 jam); bisa lambat/gagal → ulangi, `termux-change-repo` interaktif                                                                             |
-| 4   | `pkg install termux-services`, lalu tutup dan buka lagi Termux                                                              | install-release.sh:26-27; landing                      | **ya**       | Buka-ulang diganti `service-daemon start` (temuan 5). Perlu lab singkat bahwa runsvdir yang dimulai dari `init` bertahan setelah sesi ditutup (§6, L1)                                                                              |
-| 5   | `pkg install curl` (dan `tar`, `sha256sum`)                                                                                 | install-release.sh:23-25                               | **tidak**    | Dibutuhkan _sebelum_ binary ada (bootstrap). Bootstrap Termux biasanya sudah membawa curl/tar/coreutils **(belum dicek di HP baru)**                                                                                                |
-| 6   | `pkg install cloudflared nodejs-lts postgresql termux-api` (+ `glibc-runner` untuk situs glibc)                             | README Kebutuhan; landing; server-termux               | **ya**       | Hanya paket yang hilang (`dpkg -s`). Konflik node (temuan 8). Pacman Termux (`TERMUX_APP_PACKAGE_MANAGER=pacman`) memakai `--noconfirm` — tidak didukung P1                                                                         |
-| 7   | `npm install -g pm2`                                                                                                        | install-phone.sh:126-127                               | **ya**       | Pin `pm2@7.1.2` (versi lab). Butuh jaringan ke registry npm. Jangan memanggil CLI `pm2` lain (B14: daemon liar); server-termux memanggil `pm2 install pm2-logrotate` lalu `pm2 kill` — panel tidak perlu itu                        |
-| 8   | `initdb` postgres + nyalakan layanan                                                                                        | server-termux `step postgres`                          | **ya**       | Paket memasang `$SVDIR/postgres/{run,down}` sebagai conffile (`down` = mati bawaan). `initdb -D $PREFIX/var/lib/postgresql -U postgres --auth-local=trust --auth-host=scram-sha-256` hanya bila `PG_VERSION` belum ada              |
-| 9   | Unduh `install.sh`, jalankan (`curl … && sh install.sh`)                                                                    | README langkah 1                                       | **tidak**    | Satu perintah tetap batas minimum (R&D/07 #50). Menjadi bootstrap tipis                                                                                                                                                             |
-| 10  | Cek arm64, ruang 400 MB, unduh tarball, cek `SHA256SUMS`, ekstrak ke `~/panel-src/<versi>`                                  | install-release.sh                                     | **sebagian** | Unduhan pertama tetap di shell (belum ada binary). Pemeriksaan arsitektur/ruang/checksum tetap di `install.sh`; `upgrade` mengerjakan ulang hal yang sama dari dalam binary                                                         |
-| 11  | Pasang binary ke `~/panel/panel` (simpan `panel.prev`), `~/panel/data` 700, `.env` dari `.env.example` 600                  | install-phone.sh langkah 1–2                           | **ya**       | Binary menyalin dirinya (`process.execPath`) dengan pola `panel.new` → `mv`. `.env.example` di-embed (`with { type: "text" }`, pola `ecosystem.template.ts`)                                                                        |
-| 12  | Buat OAuth client Google (browser, Google Cloud Console)                                                                    | README Google OAuth; landing langkah 2                 | **sebagian** | Hanya pemilik yang bisa membuatnya. `init` menampilkan redirect URI persis `https://<host>/api/auth/callback/google` untuk ditempel, lalu bertanya Client ID/secret                                                                 |
-| 13  | `nano ~/panel/.env`: isi `APP_BASE_URL`, `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `SUPER_ADMIN_EMAILS`, jalankan ulang   | install-phone.sh exit 3; landing langkah 2 & 5         | **ya**       | Prompt; secret dibaca tanpa echo (`setRawMode` ada di `bun-types`); nilai ditulis lewat `encodeEnvLine` (B23) dan divalidasi `parseEnv`. `APP_BASE_URL` diturunkan dari hostname panel                                              |
-| 14  | Service runit `panel` (`run`, `log/run` → svlogger, `down` selama `.env` belum lengkap)                                     | install-phone.sh langkah 3                             | **ya**       | Run script di-embed (`deploy/sv/panel/run`)                                                                                                                                                                                         |
-| 15  | pm2: `~/sites/ecosystem.config.js` + `apps.json` + service runit `pm2` (hanya HP tanpa pm2)                                 | install-phone.sh langkah 4; server-termux `step pm2`   | **ya**       | Sudah ada: fix `sites_dir_create` menulis template (`ecosystemFromTemplate`), fix `ecosystem_block`/`pm2_auto_exit` untuk file yang ada. HP lama: tidak pernah ditimpa                                                              |
-| 16  | `cloudflared tunnel login` (buka URL di browser, pilih domain)                                                              | server-termux README 3; README.md langkah 3 (implisit) | **sebagian** | Pengguna harus login di browser. cloudflared mencetak URL dan menunggu `~/.cloudflared/cert.pem`. `init` bisa membuka URL dengan `termux-open-url` **(belum dicek di POCO)** dan menunggu file itu                                  |
-| 17  | `cloudflared tunnel create <nama>`, tulis `~/.cloudflared/config.yml` (tunnel, credentials-file, catch-all 404)             | server-termux `step cloudflared`                       | **ya**       | `tunnel create -o json`, `tunnel list -n <nama> -o json` ada di 2026.11.2 (dicek `--help` POCO dan sumber). Nama tunnel yang sudah dipakai di akun → gagal: tawarkan memakai yang ada                                               |
-| 18  | Tambah ingress `panel.<domain>` → `http://localhost:3200` sebelum catch-all                                                 | README langkah 3                                       | **ya**       | `insertIngressRule` + `cloudflared.validate` + backup, sama dengan job situs (`ingress.editor.ts`, `site.steps.ts`)                                                                                                                 |
-| 19  | `cloudflared tunnel route dns <tunnel> panel.<domain>`                                                                      | README langkah 3; landing                              | **ya**       | `CloudflaredAdapter.routeDns` (tanpa `--overwrite-dns`, `DnsWrongZoneError` bila cert zona lain)                                                                                                                                    |
-| 20  | Run script cloudflared + `sv up` / `sv restart cloudflared`                                                                 | README langkah 3; server-termux                        | **ya**       | Folder layanan milik paket (temuan 6). Restart di HP yang sudah melayani situs = semua situs putus sebentar → hanya dengan persetujuan                                                                                              |
-| 21  | `sv restart panel` + tunggu `/api/health`                                                                                   | install-phone.sh langkah 5                             | **ya**       | `sv -w 130` (shutdown menunggu job situs, PLAN/03 §4.12)                                                                                                                                                                            |
-| 22  | Cloudflare Access (Zero Trust, 4 path, policy email)                                                                        | README langkah 4; landing langkah 4                    | **sebagian** | Dashboard. Bisa lewat API dengan token berizin Access — fitur baru, P2. `init` mencetak resep singkat + tautan; onboarding panel sudah melacaknya (`access`)                                                                        |
-| 23  | Termux:Boot: `~/.termux/boot/<skrip>` yang memanggil `termux-wake-lock` + `service-daemon start`                            | landing prereqs (opsional); server-termux              | **ya**       | Tulis hanya bila folder `~/.termux/boot/` kosong dari skrip yang menyalakan layanan. POCO punya `start-services` → `~/bin/ensure-services boot` (jangan disentuh)                                                                   |
-| 24  | Watchdog 15 menit (`termux-job-scheduler`)                                                                                  | server-termux                                          | **sebagian** | Butuh Termux:API. Di luar lingkup panel (P2/opsi)                                                                                                                                                                                   |
-| 25  | Upgrade: jalankan perintah curl lagi                                                                                        | README langkah 2; landing                              | **ya**       | `panel upgrade`                                                                                                                                                                                                                     |
-| 26  | Rollback: `sv down`, `cp panel.prev panel`, pilih snapshot, `sv up`                                                         | README Rollback; `rollback_hint`                       | **ya**       | `panel rollback`. Pemulihan `panel.db` dari snapshot tetap pilihan eksplisit (`--db`), karena data setelah upgrade hilang                                                                                                           |
-| 27  | Sesudah panel jalan: simpan kunci data, cadangan, token Cloudflare, situs pertama                                           | onboarding `/dev` (PLAN/05)                            | –            | Sudah ditangani UI. `init` hanya menunjuk ke sana                                                                                                                                                                                   |
+| #   | Langkah manual sekarang                                                                                                     | Sumber                                                 | Binary bisa? | Kendala / catatan                                                                                                                                                                                                                                                             |
+| --- | --------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------ | ------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 1   | Pasang Termux, Termux:API, Termux:Boot dari F-Droid/GitHub (bukan Play Store)                                               | landing prereqs; server-termux README 1                | **tidak**    | Aplikasi Android. **(dikoreksi, debat m2)** Keduanya **bisa** dideteksi: `cmd package list packages` di POCO (Android 16) mencetak `com.termux.boot` dan `com.termux.api` (doctor: timeout 5 dtk, gagal → info). Asal APK: `TERMUX_APK_RELEASE` (`GOOGLE_PLAY_STORE` = rusak) |
+| 2   | Pengaturan Android: matikan pembatas proses anak (Android 12+), baterai "tanpa batasan", autostart, buka Termux:Boot sekali | server-termux README 4                                 | **tidak**    | Tidak bisa dibaca dari Termux tanpa adb. `init` mencetak daftar ini di akhir; `docs` memuatnya                                                                                                                                                                                |
+| 3   | `pkg upgrade` pertama kali                                                                                                  | server-termux README 2                                 | **ya**       | Hanya di HP baru (§5.2). Mirror dipilih otomatis oleh `pkg` (`select_mirror`, cache 6 jam); bisa lambat/gagal → ulangi, `termux-change-repo` interaktif                                                                                                                       |
+| 4   | `pkg install termux-services`, lalu tutup dan buka lagi Termux                                                              | install-release.sh:26-27; landing                      | **ya**       | Buka-ulang diganti `service-daemon start` (temuan 5; keluar 1 bila sudah jalan, butuh `LOGDIR`). Perlu lab bahwa runsvdir yang dimulai dari `init` bertahan setelah sesi ditutup (L1)                                                                                         |
+| 5   | `pkg install curl` (dan `tar`, `sha256sum`)                                                                                 | install-release.sh:23-25                               | **tidak**    | Dibutuhkan _sebelum_ binary ada (bootstrap). Bootstrap Termux biasanya sudah membawa curl/tar/coreutils **(belum dicek di HP baru)**                                                                                                                                          |
+| 6   | `pkg install cloudflared nodejs-lts postgresql termux-api` (+ `glibc-runner` untuk situs glibc)                             | README Kebutuhan; landing; server-termux               | **ya**       | Hanya paket yang hilang (`dpkg -s`). Konflik node (temuan 8). Pacman Termux memakai `--noconfirm`, tidak didukung; dideteksi dari file, bukan env (temuan 11)                                                                                                                 |
+| 7   | `npm install -g pm2`                                                                                                        | install-phone.sh:126-127                               | **ya**       | Pin `pm2@7.1.2` (versi lab). Butuh jaringan ke registry npm. Jangan memanggil CLI `pm2` lain (B14: daemon liar); server-termux memanggil `pm2 install pm2-logrotate` lalu `pm2 kill` — panel tidak perlu itu                                                                  |
+| 8   | `initdb` postgres + nyalakan layanan                                                                                        | server-termux `step postgres`                          | **ya**       | Paket memasang `$SVDIR/postgres/{run,down}` sebagai conffile (`down` = mati bawaan). `initdb -D $PREFIX/var/lib/postgresql -U postgres --auth-local=trust --auth-host=scram-sha-256` hanya bila `PG_VERSION` belum ada                                                        |
+| 9   | Unduh `install.sh`, jalankan (`curl … && sh install.sh`)                                                                    | README langkah 1                                       | **tidak**    | Satu perintah tetap batas minimum (R&D/07 #50). Menjadi bootstrap tipis                                                                                                                                                                                                       |
+| 10  | Cek arm64, ruang 400 MB, unduh tarball, cek `SHA256SUMS`, ekstrak ke `~/panel-src/<versi>`                                  | install-release.sh                                     | **sebagian** | Unduhan pertama tetap di shell (belum ada binary). Pemeriksaan arsitektur/ruang/checksum tetap di `install.sh`; `upgrade` (ditunda, C14) akan mengerjakan ulang hal yang sama dari dalam binary                                                                               |
+| 11  | Pasang binary ke `~/panel/panel` (simpan `panel.prev`), `~/panel/data` 700, `.env` dari `.env.example` 600                  | install-phone.sh langkah 1–2                           | **ya**       | Binary menyalin dirinya (`process.execPath`) dengan pola `panel.new` → `mv`. `.env.example` di-embed (`with { type: "text" }`, pola `ecosystem.template.ts`)                                                                                                                  |
+| 12  | Buat OAuth client Google (browser, Google Cloud Console)                                                                    | README Google OAuth; landing langkah 2                 | **sebagian** | Hanya pemilik yang bisa membuatnya. `init` menampilkan redirect URI persis `https://<host>/api/auth/callback/google` untuk ditempel, lalu bertanya Client ID/secret                                                                                                           |
+| 13  | `nano ~/panel/.env`: isi `APP_BASE_URL`, `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `SUPER_ADMIN_EMAILS`, jalankan ulang   | install-phone.sh exit 3; landing langkah 2 & 5         | **ya**       | Prompt; secret dibaca tanpa echo (`setRawMode` ada di `bun-types`); nilai ditulis lewat `encodeEnvLine` (B23) dan divalidasi `parseEnv`. `APP_BASE_URL` diturunkan dari hostname panel                                                                                        |
+| 14  | Service runit `panel` (`run`, `log/run` → svlogger, `down` selama `.env` belum lengkap)                                     | install-phone.sh langkah 3                             | **ya**       | Run script di-embed (`deploy/sv/panel/run`)                                                                                                                                                                                                                                   |
+| 15  | pm2: `~/sites/ecosystem.config.js` + `apps.json` + service runit `pm2` (hanya HP tanpa pm2)                                 | install-phone.sh langkah 4; server-termux `step pm2`   | **ya**       | Sudah ada: fix `sites_dir_create` menulis template (`ecosystemFromTemplate`), fix `ecosystem_block`/`pm2_auto_exit` untuk file yang ada. HP lama: tidak pernah ditimpa                                                                                                        |
+| 16  | `cloudflared tunnel login` (buka URL di browser, pilih domain)                                                              | server-termux README 3; README.md langkah 3 (implisit) | **sebagian** | Pengguna harus login di browser. cloudflared mencetak URL dan menunggu `~/.cloudflared/cert.pem`. `init` bisa membuka URL dengan `termux-open-url` **(belum dicek di POCO)** dan menunggu file itu                                                                            |
+| 17  | `cloudflared tunnel create <nama>`, tulis `~/.cloudflared/config.yml` (tunnel, credentials-file, catch-all 404)             | server-termux `step cloudflared`                       | **ya**       | **(dikoreksi, debat D4)** `tunnel create -o json` mencetak `TunnelWithToken` **termasuk token**; pakai `tunnel create <nama>` tanpa `-o`, id dari `tunnel list -n <nama> -o json` (tanpa rahasia). Nama yang sudah dipakai di akun → gagal: tawarkan memakai yang ada         |
+| 18  | Tambah ingress `panel.<domain>` → `http://localhost:3200` sebelum catch-all                                                 | README langkah 3                                       | **ya**       | `insertIngressRule` + `cloudflared.validate` + backup, sama dengan job situs (`ingress.editor.ts`, `site.steps.ts`)                                                                                                                                                           |
+| 19  | `cloudflared tunnel route dns <tunnel> panel.<domain>`                                                                      | README langkah 3; landing                              | **ya**       | `CloudflaredAdapter.routeDns` (tanpa `--overwrite-dns`, `DnsWrongZoneError` bila cert zona lain)                                                                                                                                                                              |
+| 20  | Run script cloudflared + `sv up` / `sv restart cloudflared`                                                                 | README langkah 3; server-termux                        | **ya**       | Folder layanan milik paket (temuan 6). Restart di HP yang sudah melayani situs = semua situs putus sebentar → hanya dengan persetujuan                                                                                                                                        |
+| 21  | `sv restart panel` + tunggu `/api/health`                                                                                   | install-phone.sh langkah 5                             | **ya**       | `sv -w 130` (shutdown menunggu job situs, PLAN/03 §4.12)                                                                                                                                                                                                                      |
+| 22  | Cloudflare Access (Zero Trust, 4 path, policy email)                                                                        | README langkah 4; landing langkah 4                    | **sebagian** | Dashboard. Bisa lewat API dengan token berizin Access — fitur baru, P2. `init` mencetak resep singkat + tautan; onboarding panel sudah melacaknya (`access`)                                                                                                                  |
+| 23  | Termux:Boot: `~/.termux/boot/<skrip>` yang memanggil `termux-wake-lock` + `service-daemon start`                            | landing prereqs (opsional); server-termux              | **ya**       | Tulis hanya bila folder `~/.termux/boot/` kosong dari skrip yang menyalakan layanan; export `SVDIR` **dan** `LOGDIR`. POCO punya `start-services` → `~/bin/ensure-services boot` (jangan disentuh)                                                                            |
+| 24  | Watchdog 15 menit (`termux-job-scheduler`)                                                                                  | server-termux                                          | **sebagian** | Butuh Termux:API. Di luar lingkup panel (P2/opsi)                                                                                                                                                                                                                             |
+| 25  | Upgrade: jalankan perintah curl lagi                                                                                        | README langkah 2; landing                              | **ya**       | Tetap = jalankan lagi `install.sh`. `panel upgrade` ditunda sampai rilis bertanda tangan Ed25519 (C14)                                                                                                                                                                        |
+| 26  | Rollback: `sv down`, `cp panel.prev panel`, pilih snapshot, `sv up`                                                         | README Rollback; `rollback_hint`                       | **ya**       | `panel rollback`. Pemulihan `panel.db` dari snapshot tetap pilihan eksplisit (`--db`), karena data setelah upgrade hilang                                                                                                                                                     |
+| 27  | Sesudah panel jalan: simpan kunci data, cadangan, token Cloudflare, situs pertama                                           | onboarding `/dev` (PLAN/05)                            | –            | Sudah ditangani UI. `init` hanya menunjuk ke sana                                                                                                                                                                                                                             |
 
 Hitungan: **ya** 17, **sebagian** 6, **tidak** 4 (Android, satu perintah unduh, prasyarat curl). Setelah CLI, pengguna
 HP baru mengetik **satu perintah** lalu menjawab prompt; tiga kali keluar Termux (browser Google Cloud, browser login
@@ -114,8 +143,12 @@ Cloudflare, pengaturan Android) tidak bisa dihilangkan.
   parse output `apt`; keberhasilan dicek ulang dengan `dpkg -s <paket>` (status `install ok installed`).
 - `TERMUX_APP_PACKAGE_MANAGER` bisa `pacman` (`pkg install` = `pacman -Sy --needed`). P1: hanya apt; pacman → pesan
   "pasang manual: …" (exit 3).
-- Paket yang sudah ada **tidak** di-upgrade (temuan 6/7). `apt install` paket baru bisa menaikkan library dependensinya;
-  itu bawaan apt dan diterima (server-termux melakukan hal sama).
+- Paket yang sudah ada **tidak** di-upgrade (temuan 6/7). **(dikoreksi, debat D9)** `apt install` paket baru bisa
+  menaikkan dependensi yang sudah terpasang, termasuk library di bawah postgres/cloudflared yang hidup. Ini **tidak**
+  diterima di HP yang sudah jalan: jalankan `apt-get -s install <paket>` (simulasi, read-only) dulu dan tolak bila
+  daftar upgrade memuat `cloudflared`/`postgresql`/`nodejs*`. Ctrl-C mengirim SIGINT ke seluruh foreground process
+  group dan bisa memutus dpkg di tengah unpack, jadi langkah paket diawali `dpkg --audit`. Lock dpkg sudah ditunggu apt
+  (`DPkg::Lock::Timeout "120"`, POCO).
 
 ### 3.2 termux-services, runit, boot
 
@@ -139,23 +172,32 @@ Cloudflare, pengaturan Android) tidak bisa dihilangkan.
 - `tunnel run` dengan token memanggil `runWithCredentials`; tanpa token mencari nama di argumen lalu `tunnel:` di config
   (`subcommands.go` `runCommand`). Ingress tetap dibaca dari config default `~/.cloudflared/config.yml` di kedua jalur
   — **dugaan dari sumber, wajib lab L2** — artinya template paket (`--token-file $HOME/.cloudflared/token`) mungkin bisa
-  dipakai apa adanya untuk tunnel lokal dengan `cloudflared tunnel token <nama> > ~/.cloudflared/token` (600). Bila
-  lulus, run script paket tidak perlu diedit dan upgrade paket tidak merusak
-  apa pun selain file `down` (§5.3).
+  dipakai apa adanya untuk tunnel lokal dengan token yang ditulis ke `~/.cloudflared/token` (600). **(dikoreksi, debat
+  D5)** Bahkan bila L2 lulus, upgrade paket tetap menghentikan tunnel dan memasang lagi `down`, jadi semua situs mati
+  sampai ada pemulihan (§5.3).
+- **(dikoreksi, debat D4)** Dua perintah mencetak token tunnel ke stdout: `tunnel create -o json`
+  (`subcommand_context.go:149-190` → `renderOutput(&TunnelWithToken)`, `cfapi/tunnel.go:47-50`) dan `tunnel token`
+  (`subcommands.go:864-900`). `tunnel token --cred-file` menulis JSON, bukan token. Token tidak boleh lewat pipe atau
+  string: `tunnel token` di-spawn dengan stdout = fd file 600 (`O_CREAT|O_EXCL`), dan output cloudflared tidak pernah
+  dicetak atau dimasukkan ke pesan error.
 - `routeDns` panel tidak pernah memakai `--overwrite-dns` (aturan yang ada).
 
 ### 3.4 Binary Bun (`bun build --compile`)
 
-| Perilaku                           | Hasil                                                                                                                 | Bukti                                |
-| ---------------------------------- | --------------------------------------------------------------------------------------------------------------------- | ------------------------------------ |
-| argv                               | `["bun", "/$bunfs/root/<nama>", ...args]`; `execArgv` kosong; `--smol`/`--help` sampai ke skrip                       | eksperimen lokal                     |
-| `Bun.isStandaloneExecutable`       | `true` di binary                                                                                                      | eksperimen + `bun-types`             |
-| `process.execPath`                 | path binary itu sendiri → bisa menyalin dirinya ke `~/panel/panel`                                                    | eksperimen                           |
-| `.env` cwd                         | dimuat otomatis (`autoloadDotenv` default true)                                                                       | eksperimen + `CompileBuildOptions`   |
-| `parseArgs`                        | ada; `strict` melempar `ERR_PARSE_ARGS_UNKNOWN_OPTION`; `--v`/`--h` adalah opsi panjang bernama `v`/`h` (perlu alias) | eksperimen + `@types/node/util.d.ts` |
-| `import()` dinamis                 | ikut ter-bundle dan hanya dievaluasi saat dipanggil                                                                   | eksperimen                           |
-| `prompt()`/`confirm()`             | global Bun (non-rahasia)                                                                                              | `bun-types/globals.d.ts:1010`        |
-| Mengganti binary yang sedang jalan | `rename` atas file yang sedang dieksekusi aman di Linux (inode lama tetap); `install-phone.sh` sudah memakainya       | pola yang sudah berjalan di POCO     |
+| Perilaku                           | Hasil                                                                                                                   | Bukti                                |
+| ---------------------------------- | ----------------------------------------------------------------------------------------------------------------------- | ------------------------------------ |
+| argv                               | `["bun", "/$bunfs/root/<nama>", ...args]`; `execArgv` kosong; `--smol`/`--help` sampai ke skrip                         | eksperimen lokal                     |
+| `Bun.isStandaloneExecutable`       | `true` di binary                                                                                                        | eksperimen + `bun-types`             |
+| `process.execPath`                 | path binary itu sendiri → bisa menyalin dirinya ke `~/panel/panel`                                                      | eksperimen                           |
+| `.env` cwd                         | dimuat otomatis (`autoloadDotenv` default true)                                                                         | eksperimen + `CompileBuildOptions`   |
+| `parseArgs`                        | ada; `strict` melempar `ERR_PARSE_ARGS_UNKNOWN_OPTION`; `--v`/`--h` adalah opsi panjang bernama `v`/`h` (perlu alias)   | eksperimen + `@types/node/util.d.ts` |
+| `import()` dinamis                 | ikut ter-bundle dan hanya dievaluasi saat dipanggil                                                                     | eksperimen                           |
+| `prompt()`/`confirm()`             | global Bun (non-rahasia)                                                                                                | `bun-types/globals.d.ts:1010`        |
+| Mengganti binary yang sedang jalan | `rename` atas file yang sedang dieksekusi aman di Linux (inode lama tetap); `install-phone.sh` sudah memakainya         | pola yang sudah berjalan di POCO     |
+| File `.env` lain                   | `.env.local`, `.env.development`, `.env.production` dari cwd ikut dimuat; tidak bisa dimatikan lewat build (temuan 3)   | eksperimen debat D8                  |
+| `BUN_OPTIONS`, `BUN_BE_BUN`        | `BUN_OPTIONS` menyuntik flag runtime (`execArgv` = isi variabel); `BUN_BE_BUN=1` membuat binary bertindak sebagai `bun` | eksperimen debat m18                 |
+| Dependensi dinamis                 | Hanya bionic sistem (`NEEDED libc.so libm.so libdl.so`, interp `/system/bin/linker64`) (temuan 10)                      | `objdump` debat                      |
+| `import()` dengan splitting        | Isolasi dengan `splitting: true` + plugin tailwind (konfigurasi `scripts/build.ts`) belum diuji; wajib lab L5           | debat D13                            |
 
 ## 4. Cara produk sejenis bootstrap, diagnosa, dan update
 
@@ -193,9 +235,11 @@ Pola yang diambil:
   ada (`new Database(file, { readonly: true })`; panel yang sedang jalan memegang `-wal/-shm`), selain itu DB
   `:memory:` yang dimigrasi (`runMigrations`) → setting default. `secret` tidak dibutuhkan untuk `describeSetting`
   (hanya `isSet`) — CLI tidak membaca `data/secret`.
-- `selectSystem()` memilih mode `fake` bila `$PREFIX/bin/sv` tidak ada → binary di CI/Mac otomatis fake. Pemeriksaan
-  paket (`dpkg -s`) dan bootstrap (`service-daemon`, `.env`, `cert.pem`) belum punya adapter; perlu adapter kecil
-  dengan versi fake.
+- `selectSystem()` memilih mode `fake` bila `$PREFIX/bin/sv` tidak ada → binary di CI/Mac otomatis fake. **(dikoreksi,
+  debat D1/D15)** Aturan ini salah untuk CLI: di Termux kosong `sv` belum ada, sehingga doctor/init akan membaca sistem
+  palsu (temuan 11), dan `selectSystem` menulis `log.info` ke stdout sehingga `--json` rusak. CLI memanggil
+  `createTermuxSystem()`/`createFakeSystem()` langsung; fake hanya dengan `PANEL_CLI_FAKE`. Pemeriksaan paket (`dpkg
+  -s`) dan bootstrap (`service-daemon`, `.env`, `cert.pem`) belum punya adapter; perlu adapter kecil dengan versi fake.
 - Onboarding (`getSetup`) butuh `BackupService.status()` dan DB panel; di luar panel berjalan itu tidak ada.
   `doctor` menampilkan item onboarding hanya sebagai rujukan "buka /dev" — tidak menghitung ulang.
 
@@ -212,6 +256,8 @@ Di HP yang sudah jalan:
   dengan job situs. Aturan aman: **CLI tidak menerapkan fix integrasi selama layanan `panel` `run`** — ia menunjuk ke
   Situs → Persiapan (fix yang sama, dengan lock, audit dan undo).
 - Tidak ada `pkg upgrade`, tidak ada restart pm2 (C3), restart cloudflared hanya dengan persetujuan eksplisit.
+- **(baru, debat D10)** Karena alasan lock yang sama, CLI menyunting `config.yml` hanya bila layanan `panel` tidak
+  `run`.
 
 ### 5.3 Risiko cloudflared upgrade (berlaku juga untuk POCO hari ini)
 
@@ -219,20 +265,28 @@ Upgrade paket = `prerm` menghapus `$SVDIR/cloudflared`, paket baru memasang temp
 layanan berhenti dan tidak start lagi (karena `down`), run script kustom hilang, `config.yml` dan `cert.pem` tetap.
 Opsi:
 
-| Opsi | Isi                                                                                                                  | Nilai                                                                                                    |
-| ---- | -------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------- |
-| A    | Pakai template paket: `cloudflared tunnel token <nama> > ~/.cloudflared/token` (600), run script tidak diedit        | Tahan upgrade kecuali `down` (doctor menawarkan `sv-enable`). Butuh lab L2 (ingress lokal tetap dipakai) |
-| B    | Tulis run script sendiri (seperti server-termux), doctor mendeteksi bila diganti template dan `init` menulisnya lagi | Jalan sekarang; tunnel tetap mati sampai pengguna menjalankan `panel init`/`doctor`                      |
+| Opsi | Isi                                                                                                                  | Nilai                                                                                                                      |
+| ---- | -------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------- |
+| A    | Pakai template paket: token ditulis ke `~/.cloudflared/token` (600) lewat fd file, run script tidak diedit           | **(dikoreksi, debat D5)** Tidak tahan upgrade: `down` saja sudah berarti semua situs mati sampai `sv-enable`. Butuh lab L2 |
+| B    | Tulis run script sendiri (seperti server-termux), doctor mendeteksi bila diganti template dan `init` menulisnya lagi | Jalan sekarang; tunnel tetap mati sampai pengguna menjalankan `panel init`/`doctor`                                        |
 
 Rekomendasi: A bila L2 lulus, B sebagai cadangan. Doctor tetap memeriksa `down` + isi run script di kedua kasus. Temuan
 ini perlu disampaikan ke pemilik untuk POCO (jangan `pkg upgrade cloudflared` sampai diputuskan).
+
+**(dikoreksi, debat D5)** Kedua opsi butuh langkah pemulihan setelah upgrade paket. Pencegahan native-nya adalah
+`apt-mark hold cloudflared postgresql`; POCO sudah di-hold 2026-11-27 dengan izin pemilik (C15). Doctor `pkg_held`
+memeriksa hold, `cloudflared_down_file` menjadi error bila `config.yml` ada, dan `panel docs paket` memuat resep upgrade
+aman (`sv down` → `apt-mark unhold` → `pkg install` → pulihkan `run` → hapus `down` → `sv up` → `hold`). Opsi C
+(layanan tunnel milik panel di folder yang tidak dikenal dpkg) dicatat sebagai backlog.
 
 ### 5.4 Rahasia
 
 - Prompt secret: raw mode, tanpa echo, tidak pernah dicetak ulang, tidak masuk log/state/argv. Ditulis langsung ke
   `.env` (600) lewat `encodeEnvLine`. Doctor hanya menyebut nama variabel yang kosong (pola `install-phone.sh`).
-- Token tunnel (opsi A) ditulis cloudflared langsung ke file lewat stdout yang diarahkan oleh CLI ke file 600,
-  tidak pernah lewat terminal.
+- Token tunnel (opsi A) ditulis cloudflared langsung ke file lewat stdout yang diarahkan oleh CLI ke fd file 600
+  (`O_CREAT|O_EXCL`), tidak pernah lewat pipe, string, atau terminal. `tunnel create` dijalankan tanpa `-o json` (§3.3).
+- **(baru, debat D3)** Kunci `.env` panel dihapus dari `process.env` di cabang CLI sebelum modul apa pun dimuat, supaya
+  `sv`, `npm` (lifecycle script dari registry), dan runsvdir tidak mewarisi rahasia.
 - `cert.pem` milik pengguna (login Cloudflare), tidak dibaca isinya, hanya keberadaannya.
 
 ### 5.5 Ukuran dan waktu start
@@ -242,6 +296,9 @@ dan efek samping modul. Entry tipis dengan `import()` dinamis per perintah membu
 dan jalur serve tetap sama persis.
 
 ## 6. Lab yang dibutuhkan (POCO terisolasi atau HP/emulator kosong)
+
+Daftar final (L1–L8, lokasi, dan gerbang) ada di `PLAN/07-cli-bootstrap.md` §14. Tanpa Docker (C16). Tabel di bawah
+adalah daftar awal riset.
 
 | #   | Pertanyaan                                                                                                                    | Kenapa                                      |
 | --- | ----------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------- |
@@ -254,5 +311,6 @@ dan jalur serve tetap sama persis.
 
 - Cloudflare Access lewat API (butuh token berizin Access) — P2.
 - Watchdog `termux-job-scheduler`, sshd/Tailscale — milik server-termux, bukan panel.
-- Upgrade dari UI panel (tombol "Perbarui") — memakai `panel upgrade` di belakang; butuh PLAN sendiri.
+- Upgrade dari UI panel (tombol "Perbarui") — memakai `panel upgrade` di belakang; butuh PLAN sendiri. `panel upgrade`
+  sendiri ditunda sampai rilis bertanda tangan Ed25519 (C14).
 - Pacman Termux — hanya pesan manual.
