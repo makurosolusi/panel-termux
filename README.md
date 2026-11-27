@@ -233,7 +233,7 @@ Panel memiliki `~/sites/apps.json` (dibuat otomatis saat start bila belum ada). 
 
 - Di `ecosystem.config.js` panel hanya menambahkan blok bertanda `panel-termux:apps v1` di **akhir** file (dan menghapus `...require("./apps.json")` lama bila ada). Aplikasi tulisan tangan tidak diubah dan tidak di-restart. Penjaga `pm2-guard` hanya ditambahkan bila tidak ada aplikasi tulisan tangan.
 - Di run script layanan pm2 panel hanya menambahkan `--no-auto-exit` setelah `pm2-runtime`. Ini berlaku saat pm2 start berikutnya (HP atau pm2 dinyalakan ulang). **Mulai ulang pm2 sekarang** (opsional, meminta konfirmasi yang menyebut aplikasi yang berjalan) memeriksa semua aplikasi kembali berjalan; bila tidak, panel menawarkan **Kembalikan file ecosystem dan mulai ulang pm2**.
-- Folder situs yang belum ada bisa dibuat dari kartu yang sama.
+- Folder situs yang belum ada bisa dibuat dari kartu yang sama. `apps.json` yang rusak disusun ulang dari daftar situs panel, dan `ecosystem.config.js` yang belum ada dibuat dari template [`deploy/pm2/ecosystem.config.js`](deploy/pm2/ecosystem.config.js). Setelah perbaikan yang berlaku saat pm2 start berikutnya, kartu menawarkan **Mulai ulang pm2 sekarang**.
 - Sebelum menulis, panel memvalidasi hasilnya dengan `node`; bila gagal, file lama tetap dipakai ("Tidak diterapkan"). pm2 tidak pernah di-restart oleh perbaikan itu sendiri.
 - **Batalkan perubahan** mengembalikan tiap file yang diubah ke versi sebelum perbaikan (satu undo per file). Salinan disimpan di `<PANEL_DATA_DIR>/fix-backups/`, 10 terakhir per file, hanya di HP (tidak ikut cadangan R2/S3 karena ecosystem bisa memuat `env` rahasia).
 - File yang tidak bisa diubah dengan aman (bukan UTF-8, symlink, penanda blok rusak, `apps.json` dipakai dengan cara lain) tidak disentuh. Baris itu menyebut alasannya dan membuka **Cara manual (untuk pengguna teknis)**.
@@ -279,9 +279,13 @@ Untuk file tulisan tangan, bagian Cara manual di kartu Persiapan menampilkan blo
 
 **Situs → Buat situs**: isi nama, satu atau beberapa hostname, port (disarankan otomatis dari `sites.port_range`), database opsional, dan variabel `.env` tambahan. Wizard memeriksa nama, port, dan hostname saat diketik. Panel menjalankan perubahan bertahap: folder `~/sites/<nama>` → database dan role Postgres (opsional, `DATABASE_URL` ditulis ke `.env`) → `.env` (`PORT` diisi panel) → entri `apps.json` → ingress `config.yml` (divalidasi cloudflared dulu, backup `config.yml.bak`) → CNAME DNS → satu kali restart cloudflared. Bila satu langkah gagal, langkah sebelumnya di-undo. Progres per langkah, durasinya, dan log-nya terlihat di **Riwayat perubahan** (`/panel/jobs`).
 
-DNS dibuat lewat token API Cloudflare bila diisi. Tanpa token, panel memakai login cloudflared HP (`~/.cloudflared/cert.pem`, `cloudflared tunnel route dns`) dan hanya menerima hasilnya bila cloudflared membuat record dengan nama yang persis sama; menghapus record itu nanti tetap butuh token. Bila keduanya tidak tersedia, atau cloudflared membuat record di zona lain, langkah DNS dilewati (situs tetap dibuat) dan panel menampilkan kartu record siap salin (tipe, nama, isi, proxy) dengan **Periksa lagi**.
+DNS dibuat lewat token API Cloudflare bila diisi. Tanpa token, panel memakai login cloudflared HP (`~/.cloudflared/cert.pem`, `cloudflared tunnel route dns`) dan hanya menerima hasilnya bila cloudflared membuat record dengan nama yang persis sama; menghapus record itu nanti tetap butuh token. Bila keduanya tidak tersedia, atau cloudflared membuat record di zona lain, langkah DNS dilewati (situs tetap dibuat) dan panel menampilkan kartu record siap salin (tipe, nama, isi, proxy) dengan **Periksa lagi**. Ringkasan wizard menyebut cara DNS yang akan dipakai.
 
 Di halaman detail situs: tambah/hapus domain, ubah variabel lingkungan (tempel `.env` dengan pratinjau; "Simpan" atau "Simpan dan mulai ulang" yang mengembalikan nilai lama bila aplikasi gagal sehat), mulai ulang, dan pengaturan cek kesehatan (path, status yang diharapkan, batas waktu 10-300 detik, default 60).
+
+Rute domain yang ditulis manual di `config.yml` juga bisa dihapus dari detail situs: ketik nama domainnya untuk konfirmasi. Panel hanya menghapus baris rute itu; bagian lain config tidak diubah.
+
+Bila folder situs hilang dari HP, deploy ke situs buatan panel tanpa database membuat ulang folder itu. Untuk situs dengan database atau situs adopsi, panel tidak menebak isinya dan menampilkan panduan dengan **Hapus situs** dan **Buka Cadangan**.
 
 Perubahan yang terputus (panel di-restart di tengah jalan) tampil "Terputus" dengan tombol **Pulihkan**, yang membereskan sisa langkahnya; hapus situs atau domain yang terputus bisa diulang (**Ulangi hapus situs**, **Ulangi hapus domain**).
 
@@ -480,6 +484,7 @@ Asumsi: HP baru bersih, kamu punya akun Cloudflare (dashboard + R2), akun Google
 - Setiap perubahan ingress me-restart cloudflared, sehingga **semua** domain di tunnel putus beberapa detik.
 - Panel tidak bisa memberi tahu saat dirinya atau HP mati (lihat [Pemantauan dan notifikasi](#pemantauan-dan-notifikasi)).
 - Panel menulis `apps.json`, `.env`, `config.yml`, dan file yang diperbaiki dengan fsync (file dan folder) sebelum rename. Di POCO, `/data` memakai f2fs `fsync_mode=nobarrier`: urutan tulis terjaga, tetapi isi file tidak dijamin selamat bila HP mati mendadak tepat saat menulis. Salinan di `fix-backups/` dan validasi Persiapan membantu memulihkannya.
+- Batas diam koneksi HTTP panel 120 detik: permintaan yang tidak dijawab selama itu diputus.
 - Upload multipart S3 belum diuji dengan dump besar.
 - Panggilan nyata ke R2 dan API Cloudflare belum diuji end-to-end (hanya dengan mock di test).
 
