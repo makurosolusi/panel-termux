@@ -5,6 +5,7 @@ import { join } from "node:path";
 import { type CliHost, type FakeScenarioName, type ProcInfo, probePaths } from "@/cli/cli.host";
 import { createFakeHost, FAKE_PANEL_PID, type FakeHost } from "@/cli/cli.host.fake";
 import { createCliOut } from "@/cli/cli.output";
+import { REINSTALL } from "@/cli/doctor.checks.base";
 import { doctorCommand, openDoctorDb, runDoctor } from "@/cli/doctor.command";
 import { openDb } from "@/server/db/client";
 import { runMigrations } from "@/server/db/migrate";
@@ -75,6 +76,11 @@ describe("scenarios (PLAN/07 §3.1, §9)", () => {
     expect(get(report, "pkg_cloudflared")?.hint).toBe("jalankan: pkg install cloudflared");
     expect(get(report, "pkg_cloudflared")?.action).toBe("manual");
     expect(r.stdout).toContain("❌ cloudflared belum terpasang\n     → jalankan: pkg install cloudflared");
+    // 0.5.1: missing install pieces point at `panel init`, never at the removed install.sh
+    expect(get(report, "binary_installed")?.hint).toBe(REINSTALL);
+    expect(get(report, "binary_installed")?.action).toBe("init");
+    expect(REINSTALL).toContain("panel init");
+    expect(r.stdout).not.toContain("install.sh");
   });
 
   test("ready: no error, exit 0, panel healthy line", async () => {

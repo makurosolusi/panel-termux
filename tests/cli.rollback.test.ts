@@ -69,11 +69,25 @@ function withSnapshot(data: string, dbVersion: string, snapVersion: string) {
 }
 
 describe("panel rollback: refusals change nothing", () => {
+  test("no ~/panel/panel → 1, hint points at panel init / the install line", async () => {
+    const { host, dir } = setup();
+    rmSync(join(dir, "panel"));
+    const r = await run(host, { yes: true });
+    expect(r.code).toBe(1);
+    expect(r.stderr).toContain("Tidak ada binary panel");
+    expect(r.stderr).toContain("panel init");
+    expect(r.stderr).not.toContain("install.sh");
+    expect(existsSync(join(dir, "panel.prev"))).toBe(true);
+    expect(svCalls(host)).toEqual([]);
+  });
+
   test("no panel.prev → 1", async () => {
     const { host, dir } = setup({ prev: null });
     const r = await run(host, { yes: true });
     expect(r.code).toBe(1);
     expect(r.stderr).toContain("Tidak ada versi sebelumnya");
+    expect(r.stderr).toContain("panel init menyimpannya saat upgrade");
+    expect(r.stderr).not.toContain("install.sh");
     expect(readFileSync(join(dir, "panel"), "utf8")).toBe(NEW);
     expect(svCalls(host)).toEqual([]);
   });
