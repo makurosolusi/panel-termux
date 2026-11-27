@@ -5,7 +5,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createTermuxCloudflared, parseRouteDns } from "@/server/system/cloudflared.termux";
 import { createTermuxRunit, uptimeFromStatus } from "@/server/system/runit.termux";
-import { DnsWrongZoneError, SystemError } from "@/server/system/system.types";
+import { DnsRecordExistsError, DnsWrongZoneError, SystemError } from "@/server/system/system.types";
 
 const prefix = mkdtempSync(join(tmpdir(), "panel-termux-sys-"));
 const bin = join(prefix, "bin");
@@ -119,6 +119,24 @@ describe("cloudflared route dns (PLAN/06 §6.4 B, gate G0)", () => {
     expect(called()).toContain("cloudflared tunnel route dns t1 blog.contoh.com");
     expect(called()).not.toContain("overwrite");
     spy("cloudflared", 'echo "ERR An A, AAAA, or CNAME record with that host already exists" >&2; exit 1');
-    await expect(cf.routeDns("t1", "blog.contoh.com")).rejects.toThrow(/exited 1: .*already exists/);
+    const exists = await cf.routeDns("t1", "blog.contoh.com").catch((e: unknown) => e);
+    expect(exists).toBeInstanceOf(DnsRecordExistsError);
+    expect((exists as DnsRecordExistsError).hostname).toBe("blog.contoh.com");
+    spy("cloudflared", 'echo "ERR Failed to add route: code: 1001, reason: unauthorized" >&2; exit 1');
+    const other = await cf.routeDns("t1", "blog.contoh.com").catch((e: unknown) => e);
+    expect(other).toBeInstanceOf(SystemError);
+    expect(other).not.toBeInstanceOf(DnsRecordExistsError);
+    expect((other as Error).message).toMatch(/exited 1: .*unauthorized/);
+  });
+
+  test("routeDns overwrite: --overwrite-dns before the tunnel; the updated line counts as success", async () => {
+    rmSync(calls, { force: true });
+    spy("cloudflared", `echo "${ADDED}" >&2`);
+    const cf = createTermuxCloudflared(join(prefix, "config.yml"));
+    expect(await cf.routeDns("t1", "blog.contoh.com", { overwrite: true })).toEqual({ created: true });
+    expect(called()).toContain("cloudflared tunnel route dns --overwrite-dns t1 blog.contoh.com");
+    expect(parseRouteDns("INF blog.contoh.com updated to route to your tunnel", "blog.contoh.com")).toEqual({
+      created: true,
+    });
   });
 });

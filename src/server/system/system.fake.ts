@@ -8,7 +8,7 @@ import { createOfflineClients } from "./external.fake";
 import { FAKE_INTEGRATIONS, type FakeIntegration, writeFakeIntegration } from "./fake.integration";
 import { createFakePm2, type FakePm2Behaviour } from "./pm2.fake";
 import { createFakePostgres } from "./postgres.fake";
-import type { RunitControlOptions, RunitService, SystemAdapters } from "./system.types";
+import { DnsRecordExistsError, type RunitControlOptions, type RunitService, type SystemAdapters } from "./system.types";
 
 export { fakeEcosystem } from "./fake.integration";
 
@@ -165,7 +165,7 @@ export function createFakeSystem({
   });
 
   const svDir = join(home, "usr", "var", "service");
-  const routed = new Set<string>();
+  const routed = new Map<string, string>(); // fqdn → tunnel its CNAME points at
   const listening = (port: number) => listeningPorts.includes(port) || listens(port);
 
   const svcView = (s: FakeSvc): RunitService => ({
@@ -220,14 +220,18 @@ export function createFakeSystem({
       listIngress: cloudflared.listIngress,
       probe: async (hostname) => (hostname.startsWith("old.") ? { status: 502, ms: 40 } : { status: 200, ms: 12 }),
       validate: fakeValidate,
-      // Like cloudflared with a cert.pem of FAKE_DNS_ZONE: a hostname outside the zone gets the zone appended.
-      async routeDns(_tunnel, hostname) {
+      // Like cloudflared with a cert.pem of FAKE_DNS_ZONE: a hostname outside the zone gets the zone appended; a
+      // record of another tunnel is refused unless `overwrite` (C19).
+      async routeDns(tunnel, hostname, { overwrite = false } = {}) {
         await sleep(delayMs);
         const fqdn = hostname.endsWith(`.${FAKE_DNS_ZONE}`) ? hostname : `${hostname}.${FAKE_DNS_ZONE}`;
-        const out = routed.has(fqdn)
-          ? `INF ${fqdn} is already configured to route to your tunnel`
-          : `INF Added CNAME ${fqdn} which will route to this tunnel`;
-        routed.add(fqdn);
+        const current = routed.get(fqdn);
+        if (current !== undefined && current !== tunnel && !overwrite) throw new DnsRecordExistsError(hostname);
+        const out =
+          current === tunnel
+            ? `INF ${fqdn} is already configured to route to your tunnel`
+            : `INF Added CNAME ${fqdn} which will route to this tunnel`;
+        routed.set(fqdn, tunnel);
         return parseRouteDns(out, hostname);
       },
     },

@@ -6,7 +6,12 @@ import { join } from "node:path";
 import type { SiteDnsProvider } from "@/server/cloudflare/dns.provider";
 import { DnsNotConfiguredError } from "@/server/cloudflare/dns.types";
 import { dnsEnsureStep } from "@/server/sites/site.steps";
-import { type CloudflaredAdapter, DnsWrongZoneError, SystemError } from "@/server/system/system.types";
+import {
+  type CloudflaredAdapter,
+  DnsRecordExistsError,
+  DnsWrongZoneError,
+  SystemError,
+} from "@/server/system/system.types";
 
 const dirs: string[] = [];
 afterAll(() => {
@@ -26,7 +31,7 @@ function cf(cert: boolean, route: (host: string) => Promise<{ created: boolean }
   const dir = mkdtempSync(join(tmpdir(), "panel-cf-"));
   dirs.push(dir);
   if (cert) writeFileSync(join(dir, "cert.pem"), "test-only");
-  const routeDns = mock(async (_t: string, h: string) => route(h));
+  const routeDns = mock(async (_t: string, h: string, _o?: unknown) => route(h));
   return { adapter: { configPath: join(dir, "config.yml"), routeDns } as unknown as CloudflaredAdapter, routeDns };
 }
 const run = (hosts: string[], adapter: CloudflaredAdapter | undefined, owned = new Set<string>()) =>
@@ -67,6 +72,18 @@ describe("dnsEnsureStep without a token", () => {
       params: { hostname: "blog.contoh.com" },
       detail: "record with that host already exists",
     });
+  });
+
+  test("record of another tunnel → dns_route_failed skipped; the site job never asks for --overwrite-dns", async () => {
+    const { adapter, routeDns } = cf(true, async (h) => {
+      throw new DnsRecordExistsError(h);
+    });
+    expect(await run(["blog.contoh.com"], adapter)).toMatchObject({
+      code: "dns_route_failed",
+      skipped: true,
+      params: { hostname: "blog.contoh.com" },
+    });
+    expect(routeDns.mock.calls).toEqual([[TUNNEL, "blog.contoh.com"]]); // no options argument at all
   });
 
   test("no cert.pem → dns_no_token with the hostnames for the manual record card", async () => {

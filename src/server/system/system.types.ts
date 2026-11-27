@@ -87,8 +87,21 @@ export class DnsWrongZoneError extends SystemError {
   }
 }
 
+/**
+ * Thrown by `routeDns` without `overwrite` when the hostname already has a DNS record for another target (C19).
+ * cloudflared does not say which target, so the old one is unknown here.
+ */
+export class DnsRecordExistsError extends SystemError {
+  constructor(readonly hostname: string) {
+    super(`cloudflared route dns ${hostname}: a DNS record for this hostname already exists`);
+  }
+}
+
 /** `routeDns` outcome: `created` = new CNAME, false = it already pointed at this tunnel. */
 export type RouteDnsResult = { created: boolean };
+
+/** `routeDns` options: `overwrite` = `--overwrite-dns` (only `panel init` after a TTY yes, C19; site jobs never). */
+export type RouteDnsOptions = { overwrite?: boolean };
 
 /** cloudflared ingress config and reachability of its hostnames. */
 export interface CloudflaredAdapter {
@@ -99,10 +112,11 @@ export interface CloudflaredAdapter {
   /** `cloudflared tunnel --config <path> ingress validate` on a candidate config file. */
   validate(path: string): Promise<{ ok: boolean; message: string }>;
   /**
-   * `cloudflared tunnel route dns <tunnel> <hostname>` (uses ~/.cloudflared/cert.pem, never --overwrite-dns).
-   * Throws DnsWrongZoneError when the reported name differs from `hostname`, SystemError on any other failure.
+   * `cloudflared tunnel route dns <tunnel> <hostname>` (uses ~/.cloudflared/cert.pem; `--overwrite-dns` only with
+   * `overwrite`). Throws DnsWrongZoneError when the reported name differs from `hostname`, DnsRecordExistsError when
+   * another record has the name (no overwrite), SystemError on any other failure.
    */
-  routeDns(tunnel: string, hostname: string): Promise<RouteDnsResult>;
+  routeDns(tunnel: string, hostname: string, opts?: RouteDnsOptions): Promise<RouteDnsResult>;
 }
 
 /** Local PostgreSQL databases. Names passed to create/drop must match SQL_IDENT_RE. */
