@@ -1,6 +1,5 @@
 import { DownloadIcon, Trash2Icon } from "lucide-react";
-import { useEffect, useRef, useState } from "react";
-import { useLocation } from "react-router";
+import { useState } from "react";
 import type { SecurityStatus } from "@/shared/security.types";
 import { ConfirmAction } from "@/web/components/confirm-action";
 import { InlineCode } from "@/web/components/inline-code";
@@ -9,9 +8,9 @@ import { RelativeTime } from "@/web/components/relative-time";
 import { Section } from "@/web/components/section";
 import { StatusBadge } from "@/web/components/status-badge";
 import { Button } from "@/web/components/ui/button";
-import { DATA_KEY_ANCHOR, devAnchorFromHash } from "@/web/dev/onboarding.state";
 import { tSecurity } from "@/web/i18n/en.security";
 import { tSettings } from "@/web/i18n/en.settings";
+import { DATA_KEY_ANCHOR } from "@/web/shared/dev.anchors";
 import { toast } from "@/web/shared/toast.lazy";
 import { exportDataKey, isReauthRequired, resetDataKey, SECURITY_ERROR_CODES } from "./security.api";
 import { Notice, ReauthNotice } from "./security.notice";
@@ -31,12 +30,6 @@ export const settingLabel = (key: string): string =>
 export function DataKeyCard({ status, onChanged }: { status: SecurityStatus; onChanged: () => void }) {
   const key = status.dataKey;
   const [reauth, setReauth] = useState(false);
-  const ref = useRef<HTMLDivElement>(null);
-  const { hash } = useLocation();
-  // rendered after the security fetch, so the browser's own hash jump (and any 0.5.x `#kunci-data` link) missed it
-  useEffect(() => {
-    if (devAnchorFromHash(hash) === DATA_KEY_ANCHOR) ref.current?.scrollIntoView({ block: "start" });
-  }, [hash]);
   const mismatch = key.state === "mismatch";
   const labels = key.unreadableSettings.map(settingLabel);
 
@@ -55,7 +48,7 @@ export function DataKeyCard({ status, onChanged }: { status: SecurityStatus; onC
   };
 
   return (
-    <div ref={ref} id={DATA_KEY_ANCHOR} className="scroll-mt-20 rounded-lg border bg-card p-4">
+    <div id={DATA_KEY_ANCHOR} className="scroll-mt-20 rounded-lg border bg-card p-4">
       <Section
         title={t.title}
         description={t.help}

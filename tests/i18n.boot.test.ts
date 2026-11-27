@@ -2,6 +2,8 @@
 // splitting config, swaps only `app.mount` for a probe (tests/fixtures/i18n-boot), loads the built bootstrap with a
 // stubbed browser, and checks that dictionaries — including one in a shared chunk and a module-level alias in a
 // lazy chunk — come out Indonesian for lang=id and English for lang=en.
+// The probe replaces app.mount, so what mount() does after the overlay (URL fragment scroll, meta description) is not
+// exercised here: the fragment logic is covered by tests/web.hash-scroll.test.ts.
 import { afterAll, beforeAll, describe, expect, spyOn, test } from "bun:test";
 import { cpSync, mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";

@@ -2,6 +2,7 @@ import type { DevSetup, SetupDismissPut, SetupItem, SetupItemKey, SetupManualPut
 import { tDevSetup } from "@/web/i18n/en.dev.setup";
 import { runApiAction } from "@/web/shared/api.action";
 import { apiFetch, apiUrl } from "@/web/shared/api.client";
+import { DATA_KEY_ANCHOR, devAnchorFromHash, ONBOARDING_ANCHOR } from "@/web/shared/dev.anchors";
 
 // Decisions of the onboarding card/banner (PLAN/05 F1, §3.1): which items show, progress, visibility, actions; plus
 // the two PUTs both use.
@@ -12,21 +13,7 @@ const t = tDevSetup;
 export const ACCESS_GUIDE_URL = "https://github.com/makurosolusi/panel-termux#install-on-your-phone";
 /** Copy-paste fallback for saving the data key from a laptop; `<phone>` is the owner's SSH host alias. */
 export const SECRET_SCP_COMMAND = "scp <phone>:panel/data/secret ./panel-termux-secret";
-/** Anchor of the onboarding card on /dev (target of the banner and the Information rows). */
-export const ONBOARDING_ANCHOR = "setup";
-/** Anchor of PLAN/04's DataKeyCard on /dev (download lives there, with its fresh-session handling). */
-export const DATA_KEY_ANCHOR = "data-key";
-/** 0.5.x Indonesian ids of the two /dev anchors, kept so old bookmarks and stored problem links still land. */
-const LEGACY_DEV_ANCHOR: Readonly<Record<string, string>> = {
-  penyiapan: ONBOARDING_ANCHOR,
-  "kunci-data": DATA_KEY_ANCHOR,
-};
-
-/** Anchor named by a /dev URL hash (`#kunci-data` → `data-key`); an unknown id passes through unchanged. */
-export function devAnchorFromHash(hash: string): string {
-  const id = hash.replace(/^#/, "");
-  return LEGACY_DEV_ANCHOR[id] ?? id;
-}
+export { DATA_KEY_ANCHOR, devAnchorFromHash, ONBOARDING_ANCHOR };
 
 /** Items the owner may tick by hand (server MANUAL_KEYS). */
 const MANUAL: ReadonlySet<SetupItemKey> = new Set(["access", "secret_saved"]);

@@ -8,7 +8,7 @@ import { tSettings } from "@/web/i18n/en.settings";
 import { useApiQuery } from "@/web/shared/use-api-query";
 import { devUrl } from "./dev.api";
 import { SettingsGroup } from "./settings.group";
-import { anchorFromHash, GROUP_ANCHOR, SETTING_GROUPS, type SettingGroup } from "./settings.registry";
+import { GROUP_ANCHOR, SETTING_GROUPS, type SettingGroup } from "./settings.registry";
 import { groupItems } from "./settings.state";
 
 const t = tSettings;
@@ -49,13 +49,6 @@ export function SettingsPage() {
       return next;
     });
   }, []);
-
-  // Cards render after the first load, so the browser's own jump to `#backup` happened too early
-  // (and never happens for a 0.5.x alias such as `#cadangan`).
-  const loaded = query.data !== undefined;
-  useEffect(() => {
-    if (loaded && window.location.hash) document.getElementById(anchorFromHash(window.location.hash))?.scrollIntoView();
-  }, [loaded]);
 
   return (
     <div className="flex flex-col">

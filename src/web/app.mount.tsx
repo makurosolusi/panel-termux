@@ -5,6 +5,7 @@ import { createRoot } from "react-dom/client";
 import { RouterProvider } from "react-router/dom";
 import { tApp } from "@/web/i18n/en.app";
 import { router } from "@/web/router";
+import { followUrlHash } from "@/web/shared/hash.scroll";
 import { toast } from "@/web/shared/toast.lazy";
 
 /** Mounts the SPA; `packFailed` = the Indonesian pack did not load and the page runs in English. */
@@ -16,5 +17,6 @@ export function mount({ packFailed }: { packFailed: boolean }): void {
       <RouterProvider router={router} />
     </StrictMode>,
   );
+  followUrlHash(router);
   if (packFailed) toast.warning(tApp.languagePackFailed);
 }

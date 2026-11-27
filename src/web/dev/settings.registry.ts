@@ -2,6 +2,7 @@
 // Validation stays on the server (B8); labels live in en.settings.ts (Indonesian overlay in id.settings.ts).
 import { SETTING_KEYS, type SettingKey } from "@/shared/dev.types";
 import { LOCALES } from "@/shared/locale";
+import { settingsAnchorFromHash } from "@/web/shared/dev.anchors";
 
 /** Settings cards, in page order. */
 export const SETTING_GROUPS = ["cloudflare", "backup", "alerts", "sites", "monitor", "security"] as const;
@@ -18,20 +19,8 @@ export const GROUP_ANCHOR = {
   security: "security",
 } as const satisfies Record<SettingGroup, string>;
 
-/** Indonesian anchors of 0.5.x, kept as aliases so old bookmarks and README links land on the same card (PLAN/08 §5). */
-const LEGACY_ANCHOR: Partial<Record<string, string>> = {
-  cadangan: "backup",
-  notifikasi: "alerts",
-  situs: "sites",
-  pemantauan: "monitor",
-  keamanan: "security",
-};
-
-/** Card anchor named by a URL hash (`#cadangan` → `backup`); an unknown id passes through unchanged. */
-export function anchorFromHash(hash: string): string {
-  const id = hash.replace(/^#/, "");
-  return LEGACY_ANCHOR[id] ?? id;
-}
+/** Card anchor named by a URL hash (`#cadangan` → `backup`); aliases live in shared/dev.anchors.ts. */
+export const anchorFromHash = settingsAnchorFromHash;
 
 /** Control that edits a key: free text, write-only secret, on/off switch, fixed choices, or a number that can be off. */
 export type SettingControl = "text" | "secret" | "switch" | "select" | "number" | "numberOrOff";
