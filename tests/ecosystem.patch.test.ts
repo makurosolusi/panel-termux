@@ -154,13 +154,19 @@ describe.skipIf(!node)("fixtures under node", () => {
     expect(text.slice(from)).toStartWith("// >>> panel-termux:apps v1 ");
     expect(r.candidate.toString("utf8")).toBe(text.slice(0, from) + ecosystemBlock(PREFIX));
     expect(r.effects).toMatchObject({ keepApps: ["hand"], oldSpread: false });
-    // Only the comment lines and the version marker differ between v1 and v2.
+    // Only the comment lines, the version marker and the two console.error messages (translated in v2 before its
+    // release, the v1 fixture keeps what 0.3.x phones carry) differ between v1 and v2; the logic is the same.
     const oldLines = text.slice(from).split("\n");
-    const diff = ecosystemBlock(PREFIX)
-      .split("\n")
-      .map((l, i) => (l === oldLines[i] ? null : i))
-      .filter((i) => i !== null);
-    expect(diff).toEqual([0, 1, 2, 3, 26]);
+    const newLines = ecosystemBlock(PREFIX).split("\n");
+    const diff = newLines.map((l, i) => (l === oldLines[i] ? null : i)).filter((i) => i !== null);
+    expect(diff).toEqual([0, 1, 2, 3, 18, 26, 28]);
+    const unlog = (l: string | undefined) => l?.replace(/console\.error\(".*?" \+/, "console.error(MSG +");
+    expect(unlog(newLines[18])).toBe(unlog(oldLines[18]));
+    expect(unlog(newLines[28])).toBe(unlog(oldLines[28]));
+    expect([newLines[18], newLines[28]].map((l) => l?.trim())).toEqual([
+      'console.error("[ecosystem] apps.json skipped: " + e.message);',
+      'console.error("[ecosystem] panel block skipped: " + e.message);',
+    ]);
   });
 
   test("BOM kept as the first bytes; CRLF file gets a CRLF block", async () => {

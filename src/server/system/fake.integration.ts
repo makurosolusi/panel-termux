@@ -54,7 +54,7 @@ export PM2_HOME=$HOME/.pm2
 exec node /data/data/com.termux/files/usr/lib/node_modules/pm2/bin/pm2-runtime $HOME/sites/ecosystem.config.js 2>&1
 `;
 
-/** Comment lines of the 0.3.x v1 block (test-only fixture text); the code lines are the same as the current block. */
+/** Comment lines of the 0.3.x v1 block (test-only fixture text); the code lines match the current block except the two log messages. */
 const V1_COMMENTS = [
   "// >>> panel-termux:apps v1 (dikelola Panel Termux; panel mengganti blok ini utuh, jangan diedit)",
   "// Menambahkan situs buatan panel dari apps.json ke daftar apps di atas. Entri yang binary-nya belum ada dilewati,",
@@ -65,7 +65,11 @@ const V1_COMMENTS = [
 const blockV1 = (prefix: string) => {
   const lines = ecosystemBlock(prefix).split("\n");
   lines.splice(0, V1_COMMENTS.length, ...V1_COMMENTS);
-  return lines.join("\n").replace(`{ v: ${BLOCK_VERSION}, listed`, "{ v: 1, listed");
+  return lines
+    .join("\n")
+    .replace(`{ v: ${BLOCK_VERSION}, listed`, "{ v: 1, listed")
+    .replace("apps.json skipped: ", "apps.json dilewati: ")
+    .replace("panel block skipped: ", "blok panel dilewati: ");
 };
 
 /** Ecosystem bytes of a scenario (null = no file: `no_sites_dir`). */

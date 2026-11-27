@@ -19,7 +19,7 @@ module.exports = { apps: [{ name: "hand", script: "/bin/sh" }] };
           ? raw.filter((a) => a && typeof a.name === "string" && typeof a.script === "string" && a.script !== "" && fs.existsSync(path.resolve(a.cwd || __dirname, a.script)))
           : [];
       } catch (e) {
-        console.error("[ecosystem] apps.json dilewati: " + e.message);
+        console.error("[ecosystem] apps.json skipped: " + e.message);
       }
       const names = new Set(list.map((a) => a && a.name));
       const handWritten = list.length > 0;
@@ -29,7 +29,7 @@ module.exports = { apps: [{ name: "hand", script: "/bin/sh" }] };
     }
     globalThis.__panelTermuxApps = { v: 2, listed: list !== null };
   } catch (e) {
-    console.error("[ecosystem] blok panel dilewati: " + e.message);
+    console.error("[ecosystem] panel block skipped: " + e.message);
   }
 }
 // <<< panel-termux:apps
