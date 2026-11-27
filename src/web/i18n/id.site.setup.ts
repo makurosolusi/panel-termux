@@ -33,18 +33,20 @@ export const idSiteSetup = {
   checks: {
     sites_dir: {
       ok: "Folder situs ada",
-      error: (p) => `Folder ${s(p.path)} belum ada. Panel bisa membuatnya, atau ubah folder situs di Pengaturan.`,
+      error: (p) =>
+        `Folder ${s(p.path)} belum ada. Tekan Perbaiki agar panel membuatnya, atau ubah folder situs di Pengaturan.`,
     },
     apps_json: {
       ok: "apps.json terbaca",
       error: (p) =>
         p.reason === "invalid"
-          ? "apps.json rusak (bukan daftar JSON). Tekan Periksa lagi setelah memperbaikinya, atau hapus file itu agar panel membuatnya ulang."
+          ? "apps.json rusak (bukan daftar JSON). Tekan Perbaiki agar panel menyusunnya ulang dari daftar situs panel."
           : "apps.json belum ada. Tekan Periksa lagi, panel akan membuatnya.",
     },
     ecosystem_file: {
       ok: "ecosystem.config.js ada",
-      error: (p) => `File ${s(p.path)} tidak ada. pm2 di HP ini belum memakai ecosystem.`,
+      error: (p) =>
+        `File ${s(p.path)} tidak ada, jadi pm2 belum tahu aplikasi mana yang dijalankan. Tekan Perbaiki agar panel membuatnya.`,
     },
     ecosystem_loads: {
       ok: "pm2 bisa memuat ecosystem.config.js",
@@ -100,11 +102,13 @@ export const idSiteSetup = {
   dialog: {
     ecosystem_block: {
       title: "Hubungkan situs panel ke pm2?",
+      titleUpdate: "Perbarui cara pm2 memuat situs panel?",
       body: (keep: readonly string[]) =>
         keep.length
           ? `Panel menambahkan satu blok di akhir \`ecosystem.config.js\`. Aplikasi yang sudah ada tetap sama dan tidak dimulai ulang: ${joinNames(keep)}. Situs yang berjalan tidak terganggu.`
           : "Panel menambahkan satu blok di akhir `ecosystem.config.js`. Situs yang berjalan tidak terganggu.",
       addApps: (apps: readonly string[]) => `Saat pm2 dimulai berikutnya, ${joinNames(apps)} ikut dijalankan.`,
+      keptApps: (apps: readonly string[]) => `${joinNames(apps)} tetap dijalankan pm2, sekarang lewat blok panel.`,
       oldSpread:
         "Baris lama `...require('./apps.json')` diganti, karena bisa menghentikan semua aplikasi bila `apps.json` rusak.",
       guard: "Karena belum ada aplikasi lain, panel juga menambahkan penjaga kecil (±6 MB) agar pm2 tetap hidup.",
@@ -115,8 +119,23 @@ export const idSiteSetup = {
     },
     sites_dir_create: {
       title: "Buat folder situs?",
-      body: (dir: string) => `Panel membuat folder \`${dir}\` untuk situs-situsmu.`,
+      titleEcosystem: "Buat file ecosystem.config.js?",
+      body: (dir: string, ecosystem: boolean) =>
+        ecosystem
+          ? `Panel membuat folder \`${dir}\` untuk situs-situsmu, beserta \`apps.json\` dan \`ecosystem.config.js\` yang dibaca pm2.`
+          : `Panel membuat folder \`${dir}\` untuk situs-situsmu, beserta \`apps.json\`.`,
+      ecosystemOnly: (path: string) =>
+        `Panel membuat \`${path}\`, file yang memberi tahu pm2 aplikasi mana yang dijalankan, termasuk situs buatan panel. Aplikasi yang berjalan tidak terganggu.`,
     },
+    apps_json_rebuild: {
+      title: "Susun ulang apps.json?",
+      body: (apps: readonly string[]) =>
+        apps.length
+          ? `\`apps.json\` rusak, jadi panel menulisnya ulang dari daftar situs panel: ${joinNames(apps)}.`
+          : "`apps.json` rusak, jadi panel menulisnya ulang dari daftar situs panel. Belum ada situs yang siap dijalankan, jadi daftarnya kosong.",
+    },
+    restartNote:
+      "pm2 memakai perubahan ini saat dimulai berikutnya. Setelah ini tekan Mulai ulang pm2 sekarang, atau Jalankan pm2 bila pm2 belum berjalan.",
     backupNote: "Salinan file lama disimpan, jadi perubahan ini bisa dibatalkan.",
     showDiff: "Lihat perubahan pada file",
     loading: "Menyiapkan pratinjau…",
@@ -137,12 +156,14 @@ export const idSiteSetup = {
   lastFix: {
     ecosystem: (ago: string) => `File ecosystem diubah panel ${ago}.`,
     pm2_run: (ago: string) => `Run script pm2 diubah panel ${ago}.`,
+    apps_json: (ago: string) => `apps.json disusun ulang panel ${ago}.`,
   } satisfies Record<FixFile, (ago: string) => string>,
   lastFixSites: (sites: readonly string[]) => `Situs: ${joinNames(sites)}.`,
   undoAction: "Batalkan perubahan",
   undoLabel: {
     ecosystem: "Batalkan perubahan pada file ecosystem",
     pm2_run: "Batalkan perubahan pada run script pm2",
+    apps_json: "Batalkan perubahan pada apps.json",
   } satisfies Record<FixFile, string>,
   undoTitle: (at: string) => `Kembalikan file ke versi ${at}?`,
   undoBody: {
@@ -150,6 +171,9 @@ export const idSiteSetup = {
     ecosystemSites: (sites: readonly string[]) =>
       `${joinNames(sites)} tidak berjalan lagi setelah HP dinyalakan ulang. Sekarang tetap berjalan.`,
     pm2_run: "pm2 kembali bisa berhenti sendiri saat semua aplikasi dihentikan.",
+    apps_json: "`apps.json` kembali ke isi lama yang rusak.",
+    appsJsonSites: (sites: readonly string[]) =>
+      `\`apps.json\` kembali ke isi lama yang rusak, jadi ${joinNames(sites)} tidak dijalankan pm2 setelah HP dinyalakan ulang. Sekarang tetap berjalan.`,
   },
   undoChanged: "File sudah diubah lagi setelah perbaikan. Mengembalikan versi lama membuang perubahan itu.",
   undoForce: "Tetap kembalikan",
@@ -171,6 +195,10 @@ export const idSiteSetup = {
     title: "Cara manual (untuk pengguna teknis)",
     step1: "Buka file ecosystem di Termux:",
     step2: "Tempel blok ini di akhir file:",
+    step1Create: "Buat file ecosystem baru di Termux:",
+    step2Create: "Isi file dengan teks ini:",
+    stepRepair:
+      "Perbaiki dulu kesalahan yang disebut di baris Gagal di atas (biasanya tanda kurung atau koma yang kurang).",
     step3: "Simpan. pm2 tidak perlu dimulai ulang.",
     step4: "Tekan Periksa lagi.",
     copyBlock: "Salin blok",
@@ -192,7 +220,8 @@ export const idSiteSetup = {
     ecosystem_missing: "File `ecosystem.config.js` tidak ada, jadi panel tidak tahu cara pm2 di HP ini dijalankan.",
     ecosystem_unloadable:
       "File `ecosystem.config.js` sekarang tidak bisa dimuat pm2, jadi panel tidak mengubahnya. Perbaiki dulu kesalahannya, lalu periksa lagi.",
-    ecosystem_linked: "`ecosystem.config.js` adalah tautan ke file di folder lain, jadi panel tidak mengubahnya.",
+    ecosystem_linked:
+      "`ecosystem.config.js` adalah tautan ke file lain (bisa juga file yang sudah tidak ada), jadi panel tidak mengubah atau menimpanya.",
     not_config_js: "Nama file ecosystem harus berakhiran `.config.js` agar pm2 membacanya sebagai daftar aplikasi.",
     too_large: "File ecosystem terlalu besar untuk diubah otomatis.",
     not_utf8:

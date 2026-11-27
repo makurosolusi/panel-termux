@@ -119,15 +119,34 @@ export const editCommand = (i: Integration): string => `nano ${i.ecosystemPath ?
 
 const fixFor = (i: Integration, key: IntegrationCheck["key"]) => (i.fixes ?? []).find((f) => f.checks.includes(key));
 
+/** Check that has to pass before this one means anything (no folder → no ecosystem → nothing it loads). */
+const ROOT_CHECK: Partial<Record<IntegrationCheck["key"], IntegrationCheck["key"]>> = {
+  apps_json: "sites_dir",
+  ecosystem_file: "sites_dir",
+  ecosystem_loads: "ecosystem_file",
+  ecosystem_spreads_apps_json: "ecosystem_loads",
+  snippet_current: "ecosystem_loads",
+  pm2_guard: "ecosystem_loads",
+  apps_entries_runnable: "ecosystem_loads",
+};
+
+/** True when a check this one depends on (directly or further up) is failing: the root cause gets the only row. */
+function rootFailing(i: Integration, key: IntegrationCheck["key"]): boolean {
+  for (let root = ROOT_CHECK[key]; root; root = ROOT_CHECK[root]) if ((stateOf(i, root) ?? "ok") !== "ok") return true;
+  return false;
+}
+
 /**
- * Checklist rows, one problem = one row: a failing check whose fix already belongs to an earlier failing row is folded
- * into it, and "cara lama" is not repeated while panel sites are not loaded at all (servers without `fixes`).
+ * Checklist rows, one problem = one row: a failing check behind a failing root check (missing folder, missing or
+ * broken ecosystem) is hidden, one whose fix already belongs to an earlier failing row is folded into it, and "cara
+ * lama" is not repeated while panel sites are not loaded at all (servers without `fixes`).
  */
 export function visibleChecks(i: Integration): IntegrationCheck[] {
   const notLoaded = (stateOf(i, "ecosystem_spreads_apps_json") ?? "ok") !== "ok";
   const seen = new Set<FixKey>();
   return checksOf(i).filter((c) => {
     if (c.state === "ok") return true;
+    if (rootFailing(i, c.key)) return false;
     if (c.key === "snippet_current" && notLoaded) return false;
     const fix = fixFor(i, c.key);
     if (!fix) return true;
@@ -143,10 +162,17 @@ export function rowFix(i: Integration, c: IntegrationCheck): FixKey | null {
   return fix?.available ? fix.key : null;
 }
 
+/** Root rows no fix covers: the panel cannot repair a broken ecosystem itself, so the row names why. */
+const NO_FIX_REASON: Partial<Record<IntegrationCheck["key"], FixBlockReason>> = {
+  ecosystem_loads: "ecosystem_unloadable",
+};
+
 /** Why the panel cannot fix a failing row itself (copy `setup.unfixable`), or null. */
 export function rowBlocked(i: Integration, c: IntegrationCheck): FixBlockReason | null {
-  const fix = c.state === "ok" ? undefined : fixFor(i, c.key);
-  return fix && !fix.available ? fix.reason : null;
+  if (c.state === "ok") return null;
+  const fix = fixFor(i, c.key);
+  if (fix) return fix.available ? null : fix.reason;
+  return c.state === "error" ? (NO_FIX_REASON[c.key] ?? null) : null;
 }
 
 /** Fixes behind "Perbaiki semua (n)": one per failing row, in checklist order. */
@@ -159,16 +185,41 @@ export const manualOpen = (i: Integration): boolean => visibleChecks(i).some((c)
 export const pm2Pending = (i: Integration): boolean =>
   Boolean(checksOf(i).find((c) => c.key === "pm2_auto_exit" && c.state === "ok")?.params.pending);
 
+/** Dialog title of one fix once its preview is known: replacing the old line is an update, not a first connection. */
+export function previewTitle(p: FixPreview): string {
+  const dl = idSite.setup.dialog;
+  if (p.key === "ecosystem_block" && p.effects.oldSpread) return dl.ecosystem_block.titleUpdate;
+  // folder already there: only the ecosystem file is made
+  if (p.key === "sites_dir_create" && !p.effects.dir && p.effects.newEcosystem)
+    return dl.sites_dir_create.titleEcosystem;
+  return dl[p.key].title;
+}
+
 /** Plain-language lines of one fix preview, for the dialog (readers who never open the diff). */
 export function fixSummary(p: FixPreview): string[] {
   const dl = idSite.setup.dialog;
   const e = p.effects;
+  // pm2_auto_exit's own body already says when it takes effect
+  const restart = e.appliesOnRestart ? [dl.restartNote] : [];
   if (p.key === "pm2_auto_exit") return [dl.pm2_auto_exit.body];
-  if (p.key === "sites_dir_create") return [dl.sites_dir_create.body(e.dir ?? "")];
+  if (p.key === "apps_json_rebuild") return [dl.apps_json_rebuild.body(e.addApps), ...restart];
+  if (p.key === "sites_dir_create") {
+    const sd = dl.sites_dir_create;
+    if (e.dir) return [sd.body(e.dir, Boolean(e.newEcosystem)), ...restart];
+    return e.newEcosystem ? [sd.ecosystemOnly(e.newEcosystem), ...restart] : [];
+  }
   return [
     dl.ecosystem_block.body(e.keepApps),
-    ...(e.addApps.length ? [dl.ecosystem_block.addApps(e.addApps)] : []),
+    // old spread: these sites already ran through the old line, so they are not new to pm2 (QA fix-04 MINOR-10)
+    ...(e.addApps.length ? [(e.oldSpread ? dl.ecosystem_block.keptApps : dl.ecosystem_block.addApps)(e.addApps)] : []),
     ...(e.oldSpread ? [dl.ecosystem_block.oldSpread] : []),
     ...(e.guard ? [dl.ecosystem_block.guard] : []),
   ];
 }
+
+/**
+ * The first `done` previews were applied and one of them only takes effect when pm2 starts again (new ecosystem file,
+ * rebuilt apps.json): the card then offers "Mulai ulang pm2 sekarang". pm2_auto_exit has its own server-side pending.
+ */
+export const restartNeeded = (previews: readonly FixPreview[], done: number): boolean =>
+  previews.slice(0, done).some((p) => p.effects.appliesOnRestart && p.key !== "pm2_auto_exit");

@@ -16,7 +16,7 @@ import { Input } from "@/web/components/ui/input";
 import { idCommon } from "@/web/i18n/id.common";
 import { idShell } from "@/web/i18n/id.shell";
 import { apiErrorMessage, type ErrorCodes } from "@/web/shared/api.client";
-import { useReturnFocus } from "@/web/shared/focus.return";
+import { useDoneFocus } from "@/web/shared/focus.return";
 import { toast } from "@/web/shared/toast.lazy";
 
 const t = idShell.confirm;
@@ -38,6 +38,8 @@ type ConfirmBase = {
   trigger?: ReactElement;
   open?: boolean;
   onOpenChange?: (open: boolean) => void;
+  /** Where focus goes after a successful confirm when the action unmounts the trigger (else: back to the opener). */
+  focusAfter?: () => HTMLElement | null;
 };
 
 /** Props of ConfirmAction: tier `confirm` (AlertDialog) or `typed` (type `typedValue` exactly to enable the button). */
@@ -58,7 +60,7 @@ export function ConfirmAction(props: ConfirmActionProps) {
   const typedValue = props.tier === "typed" ? props.typedValue : null;
   const [innerOpen, setInnerOpen] = useState(false);
   const open = props.open ?? innerOpen;
-  const returnFocus = useReturnFocus(open); // opened by state (no trigger): back to the opener, not <body>
+  const focus = useDoneFocus(open, props.focusAfter); // opened by state (no trigger): back to the opener, not <body>
   const [typed, setTyped] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
@@ -93,6 +95,7 @@ export function ConfirmAction(props: ConfirmActionProps) {
       inFlight.current = false;
       setPending(false);
     }
+    focus.markDone();
     setOpen(false);
     if (successToast) toast.success(successToast);
   };
@@ -101,7 +104,7 @@ export function ConfirmAction(props: ConfirmActionProps) {
     <AlertDialog open={open} onOpenChange={setOpen}>
       {trigger && <AlertDialogTrigger asChild>{trigger}</AlertDialogTrigger>}
       <AlertDialogContent
-        onCloseAutoFocus={returnFocus}
+        onCloseAutoFocus={focus.onCloseAutoFocus}
         onOpenAutoFocus={(e) => {
           if (typedValue === null) return; // confirm tier: radix focuses Batal (safe default)
           e.preventDefault(); // typed tier: the next step is typing, so focus the input

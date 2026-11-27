@@ -23,7 +23,7 @@ export const idDevHealth = {
     },
     fake_on_https: {
       ok: "Panel membaca data dari HP.",
-      fail: "Panel berjalan dengan data contoh, bukan data HP. Periksa apakah `sv` ada di Termux.",
+      fail: "Panel berjalan dengan data contoh, bukan data HP, karena runit (`sv`) tidak ditemukan.",
     },
     backup_scheduler: {
       ok: (ago: string) => `Penjadwal cadangan berjalan, terakhir ${ago}.`,

@@ -57,8 +57,7 @@ export const idSiteDetail = {
     blockers: {
       integration: "pm2 belum siap menjalankan situs buatan panel. Selesaikan persiapan di halaman Situs, lalu deploy.",
       pm2_not_running: "Layanan pm2 tidak berjalan, jadi semua situs ikut berhenti.",
-      no_folder: "Folder situs ini tidak ada di HP. Deploy dan variabel lingkungan butuh folder itu.",
-    } satisfies Record<DeployBlocker, string>,
+    } satisfies Record<Exclude<DeployBlocker, "no_folder">, string>, // no_folder: idDeploy.noFolder
     toSites: "Buka halaman Situs",
   },
   info: {
@@ -93,6 +92,8 @@ export const idSiteDetail = {
     removeTitle: (host: string) => `Hapus domain ${host}?`,
     removeBody:
       "Domain ini berhenti mengarah ke situs: rutenya di cloudflared dihapus, begitu juga record DNS otomatisnya.",
+    removeHandBody:
+      "Rute domain ini ditulis manual di config cloudflared. Panel menghapus baris rute itu, jadi domain berhenti mengarah ke situs. Bagian lain config tidak diubah.",
     removeDnsNote:
       "Bila record DNS tidak bisa dihapus, domain tetap dilepas dan record-nya dibiarkan. Hapus sendiri di dasbor Cloudflare.",
     last: "Situs harus punya minimal satu domain. Untuk melepas domain terakhir, hapus situsnya.",
@@ -210,7 +211,8 @@ export const idSiteDetail = {
   },
   errorCodes: {
     last_hostname: "Situs harus punya minimal satu domain. Untuk melepas domain terakhir, hapus situsnya.",
-    hand_written: "Rute ini ditulis manual di config.yml. Hapus lewat ssh bila perlu.",
+    hand_written:
+      "Rute domain ini ditulis manual di config cloudflared, jadi panel perlu konfirmasi tambahan. Ketik nama domainnya di bawah, lalu hapus lagi.",
     confirm_mismatch: "Nama yang diketik tidak sama dengan nama situs. Ketik ulang persis sama.",
     busy_backup: "Cadangan sedang berjalan. Tunggu sampai selesai, lalu hapus situs ini.",
     env_locked: "Variabel ini diatur panel dan tidak bisa diubah.",
@@ -218,7 +220,8 @@ export const idSiteDetail = {
     invalid_settings: "Pengaturan cek kesehatan tidak valid. Periksa path dan batas waktu.",
     invalid_hostname: "Ada domain yang tidak valid. Periksa penulisannya, lalu coba lagi.",
     no_folder: "Folder situs ini tidak ada di HP, jadi .env tidak bisa ditulis.",
-    pm2_not_running: "Layanan pm2 tidak berjalan, jadi semua situs ikut berhenti. Tekan Jalankan pm2, lalu coba lagi.",
+    pm2_not_running:
+      "Layanan pm2 tidak berjalan, jadi semua situs ikut berhenti. Tutup dialog ini, tekan Jalankan pm2 di atas halaman, lalu coba lagi.",
   },
   /** Copy-ready DNS record while no API token is set (PLAN/06 §6.4 A, dns.manual.tsx). */
   dnsManual: {

@@ -60,6 +60,6 @@ export const idDevSetup = {
   } satisfies Record<Exclude<SetupItemKey, "adopt_sites">, SetupItemCopy>,
   accessDone: "Sudah saya pasang",
   secretDone: "Sudah saya simpan",
-  secretCopyHint: "Atau salin file lewat SSH dari laptop:",
+  secretCopyHint: "Pengguna teknis bisa juga menyalinnya dari laptop:",
   backupFirstRun: "Jalankan cadangan pertama",
 } as const;

@@ -95,13 +95,16 @@ export function DataKeyCard({ status, onChanged }: { status: SecurityStatus; onC
             <p>{t.noTelegram}</p>
             {key.createdThisBoot && <p className="text-muted-foreground">{t.createdThisBoot}</p>}
             <p className="font-medium">{t.restoreFile}</p>
-            <ol aria-label={t.restoreStepsLabel} className="flex flex-col gap-1">
-              {t.restoreSteps.map((cmd) => (
-                <li key={cmd}>
-                  <InlineCode copy>{cmd}</InlineCode>
-                </li>
-              ))}
-            </ol>
+            <details className="text-sm">
+              <summary className="cursor-pointer font-medium pointer-coarse:py-3">{t.restoreStepsLabel}</summary>
+              <ol className="mt-2 flex flex-col gap-1">
+                {t.restoreSteps.map((cmd) => (
+                  <li key={cmd}>
+                    <InlineCode copy>{cmd}</InlineCode>
+                  </li>
+                ))}
+              </ol>
+            </details>
             <p className="text-muted-foreground">{t.orReset}</p>
             <ConfirmAction
               tier="typed"

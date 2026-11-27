@@ -16,6 +16,13 @@ export const SITE_ERROR_CODES: Readonly<Record<string, string>> = idSite.errorCo
 /** `/api/panel/sites/<name>` (+ `rest`), name URL-encoded. */
 export const siteUrl = (name: string, rest = ""): string => panelUrl(`/sites/${encodeURIComponent(name)}${rest}`);
 
+/** DELETE URL of one domain; `confirm` (the typed domain) is what a hand-written route needs. */
+export const hostnameRemoveUrl = (name: string, hostname: string, confirm?: string): string =>
+  siteUrl(
+    name,
+    `/hostnames/${encodeURIComponent(hostname)}${confirm ? `?confirm=${encodeURIComponent(confirm)}` : ""}`,
+  );
+
 /** SPA path of a job's progress view. */
 export const jobPath = (jobId: string): string => `/panel/jobs/${encodeURIComponent(jobId)}`;
 

@@ -74,6 +74,12 @@ export function SetupChecklist({
                 </>
               )}
             </span>
+            {c.state !== "ok" && c.detail && (
+              // e.g. pm2's own load error of a broken ecosystem (QA fix-04 MINOR-9)
+              <code className="max-w-full font-mono text-xs break-all whitespace-pre-wrap text-muted-foreground">
+                {c.detail}
+              </code>
+            )}
             {c.state !== "ok" && (
               <RowAction integration={integration} check={c} onFix={onFix} onVerified={onVerified} />
             )}

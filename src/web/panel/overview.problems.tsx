@@ -21,6 +21,7 @@ import {
   problemSetKey,
   sinceText,
   splitProblems,
+  withoutStarted,
 } from "./overview.state";
 import { TOUCH_HIT } from "./panel.touch";
 
@@ -39,7 +40,17 @@ export function problemService(p: Pick<Problem, "code" | "target" | "params">): 
   return null;
 }
 
-function ProblemRow({ p, frozenAt, hidden }: { p: Problem; frozenAt: string | null; hidden: string | false }) {
+function ProblemRow({
+  p,
+  frozenAt,
+  hidden,
+  onStarted,
+}: {
+  p: Problem;
+  frozenAt: string | null;
+  hidden: string | false;
+  onStarted: (id: string) => void;
+}) {
   const now = useNow();
   const Icon = ICON[p.severity];
   const since = sinceText(p.since, now);
@@ -57,7 +68,7 @@ function ProblemRow({ p, frozenAt, hidden }: { p: Problem; frozenAt: string | nu
         {service && (
           <div className="py-1">
             <Suspense fallback={null}>
-              <ServiceStartButton service={service} />
+              <ServiceStartButton service={service} onStarted={() => onStarted(p.id)} />
             </Suspense>
           </div>
         )}
@@ -96,13 +107,23 @@ export function ProblemStrip({
   sampledAt,
   unavailable,
   dataAt,
+  onReload,
 }: {
   problems: readonly Problem[];
   sampledAt: string | null;
   unavailable: readonly OverviewSection[];
   dataAt: string | null;
+  /** Refetch of the Ringkasan after a service was started from a row. */
+  onReload: () => void;
 }) {
-  const { alerts, info } = splitProblems(problems);
+  const [seenAt, setSeenAt] = useState<Record<string, string | null>>({});
+  const strip = useRef<HTMLElement>(null);
+  const { alerts, info } = splitProblems(withoutStarted(problems, seenAt, sampledAt));
+  const onStarted = (id: string) => {
+    setSeenAt((m) => ({ ...m, [id]: sampledAt }));
+    onReload();
+    strip.current?.focus(); // the pressed button leaves with its row
+  };
   const [expanded, setExpanded] = useState(false);
   const announcement = useAnnouncement(alerts);
   const phoneMore = hiddenProblems(alerts.length, PHONE_PROBLEM_ROWS, expanded);
@@ -119,7 +140,7 @@ export function ProblemStrip({
   );
 
   return (
-    <section aria-label={t.problemsLabel} className="flex flex-col gap-2">
+    <section ref={strip} tabIndex={-1} aria-label={t.problemsLabel} className="flex flex-col gap-2 outline-none">
       <p className="sr-only" aria-live="polite">
         {announcement}
       </p>
@@ -134,7 +155,13 @@ export function ProblemStrip({
         <div className="overflow-hidden rounded-lg border bg-card">
           <ul className="divide-y">
             {alerts.map((p, i) => (
-              <ProblemRow key={p.id} p={p} frozenAt={isFrozen(p, unavailable) ? dataAt : null} hidden={rowHidden(i)} />
+              <ProblemRow
+                key={p.id}
+                p={p}
+                frozenAt={isFrozen(p, unavailable) ? dataAt : null}
+                hidden={rowHidden(i)}
+                onStarted={onStarted}
+              />
             ))}
           </ul>
           {alerts.length > PHONE_PROBLEM_ROWS && toggle(phoneMore, "md:hidden")}

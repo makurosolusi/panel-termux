@@ -63,7 +63,13 @@ function SiteSections({ site, reload, deleting, setDeleting, uploader }: Section
   const interrupted = jobs.data?.items[0] ?? null;
   return (
     <div className="flex flex-col gap-8">
-      <SiteBanners site={site} interrupted={interrupted} codes={CODES} onChanged={reload} />
+      <SiteBanners
+        site={site}
+        interrupted={interrupted}
+        codes={CODES}
+        onChanged={reload}
+        onDelete={() => setDeleting(true)}
+      />
       <AnchorSection id="ringkasan" title={t.anchors.summary}>
         <Summary site={site} />
       </AnchorSection>

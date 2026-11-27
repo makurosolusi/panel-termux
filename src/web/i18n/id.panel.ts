@@ -1,6 +1,6 @@
 import type { AppStatus, ControlAction } from "@/shared/panel.types";
 
-const SSH_HINT = "Hentikan lewat SSH bila memang perlu.";
+const SSH_HINT = "Bila memang perlu dihentikan, lakukan dari terminal HP.";
 
 /** Indonesian strings of the Layanan, Aplikasi, Domain, Database and log pages (Ringkasan: id.overview.ts). */
 export const idPanel = {
@@ -19,7 +19,7 @@ export const idPanel = {
       "Layanan postgres tidak berjalan. Situs yang memakai database tidak bisa diakses sampai postgres berjalan lagi.",
     too_soon: "Tunggu sebentar sebelum mengecek lagi.",
     invalid_cursor: "Posisi log tidak dikenali lagi. Muat ulang halaman untuk membaca dari akhir log.",
-    system_error: "Perintah sistem di HP gagal. Coba lagi; bila terus gagal, cek lewat SSH.",
+    system_error: "Perintah sistem di HP gagal. Coba lagi; bila terus gagal, lihat log layanannya di halaman Layanan.",
   },
   fakeMode: "Mode demo",
   fakeModeHelp: "Data di halaman ini contoh, karena panel tidak berjalan di Termux.",
@@ -47,7 +47,7 @@ export const idPanel = {
   serviceImpact: {
     pm2: "Semua aplikasi ikut berhenti; situs tidak bisa diakses sampai pm2 dan aplikasinya berjalan lagi.",
     postgres: "Situs yang memakai database tidak bisa diakses sampai postgres berjalan lagi.",
-    sshd: "Kamu tidak bisa masuk lewat SSH sampai sshd dijalankan lagi (sesi yang sudah terbuka biasanya tetap jalan).",
+    sshd: "Login SSH ke HP ini ditolak sampai sshd dijalankan lagi (sesi yang sudah terbuka biasanya tetap jalan).",
     cloudflared: "Semua domain terputus beberapa detik selama tunnel cloudflared dimulai ulang.",
     panel: "Halaman ini terputus ±10–30 dtk lalu tersambung lagi.",
   } as Readonly<Record<string, string>>,
@@ -69,14 +69,15 @@ export const idPanel = {
       body: "Menyambung ulang. Halaman ini kembali sendiri begitu panel siap.",
       failedTitle: "Panel belum tersambung lagi",
       failed:
-        "Cek lewat SSH: `sv status panel` dan `tail $PREFIX/var/log/sv/panel/current`. Bila kamu memakai Cloudflare Access, muat ulang halaman untuk login lagi.",
+        "Tunggu sebentar lalu tekan Coba lagi. Bila tetap gagal, pastikan HP menyala, terhubung ke internet, dan Termux masih terbuka. Bila kamu memakai Cloudflare Access, muat ulang halaman untuk login lagi.",
       back: "panel dimulai ulang.",
     },
     cloudflared: {
       title: "cloudflared dimulai ulang…",
       body: "Semua domain terputus beberapa detik. Menunggu tunnel tersambung lagi.",
       failedTitle: "cloudflared belum berjalan lagi",
-      failed: "Cek lewat SSH: `sv status cloudflared`, lalu buka log cloudflared di halaman Layanan.",
+      failed:
+        "Tunggu sebentar lalu tekan Coba lagi. Bila tetap gagal, buka log cloudflared di halaman Layanan untuk melihat penyebabnya.",
       back: "cloudflared dimulai ulang.",
     },
     retry: "Coba lagi",
@@ -96,7 +97,8 @@ export const idPanel = {
     crashLoop: "berulang kali dimulai ulang",
     emptyTitle: "Belum ada layanan runit",
     emptyBody: "Panel membaca layanan dari `$PREFIX/var/service`.",
-    error: "Daftar layanan tidak bisa dibaca. Coba lagi; bila terus gagal, cek runit lewat SSH.",
+    error:
+      "Daftar layanan tidak bisa dibaca. Coba lagi; bila terus gagal, tunggu beberapa saat lalu muat ulang halaman.",
   },
   apps: {
     title: "Aplikasi",

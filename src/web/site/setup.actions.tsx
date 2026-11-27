@@ -3,12 +3,10 @@ import { useState } from "react";
 import type { FixBackup, Pm2RestartResult } from "@/shared/fix.types";
 import type { Integration } from "@/shared/site.types";
 import { ConfirmAction } from "@/web/components/confirm-action";
-import { RelativeTime } from "@/web/components/relative-time";
 import { Button } from "@/web/components/ui/button";
 import { idSite } from "@/web/i18n/id.site";
-import { ApiError } from "@/web/shared/api.client";
-import { formatDateTime } from "@/web/shared/format";
 import { toast } from "@/web/shared/toast.lazy";
+import { UndoRow } from "./setup.undo";
 import { pm2Pending } from "./site.adopt";
 import { FIX_ERROR_CODES, restartPm2, restoreFix } from "./site.api";
 
@@ -16,73 +14,23 @@ const t = idSite.setup;
 /** The restart's 404 means runit has no pm2 service, not a missing backup. */
 const RESTART_CODES = { ...FIX_ERROR_CODES, not_found: t.restartNotFound };
 
-/** Consequence of restoring `b`, first: managed sites that stop surviving a reboot, then a later hand edit lost. */
-export function undoDescription(b: FixBackup): string {
-  const what =
-    b.file === "pm2_run"
-      ? t.undoBody.pm2_run
-      : b.affectedSites.length
-        ? t.undoBody.ecosystemSites(b.affectedSites)
-        : t.undoBody.ecosystem;
-  return b.changedSince ? `${what} ${t.undoChanged}` : what;
-}
-
 /** Restart dialog text: who stops briefly, plus the panel's ecosystem change taking effect now. */
 export const restartDescription = (i: Integration): string =>
   i.lastFixes?.some((b) => b.file === "ecosystem")
     ? `${t.restartPm2Body(i.appNames ?? [])} ${t.restartPm2FileNote}`
     : t.restartPm2Body(i.appNames ?? []);
 
-/** "Batalkan perubahan" of one file: restores its newest backup; 409 `changed_since` reloads so the next try offers force. */
-function UndoButton({ backup, onChange }: { backup: FixBackup; onChange: () => void }) {
-  return (
-    <ConfirmAction
-      title={t.undoTitle(formatDateTime(backup.at))}
-      description={undoDescription(backup)}
-      confirmLabel={backup.changedSince ? t.undoForce : t.undoAction}
-      destructive={backup.affectedSites.length > 0}
-      codes={FIX_ERROR_CODES}
-      successToast={t.undone}
-      onConfirm={async () => {
-        try {
-          await restoreFix(backup.id, { force: backup.changedSince });
-        } catch (err) {
-          if (err instanceof ApiError && err.code === "changed_since") onChange();
-          throw err;
-        }
-        onChange();
-      }}
-      trigger={
-        <Button variant="link" size="sm" className="h-auto p-0" aria-label={t.undoLabel[backup.file]}>
-          {t.undoAction}
-        </Button>
-      }
-    />
-  );
-}
-
-/** "File ecosystem diubah panel … Situs: blog. Batalkan perubahan": one line per changed file. */
-function UndoRow({ backup, onChange }: { backup: FixBackup; onChange: () => void }) {
-  return (
-    <p className="flex flex-wrap items-baseline gap-x-2">
-      <RelativeTime at={backup.at} format={t.lastFix[backup.file]} />
-      {backup.affectedSites.length > 0 && (
-        <span className="text-muted-foreground">{t.lastFixSites(backup.affectedSites)}</span>
-      )}
-      <UndoButton backup={backup} onChange={onChange} />
-    </p>
-  );
-}
-
 /** Warning after a checked restart where apps did not come back; offers restore + restart when the fix is to blame. */
 function RestartFailed({
   result,
   backup,
   onResult,
+  focusCard,
 }: {
   result: Pm2RestartResult;
   backup: FixBackup | null;
   onResult: (r: Pm2RestartResult | null) => void;
+  focusCard: () => HTMLElement | null;
 }) {
   const offer = result.offerRestore;
   return (
@@ -102,6 +50,7 @@ function RestartFailed({
           description={`${t.undoBody.ecosystem} ${t.restartPm2Body(result.integration.appNames ?? [])}`}
           confirmLabel={t.restoreAndRestart}
           codes={FIX_ERROR_CODES}
+          focusAfter={focusCard}
           onConfirm={async () => {
             const r = await restoreFix(offer, { restart: true, force: backup?.changedSince ?? false });
             toast.success(t.undone);
@@ -123,41 +72,70 @@ function RestartFailed({
  * pm2 sekarang" inside <details>, plus the warning when apps did not come back. Nothing when there is nothing to undo
  * and no restart pending.
  */
-export function SetupActions({ integration, onChange }: { integration: Integration; onChange: () => void }) {
+export function SetupActions({
+  integration,
+  onChange,
+  focusCard,
+  restartWanted = false,
+  onRestarted,
+}: {
+  integration: Integration;
+  onChange: () => void;
+  /** The Persiapan card: focus lands there once undo / restart removed the button that was pressed. */
+  focusCard: () => HTMLElement | null;
+  /** A fix just applied takes effect when pm2 starts again: show the restart like a pending one. */
+  restartWanted?: boolean;
+  onRestarted?: () => void;
+}) {
   const [failed, setFailed] = useState<Pm2RestartResult | null>(null);
   const backups = integration.lastFixes ?? [];
   const eco = backups.find((b) => b.file === "ecosystem") ?? null;
-  if (!backups.length && !pm2Pending(integration) && !failed) return null;
+  const pending = pm2Pending(integration) || restartWanted;
+  if (!backups.length && !pending && !failed) return null;
 
   const onResult = (r: Pm2RestartResult | null) => {
+    if (r) onRestarted?.();
     if (r?.ok) toast.success(t.restartOk);
     setFailed(r && !r.ok ? r : null);
     onChange();
   };
 
+  const restart = (
+    <ConfirmAction
+      title={t.restartPm2Title}
+      description={restartDescription(integration)}
+      confirmLabel={t.restartPm2}
+      codes={RESTART_CODES}
+      focusAfter={focusCard}
+      onConfirm={async () => onResult(await restartPm2())}
+      trigger={
+        // pending: the restart is what makes the change take effect, so it is a visible button (QA fix-04 MINOR-4)
+        <Button
+          variant={pending ? "outline" : "link"}
+          size="sm"
+          className={pending ? "w-fit" : "h-auto p-0 pointer-coarse:py-3"}
+        >
+          {t.restartPm2}
+        </Button>
+      }
+    />
+  );
+
   return (
     <>
-      {failed && <RestartFailed result={failed} backup={eco} onResult={onResult} />}
-      <details className="text-sm">
-        <summary className="cursor-pointer text-muted-foreground">{t.more}</summary>
-        <div className="mt-2 flex flex-col items-start gap-2 pl-4">
-          {backups.map((b) => (
-            <UndoRow key={b.id} backup={b} onChange={onChange} />
-          ))}
-          <ConfirmAction
-            title={t.restartPm2Title}
-            description={restartDescription(integration)}
-            confirmLabel={t.restartPm2}
-            codes={RESTART_CODES}
-            onConfirm={async () => onResult(await restartPm2())}
-            trigger={
-              <Button variant="link" size="sm" className="h-auto p-0">
-                {t.restartPm2}
-              </Button>
-            }
-          />
-        </div>
-      </details>
+      {failed && <RestartFailed result={failed} backup={eco} onResult={onResult} focusCard={focusCard} />}
+      {pending && restart}
+      {backups.length > 0 && (
+        <details className="text-sm">
+          <summary className="cursor-pointer text-muted-foreground pointer-coarse:py-3">{t.more}</summary>
+          <div className="mt-2 flex flex-col items-start gap-2 pl-4">
+            {backups.map((b) => (
+              <UndoRow key={b.id} backup={b} onChange={onChange} focusCard={focusCard} />
+            ))}
+            {!pending && restart}
+          </div>
+        </details>
+      )}
     </>
   );
 }

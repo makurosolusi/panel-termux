@@ -8,13 +8,15 @@ import { ApiError } from "@/web/shared/api.client";
 import { toast } from "@/web/shared/toast.lazy";
 import { fixDialogTitle } from "@/web/site/fix.dialog";
 import { diffLines } from "@/web/site/fix.diff";
-import { restartDescription, undoDescription } from "@/web/site/setup.actions";
+import { restartDescription } from "@/web/site/setup.actions";
+import { undoDescription, undoForce } from "@/web/site/setup.undo";
 import {
   applicableFixes,
   checkText,
   fixSummary,
   manualOpen,
   pm2Pending,
+  previewTitle,
   rowBlocked,
   rowFix,
   setupNeeded,
@@ -156,11 +158,11 @@ describe("fix dialog", () => {
     expect(lines[0]).toContain("tidak dimulai ulang: makuro-solusi dan adminneo");
     expect(lines).toContain(t.dialog.ecosystem_block.oldSpread);
     expect(lines).toContain(t.dialog.ecosystem_block.guard);
-    expect(lines.join(" ")).toContain("blog ikut dijalankan");
+    expect(lines.join(" ")).toContain("blog tetap dijalankan pm2"); // old spread: blog already ran
     expect(fixSummary(preview({ key: "pm2_auto_exit", files: [] }))).toEqual([t.dialog.pm2_auto_exit.body]);
     expect(
       fixSummary(preview({ key: "sites_dir_create", files: [], effects: { ...preview().effects, dir: "~/s" } })),
-    ).toEqual(["Panel membuat folder `~/s` untuk situs-situsmu."]);
+    ).toEqual(["Panel membuat folder `~/s` untuk situs-situsmu, beserta `apps.json`."]);
   });
 
   test("diff lines: file order, added lines numbered after their anchor, removal first", () => {
@@ -265,5 +267,64 @@ describe("undo and checked restart", () => {
     expect(joinNames([])).toBe("");
     expect(joinNames(["a"])).toBe("a");
     expect(joinNames(["a", "b", "c"])).toBe("a, b, dan c");
+  });
+});
+
+describe("QA fix-04 follow-ups", () => {
+  test("undo forces once a 409 changed_since was seen, even while the cached check still says false", () => {
+    expect(undoForce(backup(), false)).toBe(false);
+    expect(undoForce(backup(), true)).toBe(true);
+    expect(undoForce(backup({ changedSince: true }), false)).toBe(true);
+  });
+
+  test("one root cause = one row: no folder hides the ecosystem rows, a broken ecosystem hides what it loads", () => {
+    const noDir = integration([
+      chk("sites_dir", "error"),
+      chk("apps_json", "error"),
+      chk("ecosystem_file", "error"),
+      chk("ecosystem_loads", "error"),
+      chk("ecosystem_spreads_apps_json", "error"),
+      chk("pm2_runtime"),
+    ]);
+    expect(
+      visibleChecks(noDir)
+        .filter((c) => c.state !== "ok")
+        .map((c) => c.key),
+    ).toEqual(["sites_dir"]);
+    const broken = integration([
+      chk("sites_dir"),
+      chk("ecosystem_file"),
+      chk("ecosystem_loads", "error"),
+      chk("ecosystem_spreads_apps_json", "error"),
+      chk("snippet_current", "error"),
+    ]);
+    expect(
+      visibleChecks(broken)
+        .filter((c) => c.state !== "ok")
+        .map((c) => c.key),
+    ).toEqual(["ecosystem_loads"]);
+  });
+
+  test("missing ecosystem is a Perbaiki row; an unloadable one names why and opens Cara manual", () => {
+    const fix: FixAvailability = { key: "sites_dir_create", checks: ["ecosystem_file"], available: true };
+    const missing = integration([chk("sites_dir"), chk("ecosystem_file", "error")], [fix]);
+    const row = missing.checks?.[1] as IntegrationCheck;
+    expect(rowFix(missing, row)).toBe("sites_dir_create");
+    expect(rowBlocked(missing, row)).toBeNull();
+    expect(manualOpen(missing)).toBe(false);
+    // the panel makes a missing ecosystem itself now: no manual-only reason without a fix entry either
+    expect(rowBlocked(integration(missing.checks ?? [], []), row)).toBeNull();
+    const broken = integration([chk("ecosystem_loads", "error")], []);
+    expect(rowBlocked(broken, broken.checks?.[0] as IntegrationCheck)).toBe("ecosystem_unloadable");
+    expect(rowBlocked(broken, chk("tunnel", "error"))).toBeNull();
+  });
+
+  test("replacing the old apps.json line reads as an update: own title, sites kept rather than added", () => {
+    const old = preview({ effects: { ...preview().effects, oldSpread: true, addApps: ["toko-kopi"] } });
+    expect(previewTitle(old)).toBe(t.dialog.ecosystem_block.titleUpdate);
+    expect(fixSummary(old)).toContain("toko-kopi tetap dijalankan pm2, sekarang lewat blok panel.");
+    const fresh = preview({ effects: { ...preview().effects, addApps: ["toko-kopi"] } });
+    expect(previewTitle(fresh)).toBe(t.dialog.ecosystem_block.title);
+    expect(fixSummary(fresh)).toContain(t.dialog.ecosystem_block.addApps(["toko-kopi"]));
   });
 });

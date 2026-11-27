@@ -114,7 +114,8 @@ export const idJob = {
     apps_removed: (p) => `Entri ${s(p.name)} dihapus dari apps.json.`,
     apps_absent: () => "Tidak ada entri di apps.json.",
     apps_adopted_skip: () => "Situs adopsi: entri pm2 ditulis manual, tidak diubah.",
-    apps_json_invalid: () => "File apps.json rusak. Perbaiki lewat ssh, lalu coba lagi.",
+    apps_json_invalid: () =>
+      "File apps.json rusak. Tekan Perbaiki di kartu Persiapan (halaman Situs) agar panel membangunnya ulang, lalu coba lagi.",
     app_removed: (p) => `Aplikasi ${s(p.name)} dihapus dari pm2.`,
     app_not_deployed: () => "Aplikasi belum pernah di-deploy.",
     app_adopted_skip: () => "Situs adopsi: aplikasi pm2 dibiarkan.",

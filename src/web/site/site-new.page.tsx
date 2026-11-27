@@ -19,6 +19,7 @@ import {
   optionsReady,
   type SiteForm,
   targetReady,
+  wizardDns,
 } from "./site.check";
 import { WizardOptions } from "./wizard.options";
 import { WizardSummary } from "./wizard.summary";
@@ -79,7 +80,7 @@ export function SiteNewPage() {
     setForm((f) => ({ ...f, ...p }));
   };
   const ready = integration.data ? integrationReady(integration.data) : false;
-  const tokenSet = integration.data?.checks?.find((c) => c.key === "cloudflare_token")?.state === "ok";
+  const dns = wizardDns(integration.data);
   const body = createBody(form);
   const hosts = blipHosts(
     (sites.data ?? []).flatMap((s) => s.hostnames),
@@ -114,7 +115,7 @@ export function SiteNewPage() {
       >
         {step === 0 && <WizardTarget form={form} onChange={patch} check={check} />}
         {step === 1 && <WizardOptions form={form} onChange={patch} />}
-        {step === 2 && <WizardSummary body={body} tokenSet={tokenSet} blipHosts={hosts} />}
+        {step === 2 && <WizardSummary body={body} dns={dns} blipHosts={hosts} />}
         <ActionBar>
           <Button
             type="button"

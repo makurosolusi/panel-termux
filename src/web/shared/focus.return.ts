@@ -31,3 +31,27 @@ export function useReturnFocus(open: boolean): (e: Event) => void {
     el.focus();
   };
 }
+
+/**
+ * `onCloseAutoFocus` for dialogs whose action unmounts their own trigger (fix, undo, restart): after `markDone()` focus
+ * goes to `focusAfter()` (a stable card or status region, tabIndex -1), otherwise back to the opener (Esc / Batal).
+ */
+export function useDoneFocus(
+  open: boolean,
+  focusAfter?: () => HTMLElement | null,
+): { markDone: () => void; onCloseAutoFocus: (e: Event) => void } {
+  const returnFocus = useReturnFocus(open);
+  const done = useRef(false);
+  return {
+    markDone: () => {
+      done.current = true;
+    },
+    onCloseAutoFocus: (e) => {
+      const target = done.current ? focusAfter?.() : null;
+      done.current = false;
+      if (!target) return returnFocus(e);
+      e.preventDefault();
+      target.focus();
+    },
+  };
+}

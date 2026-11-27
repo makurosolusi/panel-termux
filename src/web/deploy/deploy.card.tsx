@@ -7,19 +7,12 @@ import { CopyButton } from "@/web/components/copy-button";
 import { Button } from "@/web/components/ui/button";
 import { idDeploy } from "@/web/i18n/id.deploy";
 import { formatBytes, formatDateTime } from "@/web/shared/format";
-import { DEPLOY_ERROR_CODES } from "./deploy.api";
+import { blockerText } from "./deploy.state";
 import { missingChunks } from "./deploy.upload";
 import type { Uploader } from "./deploy.uploader";
 import { UploadProgress } from "./upload.progress";
 
 const t = idDeploy.upload;
-
-/** Server code behind each deploy blocker, for the reason text. */
-const BLOCKER_CODE = {
-  integration: "integration_required",
-  no_folder: "no_folder",
-  pm2_not_running: "pm2_not_running",
-};
 
 /** Copyable build commands for both supported targets. */
 function BuildHelp() {
@@ -45,7 +38,7 @@ function BuildHelp() {
 export function DeployCard({ site, up }: { site: SiteDetail; up: Uploader }) {
   const input = useRef<HTMLInputElement>(null);
   const { state, active } = up;
-  const blocker = site.deployBlocker ? DEPLOY_ERROR_CODES[BLOCKER_CODE[site.deployBlocker]] : null;
+  const blocker = blockerText(site);
   const running = state.kind === "running";
   const pickButton = (label: string, variant: "default" | "outline" = "default") => (
     <Button variant={variant} disabled={Boolean(blocker)} onClick={() => input.current?.click()}>

@@ -22,7 +22,7 @@ const MetricTrends = lazy(() => import("./sparkline").then((m) => ({ default: m.
 const ActivityList = lazy(() => import("./overview.activity").then((m) => ({ default: m.ActivityList })));
 const RecentProblems = lazy(() => import("./problems.page").then((m) => ({ default: m.RecentProblems })));
 
-function Overview({ o }: { o: PanelOverview }) {
+function Overview({ o, onReload }: { o: PanelOverview; onReload: () => void }) {
   const { role } = useMe();
   // Transitional shared types (W7 tightens them): the server already sends full Problems and null for failed parts.
   const problems = o.problems as Problem[];
@@ -35,6 +35,7 @@ function Overview({ o }: { o: PanelOverview }) {
         sampledAt={o.sampledAt ?? null}
         unavailable={o.unavailable ?? []}
         dataAt={o.dataAt ?? null}
+        onReload={onReload}
       />
       <DeviceTiles device={device} baseline={o.loadBaseline} problems={problems} />
       {/* Phone: after the tiles so they stay above the bottom bar (PLAN/02 §6, QA N4); wider screens: first.
@@ -83,7 +84,7 @@ export function OverviewPage() {
         }}
       />
       <QueryView query={query} empty={null} isEmpty={() => false} skeleton={<StatTilesSkeleton />}>
-        {(o) => <Overview o={o} />}
+        {(o) => <Overview o={o} onReload={query.reload} />}
       </QueryView>
     </>
   );

@@ -153,7 +153,13 @@ export const idSite = {
         `Menulis .env (PORT${p.database ? " dan DATABASE_URL" : ""}${Number(p.env) > 0 ? ` + ${s(p.env)} variabel` : ""})`,
       ingress: (p) => `Menambahkan rute ${s(p.hosts)}${p.port ? ` ke port ${s(p.port)}` : ""} di config cloudflared`,
       dns: (p) =>
-        `Membuat record DNS ${s(p.hosts)} di Cloudflare${p.token ? "" : " (dilewati: token belum diisi, buat manual)"}`,
+        p.dns === "token"
+          ? `Membuat record DNS ${s(p.hosts)} di Cloudflare`
+          : p.dns === "cert"
+            ? `Membuat record DNS ${s(p.hosts)} lewat login cloudflared di HP ini; domain di luar zona login itu mendapat record siap salin`
+            : p.dns === "manual"
+              ? `Record DNS ${s(p.hosts)} tidak dibuat otomatis: panel menampilkan record siap salin setelah situs dibuat`
+              : `Membuat record DNS ${s(p.hosts)} lewat login cloudflared bila ada; bila tidak, panel menampilkan record siap salin`,
       tunnel_restart: "Memulai ulang cloudflared",
       domain_probe: "Mengecek domain bisa dijangkau",
     } satisfies Partial<Record<JobStepKey, Copy>>,
