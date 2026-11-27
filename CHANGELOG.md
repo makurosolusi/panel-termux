@@ -15,6 +15,7 @@
 - `panel` tanpa argumen di terminal kini mencetak bantuan, bukan menyalakan server. Untuk menjalankan server secara manual, pakai `panel serve`. Layanan runit tidak berubah dan tetap menyalakan server.
 - `.env.example` kini dibuat dari daftar variabel yang sama dengan `panel env --full`: `APP_BASE_URL` dan `SUPER_ADMIN_EMAILS` kosong (bukan contoh isian), `PORT` dan `PANEL_DATA_DIR` dikomentari.
 - Installer hanya mengganti `panel.prev` bila panel yang terpasang sehat (atau `panel.prev` belum ada), sehingga versi terakhir yang sehat tetap tersedia untuk rollback. Petunjuk rollback dari installer kini `panel rollback [--db]`.
+- Build dan CI kini menguji runtime Bun yang sama dengan yang dikirim di binary (1.4.5); build memeriksa versi runtime yang di-embed dan gagal bila berbeda.
 - Installer dan `panel doctor` menghitung contoh isian lama dari `.env.example` (mis. `https://panel.example.com`) sebagai kosong.
 
 ### Fixed
