@@ -108,7 +108,9 @@ export function listProcs(): ProcInfo[] {
   if (!existsSync(PROC)) return [];
   return readdirSync(PROC)
     .filter((n) => /^\d+$/.test(n))
-    .map((n) => readProc(Number(n)))
+    .map(Number)
+    .sort((a, b) => a - b) // readdir order is filesystem-dependent; pids reach doctor output
+    .map(readProc)
     .filter((p): p is ProcInfo => p !== null);
 }
 
