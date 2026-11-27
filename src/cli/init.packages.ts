@@ -1,7 +1,9 @@
 // Init step 2 "packages" (PLAN/07 §4.1 row 2, K7, K8, D9, C20, lab L8): installs only what is missing. A fresh phone
 // without PostgreSQL gets `pkg upgrade` first (confirmRisky); everywhere else `LC_ALL=C apt-get -s install` runs first
-// and an install that would replace cloudflared/postgresql/nodejs* is refused. Never `--reinstall` (hold does not stop
-// it, L8). Every apt/dpkg/pkg child runs with LC_ALL=C; SVDIR/LOGDIR come from CliHost.
+// and an install that would replace cloudflared/postgresql/nodejs* is refused. That simulation in apply follows one
+// `apt-get update` (lists only, never upgrades: `pkg update` would also upgrade), so it sees what `pkg install` will
+// fetch; detect's simulation (stale lists, detect never writes) is only the plan's preview. Never `--reinstall` (hold
+// does not stop it, L8). Every apt/dpkg/pkg child runs with LC_ALL=C; SVDIR/LOGDIR come from CliHost.
 import { existsSync } from "node:fs";
 import { join } from "node:path";
 import { TermuxExecError } from "../server/exec/termux.exec";
@@ -125,6 +127,7 @@ function plan(ctx: InitContext, s: PackagesState): PlanLine[] {
       kind: "action",
       text: s.upgrade ? `Memperbarui paket Termux (pkg upgrade), lalu memasang: ${list}` : `Memasang: ${list}`,
     });
+    if (!s.upgrade) lines.push({ kind: "action", text: "Memperbarui daftar paket (apt-get update) sebelum memeriksa" });
     if (!s.upgrade && s.sim === null)
       lines.push({ kind: "warning", text: "Simulasi apt-get gagal: daftar paket belum bisa diperiksa", hint: DOCS });
     const bad = s.sim?.replaced.filter((n) => NO_REPLACE.test(n)) ?? [];
@@ -158,15 +161,20 @@ async function runOrFail(ctx: InitContext, what: string, tool: string, args: str
     );
 }
 
-/** Before a plain install: refuse replacing cloudflared/postgresql/nodejs*, confirm any other replacement (K7). */
+/**
+ * Before a plain install: refresh the lists once, simulate again (detect's simulation saw stale lists), refuse
+ * replacing cloudflared/postgresql/nodejs*, confirm any other replacement (K7). Installs stay per package, so a
+ * failure names the package.
+ */
 async function guardSimulation(ctx: InitContext, s: PackagesState): Promise<void> {
-  const sim = s.sim ?? (await simulate(ctx, s.missing));
+  await runOrFail(ctx, "Memperbarui daftar paket (apt-get update)", "apt-get", ["update"]);
+  const sim = await simulate(ctx, s.missing);
   const manual = installCmd(s.missing);
   if (sim === null)
     throw new CliExit(
       INIT_EXIT.failed,
       `Simulasi pemasangan ${pkgList(s.missing)} gagal (apt-get -s).`,
-      `jalankan: pkg update, lalu ulangi ${ctx.resumeCommand()}`,
+      `cek internet dan ${DOCS}, lalu ulangi ${ctx.resumeCommand()}`,
     );
   const bad = sim.replaced.filter((n) => NO_REPLACE.test(n));
   if (bad.length > 0)

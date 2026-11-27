@@ -193,6 +193,13 @@ describe("packages step (K7, K8, D9, C20)", () => {
     ]);
     expect(sim?.vars?.LC_ALL).toBe("C");
     expect(runs(h)).toContain("apt-mark hold cloudflared postgresql");
+    // apply refreshes the lists once, then simulates again on them, then installs package by package
+    const seq = h.records.map((x) => `${x.kind} ${x.argv.slice(0, 2).join(" ")}`);
+    const update = seq.indexOf("run apt-get update");
+    expect(seq.filter((x) => x === "run apt-get update")).toHaveLength(1);
+    expect(seq.lastIndexOf("exec apt-get -s")).toBeGreaterThan(update);
+    expect(seq.indexOf("run pkg install")).toBeGreaterThan(seq.lastIndexOf("exec apt-get -s"));
+    expect(r.text).toContain("Memperbarui daftar paket (apt-get update)");
   });
 
   test("fresh-pg: simulation replacing cloudflared/postgresql → exit 3, no pkg install", async () => {

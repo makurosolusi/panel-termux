@@ -15,11 +15,12 @@ import { join } from "node:path";
 import { type FakeScenarioName, probePaths } from "@/cli/cli.host";
 import { createFakeHost, FAKE_NEW_VERSION, FAKE_OLD_VERSION, type FakeHostOptions } from "@/cli/cli.host.fake";
 import { runCli } from "@/cli/cli.main";
-import { createCliOut } from "@/cli/cli.output";
+import { CliExit, createCliOut } from "@/cli/cli.output";
 import { INIT_STEPS, runInit } from "@/cli/init.command";
 import { detectMode, releaseTag, SELF_VERSION } from "@/cli/init.mode";
 import {
   defineStep,
+  INIT_EXIT,
   INIT_STEP_IDS,
   INIT_STEP_TITLES,
   type InitContext,
@@ -265,6 +266,67 @@ describe("plan and run rules per mode (§4 mode table, C23)", () => {
   });
 });
 
+describe("problems left at the end (M1) and the postponed tunnel exit 3 (MINOR 6)", () => {
+  const withStep = (steps: readonly InitStep[], replace: InitStep) =>
+    steps.map((x) => (x.id === replace.id ? replace : x));
+  const broken = (id: InitStepId, fixedBy?: () => boolean) =>
+    defineStep({
+      id,
+      title: INIT_STEP_TITLES[id],
+      detect: async () => null,
+      plan: () => (fixedBy?.() ? [] : [{ kind: "error" as const, text: `rusak ${id}`, hint: `perbaiki ${id}` }]),
+      apply: async () => {},
+    });
+
+  test("only error lines, nothing to do → exit 1 with the problem, not 'Tidak ada yang perlu diubah'", async () => {
+    const s = stubs(new Set());
+    const r = await init(host("fresh", { tty: true }), {}, withStep(s.steps, broken("postgres")));
+    expect(r.code).toBe(1);
+    expect(r.stdout).not.toContain("Tidak ada yang perlu diubah");
+    expect(r.stdout).toContain("panel init selesai dengan masalah:");
+    expect(r.stdout).toContain("❌ rusak postgres");
+    expect(r.stdout).not.toContain("Sudah lengkap: binary panel, paket Termux, runit, PostgreSQL");
+  });
+
+  test("other steps run, the error is still there afterwards → exit 1; fixed meanwhile → exit 0", async () => {
+    const s = stubs(new Set(["binary"]));
+    const r = await init(host("fresh"), { yes: true }, withStep(s.steps, broken("postgres")));
+    expect(s.applied).toEqual(["binary"]);
+    expect(r.code).toBe(1);
+    expect(r.stdout).toContain("❌ rusak postgres");
+    expect(r.stdout).not.toContain("✅ panel init selesai.");
+    let fixed = false;
+    const t = stubs(new Set(["binary"]), async () => {
+      fixed = true;
+    });
+    const ok = await init(
+      host("fresh"),
+      { yes: true },
+      withStep(
+        t.steps,
+        broken("postgres", () => fixed),
+      ),
+    );
+    expect(ok.code).toBe(0);
+    expect(ok.stdout).toContain("panel init selesai.");
+  });
+
+  test("tunnel exit 3 waits: boot and start still run, then exit 3 with its message; env exit 3 stops at once", async () => {
+    const needs = (id: InitStepId) => async (x: InitStepId) => {
+      if (x === id) throw new CliExit(INIT_EXIT.needsUser, `butuh terminal ${id}`, "jalankan di terminal");
+    };
+    const s = stubs(new Set(["tunnel", "boot", "start"]), needs("tunnel"));
+    const r = await init(host("fresh"), { yes: true }, s.steps);
+    expect(s.applied).toEqual(["tunnel", "boot", "start"]);
+    expect(r.code).toBe(3);
+    expect(r.stdout).toContain("❌ butuh terminal tunnel");
+    const e = stubs(new Set(["env", "start"]), needs("env"));
+    const stopped = await init(host("fresh"), { yes: true }, e.steps);
+    expect(stopped.code).toBe(3);
+    expect(e.applied).toEqual(["env"]);
+  });
+});
+
 describe("confirmRisky: one restart rule (K9, C22)", () => {
   /** Calls confirmRisky(action) from the binary step's apply; returns its answer or the exit code. */
   async function risky(scenario: FakeScenarioName, action: RiskyAction, flags = {}, opts: FakeHostOptions = {}) {
@@ -349,6 +411,31 @@ describe("lock $PREFIX/tmp/panel-init.lock (§4.1 step 0, m7, C20)", () => {
     h.proc = { ...h.proc, alive: () => false };
     expect((await init(h, { yes: true })).code).toBe(0);
     expect(existsSync(lockOf(h))).toBe(false);
+  });
+});
+
+describe("lock ownership (MINOR 4)", () => {
+  test("release leaves a lock that another init holds now; a stale lock rewritten meanwhile is not removed", async () => {
+    const h = host("fresh");
+    const lock = join(h.paths.prefix, "tmp", "panel-init.lock");
+    const s = stubs(new Set(["binary"]), async () => {
+      writeFileSync(lock, "4343\n"); // removed by hand and taken by another init while we ran
+    });
+    expect((await init(h, { yes: true }, s.steps)).code).toBe(0);
+    expect(readFileSync(lock, "utf8")).toBe("4343\n");
+    // stale pid 4343; a racing init replaces it with its live pid 4444 between our read and our rm
+    h.proc = {
+      ...h.proc,
+      alive: (pid) => {
+        if (pid === 4343) writeFileSync(lock, "4444\n"); // checked stale; the racer writes its lock right then
+        return pid === 4444;
+      },
+      list: () => [{ pid: 4444, uid: 0, exe: "/x/panel", cmdline: ["./panel", "init"] }],
+    };
+    const r = await init(h, { yes: true });
+    expect(r.code).toBe(1);
+    expect(r.stderr).toContain("pid 4444");
+    expect(readFileSync(lock, "utf8")).toBe("4444\n");
   });
 });
 

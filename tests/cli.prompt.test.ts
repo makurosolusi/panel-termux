@@ -1,6 +1,8 @@
 import { describe, expect, test } from "bun:test";
+import { mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { type ByteSource, openTty, readAnswer, readLine } from "@/cli/cli.prompt";
+import { join } from "node:path";
+import { askTerminal, type ByteSource, openTty, readAnswer, readLine } from "@/cli/cli.prompt";
 
 /** ByteSource over `text` (string = UTF-8, numbers = raw bytes); records how many bytes were consumed. */
 function bytes(...parts: (string | number)[]) {
@@ -52,5 +54,20 @@ describe("openTty", () => {
   test("a missing terminal device = null (no terminal), other errors throw with the path", () => {
     expect(openTty("/nonexistent/panel-tty")).toBeNull();
     expect(() => openTty(tmpdir())).toThrow(tmpdir());
+  });
+});
+
+describe("askTerminal", () => {
+  test("a device that is not a terminal: raw mode fails, the fd is released once (no leak)", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "panel-cli-prompt-"));
+    const file = join(dir, "not-a-tty");
+    writeFileSync(file, "");
+    const openFds = () => readdirSync("/dev/fd").length;
+    const before = openFds();
+    expect(() => askTerminal("Q?", false, file)).toThrow(/setRawMode/);
+    await Bun.sleep(50); // ReadStream.destroy() closes asynchronously
+    expect(openFds()).toBe(before);
+    expect(readFileSync(file, "utf8")).toBe("Q? "); // no newline: raw mode never started
+    rmSync(dir, { recursive: true, force: true });
   });
 });

@@ -16,7 +16,7 @@ import { join } from "node:path";
 import { type FakeScenarioName, probePaths } from "@/cli/cli.host";
 import { createFakeHost, type FakeHostOptions } from "@/cli/cli.host.fake";
 import { createCliOut } from "@/cli/cli.output";
-import { binaryStep } from "@/cli/init.binary";
+import { binaryStep, releaseBlocker } from "@/cli/init.binary";
 import { runInit } from "@/cli/init.command";
 import { SELF_VERSION } from "@/cli/init.mode";
 
@@ -235,5 +235,32 @@ describe("binary step: symlink and ~/panel-src (E11)", () => {
     );
     expect(r.text).toContain("~/panel-src/dist tidak dipakai lagi; hapus bila tidak perlu");
     expect(r.text).toContain("Menghapus unduhan lama di ~/panel-src: v0.4.0-rc.1, v0.3.0");
+  });
+});
+
+describe("binary step: what may be installed and deleted (K24)", () => {
+  test("releaseBlocker: bun runtime never; no release tag only with PANEL_DEV_INSTALL=1", () => {
+    expect(releaseBlocker("v0.5.1", false, false)).toContain("runtime bun");
+    expect(releaseBlocker("", true, false)).toContain("runtime bun");
+    expect(releaseBlocker("", false, true)).toContain("bukan build rilis");
+    expect(releaseBlocker("", true, true)).toBeNull();
+    expect(releaseBlocker("v0.5.1", false, true)).toBeNull();
+  });
+
+  test("a file not named like our download, or one in $PREFIX/bin, is installed but never deleted", async () => {
+    for (const where of ["home", "prefix"] as const) {
+      const { h, p } = host("fresh");
+      // test-only: Termux keeps $PREFIX beside $HOME; here it moves under the sandbox home so only the bin rule decides
+      if (where === "prefix") h.paths.prefix = join(h.paths.home, "pfx");
+      const self = where === "home" ? join(h.paths.home, "my-tool") : join(h.paths.prefix, "bin", "panel-termux");
+      mkdirSync(join(self, ".."), { recursive: true });
+      writeFileSync(self, SELF, { mode: 0o755 });
+      h.selfPath = self;
+      const r = await init(h);
+      expect(r.code).toBe(0);
+      expect(readFileSync(p.binary, "utf8")).toBe(SELF);
+      expect(existsSync(self)).toBe(true);
+      expect(r.text).not.toContain("Menghapus file unduhan");
+    }
   });
 });

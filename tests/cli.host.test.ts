@@ -8,12 +8,9 @@ import {
   createTermuxHost,
   detectCliHost,
   FakeScenarioError,
-  listProcs,
   NotTermuxError,
   pathsFrom,
-  pidAlive,
   probePaths,
-  procExeId,
   runVisible,
 } from "@/cli/cli.host";
 import {
@@ -24,6 +21,7 @@ import {
   FAKE_OLD_VERSION,
   FAKE_PANEL_PID,
 } from "@/cli/cli.host.fake";
+import { listProcs, pidAlive, procExeId } from "@/cli/cli.host.proc";
 import { readEnvFile } from "@/cli/env.file";
 import { TermuxExecError } from "@/server/exec/termux.exec";
 import { scrubPanelEnv } from "@/server/main";
@@ -127,6 +125,9 @@ describe("termux host pieces", () => {
     const sh = Bun.which("sh") as string;
     expect(await runVisible(sh, ["-c", "printf 'a\\nhttps://x\\nlast'"], { onLine: (l) => lines.push(l) })).toBe(0);
     expect(lines).toEqual(["a", "https://x", "last"]);
+    lines.length = 0; // cloudflared logs its login URL on stderr
+    expect(await runVisible(sh, ["-c", "echo https://login >&2"], { onLine: (l) => lines.push(l) })).toBe(0);
+    expect(lines).toEqual(["https://login"]);
     expect(await runVisible(sh, ["-c", "exit 3"], { stdio: "ignore" })).toBe(3);
   });
 

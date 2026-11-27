@@ -66,20 +66,31 @@ export function openTty(path = "/dev/tty"): number | null {
   }
 }
 
-/** Asks `question` on the terminal in raw mode; null when there is no terminal or at EOF. */
-function askTerminal(question: string, secret: boolean): string | null {
-  const fd = openTty();
+/**
+ * Asks `question` on the terminal at `path` in raw mode; null when there is no terminal or at EOF. The ReadStream owns
+ * the fd once built (destroy() closes it; a second closeSync could hit an fd reused meanwhile); before that we close it.
+ */
+export function askTerminal(question: string, secret: boolean, path = "/dev/tty"): string | null {
+  const fd = openTty(path);
   if (fd === null) return null;
-  const stream = new ReadStream(fd);
+  let stream: ReadStream;
+  try {
+    stream = new ReadStream(fd);
+  } catch (e) {
+    closeSync(fd);
+    throw new Error(`open terminal ${path} failed: ${(e as Error).message}`, { cause: e });
+  }
   const write = (t: string | Uint8Array) => writeSync(fd, typeof t === "string" ? Buffer.from(t) : t);
+  let raw = false;
   try {
     write(`${question} `);
     stream.setRawMode(true);
+    raw = true;
     return readAnswer(fdBytes(fd), secret ? null : write);
   } finally {
-    stream.setRawMode(false);
-    write("\n");
-    closeSync(fd);
+    if (raw) stream.setRawMode(false);
+    if (raw) write("\n");
+    stream.destroy();
   }
 }
 

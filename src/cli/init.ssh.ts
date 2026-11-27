@@ -13,9 +13,10 @@ import {
   writeFileSync,
 } from "node:fs";
 import { userInfo } from "node:os";
-import { join, resolve } from "node:path";
+import { basename, join, resolve } from "node:path";
 import { probePaths } from "./cli.host";
 import { CliExit } from "./cli.output";
+import { INIT_TIMING, type InitTiming, sv } from "./init.runit";
 import { defineStep, INIT_EXIT, INIT_STEP_TITLES, type InitContext, type PlanLine } from "./init.types";
 
 /** Termux sshd's port (openssh package default). */
@@ -113,6 +114,9 @@ async function readSource(ctx: InitContext, src: string): Promise<{ text: string
     } catch (e) {
       throw new CliExit(INIT_EXIT.failed, `Gagal mengunduh kunci dari ${src}: ${(e as Error).message}`, "cek internet");
     }
+    // fetch follows redirects: a hop to http:// would hand us keys anyone on the path could have swapped
+    if (!/^https:\/\//i.test(res.url || src))
+      throw new CliExit(INIT_EXIT.failed, `${src} dialihkan ke alamat yang bukan https; kunci tidak dipakai.`);
     if (!res.ok) throw new CliExit(INIT_EXIT.failed, `Gagal mengunduh kunci dari ${src}: HTTP ${res.status}.`);
     const text = await res.text();
     if (text.length > MAX_SOURCE_CHARS) throw new CliExit(INIT_EXIT.failed, `${src} terlalu besar untuk daftar kunci.`);
@@ -173,10 +177,25 @@ export function dropInDecision(p: ReturnType<typeof sshPaths>): DropIn {
   return /^\s*Include\s+\S*sshd_config\.d\//im.test(config) ? "write" : "no-include";
 }
 
-/** What detect found. `upgrade` = step left for a later run (K21: upgrade never touches ssh). */
+/**
+ * What detect found. `upgrade` = step left for a later run (K21: upgrade never touches ssh). `manual` = pid of an
+ * sshd started by hand (not under runit, e.g. from ~/.bashrc): it holds port 8022, so `sv up` would crash-loop.
+ */
 export type SshState =
   | { upgrade: true }
-  | { upgrade: false; keys: PublicKey[]; add: PublicKey[]; dropIn: DropIn; down: boolean; running: boolean };
+  | {
+      upgrade: false;
+      keys: PublicKey[];
+      add: PublicKey[];
+      dropIn: DropIn;
+      down: boolean;
+      running: boolean;
+      manual: number | null;
+    };
+
+/** Our own sshd process outside runit (only asked when runit's sshd is not running). */
+const manualSshd = (ctx: InitContext): number | null =>
+  ctx.host.proc.list().find((p) => p.uid === ctx.host.proc.uid && basename(p.exe) === "sshd")?.pid ?? null;
 
 const detect = async (ctx: InitContext): Promise<SshState> => {
   const src = ctx.args.sshKey;
@@ -194,6 +213,7 @@ const detect = async (ctx: InitContext): Promise<SshState> => {
     dropIn: dropInDecision(p),
     down: existsSync(p.down),
     running,
+    manual: running ? null : manualSshd(ctx),
   };
 };
 
@@ -217,7 +237,13 @@ const plan = (ctx: InitContext, s: SshState): PlanLine[] => {
   else lines.push({ kind: "ok", text: `Kunci SSH sudah terdaftar (${s.keys.length})` });
   if (s.dropIn === "write" || s.dropIn === "no-config")
     lines.push({ kind: "action", text: "Matikan masuk SSH dengan kata sandi (hanya kunci)" });
-  if (!s.running) lines.push({ kind: "action", text: `Nyalakan SSH (port ${SSHD_PORT})` });
+  if (s.manual !== null)
+    lines.push({
+      kind: "warning",
+      text: `SSH sudah dinyalakan manual (pid ${s.manual}), bukan lewat runit; dibiarkan`,
+      hint: `agar menyala sendiri setelah HP restart: kill ${s.manual}, lalu sv up sshd`,
+    });
+  else if (!s.running) lines.push({ kind: "action", text: `Nyalakan SSH (port ${SSHD_PORT})` });
   return lines;
 };
 
@@ -241,7 +267,7 @@ function writeKeys(p: ReturnType<typeof sshPaths>, add: readonly PublicKey[]): s
   return [...changed, p.authorizedKeys];
 }
 
-const apply = async (ctx: InitContext, s: SshState): Promise<void> => {
+const apply = async (ctx: InitContext, s: SshState, timing: InitTiming): Promise<void> => {
   if (s.upgrade) return;
   const { out, state } = ctx;
   const p = sshPaths(ctx);
@@ -258,25 +284,21 @@ const apply = async (ctx: InitContext, s: SshState): Promise<void> => {
     mkdirSync(p.dropInDir, { recursive: true });
     writeFileSync(p.dropIn, DROP_IN, { mode: 0o644 });
     state.changed.push(p.dropIn);
-    if (s.running)
+    if (s.running || s.manual !== null)
       state.manual.push("SSH: masuk hanya dengan kunci berlaku setelah sshd dinyalakan ulang (sv restart sshd)");
   } else if (s.dropIn === "no-include" || s.dropIn === "user-set") {
     out.check("info", "Pengaturan sshd tidak diubah (masuk dengan kata sandi diatur sshd_config)");
   }
-  if (!s.running) {
+  if (s.manual !== null)
+    state.manual.push(`SSH berjalan manual (pid ${s.manual}); agar ikut runit: kill ${s.manual}, lalu sv up sshd`);
+  else if (!s.running) {
     if (!existsSync(p.service))
       throw new CliExit(INIT_EXIT.failed, `Layanan sshd tidak ada di ${p.service}.`, "pasang: pkg install openssh");
     if (s.down) {
       rmSync(p.down, { force: true });
       state.changed.push(p.down);
     }
-    const r = await ctx.host.exec("sv", ["up", "sshd"]);
-    if (r.code !== 0)
-      throw new CliExit(
-        INIT_EXIT.failed,
-        `Gagal menyalakan sshd: ${r.stderr.trim() || `kode ${r.code}`}.`,
-        "sv status sshd",
-      );
+    await sv(ctx, ["up", "sshd"], timing); // retried: runsv may not supervise a just-installed folder yet
   }
   const host = existsSync(p.hostKey) ? parseKey(readFileSync(p.hostKey, "utf8")) : null;
   out.check(
@@ -287,5 +309,15 @@ const apply = async (ctx: InitContext, s: SshState): Promise<void> => {
   out.line(`  Masuk dari komputer: ssh -p ${SSHD_PORT} ${userInfo().username}@<IP HP: lihat Tailscale/Wi-Fi>`);
 };
 
+/** Step 3a with `timing` (tests shorten the `sv` retry). */
+export const createSshStep = (timing: InitTiming = INIT_TIMING) =>
+  defineStep<SshState>({
+    id: "ssh",
+    title: INIT_STEP_TITLES.ssh,
+    detect,
+    plan,
+    apply: (ctx, s) => apply(ctx, s, timing),
+  });
+
 /** Step 3a: SSH access from `--ssh-key` (K22, C26). */
-export const sshStep = defineStep<SshState>({ id: "ssh", title: INIT_STEP_TITLES.ssh, detect, plan, apply });
+export const sshStep = createSshStep();

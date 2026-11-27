@@ -82,6 +82,15 @@ export function planService(ctx: InitContext, s: ServiceState): PlanLine[] {
   return lines;
 }
 
+/**
+ * No terminal, and applyService would have to restart a running cloudflared (config.yml changes this run, or its
+ * run script is replaced): confirmRisky cannot ask, so the step must stop before it changes anything (K9).
+ */
+export function restartNeedsTerminal(ctx: InitContext, s: ServiceState, ingressChanges: boolean): boolean {
+  if (ctx.tty || !s.running || !s.dirExists) return false;
+  return ingressChanges || s.run === null || (isTemplate(s.run) && ctx.mode === "fresh");
+}
+
 const fail = (what: string, code: number) =>
   new CliExit(INIT_EXIT.failed, `${what} gagal (kode ${code}).`, "lihat: sv status cloudflared; panel docs cloudflare");
 

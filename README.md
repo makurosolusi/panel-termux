@@ -387,7 +387,7 @@ sv up panel
 
 ### Pulihkan ke HP baru
 
-Asumsi: HP baru bersih, kamu punya akun Cloudflare (dashboard + R2), akun Google Cloud (OAuth client), satu laptop atau HP lain untuk login web, dan **tidak** punya file dari HP lama kecuali yang ada di bucket (`include_secrets=off`, tanpa file kunci data). Variabel contoh: bucket `BUCKET`, prefix `panel-termux/`, nama server `poco2`. Setiap blok dijalankan di Termux HP baru kecuali disebut lain.
+Asumsi: HP baru bersih, kamu punya akun Cloudflare (dashboard + R2), akun Google Cloud (OAuth client), satu laptop atau HP lain untuk login web, dan **tidak** punya file dari HP lama kecuali yang ada di bucket (`include_secrets=off`, tanpa file kunci data). Variabel contoh: bucket `BUCKET`, prefix `panel-termux/`. Setiap blok dijalankan di Termux HP baru kecuali disebut lain.
 
 0. **HP lama masih hidup** (pindah HP, bukan hilang). Matikan konektor tunnel di sana agar trafik tidak terbagi:
 
@@ -403,8 +403,10 @@ Asumsi: HP baru bersih, kamu punya akun Cloudflare (dashboard + R2), akun Google
 2. **Alat pulih**:
 
    ```sh
-   pkg upgrade -y && pkg install -y git rclone cloudflared
+   pkg upgrade -y && pkg install -y rclone cloudflared
    ```
+
+   `pkg upgrade` aman di sini karena HP ini belum punya data PostgreSQL. Setelah langkah 11, jangan jalankan `pkg upgrade` sembarangan (lihat `panel docs paket`).
 
 3. **Token R2 baca-saja**: di dashboard Cloudflare → R2 → Manage API tokens → buat token **Object Read only** untuk bucket `BUCKET`. Catat Access Key ID, Secret Access Key, dan endpoint `https://<account>.r2.cloudflarestorage.com`. Di Termux, ketik nilainya sendiri; perintah ini tidak mencetak secret:
 
@@ -426,7 +428,7 @@ Asumsi: HP baru bersih, kamu punya akun Cloudflare (dashboard + R2), akun Google
    cat 030012-manifest.json            # catat paths, appBaseUrl, tunnel, sites, postgresVersion
    ```
 
-5. **File situs dan konfigurasi tunnel**. Ini harus dilakukan **sebelum** installer server, karena installer membuat `ecosystem.config.js` kosong bila belum ada dan memeriksa tunnel bila `config.yml` ada. Folder tujuan harus belum ada atau kosong:
+5. **File situs dan konfigurasi tunnel**. Ini harus dilakukan **sebelum** `panel init` (langkah 11). Bila folder ini sudah ada, init memakainya: `ecosystem.config.js` yang dipulihkan tidak ditimpa dan tunnel lama dipakai lagi. Folder tujuan harus belum ada atau kosong:
 
    ```sh
    mkdir -p ~/sites && tar -xzf 030012-sites.tar.gz -C ~/sites          # paths.sitesDir dari manifest
@@ -444,53 +446,60 @@ Asumsi: HP baru bersih, kamu punya akun Cloudflare (dashboard + R2), akun Google
 
    `tunnel token --cred-file` hanya untuk tunnel yang dibuat dengan cloudflared ≥ 2022.3.0. Untuk tunnel yang lebih tua: buat tunnel baru dengan nama lain, arahkan ulang setiap hostname (`cloudflared tunnel route dns -f <tunnel> <host>`), lalu ganti `tunnel:` dan `credentials-file:` di `config.yml`. DNS CNAME di Cloudflare tidak perlu diubah bila tunnel yang sama dipakai.
 
-7. **Installer server** (memasang sshd, postgres dengan role `postgres`, pm2, dan service cloudflared; membiarkan `ecosystem.config.js` yang sudah dipulihkan):
+7. **Unduh panel**, tapi jangan jalankan dulu:
 
    ```sh
-   git clone https://github.com/makurosolusi/server-termux ~/server-termux
-   sh ~/server-termux/install.sh poco2
+   cd && curl -fL --retry 3 -o panel-termux https://github.com/makurosolusi/panel-termux/releases/latest/download/panel && chmod +x panel-termux
    ```
 
-   Ikuti "Android settings" yang dicetak installer, lalu reboot dan buka kunci HP sekali. Cek dengan `SVDIR=$PREFIX/var/service sv status postgres cloudflared pm2`: semua harus `run:`. Aplikasi pm2 akan **errored** sampai langkah 13 karena binary situs tidak dicadangkan.
+   Data panel dipulihkan dulu (langkah 8 sampai 10), supaya init melihat data lama dan hanya melengkapi yang kurang.
 
-8. **Role dan database Postgres**. Cocokkan `postgresVersion` di manifest dengan `psql -V`: major HP baru harus ≥ major lama.
+8. **Data panel**:
 
    ```sh
-   cd ~/pulih
-   psql -U postgres -d postgres -f 030012-globals.sql        # "role "postgres" already exists" wajar
-   for f in 030012-*.dump; do pg_restore -U postgres --create --exit-on-error -d postgres "$f"; done
+   mkdir -p ~/panel/data && chmod 700 ~/panel ~/panel/data
+   cp ~/pulih/030012-panel.db ~/panel/data/panel.db && chmod 600 ~/panel/data/panel.db
+   rm -f ~/panel/data/panel.db-wal ~/panel/data/panel.db-shm ~/panel/data/secret
    ```
 
-9. **Pasang panel**: jalankan perintah pasang di [Instal di HP](#instal-di-hp) langkah 1 (installer rilis yang memverifikasi checksum). Installer berhenti dengan service `down` karena `.env` belum lengkap. Jangan isi `.env` dulu.
-10. **Data panel**:
+9. **`.env` panel**. Bila run berisi item `secrets`: `cp ~/pulih/secrets/.env ~/panel/.env && chmod 600 ~/panel/.env`. Bila tidak, biarkan: init menanyakan yang masih kosong di langkah 11. Siapkan jawabannya:
+   - alamat panel = `appBaseUrl` di manifest, persis sama (redirect OAuth);
+   - Google Client ID = client lama (Google Cloud → Credentials);
+   - Google Client secret = secret lama bila tersimpan, kalau tidak "Add secret" di client itu lalu hapus yang lama setelah selesai;
+   - email Google admin = email kamu.
+
+10. **Kunci data**, **salah satu** dari:
+    - (a) item `secrets` → `cp ~/pulih/secrets/secret ~/panel/data/secret`;
+    - (b) file kunci data unduhan → perintah `printf` yang ada di file itu;
+    - (c) tidak punya → biarkan `secret` tidak ada. Panel membuat kunci baru dan masuk mode tidak cocok (langkah 13).
+
+    Bila ada, `chmod 600 ~/panel/data/secret`.
+
+11. **Jalankan init** di aplikasi Termux (bukan lewat ssh tanpa `-t`: pemasangan paket, PostgreSQL, dan Termux:Boot butuh terminal):
 
     ```sh
-    export SVDIR=$PREFIX/var/service
-    sv down panel 2>/dev/null; touch $SVDIR/panel/down          # pastikan panel tidak sedang jalan
-    cp ~/pulih/030012-panel.db ~/panel/data/panel.db && chmod 600 ~/panel/data/panel.db
-    rm -f ~/panel/data/panel.db-wal ~/panel/data/panel.db-shm ~/panel/data/secret
+    cd && ./panel-termux init --hostname <alamat dari appBaseUrl> --admin-email <email kamu>
     ```
 
-    Kunci data, **salah satu** dari:
-    - (a) item `secrets` → `cp ~/pulih/secrets/secret ~/panel/data/secret` dan `cp ~/pulih/secrets/.env ~/panel/.env`;
-    - (b) file kunci data unduhan → perintah `printf` yang ada di file itu;
-    - (c) tidak punya → biarkan `secret` tidak ada. Panel membuat kunci baru dan masuk mode tidak cocok (langkah 12).
+    Karena `~/sites`, `~/.cloudflared`, dan `panel.db` sudah ada, init memilih mode **Perbaiki**: tidak ada `pkg upgrade`; paket yang kurang (termux-services, nodejs, postgresql, cloudflared, termux-api) dipasang satu per satu setelah dicek; `cloudflared` dan `postgresql` ditahan (hold) dari upgrade; PostgreSQL disiapkan kosong dengan role `postgres`; `ecosystem.config.js` dan `config.yml` yang dipulihkan dipakai apa adanya; lalu Termux:Boot dipasang dan panel dinyalakan. Jawab pertanyaan `.env` dengan nilai dari langkah 9. Bila init meminta login Cloudflare, buka tautannya dan pilih domain. Mau ssh lagi dari laptop: tambahkan `--ssh-key https://github.com/<akun>.keys`.
 
-    `chmod 600 ~/panel/data/secret ~/panel/.env`.
+    Ikuti catatan yang dicetak init di akhir (izin baterai, buka Termux:Boot sekali), lalu reboot dan buka kunci HP sekali. Cek dengan `SVDIR=$PREFIX/var/service sv status postgres cloudflared pm2 panel`: semua harus `run:`. Bila terputus di tengah, jalankan perintah yang sama lagi.
 
-11. **`.env` panel** (bila bukan dari item `secrets`). Edit `~/panel/.env`:
-    - `APP_BASE_URL` = `appBaseUrl` di manifest, persis sama (redirect OAuth);
-    - `GOOGLE_CLIENT_ID` = client lama (Google Cloud → Credentials);
-    - `GOOGLE_CLIENT_SECRET` = secret lama bila tersimpan, kalau tidak "Add secret" di client itu lalu hapus yang lama setelah selesai;
-    - `SUPER_ADMIN_EMAILS` = email kamu.
+    Aplikasi tulisan tangan di `ecosystem.config.js` (mis. daftar `apps` buatan sendiri) tetap dijalankan pm2-runtime yang membaca file itu; init tidak mengubah atau me-restart-nya. Bila **Situs → Persiapan** meminta penyesuaian, tekan **Perbaiki** di sana. Aplikasi pm2 akan **errored** sampai langkah 14 karena binary situs tidak dicadangkan.
 
-    Lalu jalankan ulang `install.sh` panel. Ini menghapus file `down`, menyalakan panel, dan menunggu `/api/health`. Panel menyala lagi sendiri setelah reboot berikutnya.
+12. **Role dan database Postgres**. Cocokkan `postgresVersion` di manifest dengan `psql -V`: major HP baru harus ≥ major lama.
 
-12. **Login dan kunci**: buka `APP_BASE_URL`, login Google.
+    ```sh
+    cd ~/pulih
+    psql -U postgres -d postgres -f 030012-globals.sql        # "role "postgres" already exists" wajar
+    for f in 030012-*.dump; do pg_restore -U postgres --create --exit-on-error -d postgres "$f"; done
+    ```
+
+13. **Login dan kunci**: buka `APP_BASE_URL`, login Google.
     - Bila langkah 10 (c): Administrasi → Kesehatan sistem → Kunci data → "Hapus pengaturan rahasia lama", lalu Pengaturan → isi ulang token API Cloudflare, kunci R2 baru dengan izin baca/tulis/hapus (bukan token baca-saja dari langkah 3), dan token bot Telegram. Lalu "Uji koneksi".
     - Hapus token baca-saja langkah 3 di dashboard R2.
-13. **Binary situs**: untuk setiap `sites[].needsBinary` di manifest, buka situs di panel → Deploy → unggah binary dari build-mu (CI/laptop). Deploy me-restart aplikasinya, dan pm2-runtime membaca `~/sites/ecosystem.config.js` sehingga `pm2 save` tidak perlu.
-14. **Cek akhir**:
+14. **Binary situs**: untuk setiap `sites[].needsBinary` di manifest, buka situs di panel → Deploy → unggah binary dari build-mu (CI/laptop). Deploy me-restart aplikasinya, dan pm2-runtime membaca `~/sites/ecosystem.config.js` sehingga `pm2 save` tidak perlu.
+15. **Cek akhir**:
     - setiap hostname situs menjawab;
     - Ringkasan tanpa masalah merah;
     - dashboard Zero Trust → tunnel menampilkan **satu** konektor;

@@ -11,6 +11,7 @@ import { ecosystemFromTemplate } from "../server/sites/ecosystem.template";
 import { planRunScriptFix } from "../server/sites/runscript.patch";
 import { writeAtomic } from "../server/sites/site.files";
 import { probePaths } from "./cli.host";
+import { stepRuns } from "./init.plan";
 import { INIT_TIMING, type InitTiming, installServiceDir, sv } from "./init.runit";
 import { defineStep, INIT_STEP_TITLES, type InitContext, type PlanLine } from "./init.types";
 
@@ -29,6 +30,8 @@ export type Pm2State = {
   run: Buffer | null;
   runIsLink: boolean;
   runNlink: number;
+  /** pm2-runtime is installed (the run script execs it). */
+  runtime: boolean;
 };
 
 const readOrNull = (f: string) => (existsSync(f) ? readFileSync(f) : null);
@@ -59,12 +62,19 @@ function detectPm2(ctx: InitContext): Pm2State {
     run,
     runIsLink: link?.isSymbolicLink() ?? false,
     runNlink: link?.nlink ?? 1,
+    runtime: existsSync(probePaths(ctx.host.paths).pm2Runtime),
   };
 }
 
 /** Our setup goes in only when nothing of a hand-made one exists (K6); parts written by an interrupted run are ours. */
 const writable = (s: Pm2State) =>
   !Object.values(s.parts).includes("other") && Object.values(s.parts).includes("missing");
+
+const noRuntime = (ctx: InitContext): PlanLine => ({
+  kind: "warning",
+  text: "pm2 belum terpasang",
+  hint: `jalankan lagi ${ctx.resumeCommand()} di terminal`,
+});
 
 /** Read-only integration report of an existing setup: the same planners the Persiapan card fixes with. */
 function integrationLines(ctx: InitContext, s: Pm2State): PlanLine[] {
@@ -86,8 +96,7 @@ function integrationLines(ctx: InitContext, s: Pm2State): PlanLine[] {
     });
   if (s.parts.service === "missing")
     lines.push({ kind: "warning", text: "Layanan pm2 belum dipasang di runit", hint: PERSIAPAN });
-  if (!existsSync(probePaths(ctx.host.paths).pm2Runtime))
-    lines.push({ kind: "warning", text: "pm2 belum terpasang", hint: "jalankan lagi panel init di terminal" });
+  if (!s.runtime) lines.push(noRuntime(ctx));
   if (lines.length === 0) lines.push({ kind: "info", text: "pm2 sudah diatur dan tidak diubah", hint: PERSIAPAN });
   return lines;
 }
@@ -98,10 +107,14 @@ export const createPm2Step = (timing: InitTiming = INIT_TIMING) =>
     id: "pm2",
     title: INIT_STEP_TITLES.pm2,
     detect: async (ctx) => detectPm2(ctx),
-    plan: (ctx, s) =>
-      writable(s)
-        ? [{ kind: "action", text: "Menyiapkan pm2 untuk situs (~/sites/ecosystem.config.js, apps.json, layanan pm2)" }]
-        : integrationLines(ctx, s),
+    plan(ctx, s) {
+      if (!writable(s)) return integrationLines(ctx, s);
+      // M2: a pm2 service without pm2-runtime crash-loops in runsv; step 2 installs it only when it runs now
+      if (!s.runtime && !stepRuns(ctx, "packages")) return [noRuntime(ctx)];
+      return [
+        { kind: "action", text: "Menyiapkan pm2 untuk situs (~/sites/ecosystem.config.js, apps.json, layanan pm2)" },
+      ];
+    },
     async apply(ctx, s) {
       const { prefix } = ctx.host.paths;
       mkdirSync(s.sitesDir, { recursive: true });

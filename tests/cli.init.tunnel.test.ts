@@ -179,7 +179,8 @@ describe("fresh phone", () => {
     const before = snapshot(root);
     const r = await init(h, { yes: true });
     expect(r.code).toBe(3);
-    expect(r.text).toContain("Login Cloudflare butuh browser dan terminal");
+    expect(r.text).toContain("⚠️ Login Cloudflare butuh browser dan terminal; tunnel dilewati"); // in the plan
+    expect(r.text).toContain("❌ Login Cloudflare butuh browser dan terminal.");
     expect(argvs(h)).not.toContain("cloudflared tunnel login");
     const lockless = (snap: string[]) => snap.filter((f) => !f.startsWith(`${root}/usr `) && !f.includes("/usr/tmp"));
     expect(lockless(snapshot(root))).toEqual(lockless(before)); // the init lock lives in $PREFIX/tmp
@@ -206,7 +207,7 @@ describe("fresh phone", () => {
     const a = setup("fresh", { tty: true, answers: [true, "", "panel-baru"], files, account: taken });
     expect((await init(a.h)).code).toBe(0);
     expect(argvs(a.h)).toContain("cloudflared tunnel create panel-baru");
-    const b = setup("fresh", { files, account: taken });
+    const b = setup("fresh", { files, account: taken, cfInstalled: true }); // cert.pem = user data: repair mode
     const r = await init(b.h, { yes: true });
     expect(r.code).toBe(3);
     expect(r.text).toContain("cloudflared tunnel delete panel-contoh-com");
@@ -251,23 +252,24 @@ describe("DNS record of another tunnel (C19, E1)", () => {
     expect(s.overwrites).toEqual([`${NEW_ID} ${HOST}`]);
   });
 
-  test("TTY no → exit 4, no overwrite, ingress not written (a rerun asks again)", async () => {
+  test("TTY no → exit 4, no overwrite, config.yml not written (a rerun reuses the tunnel and asks again)", async () => {
     const s = setup("fresh", { tty: true, answers: [true, "", false], files, account });
     await taken(s.h);
     const r = await init(s.h);
     expect(r.code).toBe(4);
     expect(s.overwrites).toEqual([]);
-    expect(readFileSync(join(s.cfDir, "config.yml"), "utf8")).not.toContain(HOST);
+    expect(existsSync(join(s.cfDir, "config.yml"))).toBe(false);
   });
 
-  test("no TTY, even --yes → exit 3 with the exact command, no overwrite", async () => {
-    const s = setup("fresh", { files, account });
+  test("no TTY, even --yes → exit 3 with the exact command, no overwrite, config.yml not written", async () => {
+    const s = setup("fresh", { files, account, cfInstalled: true });
     mkdirSync(s.cfDir, { recursive: true });
     await taken(s.h);
     const r = await init(s.h, { yes: true });
     expect(r.code).toBe(3);
     expect(r.text).toContain(`cloudflared tunnel route dns --overwrite-dns panel-contoh-com ${HOST}`);
     expect(s.overwrites).toEqual([]);
+    expect(existsSync(join(s.cfDir, "config.yml"))).toBe(false); // DNS is asked before config.yml is written
   });
 });
 
@@ -316,14 +318,35 @@ describe("existing install (repair)", () => {
     expect(s.overwrites).toEqual([]);
   });
 
-  test("panel down, no TTY (--yes): restart of a running cloudflared → exit 3, no sv restart (K9)", async () => {
+  test("panel down, no TTY (--yes): restart of a running cloudflared → exit 3 before DNS/config.yml (K9)", async () => {
     const s = setup("ready");
     noPanelRule(s.cfDir);
     await s.h.system().runit.control("panel", "stop");
+    const before = readFileSync(join(s.cfDir, "config.yml"), "utf8");
     const r = await init(s.h, { yes: true });
     expect(r.code).toBe(3);
-    expect(r.text).toContain("sv restart cloudflared");
+    expect(r.text).toContain("cloudflared yang berjalan perlu dimulai ulang (semua situs putus sebentar)"); // plan
+    expect(r.text).toContain("❌ cloudflared yang berjalan perlu dimulai ulang; tunnel tidak diubah tanpa terminal.");
     expect(argvs(s.h)).not.toContain("sv restart cloudflared");
+    // stopped before DNS and config.yml (MINOR 6): nothing half done that a terminal run would have asked about
+    expect(argvs(s.h).some((a) => a.startsWith("cloudflared tunnel route"))).toBe(false);
+    expect(readFileSync(join(s.cfDir, "config.yml"), "utf8")).toBe(before);
+  });
+
+  test("repair without TTY and without cloudflared (step 2 skipped): warning only, no cloudflared call (M2)", async () => {
+    const files = { ...ENV_FILE, ".cloudflared/cert.pem": "test-only" }; // user data → repair
+    const { h, root } = setup("fresh", { files });
+    const before = snapshot(root);
+    const r = await init(h, { yes: true });
+    expect(r.code).toBe(0);
+    expect(r.text).toContain("⚠️ cloudflared belum terpasang; tunnel belum disiapkan");
+    expect(r.text).not.toContain("Sudah lengkap: tunnel");
+    expect(argvs(h).filter((a) => a.startsWith("cloudflared") || a.startsWith("sv "))).toEqual([]);
+    const lockless = (snap: string[]) => snap.filter((f) => !f.startsWith(`${root}/usr `) && !f.includes("/usr/tmp"));
+    expect(lockless(snapshot(root))).toEqual(lockless(before));
+    // with a terminal step 2 runs first (it installs cloudflared), so the tunnel is planned
+    const t = setup("fresh", { files, tty: true });
+    expect((await init(t.h, { "dry-run": true })).text).toContain("Membuat tunnel, menghubungkan panel.contoh.com");
   });
 
   test("custom run script is kept (K6); template in repair without TTY → warning, not replaced", async () => {

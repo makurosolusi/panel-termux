@@ -14,7 +14,7 @@ import { join } from "node:path";
 import type { FakeScenarioName } from "@/cli/cli.host";
 import { createFakeHost, type FakeHost, type FakeHostOptions } from "@/cli/cli.host.fake";
 import { CliExit, createCliOut } from "@/cli/cli.output";
-import { appendKeys, parseKey, parseKeys, type SshState, sshPaths, sshStep } from "@/cli/init.ssh";
+import { appendKeys, createSshStep, parseKey, parseKeys, type SshState, sshPaths, sshStep } from "@/cli/init.ssh";
 import type { InitArgs, InitContext, InitMode } from "@/cli/init.types";
 
 // test-only public keys (private halves deleted); fingerprints as printed by `ssh-keygen -lf`
@@ -181,6 +181,13 @@ describe("ssh step (K22, C26)", () => {
     await failsWith(sshStep.detect(ctxOf(h, KEYS_URL).ctx), 1, /HTTP 404/);
   });
 
+  test("a redirect to http:// is refused (exit 1), keys not used", async () => {
+    const res = new Response(ED);
+    Object.defineProperty(res, "url", { value: "http://evil.example/k" }); // test-only: final URL after redirects
+    const h = phone("fresh", { fetch: async () => res });
+    await failsWith(sshStep.detect(ctxOf(h, KEYS_URL).ctx), 1, /bukan https/);
+  });
+
   test("local file; missing file → exit 1", async () => {
     const h = phone();
     const { ctx } = ctxOf(h, keyFile(`${RSA}\n`));
@@ -260,6 +267,39 @@ describe("ssh step (K22, C26)", () => {
     const e = await run(ctx).catch((err: CliExit) => err);
     expect(e).toMatchObject({ code: 1, hint: "pasang: pkg install openssh" });
     expect(existsSync(sshPaths(ctx).authorizedKeys)).toBe(true);
+  });
+
+  test("sshd started by hand (not runit): warning, no sv up, down kept, manual line", async () => {
+    const h = phone();
+    h.proc.list = () => [{ pid: 777, uid: h.proc.uid, exe: "/x/usr/bin/sshd", cmdline: ["sshd"] }];
+    const { ctx } = ctxOf(h, keyFile(ED));
+    const lines = await run(ctx);
+    expect(lines).toContainEqual(
+      expect.objectContaining({ kind: "warning", text: expect.stringContaining("pid 777") }),
+    );
+    expect(lines.some((l) => l.text.startsWith("Nyalakan SSH"))).toBe(false);
+    expect(h.records.some((r) => r.argv.join(" ") === "sv up sshd")).toBe(false);
+    expect(existsSync(sshPaths(ctx).down)).toBe(true);
+    expect(ctx.state.manual.join("\n")).toContain("kill 777, lalu sv up sshd");
+  });
+
+  test("sv up sshd is retried until runsv supervises the folder; still failing → exit 1", async () => {
+    let fails = 1;
+    const svUp = (tool: string, args: readonly string[]) =>
+      tool === "sv" && args[0] === "up" && fails-- > 0 ? { code: 1, stdout: "", stderr: "fail: sshd: x" } : undefined;
+    const step = createSshStep({ daemonMs: 0, svMs: 200, healthMs: 0, pollMs: 5 });
+    const h = phone("fresh", { execAnswers: svUp });
+    const { ctx } = ctxOf(h, keyFile(ED));
+    await step.apply(ctx, (await step.detect(ctx)) as SshState);
+    expect(h.records.filter((r) => r.argv.join(" ") === "sv up sshd")).toHaveLength(2);
+
+    fails = 1_000;
+    const c2 = ctxOf(phone("fresh", { execAnswers: svUp }), keyFile(ED)).ctx;
+    await failsWith(
+      step.detect(c2).then((s) => step.apply(c2, s as SshState)),
+      1,
+      /sv up sshd gagal/,
+    );
   });
 
   test("upgrade mode: source not read, a warning to run again, apply does nothing", async () => {

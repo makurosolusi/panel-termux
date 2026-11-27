@@ -3,10 +3,25 @@
 import type { CliHost } from "./cli.host";
 import type { CliOut } from "./cli.output";
 import { SELF_VERSION } from "./init.mode";
-import type { InitContext, InitMode, InitStep, ModeDecision, PlanLine } from "./init.types";
+import type { InitContext, InitMode, InitStep, InitStepId, ModeDecision, PlanLine } from "./init.types";
 
 /** run = may change the phone; tty = only with a terminal (else reported); report = never, only reported (§4). */
 export type Policy = "run" | "tty" | "report";
+
+/** Which step may change the phone in which mode (§4 mode table, K9, K21, C22, C23). */
+export const POLICY: Record<InitStepId, Record<InitMode, Policy>> = {
+  binary: { fresh: "run", repair: "run", upgrade: "run" },
+  packages: { fresh: "run", repair: "tty", upgrade: "report" },
+  runit: { fresh: "run", repair: "run", upgrade: "report" },
+  ssh: { fresh: "run", repair: "run", upgrade: "report" },
+  postgres: { fresh: "run", repair: "tty", upgrade: "report" },
+  env: { fresh: "run", repair: "run", upgrade: "report" },
+  "panel-sv": { fresh: "run", repair: "run", upgrade: "run" }, // upgrade: only a known old run script (C23)
+  pm2: { fresh: "run", repair: "run", upgrade: "report" },
+  tunnel: { fresh: "run", repair: "run", upgrade: "report" },
+  boot: { fresh: "run", repair: "tty", upgrade: "report" },
+  start: { fresh: "run", repair: "run", upgrade: "run" },
+};
 
 /** `path` with the home folder written as ~. */
 export const tilde = (host: CliHost, path: string) =>
@@ -35,6 +50,8 @@ export type Planned = { step: InitStep; policy: Policy; lines: PlanLine[] };
 export const hasAction = (lines: PlanLine[]) => lines.some((l) => l.kind === "action");
 /** The policy lets the step change the phone now. */
 export const allowed = (policy: Policy, tty: boolean) => policy === "run" || (policy === "tty" && tty);
+/** Step `id` may change the phone in this run (e.g. step 2 installs a tool a later step needs, M2). */
+export const stepRuns = (ctx: InitContext, id: InitStepId) => allowed(POLICY[id][ctx.mode], ctx.tty);
 
 /** Prints the mode line, numbered actions, checked facts, blocked actions and the complete steps. */
 export function printPlan(ctx: InitContext, planned: Planned[]): void {
@@ -51,7 +68,8 @@ export function printPlan(ctx: InitContext, planned: Planned[]): void {
       if (run) out.line(`  ${++n}. ${l.text}`);
       else blocked.push(`${l.text} (${why})`);
     }
-    if (!hasAction(lines)) complete.push(step.title);
+    if (!lines.some((l) => l.kind === "action" || l.kind === "warning" || l.kind === "error"))
+      complete.push(step.title);
   }
   if (n === 0) out.line("  (tidak ada)");
   for (const { lines } of planned)
@@ -60,10 +78,14 @@ export function printPlan(ctx: InitContext, planned: Planned[]): void {
   if (complete.length > 0) out.line(`Sudah lengkap: ${complete.join(", ")}.`);
 }
 
-/** Closing summary: changed paths and manual steps. */
-export function summary(out: CliOut, ctx: InitContext): void {
+/** Closing summary: changed paths, manual steps and the problems left (error lines, a postponed exit 3). */
+export function summary(out: CliOut, ctx: InitContext, problems: PlanLine[] = []): void {
   out.line();
-  out.check("ok", "panel init selesai.");
+  if (problems.length === 0) out.check("ok", "panel init selesai.");
+  else {
+    out.check("warning", "panel init selesai dengan masalah:");
+    for (const p of problems) out.check("error", p.text, p.hint ?? null);
+  }
   if (ctx.state.changed.length > 0)
     out.line(`Yang diubah:\n${[...new Set(ctx.state.changed)].map((f) => `  ${f}`).join("\n")}`);
   if (ctx.state.manual.length > 0) out.line(`Langkah manual:\n${ctx.state.manual.map((m) => `  → ${m}`).join("\n")}`);

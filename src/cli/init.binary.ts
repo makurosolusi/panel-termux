@@ -21,13 +21,13 @@ import {
   statSync,
   symlinkSync,
 } from "node:fs";
-import { dirname, join, resolve } from "node:path";
+import { basename, dirname, join, resolve } from "node:path";
 import { BinaryError, detectRuntime } from "../server/deploy/elf.runtime";
 import { ENV_VARS, type EnvVar, type EnvVarName } from "../shared/env.schema";
 import { type CliHost, probePaths } from "./cli.host";
 import { CliExit } from "./cli.output";
 import { readEnvFile } from "./env.file";
-import { SELF_VERSION } from "./init.mode";
+import { releaseTag, SELF_VERSION } from "./init.mode";
 import { tilde } from "./init.plan";
 import { defineStep, INIT_EXIT, INIT_STEP_TITLES, type InitContext, type PlanLine } from "./init.types";
 import { previewVerify, verifyInstall } from "./init.verify";
@@ -36,6 +36,10 @@ import { previewVerify, verifyInstall } from "./init.verify";
 export const SPACE_HEADROOM_BYTES = 256 * 1024 * 1024;
 const VERSION_DIR = /^v[0-9]/;
 const SEMVER_DIR = /^v\d+\.\d+\.\d+(-[0-9A-Za-z.-]+)?$/;
+/** Names our download has (README: ~/panel-termux; install.sh shim: the raw `panel` asset). */
+const DOWNLOAD_NAMES = new Set(["panel-termux", "panel"]);
+/** Lets a phone install a local build without a release tag (developers only; the bun runtime is still refused). */
+export const DEV_INSTALL_ENV = "PANEL_DEV_INSTALL";
 
 /** What step 1 found; detect only reads. */
 export type BinaryState = {
@@ -107,12 +111,16 @@ function linkState(host: CliHost): BinaryState["link"] {
 }
 
 /**
- * The download to delete (K24, E10): this file, when it is outside ~/panel/ (panel.prev/panel.new never). The fake
- * host only ever deletes inside its sandbox, so `PANEL_CLI_FAKE=… bun`/`dist/panel` never removes bun or a build.
+ * The download to delete (K24, E10): this file, when it is named like our download, outside ~/panel/ (panel.prev/
+ * panel.new never) and outside $PREFIX/bin (an installed tool, not a download). So `bun …/main.ts init` never removes
+ * bun. The fake host only ever deletes inside its sandbox, so `PANEL_CLI_FAKE=… dist/panel` never removes a build.
  */
 function downloadPath(host: CliHost): string | null {
-  if (!existsSync(host.selfPath)) return null;
+  if (!existsSync(host.selfPath) || !DOWNLOAD_NAMES.has(basename(host.selfPath))) return null;
   const self = realpathSync(host.selfPath);
+  const bin = join(host.paths.prefix, "bin");
+  const realBin = existsSync(bin) ? realpathSync(bin) : bin;
+  if (dirname(host.selfPath) === bin || dirname(self) === realBin) return null;
   const panelDir = existsSync(host.paths.panelDir) ? realpathSync(host.paths.panelDir) : host.paths.panelDir;
   if (self.startsWith(`${panelDir}/`)) return null;
   if (host.mode === "fake" && !self.startsWith(`${realpathSync(host.paths.home)}/`)) return null;
@@ -135,9 +143,22 @@ function srcEntries(host: CliHost): { prune: string[]; stray: string[] } {
   };
 }
 
-/** Wrong build (not aarch64 bionic) or too little space for 2 × panel.db + 256 MB + one binary (E16). */
+/**
+ * Only a compiled panel is installed: the bun runtime (`bun src/cli/main.ts init`) never, and a build without an
+ * embedded release tag (no SHA256SUMS to check against) only with PANEL_DEV_INSTALL=1. Null = allowed.
+ */
+export function releaseBlocker(tag: string, devInstall: boolean, compiled: boolean): string | null {
+  if (!compiled) return "Ini runtime bun, bukan binary panel; jalankan binary rilis (./panel-termux init)";
+  if (!tag && !devInstall) return "Binary ini bukan build rilis (tanpa tag rilis), jadi tidak bisa dicek";
+  return null;
+}
+
+/** Not a release build, wrong build (not aarch64 bionic) or too little space for 2 × panel.db + 256 MB + binary (E16). */
 function blockerOf(host: CliHost): string | null {
   if (host.mode === "termux") {
+    // a compiled binary runs its entry from Bun's embedded filesystem (/$bunfs/…); plain bun runs a real file
+    const blocked = releaseBlocker(releaseTag(), process.env[DEV_INSTALL_ENV] === "1", Bun.main.startsWith("/$bunfs/"));
+    if (blocked) return blocked;
     try {
       if (detectRuntime(host.selfPath) !== "native") return "Binary ini build glibc, bukan build Android (bionic)";
     } catch (e) {

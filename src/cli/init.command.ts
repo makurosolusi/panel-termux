@@ -12,7 +12,7 @@ import { envStep } from "./init.env";
 import { detectMode, SELF_VERSION } from "./init.mode";
 import { packagesStep } from "./init.packages";
 import { panelSvStep } from "./init.panel-sv";
-import { allowed, hasAction, type Planned, type Policy, printPlan, summary, tilde } from "./init.plan";
+import { allowed, hasAction, type Planned, POLICY, printPlan, summary, tilde } from "./init.plan";
 import { pm2Step } from "./init.pm2";
 import { postgresStep } from "./init.postgres";
 import { runitStep } from "./init.runit";
@@ -24,28 +24,15 @@ import {
   INIT_SKIPPABLE,
   type InitArgs,
   type InitContext,
-  type InitMode,
   type InitSkippable,
   type InitStep,
   type InitStepId,
+  type PlanLine,
 } from "./init.types";
 
 /** Test knobs: the step list (default INIT_STEPS). */
 export type InitOpts = { steps?: readonly InitStep[] };
 
-const POLICY: Record<InitStepId, Record<InitMode, Policy>> = {
-  binary: { fresh: "run", repair: "run", upgrade: "run" },
-  packages: { fresh: "run", repair: "tty", upgrade: "report" },
-  runit: { fresh: "run", repair: "run", upgrade: "report" },
-  ssh: { fresh: "run", repair: "run", upgrade: "report" },
-  postgres: { fresh: "run", repair: "tty", upgrade: "report" },
-  env: { fresh: "run", repair: "run", upgrade: "report" },
-  "panel-sv": { fresh: "run", repair: "run", upgrade: "run" }, // upgrade: only a known old run script (C23)
-  pm2: { fresh: "run", repair: "run", upgrade: "report" },
-  tunnel: { fresh: "run", repair: "run", upgrade: "report" },
-  boot: { fresh: "run", repair: "tty", upgrade: "report" },
-  start: { fresh: "run", repair: "run", upgrade: "run" },
-};
 /** Steps the flags leave out entirely (not even planned). */
 const LEFT_OUT: Partial<Record<InitStepId, (a: InitArgs) => boolean>> = {
   ssh: (a) => a.sshKey === null,
@@ -53,6 +40,12 @@ const LEFT_OUT: Partial<Record<InitStepId, (a: InitArgs) => boolean>> = {
   tunnel: (a) => a.skip.has("tunnel"),
   boot: (a) => a.skip.has("boot"),
 };
+
+/**
+ * Steps whose exit 3 (needs a terminal: Cloudflare login, DNS move, cloudflared restart) waits until the run ends:
+ * no later step reads what they make, so boot and start still run; init then exits 3 with the step's message.
+ */
+const DEFERRED_NEEDS_USER: ReadonlySet<InitStepId> = new Set(["tunnel"]);
 
 /** The steps in run order (§4.1). */
 export const INIT_STEPS: readonly InitStep[] = [
@@ -100,35 +93,50 @@ function lockHeld(host: CliHost, pid: number): boolean {
   return host.proc.list().some((p) => p.pid === pid && p.cmdline.includes("init"));
 }
 
+const readLock = (file: string): string | null => {
+  try {
+    return readFileSync(file, "utf8").trim();
+  } catch (e) {
+    if ((e as NodeJS.ErrnoException).code === "ENOENT") return null;
+    throw new CliExit(INIT_EXIT.failed, `Gagal membaca lock ${file}: ${errCode(e)}.`);
+  }
+};
+
 /** `$PREFIX/tmp/panel-init.lock` (O_EXCL, holds our pid; outside $HOME, C20). Returns an idempotent release. */
 export function acquireLock(host: CliHost): () => void {
   const file = join(host.paths.prefix, "tmp", "panel-init.lock");
+  const own = String(host.proc.selfPid);
   for (let attempt = 0; attempt < 2; attempt++) {
     try {
       mkdirSync(dirname(file), { recursive: true });
       const fd = openSync(file, "wx", 0o600);
       try {
-        writeSync(fd, `${host.proc.selfPid}\n`);
+        writeSync(fd, `${own}\n`);
       } finally {
         closeSync(fd);
       }
       let held = true;
       return () => {
-        if (held) rmSync(file, { force: true });
+        // a lock another init took over after ours was removed by hand is not ours to delete
+        if (held && readLock(file) === own) rmSync(file, { force: true });
         held = false;
       };
     } catch (e) {
       if ((e as NodeJS.ErrnoException).code !== "EEXIST")
         throw new CliExit(INIT_EXIT.failed, `Gagal membuat lock ${file}: ${errCode(e)}.`);
     }
-    const pid = Number(readFileSync(file, "utf8").trim());
+    const text = readLock(file);
+    if (text === null) continue; // released meanwhile
+    const pid = Number(text);
     if (lockHeld(host, pid))
       throw new CliExit(
         INIT_EXIT.failed,
         `panel init lain sedang berjalan (pid ${pid}).`,
         `tunggu sampai selesai; bila tidak ada yang berjalan: rm ${file}`,
       );
-    rmSync(file, { force: true }); // stale (m7)
+    // stale (m7); removed only while it still holds that pid, so a lock a racing init just took stays
+    // ponytail: read-then-rm leaves a tiny window; a rename-based lock closes it if two inits ever really race
+    if (readLock(file) === text) rmSync(file, { force: true });
   }
   throw new CliExit(INIT_EXIT.failed, `Gagal membuat lock ${file}: dibuat ulang proses lain.`, "ulangi panel init");
 }
@@ -216,9 +224,22 @@ export async function runInit(parsed: ParsedArgs, io: CliIo, opts: InitOpts = {}
     printPlan(ctx, planned);
     if (args.dryRun) return INIT_EXIT.ok;
     const todo = planned.filter((p) => allowed(p.policy, tty) && hasAction(p.lines));
+    /** Error lines still true after the run (M1: a plan with only errors has no action, so nothing fixed it). */
+    const leftErrors = async (): Promise<PlanLine[]> => {
+      const errors: PlanLine[] = [];
+      for (const { step, lines } of planned)
+        if (lines.some((l) => l.kind === "error"))
+          errors.push(...step.plan(ctx, await step.detect(ctx)).filter((l) => l.kind === "error"));
+      return errors;
+    };
     if (todo.length === 0) {
-      out.line("Tidak ada yang perlu diubah.");
-      return INIT_EXIT.ok;
+      const errors = await leftErrors();
+      if (errors.length === 0) {
+        out.line("Tidak ada yang perlu diubah.");
+        return INIT_EXIT.ok;
+      }
+      summary(out, ctx, errors);
+      return INIT_EXIT.failed;
     }
     // The plan question (§4.1): --yes answers it, a TTY asks [Y/n], neither = exit 3.
     if (!args.yes && !tty)
@@ -231,15 +252,24 @@ export async function runInit(parsed: ParsedArgs, io: CliIo, opts: InitOpts = {}
       out.line("Dibatalkan, tidak ada yang diubah.");
       return INIT_EXIT.cancelled;
     }
+    const postponed: PlanLine[] = [];
     for (const { step } of todo) {
       const state = await step.detect(ctx); // fresh: an earlier step may have done part of it
       if (!hasAction(step.plan(ctx, state))) continue;
       out.line();
       out.line(`${step.title.charAt(0).toUpperCase()}${step.title.slice(1)}`);
-      await step.apply(ctx, state);
+      try {
+        await step.apply(ctx, state);
+      } catch (e) {
+        if (!(e instanceof CliExit && e.code === INIT_EXIT.needsUser && DEFERRED_NEEDS_USER.has(step.id))) throw e;
+        out.check("warning", `${e.message} Langkah lain dilanjutkan.`);
+        postponed.push({ kind: "error", text: e.message, ...(e.hint ? { hint: e.hint } : {}) });
+      }
     }
-    summary(out, ctx);
-    return INIT_EXIT.ok;
+    const errors = await leftErrors();
+    summary(out, ctx, [...postponed, ...errors]);
+    if (errors.length > 0) return INIT_EXIT.failed;
+    return postponed.length > 0 ? INIT_EXIT.needsUser : INIT_EXIT.ok;
   } finally {
     if (!args.dryRun) process.off("SIGINT", onSigint);
     release();

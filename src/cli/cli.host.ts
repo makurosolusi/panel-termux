@@ -1,12 +1,13 @@
 // CliHost (PLAN/07 §7.1, K13, D1, D14, D15): everything the CLI asks of the phone, so tests and PANEL_CLI_FAKE swap
 // one object. The CLI never uses the server's mode picker: it picks fake when `sv` is missing and logs to stdout.
-import { existsSync, readdirSync, readFileSync, readlinkSync, statfsSync, statSync } from "node:fs";
+import { existsSync, statfsSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { type ExecOptions, type ExecResult, resolveArgv, runTermux, termuxPrefix } from "../server/exec/termux.exec";
 import { createTermuxSystem } from "../server/system/system.select";
 import type { SystemAdapters } from "../server/system/system.types";
 import { ENV_VARS } from "../shared/env.schema";
+import { listProcs, localHealth, pidAlive, procExeId } from "./cli.host.proc";
 import { ttyAsk, ttySecret } from "./cli.prompt";
 
 /** Base folders; every other probe path derives from these (probePaths). */
@@ -20,7 +21,7 @@ export type ProcInfo = { pid: number; uid: number; exe: string; cmdline: string[
 
 /**
  * Options of CliHost.run (D14): `inherit` = the user sees the tool (pkg, npm), `ignore` = silent (service-daemon);
- * `onLine` pipes stdout and gets each line after it is echoed to stderr (cloudflared login URL). No timeout.
+ * `onLine` pipes stdout and stderr and gets each line after it is echoed to stderr (cloudflared login URL). No timeout.
  */
 export type RunOptions = {
   stdio?: "inherit" | "ignore";
@@ -142,45 +143,6 @@ export function pathsFrom(home: string, prefix: string, env: Record<string, stri
   };
 }
 
-const PROC = "/proc";
-// A process can exit or be another user's between readdir and read: skip those, rethrow anything else.
-const GONE = new Set(["ENOENT", "ESRCH", "EACCES", "EPERM"]);
-
-function readProc(pid: number): ProcInfo | null {
-  const dir = join(PROC, String(pid));
-  try {
-    const uid = Number(/^Uid:\s+(\d+)/m.exec(readFileSync(join(dir, "status"), "utf8"))?.[1] ?? -1);
-    const cmdline = readFileSync(join(dir, "cmdline"), "utf8").split("\0").filter(Boolean);
-    return { pid, uid, exe: readlinkSync(join(dir, "exe")), cmdline };
-  } catch (e) {
-    if (GONE.has((e as NodeJS.ErrnoException).code ?? "")) return null;
-    throw new Error(`read ${dir} failed: ${(e as Error).message}`, { cause: e });
-  }
-}
-
-/** Processes visible in /proc (empty where there is no /proc, e.g. macOS). */
-export function listProcs(): ProcInfo[] {
-  if (!existsSync(PROC)) return [];
-  return readdirSync(PROC)
-    .filter((n) => /^\d+$/.test(n))
-    .map(Number)
-    .sort((a, b) => a - b) // readdir order is filesystem-dependent; pids reach doctor output
-    .map(readProc)
-    .filter((p): p is ProcInfo => p !== null);
-}
-
-/** `kill -0`: true when `pid` exists (EPERM = exists, other user). */
-export function pidAlive(pid: number): boolean {
-  try {
-    process.kill(pid, 0);
-    return true;
-  } catch (e) {
-    const code = (e as NodeJS.ErrnoException).code;
-    if (code === "EPERM" || code === "ESRCH") return code === "EPERM";
-    throw new Error(`kill -0 ${pid} failed: ${(e as Error).message}`, { cause: e });
-  }
-}
-
 /** y/ya/yes = yes, n/no/tidak = no, empty line = `defaultYes`; anything else (or EOF) = no. */
 export function confirmAnswer(answer: string | null, defaultYes = false): boolean {
   const a = answer?.trim() ?? null;
@@ -208,59 +170,40 @@ export function childEnv(
   return env;
 }
 
-const HEALTH_TIMEOUT_MS = 1000;
-
-/** /api/health on 127.0.0.1; refused, timeout, non-2xx or no JSON = null (not an error: the panel may be down). */
-export async function localHealth(port: number): Promise<PanelHealth | null> {
-  try {
-    const res = await fetch(`http://127.0.0.1:${port}/api/health`, { signal: AbortSignal.timeout(HEALTH_TIMEOUT_MS) });
-    if (!res.ok) return null;
-    const body = (await res.json()) as { version?: unknown; bootId?: unknown };
-    return { version: typeof body.version === "string" ? body.version : "", bootId: body.bootId };
-  } catch {
-    return null; // not answering is an answer here (K20 falls back to app_meta)
+/** Echoes every line of `stream` to our stderr (the user sees it) and hands it to `onLine`; the last one too. */
+async function eachLine(stream: ReadableStream, onLine: (line: string) => void): Promise<void> {
+  let rest = "";
+  const emit = (line: string) => {
+    process.stderr.write(`${line}\n`);
+    onLine(line);
+  };
+  for await (const chunk of stream.pipeThrough(new TextDecoderStream())) {
+    const lines = (rest + chunk).split("\n");
+    rest = lines.pop() ?? "";
+    for (const line of lines) emit(line);
   }
+  if (rest) emit(rest);
 }
 
-/** dev+ino of `/proc/<pid>/exe` (stat follows the link); null when the process is gone or not ours. */
-export function procExeId(pid: number): FileId | null {
-  try {
-    const s = statSync(join(PROC, String(pid), "exe"));
-    return { dev: s.dev, ino: s.ino };
-  } catch (e) {
-    if (GONE.has((e as NodeJS.ErrnoException).code ?? "")) return null;
-    throw new Error(`stat ${PROC}/${pid}/exe failed: ${(e as Error).message}`, { cause: e });
-  }
-}
-
-/** Runs a Termux tool with stdio per RunOptions; spawn failure throws with the command name (Rule 11). */
+/**
+ * Runs a Termux tool with stdio per RunOptions; spawn failure throws with the command name (Rule 11). With `onLine`
+ * both stdout and stderr are piped: cloudflared prints its login URL on stderr.
+ */
 export async function runVisible(tool: string, args: readonly string[] = [], opts: RunOptions = {}): Promise<number> {
   const argv = resolveArgv(tool, args);
   const stdio = opts.stdio ?? "inherit";
+  const out = opts.onLine ? "pipe" : stdio;
   let proc: Bun.Subprocess;
   try {
-    proc = Bun.spawn(argv, {
-      env: opts.env ?? process.env,
-      cwd: opts.cwd,
-      stdin: stdio,
-      stdout: opts.onLine ? "pipe" : stdio,
-      stderr: stdio,
-    });
+    proc = Bun.spawn(argv, { env: opts.env ?? process.env, cwd: opts.cwd, stdin: stdio, stdout: out, stderr: out });
   } catch (e) {
     throw new Error(`run ${tool} failed to spawn: ${(e as Error).message}`, { cause: e });
   }
-  if (opts.onLine && proc.stdout instanceof ReadableStream) {
-    let rest = "";
-    for await (const chunk of proc.stdout.pipeThrough(new TextDecoderStream())) {
-      const lines = (rest + chunk).split("\n");
-      rest = lines.pop() ?? "";
-      for (const line of lines) {
-        process.stderr.write(`${line}\n`);
-        opts.onLine(line);
-      }
-    }
-    if (rest) opts.onLine(rest);
-  }
+  const { onLine } = opts;
+  if (onLine)
+    await Promise.all(
+      [proc.stdout, proc.stderr].map((s) => (s instanceof ReadableStream ? eachLine(s, onLine) : undefined)),
+    );
   return proc.exited;
 }
 

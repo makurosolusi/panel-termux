@@ -16,7 +16,7 @@ import { basename, join } from "node:path";
 import { type FakeScenarioName, probePaths } from "@/cli/cli.host";
 import { createFakeHost, type FakeHost, type FakeHostOptions } from "@/cli/cli.host.fake";
 import { CliExit, createCliOut } from "@/cli/cli.output";
-import { BOOT_SCRIPT, bootStep } from "@/cli/init.boot";
+import { bootStep } from "@/cli/init.boot";
 import { parseInitArgs, runInit } from "@/cli/init.command";
 import { SELF_VERSION } from "@/cli/init.mode";
 import { PANEL_RUN_TEMPLATE, panelSvStep } from "@/cli/init.panel-sv";
@@ -270,6 +270,9 @@ describe("pm2 (step 7)", () => {
     const sites = join(h.paths.home, "sites");
     mkdirSync(sites, { recursive: true });
     writeFileSync(join(sites, "ecosystem.config.js"), ecosystemFromTemplate(sites, h.paths.prefix));
+    const runtime = probePaths(h.paths).pm2Runtime; // installed by step 2 of the earlier run (M2: needed for the service)
+    mkdirSync(join(runtime, ".."), { recursive: true });
+    writeFileSync(runtime, "");
     const ctx = ctxOf(h, "repair");
     await run(pm2, ctx);
     expect(ctx.state.changed).toEqual([join(sites, "apps.json"), join(h.paths.svdir, "pm2")]);
@@ -288,31 +291,6 @@ describe("pm2 (step 7)", () => {
     const own = (await planOf(pm2, ctxOf(h, "repair"))).lines;
     expect(actions(own)).toEqual([]);
     expect(own.map((l) => l.text)).toContain("Layanan pm2 belum dipasang di runit");
-  });
-});
-
-describe("boot (step 9)", () => {
-  test("fresh: script with SVDIR+LOGDIR, wake lock now, battery + Termux:Boot notes", async () => {
-    const h = host("fresh"); // fresh has no Termux:Boot app
-    const ctx = ctxOf(h, "fresh");
-    const { lines } = await planOf(bootStep, ctx);
-    expect(lines.map((l) => l.kind)).toEqual(["action", "warning"]);
-    await run(bootStep, ctx);
-    const file = join(probePaths(h.paths).bootDir, BOOT_SCRIPT);
-    const text = readFileSync(file, "utf8");
-    expect(text).toContain(`export SVDIR="${h.paths.svdir}" LOGDIR="${h.paths.logdir}"`);
-    expect(text).toContain(`exec ${h.paths.prefix}/bin/service-daemon start`);
-    expect(statSync(file).mode & 0o777).toBe(0o755);
-    expect(argvs(h)).toContain("termux-wake-lock");
-    expect(ctx.lines.join("")).toContain("pilih Izinkan");
-    expect(ctx.state.manual).toHaveLength(2);
-  });
-
-  test("repair: no battery note; a boot script that already starts the services → nothing", async () => {
-    const ctx = ctxOf(host("fresh"), "repair");
-    await run(bootStep, ctx);
-    expect(ctx.state.manual.some((m) => m.includes("baterai"))).toBe(false);
-    expect((await planOf(bootStep, ctxOf(host("poco"), "repair"))).lines).toEqual([]);
   });
 });
 

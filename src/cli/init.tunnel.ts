@@ -1,7 +1,7 @@
 // `panel init` step 8, tunnel (PLAN/07 §4.4, C19, D4, D10, K9, K10): Cloudflare login → tunnel (reused when its
-// credentials are here) → config.yml → DNS (a record of another tunnel moves only after a TTY yes) → ingress for
-// the panel hostname → cloudflared service (init.tunnel.service.ts). cloudflared output is never printed (K10):
-// `tunnel create` runs without `-o` (D4: `-o json` prints the tunnel token) and errors carry the exit code only.
+// credentials are here; init.tunnel.login.ts) → DNS (a record of another tunnel moves only after a TTY yes) →
+// config.yml → ingress for the panel hostname → cloudflared service (init.tunnel.service.ts). Every question that
+// needs a terminal comes before the first write, so a run without one stops (exit 3) with the phone unchanged.
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { insertIngressRule, readTunnelId } from "../server/sites/ingress.editor";
@@ -15,13 +15,18 @@ import { ENV_VARS, type EnvVar } from "../shared/env.schema";
 import { probePaths } from "./cli.host";
 import { CliExit } from "./cli.output";
 import { readEnvFile } from "./env.file";
-import { applyService, detectService, planService, type ServiceState } from "./init.tunnel.service";
+import { stepRuns } from "./init.plan";
+import { ensureTunnel, login } from "./init.tunnel.login";
+import {
+  applyService,
+  detectService,
+  planService,
+  restartNeedsTerminal,
+  type ServiceState,
+} from "./init.tunnel.service";
 import { defineStep, INIT_EXIT, INIT_STEP_TITLES, type InitContext, type PlanLine } from "./init.types";
 
-/** cloudflared calls that reach the Cloudflare API from the phone (slow mobile networks). */
-const API_TIMEOUT_MS = 30_000;
-/** Tunnel names we create/accept (cloudflared allows more; we keep them safe for argv and the run script). */
-const TUNNEL_NAME_RE = /^[a-z0-9][a-z0-9-]{0,62}$/;
+export { defaultTunnelName } from "./init.tunnel.login";
 
 /** Read-only facts of step 8. host = from APP_BASE_URL (https) or --hostname, null until step 5 wrote it. */
 export type TunnelStepState = {
@@ -39,12 +44,6 @@ export type TunnelStepState = {
 };
 
 const DEFAULT_PORT = (ENV_VARS as readonly EnvVar[]).find((v) => v.name === "PORT")?.default ?? "";
-
-/** Q7: `panel.contoh.com` → `panel-contoh-com` (prefix `panel-` + the domain without its first label). */
-export function defaultTunnelName(host: string): string {
-  const domain = host.split(".").slice(1).join("-");
-  return `panel-${domain || host.replaceAll(".", "-")}`.slice(0, 63);
-}
 
 function panelHost(ctx: InitContext, appBaseUrl: string | undefined): string | null {
   try {
@@ -94,17 +93,30 @@ async function detect(ctx: InitContext): Promise<TunnelStepState> {
   };
 }
 
+/** config.yml gets the panel rule this run: a new config, or an existing one while the panel is down (D10, K6). */
+const ingressWillChange = (s: TunnelStepState) =>
+  s.host !== null && !s.ingress && (s.config === null || !s.panelRunning);
+
+const needsTerminal = (ctx: InitContext) => `jalankan ${ctx.resumeCommand()} di terminal`;
+
 function plan(ctx: InitContext, s: TunnelStepState): PlanLine[] {
+  // M2: no cloudflared and step 2 does not run now (repair without terminal) → `cloudflared …` would not exist
+  if (!s.service.installed && !stepRuns(ctx, "packages"))
+    return [{ kind: "warning", text: "cloudflared belum terpasang; tunnel belum disiapkan", hint: needsTerminal(ctx) }];
   const where = s.host ?? "alamat panel";
+  const lines: PlanLine[] = [];
   if (s.config === null) {
     const login = s.cert ? "" : "Login Cloudflare di browser, ";
-    const text = `${login}${login ? "membuat" : "Membuat"} tunnel, menghubungkan ${where}`;
-    return [{ kind: "action", text }];
-  }
-  if (s.configProblem !== null)
+    lines.push({ kind: "action", text: `${login}${login ? "membuat" : "Membuat"} tunnel, menghubungkan ${where}` });
+    if (!s.cert && !ctx.tty)
+      lines.push({
+        kind: "warning",
+        text: "Login Cloudflare butuh browser dan terminal; tunnel dilewati, langkah lain tetap jalan",
+        hint: `jalankan di terminal: cloudflared tunnel login, lalu ${ctx.resumeCommand()}`,
+      });
+  } else if (s.configProblem !== null)
     return [{ kind: "error", text: s.configProblem, hint: "perbaiki file itu (panel docs cloudflare), lalu ulangi" }];
-  const lines: PlanLine[] = [];
-  if (s.host !== null && !s.ingress) {
+  else if (s.host !== null && !s.ingress) {
     if (s.panelRunning)
       lines.push({
         kind: "warning",
@@ -113,104 +125,16 @@ function plan(ctx: InitContext, s: TunnelStepState): PlanLine[] {
       });
     else lines.push({ kind: "action", text: `Menghubungkan ${s.host} ke tunnel ${s.ref} (DNS + config.yml)` });
   }
+  if (restartNeedsTerminal(ctx, s.service, ingressWillChange(s)))
+    lines.push({
+      kind: "warning",
+      text: "cloudflared yang berjalan perlu dimulai ulang (semua situs putus sebentar); tanpa terminal tunnel tidak diubah",
+      hint: needsTerminal(ctx),
+    });
   return [...lines, ...planService(ctx, s.service)];
 }
 
-/** One line of cloudflared's exit for an error message: the code only (K10: its output may hold secrets). */
-const cfFail = (what: string, code: number, ctx: InitContext) =>
-  new CliExit(
-    INIT_EXIT.failed,
-    `cloudflared ${what} gagal (kode ${code}).`,
-    `periksa internet, lalu ${ctx.resumeCommand()}`,
-  );
-
-async function login(ctx: InitContext, s: TunnelStepState): Promise<void> {
-  if (!ctx.tty)
-    throw new CliExit(
-      INIT_EXIT.needsUser,
-      "Login Cloudflare butuh browser dan terminal.",
-      `jalankan di terminal: cloudflared tunnel login, lalu ${ctx.resumeCommand()}`,
-    );
-  ctx.out.line("Login Cloudflare di browser: buka alamat yang muncul di bawah, lalu pilih domain panel.");
-  let opened = false;
-  const code = await ctx.host.run("cloudflared", ["tunnel", "login"], {
-    onLine: (line) => {
-      const url = /https:\/\/\S+/.exec(line)?.[0];
-      if (!url || opened) return;
-      opened = true;
-      ctx.out.line(`Bila browser tidak terbuka sendiri, buka: ${url}`); // one-time login URL, not a secret (D14)
-      ctx.host.exec("termux-open-url", [url]).catch(() => {
-        ctx.out.note("ℹ️ termux-open-url tidak tersedia; buka alamat di atas secara manual.");
-      });
-    },
-  });
-  const cert = join(s.cfDir, "cert.pem");
-  if (code !== 0 || !existsSync(cert)) throw cfFail("tunnel login", code, ctx);
-  ctx.state.changed.push(cert);
-}
-
-type TunnelRow = { id?: unknown; name?: unknown };
-
-/** UUID of tunnel `name` from `tunnel list -n <name> -o json` (no secrets in that JSON); null = no such tunnel. */
-async function tunnelIdOf(ctx: InitContext, name: string): Promise<string | null> {
-  const r = await ctx.host.exec("cloudflared", ["tunnel", "list", "-n", name, "-o", "json"], {
-    timeoutMs: API_TIMEOUT_MS,
-  });
-  if (r.code !== 0) throw cfFail("tunnel list", r.code, ctx);
-  let rows: TunnelRow[];
-  try {
-    rows = JSON.parse(r.stdout || "[]") as TunnelRow[];
-  } catch (e) {
-    throw new CliExit(INIT_EXIT.failed, `cloudflared tunnel list: output bukan JSON (${(e as Error).message}).`);
-  }
-  const row = (Array.isArray(rows) ? rows : []).find((t) => t?.name === name && typeof t.id === "string");
-  return row ? (row.id as string).toLowerCase() : null;
-}
-
-async function askName(ctx: InitContext, suggested: string): Promise<string> {
-  for (;;) {
-    const a = (await ctx.prompt.ask(`Nama tunnel [${suggested}]:`))?.trim().toLowerCase();
-    if (!a) return suggested; // Enter or EOF = the default
-    if (TUNNEL_NAME_RE.test(a)) return a;
-    ctx.out.line("Nama tunnel: huruf kecil, angka, dan tanda minus (mis. panel-contoh-com).");
-  }
-}
-
-/** C19: reuse a tunnel whose credentials are here, create it when missing, other name when it is not ours. */
-async function ensureTunnel(ctx: InitContext, s: TunnelStepState, host: string): Promise<{ name: string; id: string }> {
-  let name = defaultTunnelName(host);
-  if (ctx.tty) name = await askName(ctx, name);
-  for (;;) {
-    let id = await tunnelIdOf(ctx, name);
-    if (id === null) {
-      const r = await ctx.host.exec("cloudflared", ["tunnel", "create", name], { timeoutMs: API_TIMEOUT_MS }); // no -o (D4)
-      if (r.code !== 0) throw cfFail(`tunnel create ${name}`, r.code, ctx);
-      id = await tunnelIdOf(ctx, name);
-      if (id === null)
-        throw new CliExit(INIT_EXIT.failed, `Tunnel ${name} sudah dibuat tetapi tidak muncul di daftar.`);
-      const cred = join(s.cfDir, `${id}.json`);
-      if (!existsSync(cred)) throw new CliExit(INIT_EXIT.failed, `Kredensial tunnel ${name} tidak ada di ${cred}.`);
-      ctx.state.changed.push(cred);
-      return { name, id };
-    }
-    if (existsSync(join(s.cfDir, `${id}.json`))) {
-      ctx.out.line(`Tunnel ${name} sudah ada dan kredensialnya ada di HP ini: dipakai ulang.`);
-      return { name, id };
-    }
-    if (!ctx.tty)
-      throw new CliExit(
-        INIT_EXIT.needsUser,
-        `Tunnel ${name} sudah ada di akun Cloudflare, tetapi kredensialnya tidak ada di HP ini.`,
-        `pilih nama lain: jalankan ${ctx.resumeCommand()} di terminal; atau bila tunnel itu tidak dipakai lagi: cloudflared tunnel delete ${name}`,
-      );
-    ctx.out.line(
-      `Tunnel ${name} sudah ada di akun Cloudflare, tetapi kredensialnya tidak ada di HP ini. Pilih nama lain.`,
-    );
-    name = await askName(ctx, `${name}-2`);
-  }
-}
-
-/** config.yml (600) with only the catch-all; the panel rule is added by `addIngress` after DNS. */
+/** config.yml (600) with only the catch-all; the panel rule is added by `addIngress` right after. */
 function writeConfig(ctx: InitContext, s: TunnelStepState, id: string): void {
   const file = join(s.cfDir, "config.yml");
   const text = `tunnel: ${id}\ncredentials-file: ${s.cfDir}/${id}.json\ningress:\n  - service: http_status:404\n`;
@@ -271,21 +195,27 @@ async function apply(ctx: InitContext, s: TunnelStepState): Promise<void> {
   if (s.configProblem !== null) throw new CliExit(INIT_EXIT.failed, s.configProblem, "panel docs cloudflare");
   const noHost = "Alamat panel belum ada di ~/panel/.env (APP_BASE_URL).";
   if (s.host === null) throw new CliExit(INIT_EXIT.needsUser, noHost, ctx.resumeCommand());
+  const ingressChanged = ingressWillChange(s);
+  // MINOR 6: the restart question would come after DNS + config.yml; without a terminal stop before both
+  if (restartNeedsTerminal(ctx, s.service, ingressChanged))
+    throw new CliExit(
+      INIT_EXIT.needsUser,
+      "cloudflared yang berjalan perlu dimulai ulang; tunnel tidak diubah tanpa terminal.",
+      needsTerminal(ctx),
+    );
   let { ref, id } = s;
-  let ingressChanged = false;
   const created = s.config === null;
   if (created) {
-    if (!s.cert) await login(ctx, s);
-    const t = await ensureTunnel(ctx, s, s.host);
-    writeConfig(ctx, s, t.id);
+    if (!s.cert) await login(ctx, s.cfDir); // exit 3 without a terminal, before any write
+    const t = await ensureTunnel(ctx, s.cfDir, s.host);
     [ref, id] = [t.name, t.id];
   }
   if (ref === null || id === null) throw new Error("tunnel: config.yml without tunnel after detect");
-  // An existing config.yml is edited only while the panel is down (D10); a config we just wrote is ours.
-  if (!s.ingress && (created || !s.panelRunning)) {
-    await routeDns(ctx, ref, id, s.host); // before ingress: a cancelled move leaves the rule out, so a rerun retries
+  if (ingressChanged) {
+    // DNS first: a refused or unanswerable move (exit 3/4) leaves config.yml as it was, so a rerun retries
+    await routeDns(ctx, ref, id, s.host);
+    if (created) writeConfig(ctx, s, id);
     await addIngress(ctx, s, s.host);
-    ingressChanged = true;
   }
   await applyService(ctx, await detectService(ctx), id, ingressChanged); // run by UUID: no API name lookup
 }
