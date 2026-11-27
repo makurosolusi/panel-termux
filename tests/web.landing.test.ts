@@ -5,6 +5,7 @@ import { OG_TEXT } from "@/server/http/seo";
 import type { Role } from "@/shared/roles";
 import { tLanding } from "@/web/i18n/en.landing";
 import { ACCOUNT_DELETED_HREF, isAccountDeletedSearch } from "@/web/landing/account.deleted";
+import { languageSwitch } from "@/web/landing/final.section";
 import { landingCta } from "@/web/landing/landing.cta";
 import { GALLERY, imgLoading, SHOTS } from "@/web/landing/landing.shots";
 import type { MeResult } from "@/web/session/session.api";
@@ -25,24 +26,25 @@ const as = (role: Role): MeResult => ({
 });
 
 describe("landingCta (header account link)", () => {
-  test("anonymous visitor → Masuk via /login", () => {
-    expect(landingCta({ status: "unauthorized" })).toEqual({ kind: "signIn", label: "Masuk", to: "/login" });
+  test("anonymous visitor → Sign in via /login", () => {
+    expect(landingCta({ status: "unauthorized" })).toEqual({ kind: "signIn", label: "Sign in", to: "/login" });
   });
 
-  test("no loader data yet → Masuk", () => expect(landingCta(undefined).kind).toBe("signIn"));
+  test("no loader data yet → Sign in", () => expect(landingCta(undefined).kind).toBe("signIn"));
 
-  test("user → Akun saya at /profile", () => {
-    expect(landingCta(as("user"))).toEqual({ kind: "account", label: "Akun saya", to: "/profile" });
+  test("user → My account at /profile", () => {
+    expect(landingCta(as("user"))).toEqual({ kind: "account", label: "My account", to: "/profile" });
   });
 
-  test.each(["admin", "super_admin"] as const)("%s → Buka panel at /panel (from role, not payload)", (role) => {
-    expect(landingCta(as(role))).toEqual({ kind: "open", label: "Buka panel", to: "/panel" });
+  test.each(["admin", "super_admin"] as const)("%s → Open panel at /panel (from role, not payload)", (role) => {
+    expect(landingCta(as(role))).toEqual({ kind: "open", label: "Open panel", to: "/panel" });
   });
 });
 
 describe("landing copy", () => {
   test("meta equals the server link preview (OG_TEXT) and fits a search snippet", () => {
     expect(OG_TEXT).toEqual(tLanding.meta);
+    expect(tLanding.meta.title).toBe("Panel Termux — turn an Android phone into a server");
     expect(tLanding.meta.description.length).toBeLessThanOrEqual(155);
   });
 
@@ -63,22 +65,22 @@ describe("landing copy", () => {
   test("install steps: one line, what init asks (Google OAuth, Cloudflare login), then open the panel", () => {
     const steps = tLanding.install.steps;
     expect(steps.map((s) => s.title)).toEqual([
-      "Jalankan baris ini di Termux",
-      "Jawab pertanyaan init",
-      "Login Cloudflare di browser",
-      "Buka panel",
+      "Run this line in Termux",
+      "Answer the init questions",
+      "Sign in to Cloudflare in the browser",
+      "Open the panel",
     ]);
     expect(steps[1].body).toContain("Client secret");
-    expect(tLanding.install.upgrade).toContain("baris yang sama");
+    expect(tLanding.install.upgrade).toContain("run the same line");
     const all = JSON.stringify(tLanding);
-    for (const gone of ["install.sh", "install-phone", "pkg install termux-services", "tutup dan buka lagi"])
+    for (const gone of ["install.sh", "install-phone", "pkg install termux-services", "close and reopen"])
       expect(all).not.toContain(gone);
   });
 
   test("no overclaims: no one-command promise, no Google sign-in CTA, no binary-size spec", () => {
     const all = JSON.stringify(tLanding);
-    expect(all).not.toMatch(/1 perintah|satu perintah/i);
-    expect(Object.values(tLanding.cta)).not.toContain("Masuk dengan Google");
+    expect(all).not.toMatch(/one command|single command/i);
+    expect(Object.values(tLanding.cta)).not.toContain("Sign in with Google");
     expect(all).not.toContain("~110");
     expect(all).toContain("~65");
   });
@@ -128,10 +130,22 @@ describe("account-deleted notice", () => {
   test("self-delete lands on / with the marker the landing recognises", () => {
     const url = new URL(ACCOUNT_DELETED_HREF, "https://panel.example");
     expect(url.pathname).toBe("/");
+    expect(url.search).toBe("?account=deleted");
     expect(isAccountDeletedSearch(url.search)).toBe(true);
+  });
+  test("the pre-0.6.0 `?akun=dihapus` link is still recognised (DECISIONS E14, one release)", () => {
+    expect(isAccountDeletedSearch("?akun=dihapus")).toBe(true);
   });
   test("other or missing query → no notice", () => {
     expect(isAccountDeletedSearch("")).toBe(false);
     expect(isAccountDeletedSearch("?akun=lain")).toBe(false);
+    expect(isAccountDeletedSearch("?account=other")).toBe(false);
+  });
+});
+
+describe("footer language switch", () => {
+  test("offers the other language, named in itself, via ?lang=", () => {
+    expect(languageSwitch("en")).toEqual({ href: "/?lang=id", label: "Bahasa Indonesia", lang: "id" });
+    expect(languageSwitch("id")).toEqual({ href: "/?lang=en", label: "English", lang: "en" });
   });
 });

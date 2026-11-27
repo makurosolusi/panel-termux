@@ -1,4 +1,7 @@
+import { activeLocale } from "@/shared/i18n";
+import { LANGUAGE_NAMES, type Locale } from "@/shared/locale";
 import { tLanding } from "@/web/i18n/en.landing";
+import { LANG_QUERY_PARAM } from "@/web/i18n/locale.detect";
 import { InstallCta } from "./cta.link";
 
 const t = tLanding;
@@ -34,10 +37,17 @@ export function FinalSection() {
   );
 }
 
-/** Page footer: tagline, GitHub, MIT license, changelog and releases. */
+/** Footer language switch (PLAN/08 §3.2): the other locale, named in its own language; the bootstrap saves it. */
+export function languageSwitch(current: Locale): { href: string; label: string; lang: Locale } {
+  const other: Locale = current === "en" ? "id" : "en";
+  return { href: `/?${LANG_QUERY_PARAM}=${other}`, label: LANGUAGE_NAMES[other], lang: other };
+}
+
+/** Page footer: tagline, GitHub, MIT license, changelog, releases and the language switch. */
 export function LandingFooter() {
   const link =
     "inline-flex min-h-11 min-w-11 items-center justify-center gap-2 rounded hover:text-lp-ink focus-visible:outline-2 focus-visible:outline-lp-signal";
+  const language = languageSwitch(activeLocale());
   return (
     <footer className="border-t border-lp-line">
       <div className="mx-auto flex max-w-6xl flex-col gap-3 px-4 py-8 font-lp-mono text-xs text-lp-dim md:flex-row md:items-center md:justify-between sm:px-6">
@@ -54,6 +64,9 @@ export function LandingFooter() {
               {l.label}
             </a>
           ))}
+          <a href={language.href} lang={language.lang} hrefLang={language.lang} className={link}>
+            {language.label}
+          </a>
         </nav>
       </div>
     </footer>

@@ -7,16 +7,13 @@ export const NOINDEX = "noindex, nofollow";
 /** Size of `src/web/assets/og.png` (og:image:width/height). */
 const OG_IMAGE = { width: 1200, height: 630 };
 
-/**
- * Link-preview text of `/`. PLAN/05 §3.6: must equal `idLanding.meta` once the landing owner (W6) adds it;
- * until then it mirrors the `<title>`/description of src/web/index.html.
- */
+/** Link-preview text of `/`, English only (DECISIONS E13); must equal `tLanding.meta` (tests/web.landing.test.ts). */
 export const OG_TEXT: { title: string; description: string; imageAlt: string } = {
-  title: "Panel Termux — HP Android jadi server",
+  title: "Panel Termux — turn an Android phone into a server",
   description:
-    "Panel web yang mengubah HP Android dengan Termux jadi server untuk aplikasi Bun single-binary: pantau, deploy, backup, dan domain lewat Cloudflare Tunnel.",
+    "Web panel that turns an Android phone with Termux into a server for single-binary Bun apps: monitoring, deploys, backups and domains via Cloudflare Tunnel.",
   imageAlt:
-    "Logo dan nama Panel Termux, tulisan pantau · deploy · backup · domain, dan tangkapan layar Ringkasan di HP",
+    "Panel Termux logo and name, the words monitor · deploy · backup · domain, and a screenshot of the Overview on a phone",
 };
 
 const escapeAttr = (s: string): string =>
@@ -52,7 +49,7 @@ function landingTags(base: string): string {
     meta("property", "og:image:width", OG_IMAGE.width),
     meta("property", "og:image:height", OG_IMAGE.height),
     meta("property", "og:image:alt", OG_TEXT.imageAlt),
-    meta("property", "og:locale", "id_ID"),
+    meta("property", "og:locale", "en_US"),
     meta("name", "twitter:card", "summary_large_image"),
   ].join("");
 }

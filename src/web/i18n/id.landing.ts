@@ -3,9 +3,9 @@ import type { tLanding } from "./en.landing";
 
 const REPO = "https://github.com/makurosolusi/panel-termux";
 
-/** Indonesian strings of the public landing page at `/` (imported directly by src/web/landing, also `id.landing`). */
+/** Indonesian strings of the public landing page at `/` (overlay of `tLanding`, loaded through id.pack). */
 export const idLanding: Messages<typeof tLanding> = {
-  /** Tab title + link preview; must equal `OG_TEXT` in src/server/http/seo.ts (tests/web.landing.test.ts). */
+  /** Tab title in Indonesian; the link preview (OG) stays English only (DECISIONS E13). */
   meta: {
     title: "Panel Termux — HP Android jadi server",
     description:
@@ -18,7 +18,7 @@ export const idLanding: Messages<typeof tLanding> = {
     releases: `${REPO}/releases`,
     license: `${REPO}/blob/main/LICENSE`,
     changelog: `${REPO}/blob/main/CHANGELOG.md`,
-    readmeInstall: `${REPO}#instal-di-hp`,
+    readmeInstall: `${REPO}/blob/main/README.id.md#instal-di-hp`,
   },
   nav: {
     label: "Navigasi halaman",

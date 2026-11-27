@@ -10,7 +10,7 @@ const SIZES = {
   lg: "h-12 px-6 text-base",
 } as const;
 
-/** Primary landing CTA "Pasang di HP-mu": jumps to the install section (`#pasang`). */
+/** Primary landing CTA "Install on your phone": jumps to the install section (`#pasang`). */
 export function InstallCta({ size = "lg", inverted = false }: { size?: keyof typeof SIZES; inverted?: boolean }) {
   const palette = inverted
     ? "bg-lp-ink text-lp-paper focus-visible:outline-lp-ink"
@@ -27,7 +27,7 @@ export function InstallCta({ size = "lg", inverted = false }: { size?: keyof typ
 }
 
 /**
- * Small header link from the root `/api/me` loader result: "Masuk", "Buka panel" or "Akun saya". Signed-in targets
+ * Small header link from the root `/api/me` loader result: "Sign in", "Open panel" or "My account". Signed-in targets
  * are a full document load so Cloudflare Access can challenge the protected path.
  */
 export function AccountLink() {
