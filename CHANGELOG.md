@@ -11,16 +11,19 @@
 - Cek diri: sebelum memasang, init mencocokkan binary-nya dengan `SHA256SUMS` rilisnya. Asal rilis tetap dibuktikan dengan `gh attestation verify panel --repo makurosolusi/panel-termux` di komputer.
 - Tunnel: tunnel yang kredensialnya sudah ada dipakai ulang; record DNS yang mengarah ke tunnel lain hanya dipindah setelah konfirmasi di terminal.
 - Rilis kini punya aset `panel` (binary mentah). Tag `v<versi>-rc.<n>` dirilis sebagai prerelease.
+- Bila masih ada masalah di akhir, `panel init` keluar dengan kode 1 dan mencetak daftar masalah beserta petunjuknya, bukan melaporkan selesai.
 
 ### Changed
 
 - Instal, upgrade, dan perbaikan kini lewat `panel init`. Init tidak pernah menjalankan `pkg upgrade` bila data PostgreSQL ada, menahan `cloudflared` dan `postgresql`, tidak menyentuh `ecosystem.config.js` tulisan tangan (pakai **Situs → Persiapan → Perbaiki**), tidak pernah me-restart pm2, dan hanya me-restart panel saat upgrade.
 - `install.sh` rilis kini shim untuk satu rilis: mengunduh `panel`, memeriksa `SHA256SUMS`, lalu menjalankan `panel init`. Shim ini dihapus di 0.6.0.
 - Petunjuk di `panel doctor`, `panel docs`, bantuan CLI, dan landing page kini menunjuk ke `panel init`.
+- Build tanpa tag rilis (build lokal) hanya dipasang oleh `panel init` bila `PANEL_DEV_INSTALL=1` diset, karena tidak bisa dicek dengan `SHA256SUMS`. Runtime bun tidak pernah dipasang.
+- Pertanyaan tunnel (login Cloudflare, restart cloudflared) diajukan sebelum DNS atau `config.yml` diubah. Tanpa terminal, tunnel dilewati tanpa perubahan, langkah lain tetap jalan, dan init keluar dengan kode 3.
 
 ### Removed
 
-- `scripts/install-phone.sh`. Untuk menguji build sendiri: `rsync --partial dist/panel-android-arm64 poco: && ssh poco ./panel-android-arm64 init --yes`.
+- `scripts/install-phone.sh`. Untuk menguji build sendiri: `rsync --partial dist/panel-android-arm64 poco: && ssh poco 'PANEL_DEV_INSTALL=1 ./panel-android-arm64 init --yes'`.
 
 ## [0.5.0] - 2026-11-27
 

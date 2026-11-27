@@ -210,10 +210,10 @@ Tanpa rilis (mis. untuk menguji build sendiri), salin binary ke HP lalu jalankan
 
 ```sh
 bun run build
-rsync --partial dist/panel-android-arm64 poco: && ssh poco ./panel-android-arm64 init --yes
+rsync --partial dist/panel-android-arm64 poco: && ssh poco 'PANEL_DEV_INSTALL=1 ./panel-android-arm64 init --yes'
 ```
 
-Build lokal tidak punya tag rilis, jadi cek diri dilewati. `--yes` menyetujui rencana dan restart panel tanpa terminal; pertanyaan `.env` yang belum terisi tetap kosong dan panel ditahan dengan file `down` sampai kamu menjalankan `init` di terminal.
+Build lokal tidak punya tag rilis sehingga tidak bisa dicek dengan `SHA256SUMS`, jadi `init` menolaknya kecuali `PANEL_DEV_INSTALL=1` diset. `--yes` menyetujui rencana dan restart panel tanpa terminal; pertanyaan `.env` yang belum terisi tetap kosong dan panel ditahan dengan file `down` sampai kamu menjalankan `init` di terminal.
 
 ### Perintah CLI
 

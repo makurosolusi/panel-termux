@@ -14,7 +14,8 @@ import { join } from "node:path";
 import type { FakeScenarioName } from "@/cli/cli.host";
 import { createFakeHost, type FakeHost, type FakeHostOptions } from "@/cli/cli.host.fake";
 import { CliExit, createCliOut } from "@/cli/cli.output";
-import { appendKeys, createSshStep, parseKey, parseKeys, type SshState, sshPaths, sshStep } from "@/cli/init.ssh";
+import { createSshStep, type SshState, sshPaths, sshStep } from "@/cli/init.ssh";
+import { appendKeys, parseKey, parseKeys } from "@/cli/init.ssh.keys";
 import type { InitArgs, InitContext, InitMode } from "@/cli/init.types";
 
 // test-only public keys (private halves deleted); fingerprints as printed by `ssh-keygen -lf`
