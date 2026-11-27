@@ -1,17 +1,16 @@
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-// @ts-expect-error TS7016: Bun embeds the shipped template as text (`type: "text"`); tsc has no type for a .js text import.
-import ECOSYSTEM_TEMPLATE from "../../../deploy/pm2/ecosystem.config.js" with { type: "text" };
-// @ts-expect-error TS2307: Bun embeds the shipped runit script as text; tsc cannot resolve an extensionless module.
-import PM2_RUN_TEMPLATE from "../../../deploy/pm2/run" with { type: "text" };
 import type { Battery, ControlAction, DatabaseInfo } from "../../shared/panel.types";
 import { createTarArchive } from "./archive.tar";
-import { createTermuxCloudflared } from "./cloudflared.termux";
+import { createTermuxCloudflared, parseRouteDns } from "./cloudflared.termux";
 import { createOfflineClients } from "./external.fake";
+import { FAKE_INTEGRATIONS, type FakeIntegration, writeFakeIntegration } from "./fake.integration";
 import { createFakePm2, type FakePm2Behaviour } from "./pm2.fake";
 import { createFakePostgres } from "./postgres.fake";
-import type { RunitService, SystemAdapters } from "./system.types";
+import type { RunitControlOptions, RunitService, SystemAdapters } from "./system.types";
+
+export { fakeEcosystem } from "./fake.integration";
 
 /**
  * Options for the fake adapters. `delayMs` slows control actions (lets tests overlap two clicks);
@@ -19,7 +18,9 @@ import type { RunitService, SystemAdapters } from "./system.types";
  * `supervisorDown` = runit `pm2` starts down (pm2 unavailable); `exitsOnZeroAppsAtStart` = starting runit `pm2`
  * with no apps leaves it down (pm2-runtime auto-exit, lab E4); `panelPid` = pid in the fake `panel/supervise/pid`
  * (pass `process.pid` to look supervised); `offline` = S3/Telegram/DNS are offline fakes too (the panel's own fake
- * mode, D-W9-4; tests leave it off to hit their mock servers). Ports of online pm2 apps always "accept" TCP.
+ * mode, D-W9-4; tests leave it off to hit their mock servers); `pm2UptimeSec` = how long runit `pm2` has run (default
+ * 4 h); `integration` = sandbox scenario when FAKE_SCENARIO_FILE names none (default `ready`). Ports of online pm2 apps
+ * always "accept" TCP.
  */
 export type FakeOptions = FakePm2Behaviour & {
   offline?: boolean;
@@ -29,6 +30,8 @@ export type FakeOptions = FakePm2Behaviour & {
   supervisorDown?: boolean;
   exitsOnZeroAppsAtStart?: boolean;
   panelPid?: number;
+  pm2UptimeSec?: number;
+  integration?: FakeIntegration;
 };
 
 /** Demo tunnel config seeded into the sandbox when absent (real files are only touched in termux mode). */
@@ -47,42 +50,43 @@ ingress:
 `;
 /** Folder under the panel data dir used as the fake HOME by boot (kept across restarts, written by the demo seed). */
 export const FAKE_HOME_DIR = "fake-home";
-/** Optional JSON in the fake HOME that overrides demo readings: `{ battery?: Partial<Battery>, databases? }`. */
-export const FAKE_SCENARIO_FILE = ".panel-fake.json";
-type FakeScenario = { battery?: Partial<Battery>; databases?: DatabaseInfo[] };
-
 /**
- * The shipped deploy/pm2/ecosystem.config.js with its Termux paths pointed into the sandbox (so the Persiapan card
- * passes in fake mode). `$PREFIX` becomes `<home>/usr`, where seedSandbox puts the guard's `sleep`.
+ * Optional JSON in the fake HOME that overrides demo readings: `{ battery?: Partial<Battery>, databases?,
+ * integration?: FakeIntegration, pm2LostOnRestart?: string[] }` (`pm2LostOnRestart` = apps pm2 does not bring back
+ * after a restart of runit `pm2`, to see the checked restart fail).
  */
-export const fakeEcosystem = (home: string): string =>
-  ECOSYSTEM_TEMPLATE.replace(/^const SITES = .*$/m, `const SITES = ${JSON.stringify(join(home, "sites"))};`).replace(
-    /^const PREFIX = .*$/m,
-    `const PREFIX = ${JSON.stringify(join(home, "usr"))};`,
-  );
+export const FAKE_SCENARIO_FILE = ".panel-fake.json";
+/** Shape of FAKE_SCENARIO_FILE. */
+export type FakeScenario = {
+  battery?: Partial<Battery>;
+  databases?: DatabaseInfo[];
+  integration?: FakeIntegration;
+  pm2LostOnRestart?: string[];
+};
 
-function seedSandbox(home: string): void {
+/** Zone of the fake cloudflared cert.pem: `route dns` of a hostname outside it lands under it (dns_wrong_zone). */
+export const FAKE_DNS_ZONE = "contoh.com";
+
+function seedSandbox(home: string, integration: FakeIntegration): void {
   const cfDir = join(home, ".cloudflared");
-  const sitesDir = join(home, "sites");
-  const binDir = join(home, "usr", "bin");
-  const pm2Sv = join(home, "usr", "var", "service", "pm2"); // the shipped runit script, read by the pm2_auto_exit check
-  for (const d of [cfDir, sitesDir, binDir, pm2Sv]) mkdirSync(d, { recursive: true });
-  if (!existsSync(join(pm2Sv, "run"))) writeFileSync(join(pm2Sv, "run"), PM2_RUN_TEMPLATE);
+  mkdirSync(cfDir, { recursive: true });
   if (!existsSync(join(cfDir, "config.yml"))) writeFileSync(join(cfDir, "config.yml"), FAKE_CONFIG);
-  if (!existsSync(join(sitesDir, "ecosystem.config.js")))
-    writeFileSync(join(sitesDir, "ecosystem.config.js"), fakeEcosystem(home));
-  if (!existsSync(join(binDir, "sleep"))) writeFileSync(join(binDir, "sleep"), '#!/bin/sh\nexec sleep "$@"\n');
+  writeFakeIntegration(home, integration);
 }
 
 /** FAKE_SCENARIO_FILE of `home`, or {} when absent. A broken file is an error: the demo would silently lie. */
 function readScenario(home: string): FakeScenario {
   const file = join(home, FAKE_SCENARIO_FILE);
   if (!existsSync(file)) return {};
+  let scenario: FakeScenario;
   try {
-    return JSON.parse(readFileSync(file, "utf8")) as FakeScenario;
+    scenario = JSON.parse(readFileSync(file, "utf8")) as FakeScenario;
   } catch (e) {
     throw new Error(`fake system: ${file} is not valid JSON (${(e as Error).message})`, { cause: e });
   }
+  if (scenario.integration !== undefined && !FAKE_INTEGRATIONS.includes(scenario.integration))
+    throw new Error(`fake system: ${file}: unknown integration "${scenario.integration}"`);
+  return scenario;
 }
 
 /** What the fake `cloudflared ingress validate` accepts: parseable YAML whose last rule is a catch-all. */
@@ -131,10 +135,13 @@ export function createFakeSystem({
   exitsOnZeroAppsAtStart = false,
   panelPid,
   offline = false,
+  pm2UptimeSec,
+  integration,
   ...behaviour
 }: FakeOptions = {}): SystemAdapters {
-  seedSandbox(home);
   const scenario = readScenario(home);
+  const setup = scenario.integration ?? integration ?? "ready";
+  seedSandbox(home, setup);
   const cloudflared = createTermuxCloudflared(join(home, ".cloudflared", "config.yml"));
   const t0 = Date.now();
   let pid = 4000;
@@ -143,18 +150,22 @@ export function createFakeSystem({
     name,
     up: name !== "crond" && !(name === "pm2" && supervisorDown),
     pid: name === "panel" && panelPid !== undefined ? panelPid : 1000 + i,
-    since: t0 - (i + 1) * 3600 * MS_PER_SEC,
+    since: t0 - (name === "pm2" && pm2UptimeSec !== undefined ? pm2UptimeSec : (i + 1) * 3600) * MS_PER_SEC,
   }));
   const svc = (name: string) => svcs.find((x) => x.name === name);
   const pm2Svc = svc("pm2") as FakeSvc;
-  const { pm2, appCount, listens } = createFakePm2({
+  const lost = [...(behaviour.pm2LostOnRestart ?? []), ...(scenario.pm2LostOnRestart ?? [])];
+  const { pm2, appCount, listens, runtimeStarted } = createFakePm2({
     home,
     delayMs,
     nextPid,
-    behaviour,
+    behaviour: { ...behaviour, pm2LostOnRestart: lost },
+    seedSiteDirs: setup !== "no_sites_dir",
     supervisor: { isUp: () => pm2Svc.up, crash: () => Object.assign(pm2Svc, { up: false, since: Date.now() }) },
   });
 
+  const svDir = join(home, "usr", "var", "service");
+  const routed = new Set<string>();
   const listening = (port: number) => listeningPorts.includes(port) || listens(port);
 
   const svcView = (s: FakeSvc): RunitService => ({
@@ -167,7 +178,10 @@ export function createFakeSystem({
   });
   const apply = (s: FakeSvc, action: ControlAction) => {
     if (action === "stop") Object.assign(s, { up: false, since: Date.now() });
-    else if (action === "restart" || !s.up) Object.assign(s, { up: true, pid: nextPid(), since: Date.now() });
+    else if (action === "restart" || !s.up) {
+      Object.assign(s, { up: true, pid: nextPid(), since: Date.now() });
+      if (s === pm2Svc) runtimeStarted();
+    }
     // pm2-runtime exits right away when its ecosystem has no apps (lab E4).
     if (s === pm2Svc && s.up && exitsOnZeroAppsAtStart && appCount() === 0) s.up = false;
   };
@@ -183,12 +197,18 @@ export function createFakeSystem({
       list: async () => svcs.map(svcView),
       async supervise(name) {
         const s = svc(name);
-        return s ? { state: s.up ? "run" : "down", pid: s.up ? s.pid : null } : null;
+        if (!s) return null;
+        const v = svcView(s);
+        return v.uptimeSec === null
+          ? { state: v.state, pid: v.pid }
+          : { state: v.state, pid: v.pid, uptimeSec: v.uptimeSec };
       },
-      async control(name, action) {
+      async control(name, action, opts: RunitControlOptions = {}) {
         const s = svc(name);
         if (!s) return null;
         await sleep(delayMs);
+        // Same as termux: `down` under the sandbox SVDIR goes first, then the service starts.
+        if (action === "start" && opts.removeDown) rmSync(join(svDir, name, "down"), { force: true });
         apply(s, action);
         return svcView(s);
       },
@@ -200,6 +220,16 @@ export function createFakeSystem({
       listIngress: cloudflared.listIngress,
       probe: async (hostname) => (hostname.startsWith("old.") ? { status: 502, ms: 40 } : { status: 200, ms: 12 }),
       validate: fakeValidate,
+      // Like cloudflared with a cert.pem of FAKE_DNS_ZONE: a hostname outside the zone gets the zone appended.
+      async routeDns(_tunnel, hostname) {
+        await sleep(delayMs);
+        const fqdn = hostname.endsWith(`.${FAKE_DNS_ZONE}`) ? hostname : `${hostname}.${FAKE_DNS_ZONE}`;
+        const out = routed.has(fqdn)
+          ? `INF ${fqdn} is already configured to route to your tunnel`
+          : `INF Added CNAME ${fqdn} which will route to this tunnel`;
+        routed.add(fqdn);
+        return parseRouteDns(out, hostname);
+      },
     },
     postgres: createFakePostgres(scenario.databases),
     device: {

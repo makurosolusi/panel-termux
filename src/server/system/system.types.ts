@@ -13,8 +13,14 @@ import type { OfflineClients } from "./external.clients";
 /** Service as the supervisor sees it; the panel adds `protected` and `lockout`. */
 export type RunitService = Omit<Service, "protected" | "lockout">;
 
-/** One service's runsv state read from `supervise/stat` + `supervise/pid` (no `sv` spawn). */
-export type SuperviseState = { state: ServiceState; pid: number | null };
+/**
+ * One service's runsv state read from `supervise/stat` + `supervise/pid` (no `sv` spawn). `uptimeSec` (from
+ * `supervise/status`) is present only while the service runs and the status file is readable.
+ */
+export type SuperviseState = { state: ServiceState; pid: number | null; uptimeSec?: number };
+
+/** `start` options: `removeDown` deletes `<svdir>/<name>/down` first, so the service also starts after a reboot. */
+export type RunitControlOptions = { removeDown?: boolean };
 
 /** One cloudflared ingress rule with a hostname (the catch-all rule is dropped). */
 export type IngressRule = { hostname: string; service: string; port: number | null };
@@ -54,7 +60,7 @@ export interface RunitAdapter {
   list(): Promise<RunitService[]>;
   /** runsv state of one service from its `supervise/` files; null when the service does not exist. */
   supervise(name: string): Promise<SuperviseState | null>;
-  control(name: string, action: ControlAction): Promise<RunitService | null>;
+  control(name: string, action: ControlAction, opts?: RunitControlOptions): Promise<RunitService | null>;
   readLog(name: string, lines: number): Promise<string[] | null>;
 }
 
@@ -74,6 +80,16 @@ export interface Pm2Adapter {
   startFromEcosystem(ecosystem: string, name: string): Promise<App | null>;
 }
 
+/** Thrown by `routeDns` when cloudflared created/found the CNAME under another name (cert.pem of another zone). */
+export class DnsWrongZoneError extends SystemError {
+  constructor(readonly fqdn: string) {
+    super(`cloudflared routed ${fqdn} instead of the requested hostname`);
+  }
+}
+
+/** `routeDns` outcome: `created` = new CNAME, false = it already pointed at this tunnel. */
+export type RouteDnsResult = { created: boolean };
+
 /** cloudflared ingress config and reachability of its hostnames. */
 export interface CloudflaredAdapter {
   /** Path of the live config.yml (read by listIngress, edited by site jobs). */
@@ -82,6 +98,11 @@ export interface CloudflaredAdapter {
   probe(hostname: string): Promise<ProbeResult>;
   /** `cloudflared tunnel --config <path> ingress validate` on a candidate config file. */
   validate(path: string): Promise<{ ok: boolean; message: string }>;
+  /**
+   * `cloudflared tunnel route dns <tunnel> <hostname>` (uses ~/.cloudflared/cert.pem, never --overwrite-dns).
+   * Throws DnsWrongZoneError when the reported name differs from `hostname`, SystemError on any other failure.
+   */
+  routeDns(tunnel: string, hostname: string): Promise<RouteDnsResult>;
 }
 
 /** Local PostgreSQL databases. Names passed to create/drop must match SQL_IDENT_RE. */

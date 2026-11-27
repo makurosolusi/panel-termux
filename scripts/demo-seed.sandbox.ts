@@ -4,6 +4,7 @@ import { mkdirSync, rmSync, truncateSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { panelAppEntry, runScriptText } from "../src/server/deploy/run.script";
 import { FAKE_S3_DIR } from "../src/server/system/external.fake";
+import type { FakeIntegration } from "../src/server/system/fake.integration";
 import { FAKE_HOME_DIR, FAKE_SCENARIO_FILE, FAKE_TUNNEL_ID } from "../src/server/system/system.fake";
 import type { DatabaseInfo } from "../src/shared/panel.types";
 
@@ -71,8 +72,15 @@ export const demoHome = (dataDir: string) => {
   return { home, sites: join(home, "sites"), site: (name: string) => join(home, "sites", name) };
 };
 
-/** Wipes and rewrites the fake HOME (site files, apps.json, config.yml, scenario); returns the live binary path. */
-export function writeDemoHome(dataDir: string, ports: Record<string, number>): { liveBinary: string } {
+/**
+ * Wipes and rewrites the fake HOME (site files, apps.json, config.yml, scenario incl. the Persiapan `integration`
+ * the fake writes ecosystem.config.js + pm2 run script for on first start); returns the live binary path.
+ */
+export function writeDemoHome(
+  dataDir: string,
+  ports: Record<string, number>,
+  integration: FakeIntegration = "ready",
+): { liveBinary: string } {
   const h = demoHome(dataDir);
   rmSync(h.home, { recursive: true, force: true });
   for (const [name, port] of Object.entries(ports)) {
@@ -90,7 +98,7 @@ export function writeDemoHome(dataDir: string, ports: Record<string, number>): {
   writeFileSync(join(h.sites, "apps.json"), `${JSON.stringify([panelAppEntry("toko-kopi", toko)], null, 2)}\n`);
   mkdirSync(join(h.home, ".cloudflared"), { recursive: true });
   writeFileSync(join(h.home, ".cloudflared", "config.yml"), CONFIG_YML);
-  const scenario = { battery: DEMO_BATTERY, databases: DEMO_DATABASES };
+  const scenario = { battery: DEMO_BATTERY, databases: DEMO_DATABASES, integration };
   writeFileSync(join(h.home, FAKE_SCENARIO_FILE), `${JSON.stringify(scenario, null, 2)}\n`);
   return { liveBinary: join(toko, "app") };
 }

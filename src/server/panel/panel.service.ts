@@ -57,6 +57,8 @@ const DOWNLOAD_LINES = 20_000;
 /** Lines hashed as the follow anchor. */
 const ANCHOR_LINES = 3;
 const RECENT_ACTIVITY = 5;
+/** Services whose `start` also removes their runit `down` file, so they come back after a reboot (PLAN/06 F8). */
+const BOOT_SERVICES: ReadonlySet<string> = new Set(["pm2", "postgres"]);
 
 // ponytail: the cursor anchors on a hash of the last lines of the window the adapters return (no inode/offset
 // reader exists yet); a burst larger than the window, or identical repeated lines, reads as `reset`. Upgrade: an
@@ -239,7 +241,8 @@ export function createPanelService(deps: PanelDeps) {
           throw new ApiError(409, "job_running", "a site job or backup is running; restart the panel afterwards");
         return deferRestart(actorId, name, sup.pid);
       }
-      const s = await withLock(`service:${name}`, () => system.runit.control(name, action));
+      const removeDown = action === "start" && BOOT_SERVICES.has(name);
+      const s = await withLock(`service:${name}`, () => system.runit.control(name, action, { removeDown }));
       if (!s) throw new ApiError(404, "not_found", `unknown service ${name}`);
       if (action !== "stop") monitor.noteIntentionalRestart({ kind: "service", name });
       const meta = action === "stop" && prot ? { confirmTyped: true } : null;

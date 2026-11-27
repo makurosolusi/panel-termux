@@ -13,7 +13,7 @@ import { SETTINGS } from "@/server/settings.registry";
 import { candidateOf } from "@/server/sites/adopt.candidates";
 import { snippetCurrent } from "@/server/sites/integration.service";
 import { FAKE_S3_DIR } from "@/server/system/external.fake";
-import { createFakeSystem, FAKE_HOME_DIR } from "@/server/system/system.fake";
+import { createFakeSystem, FAKE_HOME_DIR, FAKE_SCENARIO_FILE } from "@/server/system/system.fake";
 import { COOKIE_FILE, DEMO_SUPER_ADMIN_EMAIL, seedDemo } from "../scripts/demo-seed";
 import { DEMO_BUCKET } from "../scripts/demo-seed.sandbox";
 
@@ -169,6 +169,23 @@ describe("scripts/demo-seed", () => {
     expect(await roleOf(dir, before.admin)).toBeNull();
     expect(await roleOf(dir, after.admin)).toBe("admin");
     expect(statSync(join(dir, COOKIE_FILE)).mode & 0o777).toBe(0o600);
+  });
+
+  test("--integration poco: the fake HOME gets POCO's ecosystem and run script; no_sites_dir is refused", async () => {
+    const pocoDir = join(root, "poco");
+    await seedDemo({ dataDir: pocoDir, baseUrl: BASE, integration: "poco" });
+    const home = join(pocoDir, FAKE_HOME_DIR);
+    expect(JSON.parse(readFileSync(join(home, FAKE_SCENARIO_FILE), "utf8")).integration).toBe("poco");
+    createFakeSystem({ home, offline: true }); // boot writes the scenario's files
+    const eco = readFileSync(join(home, "sites", "ecosystem.config.js"), "utf8");
+    expect(eco).toContain("site('makuro-solusi')");
+    expect(eco).not.toMatch(/panelApps|apps\.json/);
+    expect(readFileSync(join(home, "usr", "var", "service", "pm2", "run"), "utf8")).not.toContain("--no-auto-exit");
+    const bad = join(root, "bad-scenario");
+    await expect(seedDemo({ dataDir: bad, baseUrl: BASE, integration: "no_sites_dir" })).rejects.toThrow(
+      /--integration/,
+    );
+    expect(existsSync(join(bad, "panel.db"))).toBe(false);
   });
 
   test("refuses ./data and ~/panel without touching them", async () => {
