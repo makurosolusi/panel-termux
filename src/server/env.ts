@@ -1,3 +1,4 @@
+import { ENV_VARS, type EnvVarName } from "../shared/env.schema";
 import { log } from "./log.service";
 
 /** Validated runtime configuration. Values are never printed; errors name the variable only. */
@@ -14,9 +15,15 @@ export type Env = {
   PANEL_SKIP_SNAPSHOT: boolean;
 };
 
+/** Default of `name` from the env schema (K17: the one place defaults live). */
+const schemaDefault = (name: EnvVarName): string => {
+  const v = ENV_VARS.find((x) => x.name === name);
+  if (!v || !("default" in v)) throw new Error(`env schema has no default for ${name}`);
+  return v.default;
+};
 /** Port used when PORT is unset. */
-export const DEFAULT_PORT = 3200;
-const DEFAULT_DATA_DIR = "./data";
+export const DEFAULT_PORT = Number(schemaDefault("PORT"));
+const DEFAULT_DATA_DIR = schemaDefault("PANEL_DATA_DIR");
 /** Loose email shape check for SUPER_ADMIN_EMAILS entries. */
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
@@ -41,6 +48,7 @@ const required = (src: Record<string, string | undefined>, name: string): string
 
 /** Parses and validates env from `src` (defaults to process.env). Throws EnvError on invalid input. */
 export function parseEnv(src: Record<string, string | undefined> = process.env): Env {
+  for (const v of ENV_VARS) if (v.required) required(src, v.name);
   const APP_BASE_URL = httpUrl("APP_BASE_URL", required(src, "APP_BASE_URL"));
   const connectivity = src.PANEL_CONNECTIVITY_URL?.trim();
 
