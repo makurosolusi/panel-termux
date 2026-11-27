@@ -3,7 +3,12 @@ import type { MeSession } from "@/shared/me.types";
 import { signInErrorMessage, tAccount } from "@/web/i18n/en.account";
 import { loginErrorMessage } from "@/web/pages/login.error";
 import { canSelfDelete } from "@/web/pages/profile.delete";
-import { LANGUAGE_CHOICES, languageChoiceLabel, saveLanguage } from "@/web/pages/profile.language";
+import {
+  effectiveLanguageChoice,
+  LANGUAGE_CHOICES,
+  languageChoiceLabel,
+  saveLanguage,
+} from "@/web/pages/profile.language";
 import { needsAccess } from "@/web/pages/profile.no-access";
 import { hasOtherSessions, sessionActiveLabel, sessionDevice } from "@/web/pages/profile.sessions";
 
@@ -129,6 +134,12 @@ describe("profile language card", () => {
     expect(h.sent[0]?.body).toEqual({ locale: null });
     expect(h.store.has("panel-termux:lang")).toBe(false);
     expect(h.reloads()).toBe(1);
+  });
+  test("selected choice = account language, else the stored browser choice, else the device (QA 29 M2)", () => {
+    expect(effectiveLanguageChoice("en", "id")).toBe("en"); // account wins over a stale ?lang= cache
+    expect(effectiveLanguageChoice(null, "id")).toBe("id"); // ?lang=id without an account language
+    expect(effectiveLanguageChoice(null, null)).toBeNull(); // nothing chosen → device
+    expect(effectiveLanguageChoice(null, "fr")).toBeNull(); // garbage in storage is ignored, as at boot
   });
   test("a failed save keeps the cached choice and does not reload", async () => {
     const h = harness(500);

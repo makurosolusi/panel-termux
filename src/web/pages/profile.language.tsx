@@ -1,10 +1,10 @@
 import { cn } from "cn";
 import { useState } from "react";
-import { LANGUAGE_NAMES, LOCALES, type Locale } from "@/shared/locale";
+import { LANGUAGE_NAMES, LOCALES, type Locale, parseLocale } from "@/shared/locale";
 import type { MePatch } from "@/shared/me.types";
 import { Section } from "@/web/components/section";
 import { tAccount } from "@/web/i18n/en.account";
-import { writeStoredLocale } from "@/web/i18n/locale.detect";
+import { readStoredLocale, writeStoredLocale } from "@/web/i18n/locale.detect";
 import { browserStorage } from "@/web/session/locale.sync";
 import { ERROR_TOAST_MS } from "@/web/shared/api.action";
 import { apiErrorMessage, apiFetch } from "@/web/shared/api.client";
@@ -17,6 +17,14 @@ export const LANGUAGE_CHOICES: readonly (Locale | null)[] = [...LOCALES, null];
 
 /** Button text: language names stay in their own language (PLAN/08 §3.2); only the device option is translated. */
 export const languageChoiceLabel = (choice: Locale | null): string => (choice ? LANGUAGE_NAMES[choice] : t.device);
+
+/**
+ * Choice the page actually runs on: the account language, else the browser's stored choice (`?lang=` switcher or an
+ * earlier pick, which boot detection honours too), else the device language (`null`).
+ */
+export function effectiveLanguageChoice(accountLocale: Locale | null, stored: string | null): Locale | null {
+  return accountLocale ?? parseLocale(stored);
+}
 
 /** Saves the choice on the account, caches it for the next boot and reloads; false (with a toast) when the save failed. */
 export async function saveLanguage(
@@ -36,8 +44,9 @@ export async function saveLanguage(
 }
 
 /** "Language" card: English / Bahasa Indonesia / device language, stored on the account (`PATCH /api/me`). */
-export function ProfileLanguage({ locale }: { locale: Locale | null }) {
+export function ProfileLanguage({ locale: accountLocale }: { locale: Locale | null }) {
   const [pending, setPending] = useState<Locale | null | undefined>(undefined);
+  const locale = effectiveLanguageChoice(accountLocale, readStoredLocale(browserStorage()));
   const choose = async (choice: Locale | null) => {
     if (choice === locale || pending !== undefined) return;
     setPending(choice);
