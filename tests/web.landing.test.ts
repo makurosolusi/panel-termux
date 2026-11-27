@@ -1,6 +1,8 @@
 import { describe, expect, test } from "bun:test";
 import { readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
+import { createElement } from "react";
+import { renderToStaticMarkup } from "react-dom/server";
 import { OG_TEXT } from "@/server/http/seo";
 import type { Role } from "@/shared/roles";
 import { tLanding } from "@/web/i18n/en.landing";
@@ -147,5 +149,30 @@ describe("footer language switch", () => {
   test("offers the other language, named in itself, via ?lang=", () => {
     expect(languageSwitch("en")).toEqual({ href: "/?lang=id", label: "Bahasa Indonesia", lang: "id" });
     expect(languageSwitch("id")).toEqual({ href: "/?lang=en", label: "English", lang: "en" });
+  });
+});
+
+describe("landing anchors are English; the old Indonesian ids stay as hidden aliases (one release)", () => {
+  test.each([
+    ["install", "pasang", "install.section", "InstallSection"],
+    ["features", "fitur", "features.section", "FeaturesSection"],
+    ["how-it-works", "cara-kerja", "steps.section", "StepsSection"],
+    ["limits", "batasan", "limits.section", "LimitsSection"],
+    ["screens", "layar", "shots.section", "ShotsSection"],
+  ])("#%s, alias #%s", async (id, alias, file, name) => {
+    const mod = (await import(`@/web/landing/${file}`)) as Record<string, () => null>;
+    const html = renderToStaticMarkup(createElement(mod[name] as () => null));
+    expect(html).toContain(`<section id="${id}"`);
+    expect(html).toContain(`<span id="${alias}" aria-hidden="true"`);
+  });
+
+  test("CTA, header nav and the no-access link point at the English ids", async () => {
+    const { tAccount } = await import("@/web/i18n/en.account");
+    expect(tAccount.noAccess.ownServerHref).toBe("/#install");
+    const header = readFileSync(join(import.meta.dir, "..", "src/web/landing/landing.header.tsx"), "utf8");
+    const cta = readFileSync(join(import.meta.dir, "..", "src/web/landing/cta.link.tsx"), "utf8");
+    for (const href of ["#install", "#features", "#how-it-works"]) expect(header).toContain(`href: "${href}"`);
+    expect(cta).toContain('href="#install"');
+    expect(`${header}${cta}`).not.toMatch(/#(pasang|fitur|cara-kerja|batasan|layar)\b/);
   });
 });

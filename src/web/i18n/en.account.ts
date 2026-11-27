@@ -74,7 +74,7 @@ export const tAccount = msg("account", {
     ],
     emailLabel: "Your account email",
     reload: "Reload",
-    ownServerHref: "/#pasang",
+    ownServerHref: "/#install",
     ownServer: "Want your own server? Install Panel Termux on your phone",
   },
   theme: {

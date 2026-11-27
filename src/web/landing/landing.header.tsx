@@ -4,9 +4,9 @@ import { AccountLink, InstallCta } from "./cta.link";
 
 const t = tLanding;
 const NAV = [
-  { href: "#pasang", label: t.nav.install },
-  { href: "#fitur", label: t.nav.features },
-  { href: "#cara-kerja", label: t.nav.how },
+  { href: "#install", label: t.nav.install },
+  { href: "#features", label: t.nav.features },
+  { href: "#how-it-works", label: t.nav.how },
   { href: "#faq", label: t.nav.faq },
 ] as const;
 

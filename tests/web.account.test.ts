@@ -77,7 +77,7 @@ describe("role-dependent profile cards", () => {
   });
   test("no-access copy gives concrete steps and links to install your own", () => {
     expect(tAccount.noAccess.steps).toHaveLength(3);
-    expect(tAccount.noAccess.ownServerHref).toBe("/#pasang");
+    expect(tAccount.noAccess.ownServerHref).toBe("/#install");
   });
 });
 

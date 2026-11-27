@@ -1,4 +1,5 @@
 import { tLanding } from "@/web/i18n/en.landing";
+import { LandingLegacyAnchor } from "./landing.anchors";
 import { SectionHead } from "./section.head";
 
 const t = tLanding.how;
@@ -7,10 +8,11 @@ const t = tLanding.how;
 export function StepsSection() {
   return (
     <section
-      id="cara-kerja"
+      id="how-it-works"
       aria-labelledby="how-title"
       className="mx-auto max-w-6xl scroll-mt-16 px-4 py-16 sm:px-6 md:py-24"
     >
+      <LandingLegacyAnchor of="how-it-works" />
       <SectionHead id="how-title" kicker={t.kicker} title={t.title} />
       <ol className="mt-12 grid gap-10 md:grid-cols-4 md:gap-6">
         {t.steps.map((s, i) => (

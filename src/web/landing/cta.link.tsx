@@ -10,14 +10,14 @@ const SIZES = {
   lg: "h-12 px-6 text-base",
 } as const;
 
-/** Primary landing CTA "Install on your phone": jumps to the install section (`#pasang`). */
+/** Primary landing CTA "Install on your phone": jumps to the install section (`#install`). */
 export function InstallCta({ size = "lg", inverted = false }: { size?: keyof typeof SIZES; inverted?: boolean }) {
   const palette = inverted
     ? "bg-lp-ink text-lp-paper focus-visible:outline-lp-ink"
     : "bg-lp-signal text-lp-signal-ink focus-visible:outline-lp-signal";
   return (
     <a
-      href="#pasang"
+      href="#install"
       className={`group inline-flex items-center gap-2.5 rounded-full font-lp-mono font-semibold tracking-tight shadow-[0_1px_0_0_rgb(0_0_0/0.25)] transition-transform hover:-translate-y-0.5 focus-visible:outline-2 focus-visible:outline-offset-4 motion-reduce:transition-none motion-reduce:hover:translate-y-0 ${SIZES[size]} ${palette}`}
     >
       {tLanding.cta.install}

@@ -1,19 +1,21 @@
 import { tLanding } from "@/web/i18n/en.landing";
 import { BrowserFrame, PhoneFrame } from "./device.frame";
+import { LandingLegacyAnchor } from "./landing.anchors";
 import { GALLERY, SHOTS } from "./landing.shots";
 import { Screenshot } from "./screenshot";
 import { SectionHead } from "./section.head";
 
 const t = tLanding.shots;
 
-/** `#layar`: three screenshots; horizontal scroll-snap on phones, a 3-column grid from md up. */
+/** `#screens`: three screenshots; horizontal scroll-snap on phones, a 3-column grid from md up. */
 export function ShotsSection() {
   return (
     <section
-      id="layar"
+      id="screens"
       aria-labelledby="shots-title"
       className="scroll-mt-16 border-y border-lp-line bg-lp-ink/[0.03] py-16 md:py-24"
     >
+      <LandingLegacyAnchor of="screens" />
       <div className="mx-auto max-w-6xl px-4 sm:px-6">
         <SectionHead id="shots-title" kicker={t.kicker} title={t.title} />
       </div>

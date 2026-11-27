@@ -1,6 +1,7 @@
 import { CheckIcon, ExternalLinkIcon } from "lucide-react";
 import { CopyButton } from "@/web/components/copy-button";
 import { tLanding } from "@/web/i18n/en.landing";
+import { LandingLegacyAnchor } from "./landing.anchors";
 import { SectionHead } from "./section.head";
 
 const t = tLanding.install;
@@ -8,14 +9,15 @@ const links = tLanding.links;
 const LINK =
   "inline-flex min-h-11 items-center gap-1.5 rounded font-lp-mono text-xs font-semibold underline decoration-lp-signal decoration-2 underline-offset-4 hover:text-lp-signal focus-visible:outline-2 focus-visible:outline-lp-signal";
 
-/** `#pasang`: honest prerequisites and the four install steps, with the copyable one-line install (PLAN/07 K24). */
+/** `#install`: honest prerequisites and the four install steps, with the copyable one-line install (PLAN/07 K24). */
 export function InstallSection() {
   return (
     <section
-      id="pasang"
+      id="install"
       aria-labelledby="install-title"
       className="mx-auto max-w-6xl scroll-mt-16 px-4 py-16 sm:px-6 md:py-24"
     >
+      <LandingLegacyAnchor of="install" />
       <SectionHead id="install-title" kicker={t.kicker} title={t.title} />
       <p className="mt-5 max-w-2xl leading-relaxed text-lp-dim">{t.lead}</p>
       <div className="mt-12 grid gap-12 md:grid-cols-[0.85fr_1.15fr]">

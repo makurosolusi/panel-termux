@@ -1,5 +1,6 @@
 import { ActivityIcon, ArchiveIcon, LayersIcon, RocketIcon, ServerCogIcon, ShieldCheckIcon } from "lucide-react";
 import { tLanding } from "@/web/i18n/en.landing";
+import { LandingLegacyAnchor } from "./landing.anchors";
 import { SectionHead } from "./section.head";
 
 const t = tLanding.features;
@@ -10,10 +11,11 @@ const [wizard, ...rest] = t.items;
 export function FeaturesSection() {
   return (
     <section
-      id="fitur"
+      id="features"
       aria-labelledby="features-title"
       className="scroll-mt-16 border-y border-lp-line bg-lp-ink/[0.03] py-16 md:py-24"
     >
+      <LandingLegacyAnchor of="features" />
       <div className="mx-auto max-w-6xl px-4 sm:px-6">
         <SectionHead id="features-title" kicker={t.kicker} title={t.title} />
         <ul className="mt-12 grid gap-4 md:grid-cols-3">

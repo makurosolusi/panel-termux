@@ -63,7 +63,7 @@ export const idAccount: Messages<typeof tAccount> = {
     ],
     emailLabel: "Email akunmu",
     reload: "Muat ulang",
-    ownServerHref: "/#pasang",
+    ownServerHref: "/#install",
     ownServer: "Ingin server sendiri? Pasang Panel Termux di HP-mu",
   },
   theme: {
