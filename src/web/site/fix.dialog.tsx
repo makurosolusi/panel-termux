@@ -20,7 +20,7 @@ import { applyFixes, fixErrorMessage, previewFix, toastFixRun } from "./site.api
 
 const t = tSite.setup.dialog;
 
-/** Dialog title: the fix's own question, or "Perbaiki n hal sekaligus?" for several. */
+/** Dialog title: the fix's own question, or "Fix n items at once?" for several. */
 export const fixDialogTitle = (keys: readonly FixKey[]): string =>
   keys.length === 1 && keys[0] ? t[keys[0]].title : tSite.setup.dialogAll.title(keys.length);
 
@@ -31,7 +31,7 @@ const STICKY_FOOTER =
 /**
  * Preview of one or more fixes (PLAN/06 §4.1): plain summary first, the exact file diff folded under "Lihat perubahan
  * pada file". Terapkan applies them one by one and stops at the first failure. `keys` null = closed. Loaded lazily.
- * After Terapkan focus goes to `focusAfter()` (the Perbaiki button is gone by then). `onDone(restart)`: an applied fix
+ * After Apply focus goes to `focusAfter()` (the Fix button is gone by then). `onDone(restart)`: an applied fix
  * takes effect only when pm2 starts again.
  */
 export function FixDialog({
@@ -59,7 +59,7 @@ export function FixDialog({
             applying={applying}
             setApplying={setApplying}
             onDone={(applied, restart) => {
-              if (applied) focus.markDone(); // on an error the Perbaiki button is still there: back to it
+              if (applied) focus.markDone(); // on an error the Fix button is still there: back to it
               onDone(restart);
               onClose();
             }}

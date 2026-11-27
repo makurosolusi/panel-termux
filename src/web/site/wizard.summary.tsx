@@ -5,7 +5,7 @@ import { createPlan, type WizardDns } from "./site.check";
 
 const t = tSite.wizard;
 
-/** Wizard step 3 (Ringkasan): the job's steps in order, the named cloudflared blip, and what comes after. */
+/** Wizard step 3 (Summary): the job's steps in order, the named cloudflared blip, and what comes after. */
 export function WizardSummary({
   body,
   dns,

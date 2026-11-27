@@ -109,7 +109,7 @@ export function healthPatch(f: HealthForm, current: SiteHealthConfig): SiteSetti
 export const siteDbBackup = (site: Pick<SiteDetail, "database">, lastGood: readonly BackupLastGood[]) =>
   site.database ? (lastGood.find((g) => g.kind === "database" && g.name === site.database) ?? null) : null;
 
-/** "Simpan database"/"Simpan folder" start checked when that item has no good backup from the last 24 hours. */
+/** "Keep the database"/"Keep the folder" start checked when that item has no good backup from the last 24 hours. */
 export function deleteDefaults(
   site: Pick<SiteDetail, "database">,
   lastGood: readonly BackupLastGood[],

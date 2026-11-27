@@ -96,8 +96,8 @@ function RestartFailed({
 }
 
 /**
- * Bottom of the Persiapan card (PLAN/06 §4.1): "Diperbaiki panel … Batalkan perubahan" and the checked "Mulai ulang
- * pm2 sekarang" inside <details>, plus the warning when apps did not come back. Nothing when there is nothing to undo
+ * Bottom of the Setup card (PLAN/06 §4.1): "Changes by the panel … Undo change" and the checked "Restart
+ * pm2 now" inside <details>, plus the warning when apps did not come back. Nothing when there is nothing to undo
  * and no restart pending.
  */
 export function SetupActions({
@@ -109,7 +109,7 @@ export function SetupActions({
 }: {
   integration: Integration;
   onChange: () => void;
-  /** The Persiapan card: focus lands there once undo / restart removed the button that was pressed. */
+  /** The Setup card: focus lands there once undo / restart removed the button that was pressed. */
   focusCard: () => HTMLElement | null;
   /** A fix just applied takes effect when pm2 starts again: show the restart like a pending one. */
   restartWanted?: boolean;

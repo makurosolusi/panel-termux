@@ -16,7 +16,7 @@ import { checkText, rowBlocked, rowFix, visibleChecks } from "./site.adopt";
 const t = tSite.setup;
 const CHECK_STATE: Record<IntegrationCheck["state"], StatusKey> = { ok: "done", warning: "attention", error: "failed" };
 
-/** Action of a failing row: Perbaiki, Jalankan pm2, or the plain reason the panel cannot fix it. */
+/** Action of a failing row: Fix, Start pm2, or the plain reason the panel cannot fix it. */
 function RowAction({
   integration,
   check,
@@ -47,7 +47,7 @@ function RowAction({
   );
 }
 
-/** Persiapan checklist: one row per problem, each failing row with its action (PLAN/06 §4.1). */
+/** Setup checklist: one row per problem, each failing row with its action (PLAN/06 §4.1). */
 export function SetupChecklist({
   integration,
   onFix,

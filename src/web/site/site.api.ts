@@ -26,10 +26,10 @@ export const hostnameRemoveUrl = (name: string, hostname: string, confirm?: stri
 /** SPA path of a job's progress view. */
 export const jobPath = (jobId: string): string => `/panel/jobs/${encodeURIComponent(jobId)}`;
 
-/** Error codes meaning "pm2 is down": their toast carries a "Jalankan pm2" action (PLAN/06 §6.1). */
+/** Error codes meaning "pm2 is down": their toast carries a "Start pm2" action (PLAN/06 §6.1). */
 const PM2_DOWN: ReadonlySet<string> = new Set(["pm2_not_running", "pm2_unavailable"]);
 
-/** Error toast of a site action (code spans as <code>); pm2 down adds a "Jalankan pm2" button. */
+/** Error toast of a site action (code spans as <code>); pm2 down adds a "Start pm2" button. */
 export function toastSiteError(err: unknown, codes: Readonly<Record<string, string>> = SITE_ERROR_CODES): void {
   const pm2Down = err instanceof ApiError && err.code !== null && PM2_DOWN.has(err.code);
   toast.error(createElement(CodeText, null, apiErrorMessage(err, codes)), {
@@ -157,7 +157,7 @@ export async function applyFixes(previews: readonly FixPreview[]): Promise<FixRu
   return { done: previews.length, integration, error: null };
 }
 
-/** Toast of a fix run: done (past tense), "Tidak diterapkan" as a warning, other errors by code. */
+/** Toast of a fix run: done (past tense), "Not applied" as a warning, other errors by code. */
 export function toastFixRun(run: FixRun): void {
   const t = tSite.setup;
   if (run.error === null) {

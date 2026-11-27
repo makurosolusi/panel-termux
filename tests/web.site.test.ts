@@ -129,7 +129,7 @@ describe("wizard target", () => {
     expect(targetReady(form({ port: "0" }), { ok: true, issues: [] }, false)).toBe(false);
   });
 
-  test("issues: Indonesian copy from code + params, grouped per field and per domain; leftover job id kept", () => {
+  test("issues: copy from code + params, grouped per field and per domain; leftover job id kept", () => {
     const r = targetIssues({
       ok: false,
       issues: [
@@ -141,9 +141,9 @@ describe("wizard target", () => {
     expect(r.leftoverJobId).toBe("j9");
     expect(r.name).toEqual([tSite.issues.name_leftover]);
     expect(r.hostnames["a.contoh.com"]).toEqual([
-      "a.contoh.com sudah diarahkan ke aplikasi lain di config cloudflared.",
+      "a.contoh.com already points to another app in the cloudflared config.",
     ]);
-    expect(r.port).toEqual(["Pakai port di rentang situs 3000–3999."]);
+    expect(r.port).toEqual(["Use a port in the site range 3000–3999."]);
   });
 
   test("unknown issue code falls back to the server text", () =>
@@ -190,16 +190,16 @@ describe("wizard create body and summary", () => {
     };
     const plan = createPlan(body, "unknown");
     expect(plan).toHaveLength(8);
-    expect(plan[1]).toBe("Membuat folder ~/sites/blog");
-    expect(plan[2]).toBe("Membuat database blog beserta role-nya");
-    expect(plan[3]).toBe("Menulis .env (PORT dan DATABASE_URL)");
-    expect(plan[4]).toBe("Menambahkan rute a.contoh.com, b.contoh.com ke port 3001 di config cloudflared");
-    expect(plan[5]).not.toContain("dilewati"); // without a token the cloudflared login may still create it
-    expect(plan[5]).toContain("lewat login cloudflared bila ada");
-    expect(createPlan({ ...body, database: false }, "token")[2]).toBe("Tanpa database");
-    expect(createPlan(body, "token")[5]).toBe("Membuat record DNS a.contoh.com, b.contoh.com di Cloudflare");
-    expect(createPlan(body, "cert")[5]).toContain("lewat login cloudflared di HP ini");
-    expect(createPlan(body, "manual")[5]).toContain("record siap salin");
+    expect(plan[1]).toBe("Create the folder ~/sites/blog");
+    expect(plan[2]).toBe("Create the blog database and its role");
+    expect(plan[3]).toBe("Write .env (PORT and DATABASE_URL)");
+    expect(plan[4]).toBe("Add a route for a.contoh.com, b.contoh.com to port 3001 in the cloudflared config");
+    expect(plan[5]).not.toContain("not created"); // without a token the cloudflared login may still create it
+    expect(plan[5]).toContain("through the cloudflared login if there is one");
+    expect(createPlan({ ...body, database: false }, "token")[2]).toBe("No database");
+    expect(createPlan(body, "token")[5]).toBe("Create the DNS records for a.contoh.com, b.contoh.com in Cloudflare");
+    expect(createPlan(body, "cert")[5]).toContain("through this phone's cloudflared login");
+    expect(createPlan(body, "manual")[5]).toContain("copy-ready records");
   });
 
   test("wizard DNS route: token only when the token check is ok, else unknown until the server says", () => {
@@ -220,16 +220,16 @@ describe("wizard create body and summary", () => {
     ]);
     expect(blipHosts(["1", "2", "3", "4"], "", [])).toHaveLength(3);
     expect(tSite.wizard.blip(["x.contoh.com"])).toBe(
-      "cloudflared dimulai ulang sekali. Semua domain di HP ini terputus 3–10 dtk, termasuk x.contoh.com.",
+      "cloudflared restarts once. Every domain on this phone drops for 3–10 s, including x.contoh.com.",
     );
   });
 });
 
-describe("belum dikelola", () => {
-  test("panel's own host reads 'Panel Termux (domain ini)' and is not adoptable", () =>
+describe("not managed yet", () => {
+  test("panel's own host reads 'Panel Termux (this domain)' and is not adoptable", () =>
     expect(discoveredRow(ingress({ self: true, blockers: ["self"] }), [app()])).toEqual({
       hostname: "solusi.contoh.com",
-      target: "Panel Termux (domain ini)",
+      target: "Panel Termux (this domain)",
       adoptable: false,
       reason: null,
     }));
@@ -291,15 +291,15 @@ describe("adopt dialog", () => {
   test("facts: folder, runtime with how pm2 runs it, port with its source", () => {
     expect(appFacts(app())).toEqual({
       folder: "/data/sites/makuro-solusi",
-      runtime: "glibc · dijalankan lewat grun",
-      port: "3005 · dari `.env`",
+      runtime: "glibc · runs through grun",
+      port: "3005 · from `.env`",
     });
-    expect(appFacts(app({ runtime: null, port: null, portSource: null, cwd: null })).port).toBe("tidak diketahui");
+    expect(appFacts(app({ runtime: null, port: null, portSource: null, cwd: null })).port).toBe("unknown");
     expect(appWarnings(app({ warnings: ["script_other"] }))).toEqual([tSite.adopt.warnings.script_other]);
   });
 });
 
-describe("persiapan", () => {
+describe("setup card", () => {
   const allOk = (Object.keys(tSite.setup.checks) as IntegrationCheckKey[]).map((k) => chk(k));
 
   test("ready + no pm2 warning → card collapses; a pm2 warning keeps it open", () => {
@@ -315,7 +315,7 @@ describe("persiapan", () => {
     expect(integrationReady({ ...old, issues: ["x"] })).toBe(false);
   });
 
-  test("block steps (Cara manual) needed until panel sites load through the current block", () => {
+  test("block steps (Manual steps) needed until panel sites load through the current block", () => {
     const old = integration([chk("ecosystem_spreads_apps_json"), chk("snippet_current", "error")], false);
     expect(snippetNeeded(old)).toBe(true);
     expect(snippetNeeded(integration(allOk))).toBe(false);
@@ -324,8 +324,10 @@ describe("persiapan", () => {
   test("check copy per state, with params", () => {
     expect(checkText(chk("snippet_current", "error"))).toBe(tSite.setup.checks.snippet_current.error);
     expect(checkText(chk("sites_dir", "error", { path: "/x/sites" }))).toContain("/x/sites");
-    expect(checkText(chk("apps_json", "error", { reason: "invalid" }))).toContain("rusak");
-    expect(checkText(chk("apps_entries_runnable", "warning", { count: 2 }))).toContain("2 situs");
+    expect(checkText(chk("apps_json", "error", { reason: "invalid" }))).toContain("broken");
+    expect(checkText(chk("apps_entries_runnable", "warning", { count: 2 }))).toContain(
+      "Sites in apps.json without a binary yet: 2",
+    );
     expect(checkText(chk("tunnel"))).toBe(tSite.setup.checks.tunnel.ok);
   });
 
@@ -379,4 +381,14 @@ describe("site list", () => {
   });
 
   test("siteUrl encodes the name", () => expect(siteUrl("a b", "/env")).toBe("/api/panel/sites/a%20b/env"));
+});
+
+describe("English anchors keep the old Indonesian ids for one release", () => {
+  test("detail starts at #overview; #ringkasan, #persiapan and #belum-dikelola stay as aliases", async () => {
+    const { SITE_ANCHORS } = await import("@/web/site/site.anchors");
+    const { LEGACY_ANCHORS } = await import("@/web/site/site.legacy-anchor");
+    expect(SITE_ANCHORS[0].id).toBe("overview");
+    expect(SITE_ANCHORS[0].label).toBe("Overview");
+    expect(LEGACY_ANCHORS).toEqual({ overview: "ringkasan", setup: "persiapan", "not-managed": "belum-dikelola" });
+  });
 });

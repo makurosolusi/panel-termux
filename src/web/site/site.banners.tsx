@@ -28,7 +28,7 @@ type BannersProps = {
   onDelete?: () => void;
 };
 
-/** Running / interrupted change, restart pending and deploy blocker notices of one site (pm2 down: "Jalankan pm2"). */
+/** Running / interrupted change, restart pending and deploy blocker notices of one site (pm2 down: "Start pm2"). */
 export function SiteBanners({ site, interrupted, codes, onChanged, onDelete }: BannersProps) {
   const job = site.activeJob;
   const link = (to: string, label: string) => (

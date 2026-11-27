@@ -49,7 +49,7 @@ function Stepper({ step }: { step: number }) {
   );
 }
 
-/** /panel/sites/new: 3-step create wizard (Alamat → Opsi → Ringkasan), then hands off to the job page. */
+/** /panel/sites/new: 3-step create wizard (Address → Options → Summary), then hands off to the job page. */
 export function SiteNewPage() {
   const navigate = useNavigate();
   const [step, setStep] = useState(0);

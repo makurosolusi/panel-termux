@@ -43,7 +43,7 @@ function JobBanner({ job, interrupted }: { job: Pick<Job, "id" | "kind" | "targe
   );
 }
 
-/** Buat situs: disabled with the reason while pm2 is not ready for panel-built sites. */
+/** Create site: disabled with the reason while pm2 is not ready for panel-built sites. */
 function CreateButton({ ready }: { ready: boolean }) {
   if (ready) {
     return (
@@ -68,7 +68,7 @@ function CreateButton({ ready }: { ready: boolean }) {
   );
 }
 
-/** /panel/sites: Persiapan first, then the site list (problems first) and domains not managed yet. */
+/** /panel/sites: Setup first, then the site list (problems first) and domains not managed yet. */
 export function SitesPage() {
   const sites = useApiQuery<Site[]>(panelUrl("/sites"), PANEL_REFRESH_MS);
   const integration = useApiQuery<Integration>(panelUrl("/integration"));
@@ -78,7 +78,7 @@ export function SitesPage() {
   const unresolved = interrupted.data?.items.find((j) => j.recoverMode && !j.resolvedBy);
   const ready = integration.data ? integrationReady(integration.data) : true;
   const adoptable = discovered.data ? discoveredRows(discovered.data).filter((r) => r.adoptable).length : 0;
-  // stale notice goes above the (long) Persiapan card, not below it; QueryView then renders the list without one
+  // stale notice goes above the (long) Setup card, not below it; QueryView then renders the list without one
   const stale = Boolean(sites.error && sites.data);
   const refresh = () => {
     sites.reload();

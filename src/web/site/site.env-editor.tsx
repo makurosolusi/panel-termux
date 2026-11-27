@@ -100,8 +100,8 @@ export function ExistingKeyRow(props: {
 type EditorProps = { site: SiteDetail; busy: boolean; codes: ErrorCodes; onSaved: () => void };
 
 /**
- * Write-only `.env` editor (PLAN/03 §4.10/§5.6): replace or remove existing keys, add rows, paste a `.env`. "Simpan"
- * writes the file (restart pending); "Simpan dan mulai ulang" runs job `site.env`, which restores the old file when the
+ * Write-only `.env` editor (PLAN/03 §4.10/§5.6): replace or remove existing keys, add rows, paste a `.env`. "Save"
+ * writes the file (restart pending); "Save and restart" runs job `site.env`, which restores the old file when the
  * app turns unhealthy.
  */
 export function SiteEnvEditor({ site, busy, codes, onSaved }: EditorProps) {

@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import type { Job, JobStep } from "@/shared/job.types";
 import type { Problem } from "@/shared/monitor.types";
-import { detail } from "@/shared/problem.copy";
+import { detail } from "@/shared/problem.copy.en";
 import type { Site } from "@/shared/site.types";
 import { missingFromPm2 } from "@/shared/site.types";
 import { tDeploy } from "@/web/i18n/en.deploy";
@@ -27,12 +27,12 @@ describe("interrupted job steps (QA M4)", () => {
     "status" | "steps" | "finishedAt"
   >;
 
-  test("a step left running in an ended job shows as interrupted, never 'sedang berjalan'", () => {
+  test("a step left running in an ended job shows as interrupted, never 'running'", () => {
     expect(shownStepStatus(steps[1] as JobStep, cut)).toBe("interrupted");
     expect(JOB_STEP_STATUS_KEY[shownStepStatus(steps[1] as JobStep, cut)]).toBe("interrupted");
     expect(shownStepStatus(steps[1] as JobStep, { status: "running" })).toBe("running");
     expect(shownStepStatus(steps[0] as JobStep, cut)).toBe("done");
-    expect(liveAnnouncement(cut)).toBe("Langkah 2 dari 2: Menukar binary… terputus");
+    expect(liveAnnouncement(cut)).toBe("Step 2 of 2: Swapping the binary… interrupted");
   });
 
   test("the cut-off step stops counting at the job's finish", () => {
@@ -58,7 +58,7 @@ describe("site missing from pm2 (D-W9-3, QA M7)", () => {
   const deployed = (status: string) =>
     ({ at: "2026-11-27T09:00:00Z", kind: "deploy", status, actorName: null }) as Site["lastDeploy"];
 
-  test("no pm2 process + successful deploy, live binary or adopted → missing (danger), Jalankan lagi allowed", () => {
+  test("no pm2 process + successful deploy, live binary or adopted → missing (danger), Start again allowed", () => {
     expect(missingFromPm2(facts({ lastDeploy: deployed("succeeded") }))).toBe(true);
     expect(missingFromPm2(facts({ lastDeploy: deployed("rolled_back") }))).toBe(true);
     const binary = { live: { sizeBytes: 1, modifiedAt: "2026-11-27T09:00:00Z" }, previous: null } as Facts["binary"];
@@ -70,7 +70,7 @@ describe("site missing from pm2 (D-W9-3, QA M7)", () => {
     expect(canRestart(facts({ managed: false }))).toBe(true);
   });
 
-  test("'Belum di-deploy' only without a successful deploy and without a binary", () => {
+  test("'Never deployed' only without a successful deploy and without a binary", () => {
     expect(missingFromPm2(facts())).toBe(false);
     expect(missingFromPm2(facts({ lastDeploy: deployed("failed") }))).toBe(false);
     expect(missingFromPm2(facts({ appStatus: "online", lastDeploy: deployed("succeeded") }))).toBe(false);
@@ -80,9 +80,9 @@ describe("site missing from pm2 (D-W9-3, QA M7)", () => {
 
 describe("deployOutcomeSuffix", () => {
   test("a failed or interrupted last deploy is labelled, a successful one is not", () => {
-    expect(deployOutcomeSuffix("interrupted")).toBe(" · Terputus");
-    expect(deployOutcomeSuffix("failed")).toBe(" · Gagal");
-    expect(deployOutcomeSuffix("rolled_back")).toBe(" · Dikembalikan");
+    expect(deployOutcomeSuffix("interrupted")).toBe(" · Interrupted");
+    expect(deployOutcomeSuffix("failed")).toBe(" · Failed");
+    expect(deployOutcomeSuffix("rolled_back")).toBe(" · Rolled back");
     expect(deployOutcomeSuffix("succeeded")).toBe("");
   });
 });
@@ -91,7 +91,7 @@ describe("finalReason (QA N7)", () => {
   const error: Job["error"] = { code: "health_timeout", params: { seconds: 60, last: 502 }, detail: null };
   test("a reason a step already shows is not repeated under the banner", () => {
     expect(finalReason({ error, steps: [step("health", "failed", { code: "health_timeout" })] })).toBeNull();
-    expect(finalReason({ error, steps: [step("health", "failed")] })).toContain("60 dtk");
+    expect(finalReason({ error, steps: [step("health", "failed")] })).toContain("60 s");
     expect(finalReason({ error: { code: "interrupted", params: {}, detail: null }, steps: [] })).toBeNull();
     expect(finalReason({ error: null, steps: [] })).toBeNull();
   });
@@ -107,7 +107,7 @@ describe("in-UI start of pm2/postgres instead of manual commands (PLAN/06 §6.1,
     expect(serviceToStart({ error: null })).toBeNull();
   });
 
-  test("Ringkasan problem rows offer the button for pm2/postgres down only", () => {
+  test("Overview problem rows offer the button for pm2/postgres down only", () => {
     const p = (code: Problem["code"], target: string, params: Problem["params"] = {}) => ({ code, target, params });
     expect(problemService(p("service_down", "pm2"))).toBe("pm2");
     expect(problemService(p("service_down", "postgres"))).toBe("postgres");
@@ -123,11 +123,11 @@ describe("in-UI start of pm2/postgres instead of manual commands (PLAN/06 §6.1,
     );
     for (const text of texts) expect(text).not.toContain("sv up");
     expect(tJob.outcomes.pm2_not_running()).toBe(
-      "Layanan pm2 tidak berjalan, jadi semua situs ikut berhenti. Jalankan pm2, lalu coba lagi.",
+      "The pm2 service is not running, so every site has stopped too. Start pm2, then try again.",
     );
     const site = JSON.stringify(tSiteDetail.header);
     expect(site).not.toContain("ssh");
-    expect(detail({ code: "pm2_unavailable", target: "pm2", params: {} })).not.toContain("Mulai layanan");
+    expect(detail({ code: "pm2_unavailable", target: "pm2", params: {} })).not.toMatch(/start the service|sv up/i);
     expect(tJob.outcomes.dns_wrong_zone({ fqdn: "a.b.contoh.com" })).toContain("(a.b.contoh.com)");
     expect(tJob.outcomes.app_not_in_ecosystem({ name: "shop" })).toContain("shop");
   });

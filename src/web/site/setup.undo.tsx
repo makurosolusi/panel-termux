@@ -1,4 +1,4 @@
-// "Batalkan perubahan" rows of the Persiapan card (PLAN/06 §4.1): one per file the panel changed.
+// "Undo change" rows of the Setup card (PLAN/06 §4.1): one per file the panel changed.
 import { useState } from "react";
 import type { FixBackup } from "@/shared/fix.types";
 import { ConfirmAction } from "@/web/components/confirm-action";
@@ -34,7 +34,7 @@ export function undoDescription(b: FixBackup): string {
  */
 export const undoForce = (b: FixBackup, sawChangedSince: boolean): boolean => b.changedSince || sawChangedSince;
 
-/** "Batalkan perubahan" of one file: restores its newest backup; a 409 `changed_since` turns the button into force. */
+/** "Undo change" of one file: restores its newest backup; a 409 `changed_since` turns the button into force. */
 function UndoButton({
   backup,
   onChange,
@@ -79,7 +79,7 @@ function UndoButton({
   );
 }
 
-/** "File ecosystem diubah panel … Situs: blog. Batalkan perubahan": one line per changed file. */
+/** "The panel changed the ecosystem file … Sites: blog. Undo change": one line per changed file. */
 export function UndoRow({
   backup,
   onChange,

@@ -8,19 +8,23 @@ type Copy = string | ((p: JobParams) => string);
 type CheckCopy = { ok: Copy; warning?: Copy; error?: Copy };
 const s = (v: JobParams[string] | undefined) => String(v ?? "");
 
-/** "blog", "blog dan shop", "blog, shop, dan api". */
-function joinNames(names: readonly string[]): string {
-  if (names.length <= 1) return names.join("");
-  if (names.length === 2) return `${names[0]} dan ${names[1]}`;
-  return `${names.slice(0, -1).join(", ")}, dan ${names.at(-1)}`;
+/** Words of `joinNames` / `appNamesText`; also overlaid onto `tSiteSetup.names` for the English helpers. */
+const names = { and: "dan", guard: "penjaga pm2" };
+
+/** "blog", "blog dan shop", "blog, shop, dan api" (local copy: id.* may not import en.* at runtime). */
+function joinNames(list: readonly string[]): string {
+  if (list.length <= 1) return list.join("");
+  if (list.length === 2) return `${list[0]} ${names.and} ${list[1]}`;
+  return `${list.slice(0, -1).join(", ")}, ${names.and} ${list.at(-1)}`;
 }
 
 /** pm2 app names for people: the panel's guard gets a plain label instead of its internal name (QA fix-07 N4). */
-const appNamesText = (names: readonly string[]): string =>
-  joinNames(names.map((n) => (n === PM2_GUARD_NAME ? "penjaga pm2" : n)));
+const appNamesText = (list: readonly string[]): string =>
+  joinNames(list.map((n) => (n === PM2_GUARD_NAME ? names.guard : n)));
 
 /** Indonesian strings of the Persiapan card on /panel/sites (PLAN/03 §5.1, PLAN/06 §4.2); part of `idSite.setup`. */
 export const idSiteSetup: Messages<typeof tSiteSetup> = {
+  names,
   title: "Persiapan",
   description:
     "Sekali saja: panel menghubungkan situs buatannya ke pm2 agar tetap berjalan setelah HP dinyalakan ulang.",

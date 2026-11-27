@@ -7,249 +7,255 @@ type Copy = string | ((p: JobParams) => string);
 type CheckCopy = { ok: Copy; warning?: Copy; error?: Copy };
 const s = (v: JobParams[string] | undefined) => String(v ?? "");
 
-/** "blog", "blog dan shop", "blog, shop, dan api". */
+/** "blog", "blog and shop", "blog, shop, and api" (the conjunction follows the locale via `tSiteSetup.names.and`). */
 export function joinNames(names: readonly string[]): string {
+  const and = tSiteSetup.names.and;
   if (names.length <= 1) return names.join("");
-  if (names.length === 2) return `${names[0]} dan ${names[1]}`;
-  return `${names.slice(0, -1).join(", ")}, dan ${names.at(-1)}`;
+  if (names.length === 2) return `${names[0]} ${and} ${names[1]}`;
+  return `${names.slice(0, -1).join(", ")}, ${and} ${names.at(-1)}`;
 }
 
 /** pm2 app names for people: the panel's guard gets a plain label instead of its internal name (QA fix-07 N4). */
 export const appNamesText = (names: readonly string[]): string =>
-  joinNames(names.map((n) => (n === PM2_GUARD_NAME ? "penjaga pm2" : n)));
+  joinNames(names.map((n) => (n === PM2_GUARD_NAME ? tSiteSetup.names.guard : n)));
 
-/** UI strings of the Persiapan card on /panel/sites (PLAN/03 §5.1, PLAN/06 §4.2); part of `tSite.setup`. */
+/** UI strings of the Setup card on /panel/sites (PLAN/03 §5.1, PLAN/06 §4.2); part of `tSite.setup`. */
 export const tSiteSetup = msg("site.setup", {
-  title: "Persiapan",
+  /** Words of `joinNames` / `appNamesText`. */
+  names: { and: "and", guard: "pm2 guard" },
+  title: "Setup",
   description:
-    "Sekali saja: panel menghubungkan situs buatannya ke pm2 agar tetap berjalan setelah HP dinyalakan ulang.",
-  checklist: "Hasil pemeriksaan",
-  recheck: "Periksa lagi",
-  checking: "Memeriksa…",
-  checkedAt: (ago: string) => `Diperiksa ${ago}`,
-  readyLine: (n: number) => `pm2 siap: ${n} aplikasi terbaca, termasuk situs buatan panel.`,
-  stillFailing: (n: number) => `Masih ada ${n} hal yang perlu diperbaiki.`,
-  allOk: "Pemeriksaan wajib lolos. pm2 siap menjalankan situs buatan panel.",
-  tokenLink: "Isi token di Pengaturan",
-  adoptTitle: "Situs yang sudah berjalan",
+    "One time only: the panel connects the sites it creates to pm2 so they keep running after the phone restarts.",
+  checklist: "Check results",
+  recheck: "Check again",
+  checking: "Checking…",
+  checkedAt: (ago: string) => `Checked ${ago}`,
+  readyLine: (n: number) =>
+    `pm2 is ready: ${n} ${n === 1 ? "app" : "apps"} found, including sites created by the panel.`,
+  stillFailing: (n: number) => (n === 1 ? "1 item still needs fixing." : `${n} items still need fixing.`),
+  allOk: "Required checks passed. pm2 is ready to run sites created by the panel.",
+  tokenLink: "Set the token in Settings",
+  adoptTitle: "Sites already running",
   adoptBody: (n: number) =>
-    `${n} domain sudah diarahkan ke aplikasi di HP ini tetapi belum tercatat. Adopsi agar bisa di-deploy dari panel.`,
-  adoptLink: "Lihat yang belum dikelola",
+    n === 1
+      ? "1 domain already points to an app on this phone but is not recorded yet. Adopt it to deploy from the panel."
+      : `${n} domains already point to apps on this phone but are not recorded yet. Adopt them to deploy from the panel.`,
+  adoptLink: "See domains not managed yet",
   checks: {
     sites_dir: {
-      ok: "Folder situs ada",
+      ok: "Sites folder exists",
       error: (p) =>
-        `Folder ${s(p.path)} belum ada. Tekan Perbaiki agar panel membuatnya, atau ubah folder situs di Pengaturan.`,
+        `The folder ${s(p.path)} does not exist yet. Press Fix to let the panel create it, or change the sites folder in Settings.`,
     },
     apps_json: {
-      ok: "apps.json terbaca",
+      ok: "apps.json can be read",
       error: (p) =>
         p.reason === "invalid"
-          ? "apps.json rusak (bukan daftar JSON). Tekan Perbaiki agar panel menyusunnya ulang dari daftar situs panel."
-          : "apps.json belum ada. Tekan Periksa lagi, panel akan membuatnya.",
+          ? "apps.json is broken (not a JSON list). Press Fix to let the panel rebuild it from the panel's site list."
+          : "apps.json does not exist yet. Press Check again and the panel creates it.",
     },
     ecosystem_file: {
-      ok: "ecosystem.config.js ada",
+      ok: "ecosystem.config.js exists",
       error: (p) =>
-        `File ${s(p.path)} tidak ada, jadi pm2 belum tahu aplikasi mana yang dijalankan. Tekan Perbaiki agar panel membuatnya.`,
+        `The file ${s(p.path)} does not exist, so pm2 does not know which apps to run. Press Fix to let the panel create it.`,
     },
     ecosystem_loads: {
-      ok: "pm2 bisa memuat ecosystem.config.js",
+      ok: "pm2 can load ecosystem.config.js",
       error:
-        "pm2 tidak bisa memuat ecosystem.config.js. Situs yang berjalan tidak terganggu sekarang, tetapi semua aplikasi tidak akan jalan setelah HP dinyalakan ulang. Perbaiki file, lalu periksa lagi.",
+        "pm2 cannot load ecosystem.config.js. Running sites are fine for now, but no app will start after the phone restarts. Fix the file, then check again.",
     },
     ecosystem_spreads_apps_json: {
-      ok: "pm2 ikut menjalankan situs buatan panel",
+      ok: "pm2 also runs the sites created by the panel",
       error: (p) =>
         p.noSites
-          ? "Sebelum situs pertama dibuat, panel perlu menghubungkannya ke pm2."
-          : "Situs buatan panel belum ikut dijalankan pm2, jadi tidak berjalan lagi setelah HP dinyalakan ulang.",
+          ? "Before the first site is created, the panel needs to connect it to pm2."
+          : "pm2 does not run the sites created by the panel yet, so they will not come back after the phone restarts.",
     },
     snippet_current: {
-      ok: "Situs panel dimuat dengan cara terbaru",
-      error: "pm2 memuat situs panel dengan cara lama: bila satu situs rusak, semua aplikasi bisa berhenti.",
+      ok: "Panel sites are loaded the current way",
+      error: "pm2 loads the panel's sites the old way: if one site is broken, every app can stop.",
     },
     apps_entries_runnable: {
-      ok: "Semua situs di apps.json punya binary",
-      warning: (p) => `${s(p.count)} situs di apps.json belum punya binary. pm2 melewatinya sampai di-deploy.`,
+      ok: "Every site in apps.json has a binary",
+      warning: (p) => `Sites in apps.json without a binary yet: ${s(p.count)}. pm2 skips them until they are deployed.`,
       error: (p) =>
-        `${s(p.count)} situs di apps.json belum punya binary, dan pm2 memuatnya dengan cara lama yang tidak melewatinya.`,
+        `Sites in apps.json without a binary yet: ${s(p.count)}. pm2 loads them the old way, which does not skip them.`,
     },
     pm2_runtime: {
-      ok: "Layanan pm2 berjalan",
-      error: "Layanan pm2 tidak berjalan, jadi semua situs ikut berhenti.",
+      ok: "The pm2 service is running",
+      error: "The pm2 service is not running, so every site has stopped too.",
     },
     pm2_auto_exit: {
       ok: (p) =>
         p.pending
-          ? "Pengaman pm2 sudah dipasang. Aktif setelah HP atau pm2 dimulai ulang."
-          : "pm2 tetap hidup tanpa aplikasi",
-      warning: "pm2 bisa berhenti sendiri saat semua aplikasi dihentikan.",
+          ? "The pm2 safeguard is installed. It takes effect after the phone or pm2 restarts."
+          : "pm2 stays up with no apps",
+      warning: "pm2 can exit on its own when every app is stopped.",
     },
     pm2_guard: {
-      ok: "Ada aplikasi pm2 selain situs panel",
-      warning: "pm2 bisa berhenti sendiri saat situs terakhir dihapus.",
+      ok: "pm2 has an app besides the panel's sites",
+      warning: "pm2 can exit on its own when the last site is deleted.",
     },
     tunnel: {
-      ok: "Tunnel cloudflared terdeteksi",
-      error: "Tunnel cloudflared belum terdeteksi. Periksa ~/.cloudflared/config.yml di HP, lalu periksa lagi.",
+      ok: "cloudflared tunnel found",
+      error: "No cloudflared tunnel found. Check ~/.cloudflared/config.yml on the phone, then check again.",
     },
     cloudflare_token: {
-      ok: "Token API Cloudflare terisi",
-      warning: "Token API Cloudflare belum diisi (opsional). Tanpa token, buat record DNS domain baru secara manual.",
+      ok: "Cloudflare API token is set",
+      warning: "No Cloudflare API token set (optional). Without a token, create DNS records for new domains by hand.",
     },
   } satisfies Record<IntegrationCheckKey, CheckCopy>,
-  notReady: "pm2 belum siap menjalankan situs buatan panel.",
-  notReadyLink: "Selesaikan persiapan di halaman Situs",
-  fix: "Perbaiki",
-  fixAll: (n: number) => `Perbaiki semua (${n})`,
-  fixLabel: (what: string) => `Perbaiki: ${what}`,
+  notReady: "pm2 is not ready to run sites created by the panel.",
+  notReadyLink: "Finish setup on the Sites page",
+  fix: "Fix",
+  fixAll: (n: number) => `Fix all (${n})`,
+  fixLabel: (what: string) => `Fix: ${what}`,
   dialog: {
     ecosystem_block: {
-      title: "Hubungkan situs panel ke pm2?",
-      titleUpdate: "Perbarui cara pm2 memuat situs panel?",
+      title: "Connect the panel's sites to pm2?",
+      titleUpdate: "Update how pm2 loads the panel's sites?",
       body: (keep: readonly string[]) =>
         keep.length
-          ? `Panel menambahkan satu blok di akhir \`ecosystem.config.js\`. Aplikasi yang sudah ada tetap sama dan tidak dimulai ulang: ${joinNames(keep)}. Situs yang berjalan tidak terganggu.`
-          : "Panel menambahkan satu blok di akhir `ecosystem.config.js`. Situs yang berjalan tidak terganggu.",
-      addApps: (apps: readonly string[]) => `Saat pm2 dimulai berikutnya, ${joinNames(apps)} ikut dijalankan.`,
-      keptApps: (apps: readonly string[]) => `${joinNames(apps)} tetap dijalankan pm2, sekarang lewat blok panel.`,
+          ? `The panel adds one block at the end of \`ecosystem.config.js\`. Existing apps stay the same and are not restarted: ${joinNames(keep)}. Running sites are not affected.`
+          : "The panel adds one block at the end of `ecosystem.config.js`. Running sites are not affected.",
+      addApps: (apps: readonly string[]) => `The next time pm2 starts, it also runs ${joinNames(apps)}.`,
+      keptApps: (apps: readonly string[]) => `pm2 keeps running ${joinNames(apps)}, now through the panel's block.`,
       oldSpread:
-        "Baris lama `...require('./apps.json')` diganti, karena bisa menghentikan semua aplikasi bila `apps.json` rusak.",
-      guard: "Karena belum ada aplikasi lain, panel juga menambahkan penjaga kecil (±6 MB) agar pm2 tetap hidup.",
+        "The old `...require('./apps.json')` line is replaced, because it can stop every app if `apps.json` is broken.",
+      guard: "Since there are no other apps yet, the panel also adds a small guard (about 6 MB) to keep pm2 up.",
     },
     pm2_auto_exit: {
-      title: "Pasang pengaman pm2?",
-      body: "Panel mengubah pengaturan layanan pm2 agar tidak berhenti sendiri saat semua aplikasi dihentikan. Berlaku saat pm2 dimulai ulang berikutnya; aplikasi tidak terganggu sekarang.",
+      title: "Install the pm2 safeguard?",
+      body: "The panel changes the pm2 service settings so pm2 does not exit on its own when every app is stopped. This takes effect the next time pm2 restarts; apps are not affected now.",
     },
     sites_dir_create: {
-      title: "Buat folder situs?",
-      titleEcosystem: "Buat file ecosystem.config.js?",
+      title: "Create the sites folder?",
+      titleEcosystem: "Create ecosystem.config.js?",
       body: (dir: string, ecosystem: boolean) =>
         ecosystem
-          ? `Panel membuat folder \`${dir}\` untuk situs-situsmu, beserta \`apps.json\` dan \`ecosystem.config.js\` yang dibaca pm2.`
-          : `Panel membuat folder \`${dir}\` untuk situs-situsmu, beserta \`apps.json\`.`,
+          ? `The panel creates the folder \`${dir}\` for your sites, along with \`apps.json\` and the \`ecosystem.config.js\` that pm2 reads.`
+          : `The panel creates the folder \`${dir}\` for your sites, along with \`apps.json\`.`,
       ecosystemOnly: (path: string) =>
-        `Panel membuat \`${path}\`, file yang memberi tahu pm2 aplikasi mana yang dijalankan, termasuk situs buatan panel.`,
-      runningSafe: "Aplikasi yang berjalan tidak terganggu sekarang.",
+        `The panel creates \`${path}\`, the file that tells pm2 which apps to run, including the sites created by the panel.`,
+      runningSafe: "Running apps are not affected now.",
       stopApps: (apps: readonly string[]) =>
-        `${appNamesText(apps)} sedang berjalan tetapi tidak ada di file baru ini: akan berhenti saat pm2 dimulai ulang dan tidak dijalankan lagi. Sekarang tetap berjalan. Agar tetap jalan, tambahkan entrinya ke file itu sebelum memulai ulang pm2.`,
+        `Running but not in this new file: ${appNamesText(apps)}. They stop when pm2 restarts and do not start again; for now they keep running. To keep them, add their entries to that file before you restart pm2.`,
     },
     apps_json_rebuild: {
-      title: "Susun ulang apps.json?",
+      title: "Rebuild apps.json?",
       body: (apps: readonly string[]) =>
         apps.length
-          ? `\`apps.json\` rusak, jadi panel menulisnya ulang dari daftar situs panel: ${joinNames(apps)}.`
-          : "`apps.json` rusak, jadi panel menulisnya ulang dari daftar situs panel. Belum ada situs yang siap dijalankan, jadi daftarnya kosong.",
+          ? `\`apps.json\` is broken, so the panel rewrites it from the panel's site list: ${joinNames(apps)}.`
+          : "`apps.json` is broken, so the panel rewrites it from the panel's site list. No site is ready to run yet, so the list is empty.",
     },
     restartNote:
-      "pm2 memakai perubahan ini saat dimulai berikutnya. Setelah ini tekan Mulai ulang pm2 sekarang, atau Jalankan pm2 bila pm2 belum berjalan.",
-    backupNote: "Salinan file lama disimpan, jadi perubahan ini bisa dibatalkan.",
-    showDiff: "Lihat perubahan pada file",
-    loading: "Menyiapkan pratinjau…",
-    apply: "Terapkan",
-    cancel: "Batal",
-    applying: "Menerapkan…",
+      "pm2 picks up this change the next time it starts. Afterwards press Restart pm2 now, or Start pm2 if pm2 is not running.",
+    backupNote: "A copy of the old file is kept, so you can undo this change.",
+    showDiff: "Show the file changes",
+    loading: "Preparing the preview…",
+    apply: "Apply",
+    cancel: "Cancel",
+    applying: "Applying…",
   },
-  dialogAll: { title: (n: number) => `Perbaiki ${n} hal sekaligus?` },
+  dialogAll: { title: (n: number) => (n === 1 ? "Fix 1 item?" : `Fix ${n} items at once?`) },
   diff: {
-    label: (path: string) => `Perubahan pada ${path}`,
-    added: "ditambah",
-    removed: "dihapus",
+    label: (path: string) => `Changes to ${path}`,
+    added: "added",
+    removed: "removed",
   },
-  done: "Diperbaiki. Pemeriksaan sudah diulang.",
-  doneAll: (n: number) => `${n} hal diperbaiki. Pemeriksaan sudah diulang.`,
-  notApplied: "Tidak diterapkan: hasil perubahan tidak bisa dimuat pm2. File lama tetap dipakai.",
-  more: "Perubahan oleh panel",
+  done: "Fixed. The checks ran again.",
+  doneAll: (n: number) => `${n} ${n === 1 ? "item" : "items"} fixed. The checks ran again.`,
+  notApplied: "Not applied: pm2 could not load the result. The old file is still in use.",
+  more: "Changes by the panel",
   lastFix: {
-    ecosystem: (ago: string) => `File ecosystem diubah panel ${ago}.`,
-    pm2_run: (ago: string) => `Run script pm2 diubah panel ${ago}.`,
-    apps_json: (ago: string) => `apps.json disusun ulang panel ${ago}.`,
+    ecosystem: (ago: string) => `The panel changed the ecosystem file ${ago}.`,
+    pm2_run: (ago: string) => `The panel changed the pm2 run script ${ago}.`,
+    apps_json: (ago: string) => `The panel rebuilt apps.json ${ago}.`,
   } satisfies Record<FixFile, (ago: string) => string>,
-  lastFixSites: (sites: readonly string[]) => `Situs: ${joinNames(sites)}.`,
-  undoAction: "Batalkan perubahan",
+  lastFixSites: (sites: readonly string[]) => `Sites: ${joinNames(sites)}.`,
+  undoAction: "Undo change",
   undoLabel: {
-    ecosystem: "Batalkan perubahan pada file ecosystem",
-    pm2_run: "Batalkan perubahan pada run script pm2",
-    apps_json: "Batalkan perubahan pada apps.json",
+    ecosystem: "Undo the change to the ecosystem file",
+    pm2_run: "Undo the change to the pm2 run script",
+    apps_json: "Undo the change to apps.json",
   } satisfies Record<FixFile, string>,
-  undoTitle: (at: string) => `Kembalikan file ke versi ${at}?`,
+  undoTitle: (at: string) => `Restore the file to its version from ${at}?`,
   undoBody: {
-    ecosystem: "Situs buatan panel tidak lagi ikut dijalankan pm2 setelah HP dinyalakan ulang.",
+    ecosystem: "pm2 no longer runs the sites created by the panel after the phone restarts.",
     ecosystemSites: (sites: readonly string[]) =>
-      `${joinNames(sites)} tidak berjalan lagi setelah HP dinyalakan ulang. Sekarang tetap berjalan.`,
-    pm2_run: "pm2 kembali bisa berhenti sendiri saat semua aplikasi dihentikan.",
-    apps_json: "`apps.json` kembali ke isi lama yang rusak.",
+      `After the phone restarts, these sites no longer run: ${joinNames(sites)}. Nothing stops right now.`,
+    pm2_run: "pm2 can exit on its own again when every app is stopped.",
+    apps_json: "`apps.json` goes back to its old, broken content.",
     appsJsonSites: (sites: readonly string[]) =>
-      `\`apps.json\` kembali ke isi lama yang rusak, jadi ${joinNames(sites)} tidak dijalankan pm2 setelah HP dinyalakan ulang. Sekarang tetap berjalan.`,
+      `\`apps.json\` goes back to its old, broken content, so pm2 does not run ${joinNames(sites)} after the phone restarts. Nothing stops right now.`,
   },
-  undoChanged: "File sudah diubah lagi setelah perbaikan. Mengembalikan versi lama membuang perubahan itu.",
-  undoForce: "Tetap kembalikan",
-  undone: "Perubahan dibatalkan.",
-  restartPm2: "Mulai ulang pm2 sekarang",
-  restartPm2Title: "Mulai ulang pm2 sekarang?",
+  undoChanged: "The file was changed again after the fix. Restoring the old version discards that change.",
+  undoForce: "Restore anyway",
+  undone: "Change undone.",
+  restartPm2: "Restart pm2 now",
+  restartPm2Title: "Restart pm2 now?",
   restartPm2Body: (apps: readonly string[]) =>
     apps.length
-      ? `Semua aplikasi berhenti beberapa detik lalu berjalan lagi: ${appNamesText(apps)}. Pengunjung bisa terputus sebentar.`
-      : "pm2 berhenti beberapa detik lalu berjalan lagi.",
+      ? `Every app stops for a few seconds and then runs again: ${appNamesText(apps)}. Visitors may be cut off briefly.`
+      : "pm2 stops for a few seconds and then runs again.",
   restartPm2Stops: (apps: readonly string[]) =>
-    `${appNamesText(apps)} akan berhenti dan tidak dijalankan lagi: sedang berjalan, tetapi tidak ada di \`ecosystem.config.js\`.`,
+    `Running now but not in \`ecosystem.config.js\`, so they stop and do not start again: ${appNamesText(apps)}.`,
   restartTyped: "pm2",
-  restartWaiting: "Menunggu aplikasi berjalan lagi…",
-  restartPm2FileNote: "Perubahan yang dibuat panel pada `ecosystem.config.js` ikut berlaku sekarang.",
-  restartNotFound: "Layanan pm2 tidak terdaftar di runit HP ini, jadi pm2 tidak dimulai ulang.",
-  restartOk: "pm2 dimulai ulang. Semua aplikasi berjalan lagi.",
-  restartCheckFailed: (apps: readonly string[]) =>
-    `${appNamesText(apps)} tidak berjalan lagi setelah pm2 dimulai ulang.`,
+  restartWaiting: "Waiting for the apps to run again…",
+  restartPm2FileNote: "The panel's changes to `ecosystem.config.js` take effect now.",
+  restartNotFound: "The pm2 service is not registered in this phone's runit, so pm2 was not restarted.",
+  restartOk: "pm2 restarted. Every app is running again.",
+  restartCheckFailed: (apps: readonly string[]) => `Not running again after pm2 restarted: ${appNamesText(apps)}.`,
   restartNotListed: (apps: readonly string[]) =>
-    `${appNamesText(apps)} tidak ada di \`ecosystem.config.js\`, jadi pm2 tidak menjalankannya lagi. Tambahkan lagi entrinya ke file itu, lalu mulai ulang pm2.`,
-  restartListedHint: "Lihat log aplikasinya untuk tahu kenapa belum berjalan.",
-  restartAppsLink: "Buka Aplikasi",
-  restartFailedHint: "Mengembalikan file ecosystem ke versi sebelum perbaikan biasanya memulihkannya.",
-  restoreAndRestart: "Kembalikan file ecosystem dan mulai ulang pm2",
-  restoreAndRestartTitle: "Kembalikan file ecosystem lalu mulai ulang pm2?",
+    `Not in \`ecosystem.config.js\`, so pm2 does not run them again: ${appNamesText(apps)}. Add their entries back to that file, then restart pm2.`,
+  restartListedHint: "Check the app log to see why it is not running yet.",
+  restartAppsLink: "Open Apps",
+  restartFailedHint: "Restoring the ecosystem file to its version before the fix usually brings them back.",
+  restoreAndRestart: "Restore the ecosystem file and restart pm2",
+  restoreAndRestartTitle: "Restore the ecosystem file, then restart pm2?",
   manual: {
-    title: "Cara manual (untuk pengguna teknis)",
-    step1: "Buka file ecosystem di Termux:",
-    step2: "Tempel blok ini di akhir file:",
-    step1Create: "Buat file ecosystem baru di Termux:",
-    step2Create: "Isi file dengan teks ini:",
-    stepRepair:
-      "Perbaiki dulu kesalahan yang disebut di baris Gagal di atas (biasanya tanda kurung atau koma yang kurang).",
-    step3: "Simpan. pm2 tidak perlu dimulai ulang.",
-    step4: "Tekan Periksa lagi.",
-    copyBlock: "Salin blok",
-    runScript: "Tambahkan `--no-auto-exit` setelah `pm2-runtime` di file ini, lalu mulai ulang layanan pm2 saat aman:",
-    pm2Start: "Menyalakan layanan pm2 dari Termux:",
+    title: "Manual steps (for technical users)",
+    step1: "Open the ecosystem file in Termux:",
+    step2: "Paste this block at the end of the file:",
+    step1Create: "Create a new ecosystem file in Termux:",
+    step2Create: "Fill the file with this text:",
+    stepRepair: "First fix the error named in the Failed line above (usually a missing bracket or comma).",
+    step3: "Save. pm2 does not need a restart.",
+    step4: "Press Check again.",
+    copyBlock: "Copy block",
+    runScript: "Add `--no-auto-exit` after `pm2-runtime` in this file, then restart the pm2 service when it is safe:",
+    pm2Start: "Start the pm2 service from Termux:",
   },
   errors: {
-    busy: "Ada perubahan situs atau cadangan yang sedang berjalan. Coba lagi setelah selesai.",
-    changed: "File berubah sejak pratinjau dibuat. Lihat perubahannya lagi.",
-    changed_during_fix: "File sedang diubah di HP. Tutup editornya, lalu coba lagi.",
-    changed_since: "File sudah diubah lagi setelah perbaikan. Mengembalikan versi lama membuang perubahan itu.",
-    validation_failed: "Tidak diterapkan: hasil perubahan tidak bisa dimuat pm2. File lama tetap dipakai.",
-    not_fixable: "Panel tidak bisa memperbaiki ini otomatis. Ikuti Cara manual di kartu Persiapan.",
-    disk_full: "Memori HP penuh, jadi file tidak diubah.",
-    not_writable: "Panel tidak punya izin mengubah file ini, jadi file tidak diubah.",
-    not_found: "Salinan file lama sudah tidak ada, jadi perubahan tidak bisa dibatalkan.",
+    busy: "A site change or backup is running. Try again once it finishes.",
+    changed: "The file changed since the preview was made. Review the changes again.",
+    changed_during_fix: "The file is being edited on the phone. Close the editor, then try again.",
+    changed_since: "The file was changed again after the fix. Restoring the old version discards that change.",
+    validation_failed: "Not applied: pm2 could not load the result. The old file is still in use.",
+    not_fixable: "The panel cannot fix this automatically. Follow Manual steps on the Setup card.",
+    disk_full: "The phone's storage is full, so the file was not changed.",
+    not_writable: "The panel has no permission to change this file, so it was not changed.",
+    not_found: "The copy of the old file is gone, so the change cannot be undone.",
   } satisfies Record<FixErrorCode, string>,
   unfixable: {
-    ecosystem_missing: "File `ecosystem.config.js` tidak ada, jadi panel tidak tahu cara pm2 di HP ini dijalankan.",
+    ecosystem_missing:
+      "The file `ecosystem.config.js` does not exist, so the panel does not know how pm2 runs on this phone.",
     ecosystem_unloadable:
-      "File `ecosystem.config.js` sekarang tidak bisa dimuat pm2, jadi panel tidak mengubahnya. Perbaiki dulu kesalahannya, lalu periksa lagi.",
+      "pm2 cannot load `ecosystem.config.js` right now, so the panel does not change it. Fix the error first, then check again.",
     ecosystem_linked:
-      "`ecosystem.config.js` adalah tautan ke file lain (bisa juga file yang sudah tidak ada), jadi panel tidak mengubah atau menimpanya.",
-    not_config_js: "Nama file ecosystem harus berakhiran `.config.js` agar pm2 membacanya sebagai daftar aplikasi.",
-    too_large: "File ecosystem terlalu besar untuk diubah otomatis.",
+      "`ecosystem.config.js` is a link to another file (possibly one that no longer exists), so the panel does not change or overwrite it.",
+    not_config_js: "The ecosystem file name must end in `.config.js` for pm2 to read it as an app list.",
+    too_large: "The ecosystem file is too large to change automatically.",
     not_utf8:
-      "File ecosystem memakai penyandian teks selain UTF-8, jadi panel tidak mengubahnya agar isinya tidak rusak.",
-    markers_broken: "Penanda blok panel di `ecosystem.config.js` rusak atau dobel, jadi panel tidak mengubahnya.",
+      "The ecosystem file uses a text encoding other than UTF-8, so the panel does not change it to avoid corrupting it.",
+    markers_broken:
+      "The panel's block markers in `ecosystem.config.js` are broken or duplicated, so the panel does not change it.",
     unknown_apps_json_use:
-      "`ecosystem.config.js` memuat `apps.json` dengan cara yang tidak dikenali panel, jadi panel tidak mengubahnya.",
-    run_script_missing: "Run script layanan pm2 tidak ditemukan.",
-    run_script_unknown: "Run script layanan pm2 ditulis dengan cara yang tidak dikenali panel.",
-    sites_dir_outside_home: "Folder situs berada di luar folder home Termux, jadi panel tidak membuatnya.",
+      "`ecosystem.config.js` loads `apps.json` in a way the panel does not recognize, so the panel does not change it.",
+    run_script_missing: "The pm2 service run script was not found.",
+    run_script_unknown: "The pm2 service run script is written in a way the panel does not recognize.",
+    sites_dir_outside_home: "The sites folder is outside the Termux home folder, so the panel does not create it.",
   } satisfies Record<FixBlockReason, string>,
-  unfixableSuffix: "Ikuti Cara manual di bawah.",
-  unfixableElsewhere: "Ikuti Cara manual di kartu Persiapan.",
+  unfixableSuffix: "Follow Manual steps below.",
+  unfixableElsewhere: "Follow Manual steps on the Setup card.",
 } as const);

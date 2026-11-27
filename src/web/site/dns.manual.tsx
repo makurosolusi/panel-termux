@@ -112,7 +112,7 @@ export function DnsManualCard({ hostnames, open = false }: { hostnames: readonly
             {t.createToken}
             <ExternalLinkIcon className="size-3.5" aria-hidden />
           </a>
-          {/* the settings page is super_admin's: an admin would be sent back to Ringkasan (QA fix-07 N7) */}
+          {/* the settings page is super_admin's: an admin would be sent back to Overview (QA fix-07 N7) */}
           {hasRole(me.role, "super_admin") && (
             <Link className={link} to={SETTINGS_TOKEN_PATH}>
               {t.openSettings}

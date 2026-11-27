@@ -35,10 +35,10 @@ import { healthToast, siteBusy } from "./site-detail.state";
 const t = tSiteDetail.header;
 
 /**
- * "Mulai ulang" with its confirmation (job `site.restart` → progress page); disabled while busy or not deployed.
- * While pm2 does not run the app it is the primary "Jalankan lagi" (the same job loads it again, PLAN/06 §6.3),
+ * "Restart" with its confirmation (job `site.restart` → progress page); disabled while busy or not deployed.
+ * While pm2 does not run the app it is the primary "Start again" (the same job loads it again, PLAN/06 §6.3),
  * unless the folder is gone: then nothing can run and the no_folder banner leads (QA fix-07 N9). pm2 down: the
- * dialog carries "Jalankan pm2" itself (QA fix-04 MINOR-8).
+ * dialog carries "Start pm2" itself (QA fix-04 MINOR-8).
  */
 export function RestartAction({ site, codes, variant = "outline", onChanged }: RestartProps) {
   const navigate = useNavigate();
@@ -90,7 +90,7 @@ async function checkHealth(name: string) {
   }
 }
 
-/** Title row of the site detail: name, app status, primary domain, last deploy, Deploy / Mulai ulang / ⋯ menu. */
+/** Title row of the site detail: name, app status, primary domain, last deploy, Deploy / Restart / ⋯ menu. */
 export function SiteHeader(props: { site: SiteDetail; meta: PageMeta; codes: ErrorCodes; onDelete: () => void }) {
   const { site } = props;
   const [primary] = site.hostnames;

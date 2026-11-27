@@ -218,6 +218,7 @@ export const idJob: Messages<typeof tJob> = {
   liveStep: (n: number, total: number, label: string, state: string) =>
     `Langkah ${n} dari ${total}: ${label}… ${state}`,
   progress: (pct: number) => `${pct}%`,
+  underSecond: "< 1 dtk",
   blip: "Panel terputus sebentar karena cloudflared dimulai ulang. Halaman ini lanjut sendiri.",
   lostTitle: "Progres tidak bisa dimuat",
   lostBody: "Panel tidak menjawab lebih dari 2 menit. Periksa koneksi dan HP server, lalu coba lagi.",

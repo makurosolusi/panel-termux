@@ -25,7 +25,7 @@ function phaseLine(phase: UploadPhase): string {
   }
 }
 
-/** Bar + "42% · 37,5 MB dari 89,2 MB · 2,1 MB/dtk" + phase line; `lastSending` keeps the bar while retrying. */
+/** Bar + "42% · 37.5 MB of 89.2 MB · 2.1 MB/s" + phase line; `lastSending` keeps the bar while retrying. */
 export function UploadProgress({
   file,
   phase,

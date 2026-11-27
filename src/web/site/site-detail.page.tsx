@@ -70,7 +70,7 @@ function SiteSections({ site, reload, deleting, setDeleting, uploader }: Section
         onChanged={reload}
         onDelete={() => setDeleting(true)}
       />
-      <AnchorSection id="ringkasan" title={t.anchors.summary}>
+      <AnchorSection id="overview" title={t.anchors.summary}>
         <Summary site={site} />
       </AnchorSection>
       <AnchorSection id="deploy" title={t.anchors.deploy}>

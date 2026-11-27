@@ -34,7 +34,7 @@ function Carry({ title, items }: { title: string; items: readonly string[] }) {
   );
 }
 
-/** "Kembalikan versi sebelumnya" with the Dari → Ke dialog and what does not roll back; opens the job page. */
+/** "Restore previous version" with the From → To dialog and what does not roll back; opens the job page. */
 export function RollbackAction({ site, variant = "outline" }: { site: SiteDetail; variant?: "outline" | "default" }) {
   const navigate = useNavigate();
   const live = site.binary?.live;

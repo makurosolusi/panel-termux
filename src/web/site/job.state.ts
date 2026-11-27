@@ -25,19 +25,19 @@ export function jobProgress(job: Pick<Job, "status" | "steps">): number {
   return Math.round((settled / job.steps.length) * 100);
 }
 
-/** Indonesian step label from its key; unknown keys (pre-0007 rows) fall back to the stored legacy label, then the key. */
+/** Step label from its key; unknown keys (pre-0007 rows) fall back to the stored legacy label, then the key. */
 export const stepLabel = (step: Pick<JobStep, "key" | "legacyLabel" | "label">): string =>
   tJob.steps[step.key as JobStepKey] ?? step.legacyLabel ?? step.label ?? step.key;
 
-/** Sentence for an outcome code with its params; null code → null; unknown code → "Hasil: <code>". */
+/** Sentence for an outcome code with its params; null code → null; unknown code → "Result: <code>". */
 export function outcomeText(code: string | null | undefined, params: JobParams = {}): string | null {
   if (!code) return null;
   const fmt = (tJob.outcomes as Record<string, ((p: JobParams) => string) | undefined>)[code];
   return fmt ? fmt(params) : tJob.unknownOutcome(code);
 }
 
-/** "< 1 dtk", "12 dtk", "1 mnt 5 dtk". */
-export const durationText = (ms: number): string => (ms < 1_000 ? "< 1 dtk" : formatDuration(ms / 1_000));
+/** "< 1 s", "12 s", "1 min 5 s" (page locale). */
+export const durationText = (ms: number): string => (ms < 1_000 ? tJob.underSecond : formatDuration(ms / 1_000));
 
 /** How long a step took (or has been running at `now`); null when it never started. */
 export function stepDurationMs(step: Pick<JobStep, "startedAt" | "finishedAt">, now: number): number | null {
@@ -65,7 +65,7 @@ export function currentStepIndex(steps: readonly Pick<JobStep, "status">[]): num
   return 0;
 }
 
-/** The one live-region sentence: "Langkah 4 dari 8: Menukar binary… selesai". */
+/** The one live-region sentence: "Step 4 of 8: Swapping the binary… done". */
 export function liveAnnouncement(job: Pick<Job, "steps" | "status">): string {
   const i = currentStepIndex(job.steps);
   const step = job.steps[i];
@@ -90,7 +90,7 @@ export function pollErrorView(
   return step && BLIP_STEPS.has(step.key) ? "blip" : "stale";
 }
 
-/** The recover button of a job: plain "Pulihkan", or a confirmed "Ulangi hapus situs/domain"; null = none. */
+/** The recover button of a job: plain "Recover", or a confirmed "Retry site deletion/domain removal"; null = none. */
 export type RecoverAction = { mode: "cleanup" | "retry"; label: string; confirm: boolean };
 
 /** Decides the recover button from `recoverMode` (server rules, PLAN/03 §3.5) and the job kind. */

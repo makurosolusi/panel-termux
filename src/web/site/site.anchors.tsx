@@ -1,12 +1,13 @@
 import type { ReactNode } from "react";
 import { Section } from "@/web/components/section";
 import { tSiteDetail } from "@/web/i18n/en.site-detail";
+import { LegacyAnchor } from "./site.legacy-anchor";
 
 const t = tSiteDetail.anchors;
 
 /** Section ids of the site detail, in page order (`#deploy` is the Deploy button's target). */
 export const SITE_ANCHORS = [
-  { id: "ringkasan", label: t.summary },
+  { id: "overview", label: t.summary },
   { id: "deploy", label: t.deploy },
   { id: "domains", label: t.domains },
   { id: "env", label: t.env },
@@ -55,6 +56,7 @@ export function AnchorSection({
 }) {
   return (
     <div id={id} className="scroll-mt-32 md:scroll-mt-28">
+      {id === "overview" && <LegacyAnchor of="overview" />}
       <Section title={title} description={description} action={action}>
         {children}
       </Section>

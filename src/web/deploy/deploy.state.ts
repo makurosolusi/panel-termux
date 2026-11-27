@@ -1,5 +1,5 @@
 // Pure decisions of the #deploy section: what an upload error means for the card, rollback availability and the
-// "Dari → Ke" description of a binary.
+// "From → To" description of a binary.
 
 import type { BinaryInfo, SiteDetail } from "@/shared/site.types";
 import { tDeploy } from "@/web/i18n/en.deploy";

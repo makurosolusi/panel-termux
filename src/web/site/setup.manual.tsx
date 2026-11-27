@@ -33,7 +33,7 @@ function CodeBlock({ code, copyLabel }: { code: string; copyLabel?: string }) {
 }
 
 /**
- * "Cara manual (untuk pengguna teknis)" (PLAN/06 F7): native <details> with the block to paste at the end of the
+ * "Manual steps (for technical users)" (PLAN/06 F7): native <details> with the block to paste at the end of the
  * ecosystem, the pm2 run script flag and `sv up pm2`, each only when its check fails. Opens by itself when the panel
  * cannot apply a fix; hidden when nothing needs doing by hand.
  */

@@ -52,7 +52,7 @@ export const receivedMap = (state: Pick<UploadState, "received">): Map<number, s
 export const chunkAction = (index: number, localSha: string, received: ReadonlyMap<number, string>): "skip" | "send" =>
   received.get(index) === localSha ? "skip" : "send";
 
-/** Chunk indexes the server does not have yet (for "6 dari 11 potongan" and progress before hashing). */
+/** Chunk indexes the server does not have yet (for "6 of 11 chunks" and progress before hashing). */
 export function missingChunks(state: Pick<UploadState, "chunks" | "received">): number[] {
   const have = receivedMap(state);
   return Array.from({ length: state.chunks }, (_, i) => i).filter((i) => !have.has(i));

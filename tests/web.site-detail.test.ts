@@ -180,10 +180,10 @@ describe("site detail decisions", () => {
     const p = { path: "/api/health", checkedAt: "" };
     expect(healthToast({ ...p, ok: true, status: 200, ms: 85 })).toEqual({
       ok: true,
-      text: "Sehat: HTTP 200 dari /api/health dalam 85 ms.",
+      text: "Healthy: HTTP 200 from /api/health in 85 ms.",
     });
-    expect(healthToast({ ...p, ok: false, status: 502, ms: 9 }).text).toContain("menjawab 502");
-    expect(healthToast({ ...p, ok: false, status: null, ms: null }).text).toContain("tidak menjawab");
+    expect(healthToast({ ...p, ok: false, status: 502, ms: 9 }).text).toContain("answered 502");
+    expect(healthToast({ ...p, ok: false, status: null, ms: null }).text).toContain("did not answer");
   });
 
   test("domains dialog: normalize, check request, blinking hosts, per-domain feedback", () => {
@@ -274,11 +274,11 @@ describe("DNS record card without a token (PLAN/06 §6.4 A)", () => {
     expect(hostsNeedingRecord(dns)).toEqual(["ok.contoh.com", "down.contoh.com", "new.contoh.com"]);
   });
 
-  test("missing-from-pm2 copy offers Jalankan lagi, not ssh", () => {
+  test("missing-from-pm2 copy offers Start again, not ssh", () => {
     const h = tSiteDetail.header;
-    expect(h.runAgain).toBe("Jalankan lagi");
+    expect(h.runAgain).toBe("Start again");
     for (const text of [h.missingFromPm2Help, h.missingFromPm2Adopted]) {
-      expect(text).toContain("Jalankan lagi");
+      expect(text).toContain("Start again");
       expect(text).not.toContain("ssh");
     }
   });
