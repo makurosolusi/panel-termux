@@ -113,7 +113,7 @@ export function ProfileSessions() {
             actions={(r) =>
               r.current ? (
                 // the actions td is nowrap (no DataColumn.className there): let the hint wrap so Aksi stays visible (QA M3)
-                <span className="block max-w-40 text-right text-xs whitespace-normal text-muted-foreground">
+                <span className="block max-w-40 text-right text-xs text-balance whitespace-normal text-muted-foreground">
                   {t.currentHint}
                 </span>
               ) : (

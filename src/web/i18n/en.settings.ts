@@ -125,7 +125,7 @@ export const tSettings = msg("settings", {
     "alerts.telegram_bot_token": {
       label: "Telegram bot token",
       help: "Token from @BotFather. Stored encrypted and never shown again.",
-      placeholder: "Paste the token from @BotFather",
+      placeholder: "Token from @BotFather",
       invalid: "A token looks like `123456:ABC…` and comes from @BotFather.",
     },
     "alerts.telegram_chat_id": {

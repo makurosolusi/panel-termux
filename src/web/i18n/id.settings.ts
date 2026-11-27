@@ -120,7 +120,7 @@ export const idSettings: Messages<typeof tSettings> = {
     "alerts.telegram_bot_token": {
       label: "Token bot Telegram",
       help: "Token dari @BotFather. Disimpan terenkripsi dan tidak pernah ditampilkan lagi.",
-      placeholder: "Tempel token dari @BotFather",
+      placeholder: "Token dari @BotFather",
       invalid: "Token berbentuk `123456:ABC…` dari @BotFather.",
     },
     "alerts.telegram_chat_id": {
