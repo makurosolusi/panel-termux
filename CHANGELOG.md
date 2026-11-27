@@ -22,6 +22,10 @@
 - The release `install.sh` shim and the release tarball stay through 0.6.x and are removed in 0.7.0 (0.5.1 said it would go in 0.6.0). New installs should download `panel` and run `panel init`.
 - The panel's JavaScript bundle is slightly smaller than in 0.5.1. Indonesian text is loaded only when Indonesian is chosen.
 
+### Fixed
+
+- Links with an anchor (for example `/panel/sites#not-managed`) land on that section even when the page above it is still loading.
+
 ### Breaking
 
 - The audit CSV export header is English: `time,actor,actor_email,action,target,ip_masked,request_id` (was `waktu,aktor,email_aktor,aksi,target,ip_tersamar,request_id`). Update scripts that read the CSV by column name.
