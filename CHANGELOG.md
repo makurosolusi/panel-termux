@@ -1,5 +1,32 @@
 # Changelog
 
+## [0.6.0] - 2026-11-27
+
+### Added
+
+- Indonesian is now a language option next to English. Signed-in users choose under **Profile → Language** (English, Bahasa Indonesia, or Use device language); the choice is saved to the account, so other devices follow it. The login page and the bottom of the landing page have a link to the other language, and `?lang=id` / `?lang=en` works on any page. Without a choice, the panel follows the browser language and falls back to English.
+- CLI language: `panel init` asks **Language / Bahasa** once and saves the answer as `PANEL_LANG` in `~/panel/.env`. Every command accepts `--lang en|id`, and `PANEL_LANG` in the environment or in `~/panel/.env` sets it for all commands. `panel docs` has its guides in both languages.
+- **Telegram language** setting under Settings → Telegram alerts (`alerts.language`, English or Bahasa Indonesia). Panels that already had Telegram alerts set up before 0.6.0 are switched to Indonesian automatically during the upgrade, so their alerts keep the language they had.
+
+### Changed
+
+- **English is the default language** for the web panel, the landing page, the CLI (help, `panel doctor`, `panel init`, `panel rollback`), Telegram alerts, and the offline guides. If you want to keep the CLI in Indonesian after upgrading, set `PANEL_LANG=id` in `~/panel/.env` (or answer Bahasa Indonesia when `panel init` asks).
+- The ecosystem block that the panel adds to `ecosystem.config.js` is now `panel-termux:apps v2`, with English comments and log messages. Its code is the same as v1. Setup reports a v1 block as an older version, and **Setup → Fix** updates it with the usual preview, backup, and undo.
+- `panel docs paket` is now `panel docs packages`. The old name still works.
+- Page anchors are English: Sites `#setup`, `#overview`, `#not-managed`; Administration `#setup`, `#data-key`; Settings `#backup`, `#alerts`, `#sites`, `#monitor`, `#security`; landing `#install`, `#features`, `#how-it-works`, `#limits`, `#screens`. The old Indonesian anchors (`#persiapan`, `#kunci-data`, `#cadangan`, `#pasang`, …) still land on the same place for 0.6.x.
+- After deleting your account, the landing page is opened with `?account=deleted` (the old `?akun=dihapus` is still accepted).
+- Device names in sessions and the audit log are language-neutral, e.g. "Chrome · Android". Older audit rows ("Chrome di Android") are shown the same way.
+- The downloaded data key file is now `panel-termux-data-key-<date>.txt`, and its instructions are in English.
+- The data key reset asks you to type `delete` to confirm. The old word `hapus` is still accepted.
+- `.env.example` and `panel env` are in English.
+- The release `install.sh` shim and the release tarball stay through 0.6.x and are removed in 0.7.0 (0.5.1 said it would go in 0.6.0). New installs should download `panel` and run `panel init`.
+- The panel's JavaScript bundle is slightly smaller than in 0.5.1. Indonesian text is loaded only when Indonesian is chosen.
+
+### Breaking
+
+- The audit CSV export header is English: `time,actor,actor_email,action,target,ip_masked,request_id` (was `waktu,aktor,email_aktor,aksi,target,ip_tersamar,request_id`). Update scripts that read the CSV by column name.
+- The CLI prints English by default. Scripts that match Indonesian CLI output need `PANEL_LANG=id` or `--lang id`.
+
 ## [0.5.1] - 2026-11-27
 
 ### Added
