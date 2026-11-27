@@ -7,7 +7,8 @@ C12–C16) dan aturan global (`~/.claude/CLAUDE.md`). Ditambah `wkr-cli-plan-02`
 
 **Revisi 3** (`wkr-cli-plan-03`, 2026-11-27): menerapkan debat `PLAN/debate/07-cli-bootstrap-debate.md` (5 BLOCKER, 10
 MAJOR, 18 MINOR; rujukan "D1…D15" dan "m1…m18" di dokumen ini menunjuk temuan debat itu) dan keputusan pemilik
-DECISIONS C12–C16. Status: **rencana, belum ada kode**.
+DECISIONS C12–C16. Status: **P0 (0.5.0) dibangun di `feature/cli-p0`** (2026-11-27, W0–W1 + G1a + W3; W2 belum), lihat
+§11 dan §11.1. P1 (0.5.1) belum dibangun.
 
 ## 0. Ringkasan
 
@@ -694,34 +695,47 @@ Gerbang:
 
 ## 11. Kriteria penerimaan 0.5.0
 
-- [ ] `panel` tanpa argumen dan tanpa TTY: perilaku serve tidak berubah (test boot yang ada lulus; runit POCO tetap `run`
+- [x] `panel` tanpa argumen dan tanpa TTY: perilaku serve tidak berubah (test boot yang ada lulus; runit POCO tetap `run`
       tanpa mengubah run script).
-- [ ] `panel` tanpa argumen di terminal: bantuan + `panel serve`, exit 2, tanpa snapshot/migrasi/bind.
+- [x] `panel` tanpa argumen di terminal: bantuan + `panel serve`, exit 2, tanpa snapshot/migrasi/bind.
 - [ ] Panel kedua (`serve`, atau tanpa argumen tanpa TTY) saat panel lain menjawab di PORT: exit 1, `data/secret` dan
       `panel.db` tidak disentuh (test shell D2).
 - [ ] `panel --version` di `~/panel` (ada `.env` lengkap) mencetak versi dan keluar < 0,5 dtk di HP, tanpa snapshot,
       migrasi, atau bind port.
-- [ ] `-h -v --h --v --help --version` bekerja; flag tak dikenal dan `-v --json` exit 2.
-- [ ] Proses anak CLI tidak menerima satu pun kunci `ENV_VARS` (test perekam unit + shell).
+- [x] `-h -v --h --v --help --version` bekerja; flag tak dikenal dan `-v --json` exit 2.
+- [x] Proses anak CLI tidak menerima satu pun kunci `ENV_VARS` (test perekam unit + shell).
 - [ ] `panel doctor` di HP tanpa `PANEL_CLI_FAKE` selalu mode termux (termasuk Termux tanpa `sv`); di luar Termux tanpa
       `PANEL_CLI_FAKE` exit 1 "bukan Termux".
 - [ ] `panel doctor` di POCO (read-only, dijalankan koordinator setelah izin) menampilkan masalah yang sama dengan kartu
       Persiapan, `pkg_held` ok, tidak mengubah file apa pun (`find ~ $PREFIX/var/service -newer <penanda>` kosong
       selain log).
-- [ ] `panel doctor --json`: seluruh stdout di-parse dan cocok dengan `DoctorReport` skema 1.
+- [x] `panel doctor --json`: seluruh stdout di-parse dan cocok dengan `DoctorReport` skema 1.
 - [ ] `panel env > .env.new` di HP menghasilkan file berisi tepat 4 variabel wajib bernilai kosong; stdout tanpa
       catatan; peringatan hanya di stderr; `panel env >> .env` tidak menulis apa pun; < 0,5 dtk.
-- [ ] `.env.example` = `panel env --full`; daftar wajib `parseEnv`, doctor `env_complete`, dan `REQUIRED_VARS`
+- [x] `.env.example` = `panel env --full`; daftar wajib `parseEnv`, doctor `env_complete`, dan `REQUIRED_VARS`
       `install-phone.sh` semuanya sama dengan `ENV_VARS`; placeholder 0.4.0 dihitung kosong (test).
-- [ ] `panel docs` = 4 topik; `docs paket` memuat resep hold/upgrade aman dan PostgreSQL mayor.
-- [ ] `panel rollback` menukar binary dua arah tanpa celah, tidak pernah mengeksekusi `panel.prev`, menolak
+- [x] `panel docs` = 4 topik; `docs paket` memuat resep hold/upgrade aman dan PostgreSQL mayor.
+- [x] `panel rollback` menukar binary dua arah tanpa celah, tidak pernah mengeksekusi `panel.prev`, menolak
       `panel.prev` non-aarch64/bionic; `--db` menyimpan `before-rollback` dulu.
-- [ ] `install-phone.sh` tidak menimpa `panel.prev` dengan binary yang tidak sehat.
+- [x] `install-phone.sh` tidak menimpa `panel.prev` dengan binary yang tidak sehat.
 - [ ] Rahasia tidak pernah muncul di stdout/stderr/log/argv (test env, doctor, shell).
 - [ ] `bun run typecheck`, `bun run lint`, `bun test`, semua test shell, `bun run bundle:check` lulus di macOS dan CI
       ubuntu; ukuran binary naik < 300 KB.
-- [ ] README, CHANGELOG `[0.5.0]` (termasuk **Changed**: `panel` di terminal kini mencetak bantuan; pakai `panel serve`),
+- [x] README, CHANGELOG `[0.5.0]` (termasuk **Changed**: `panel` di terminal kini mencetak bantuan; pakai `panel serve`),
       dan `docs/cli/*` sinkron (Rule 16).
+
+### 11.1 Status dan penyimpangan (W3, 2026-11-27)
+
+- `[x]` di atas = dibuktikan unit test (`tests/cli.*`, `tests/server.instance-guard.test.ts`,
+  `tests/env.schema.test.ts`, `scripts/install-phone.test.sh`) dan `bun test` penuh di macOS. Yang masih `[ ]` butuh
+  binary + `scripts/cli.test.sh` (W2 belum ada, begitu pula langkahnya di `ci.yml`/`release.yml`), HP nyata (waktu
+  < 0,5 dtk, POCO read-only, Termux tanpa `sv`), atau CI ubuntu.
+- Penjaga instance kedua sudah dibuktikan unit test; bukti test shell D2 menunggu W2.
+- `doctor.checks.ts` dipecah menjadi `doctor.checks.base.ts` dan `doctor.checks.panel.ts` per area, demi batas baris
+  Rule 8.
+- Rotasi snapshot (`src/server/db/snapshot.ts`) tidak menghapus `panel.db.before-rollback.*` (tidak ada di §5.1);
+  pemilik menghapusnya manual.
+- Host fake ikut menyediakan `apps.json`; deklarasi modul `*.md` ada di `src/assets.d.ts` untuk `docs/cli/*.md`.
 
 ## 12. Risiko
 

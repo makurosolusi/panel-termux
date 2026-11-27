@@ -41,7 +41,7 @@ Google hanya menerima domain https publik atau `localhost`; IP Tailscale/LAN tid
 
 ## Konfigurasi (env)
 
-Hanya empat variabel wajib (lihat `.env.example`):
+Hanya empat variabel wajib (lihat `.env.example`, atau cetak template kosong dengan `panel env`; `panel env --full` menambah variabel opsional yang dikomentari):
 
 | Variabel                                   | Keterangan                                                                                                                                                                                         |
 | ------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -139,13 +139,13 @@ Sebelum membuat tag, jalankan workflow itu sekali lewat **Actions → release �
 
    Installer memeriksa HP (arm64, `termux-services`, ruang kosong minimal 400 MB; tanpa `cloudflared` hanya peringatan), mengunduh `panel-termux-android-arm64.tar.gz`, memeriksanya terhadap `SHA256SUMS`, mengekstraknya ke `~/panel-src/<versi>`, lalu menjalankan `scripts/install-phone.sh`. Versi tertentu: `PANEL_VERSION=v0.3.0 sh install.sh`. Untuk memastikan asal rilis (opsional, di komputer): `gh attestation verify panel-termux-android-arm64.tar.gz --repo makurosolusi/panel-termux`.
 
-   `install-phone.sh` idempotent: memasang binary ke `~/panel/panel` (binary lama disimpan sebagai `panel.prev`), membuat `~/panel/data` (700), membuat `~/panel/.env` dari `.env.example` bila belum ada (600), memasang service runit `$PREFIX/var/service/panel` (log lewat svlogger termux-services ke `$PREFIX/var/log/sv/panel/`). Di HP yang belum punya pm2 sama sekali (tidak ada `~/sites/ecosystem.config.js` dan tidak ada service runit `pm2`), skrip juga memasang template pm2 dari `deploy/pm2/` (lihat [Integrasi pm2](#integrasi-pm2-appsjson)); setup pm2 yang sudah ada tidak disentuh.
+   `install-phone.sh` idempotent: memasang binary ke `~/panel/panel` (binary lama disimpan sebagai `panel.prev` hanya bila panel yang terpasang sehat atau `panel.prev` belum ada, sehingga versi terakhir yang sehat tidak tertimpa), membuat `~/panel/data` (700), membuat `~/panel/.env` dari `.env.example` bila belum ada (600), memasang service runit `$PREFIX/var/service/panel` (log lewat svlogger termux-services ke `$PREFIX/var/log/sv/panel/`). Di HP yang belum punya pm2 sama sekali (tidak ada `~/sites/ecosystem.config.js` dan tidak ada service runit `pm2`), skrip juga memasang template pm2 dari `deploy/pm2/` (lihat [Integrasi pm2](#integrasi-pm2-appsjson)); setup pm2 yang sudah ada tidak disentuh.
 
-2. Buat OAuth client Google ([langkah di atas](#google-oauth-client)), isi `~/panel/.env`, lalu jalankan `sh install.sh` lagi. Selama `.env` belum lengkap, service ditahan dengan file `down` dan skrip keluar dengan kode 3 sambil menyebut variabel yang masih kosong. Setelah lengkap, skrip menjalankan `sv restart panel` dan menunggu `http://127.0.0.1:<PORT>/api/health`.
+2. Buat OAuth client Google ([langkah di atas](#google-oauth-client)), isi `~/panel/.env`, lalu jalankan `sh install.sh` lagi. Contoh isian lama dari `.env.example` versi ≤ 0.4.0 (mis. `https://panel.example.com`) dihitung kosong. Selama `.env` belum lengkap, service ditahan dengan file `down` dan skrip keluar dengan kode 3 sambil menyebut variabel yang masih kosong. Setelah lengkap, skrip menjalankan `sv restart panel` dan menunggu `http://127.0.0.1:<PORT>/api/health`.
 
    Bila ada perubahan situs yang sedang berjalan (deploy, buat situs, dll.), `sv restart panel` menunggu perubahan itu selesai, **sampai 2 menit**. Selama itu panel tidak terjangkau. Perubahan yang belum selesai setelah 2 menit terputus dan tampil sebagai "Terputus" di Riwayat perubahan, dengan tombol **Pulihkan** untuk membereskannya.
 
-   Upgrade = jalankan perintah langkah 1 lagi. Setelah upgrade, buka **Situs → Persiapan**: bila ada yang perlu disesuaikan (mis. snippet ecosystem lama), tekan **Perbaiki semua** di sana, tanpa membuka Termux. Rollback: lihat [Rollback](#rollback).
+   Upgrade = jalankan perintah langkah 1 lagi (belum ada `panel upgrade`). Setelah upgrade, buka **Situs → Persiapan**: bila ada yang perlu disesuaikan (mis. snippet ecosystem lama), tekan **Perbaiki semua** di sana, tanpa membuka Termux. Rollback: lihat [Rollback](#rollback).
 
 3. Tambahkan hostname panel ke tunnel cloudflared HP, mis. di `~/.cloudflared/config.yml` sebelum aturan catch-all:
 
@@ -192,17 +192,34 @@ rsync -avR --partial dist/panel-android-arm64 scripts/install-phone.sh deploy/sv
 ssh <hp> 'cd ~/panel-src && sh scripts/install-phone.sh ./dist/panel-android-arm64'
 ```
 
+### Perintah CLI
+
+Binary yang sama juga punya perintah untuk terminal. Jalankan dari `~/panel` (`cd ~/panel && ./panel <perintah>`):
+
+| Perintah                        | Fungsi                                                                                                                                                                                                 |
+| ------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `panel -h`, `--help`, `--h`     | Bantuan; `panel <perintah> --help` untuk satu perintah.                                                                                                                                                |
+| `panel -v`, `--version`, `--v`  | Versi, mis. `panel-termux 0.5.0 (android-arm64, bun 1.x)`.                                                                                                                                             |
+| `panel serve`                   | Menjalankan server. runit tetap menjalankan `panel` tanpa argumen; di terminal, `panel` tanpa argumen hanya mencetak bantuan.                                                                          |
+| `panel doctor [--json]`         | Memeriksa HP tanpa mengubah apa pun: paket dan hold, Termux:Boot/API, runit, `.env`, panel ganda, kartu Persiapan (dengan pesan yang sama), tunnel, versi PostgreSQL. Kode keluar 1 hanya bila ada ❌. |
+| `panel env [--full]`            | Mencetak template `.env` kosong ke stdout. Tulis ke file baru (`panel env > .env.new`); menambah ke `.env` yang sudah berisi (`>>`) ditolak.                                                           |
+| `panel docs [topik]`            | Panduan offline: `google`, `cloudflare`, `android`, `paket` (kenapa `cloudflared` dan `postgresql` ditahan dari `pkg upgrade`, dan cara upgrade-nya dengan aman).                                      |
+| `panel rollback [--db] [--yes]` | Kembali ke binary sebelumnya, lihat [Rollback](#rollback).                                                                                                                                             |
+
+Kode keluar: 0 berhasil, 1 gagal, 2 salah pakai, 3 butuh tindakan lalu ulangi, 4 dibatalkan. Perintah CLI tidak meneruskan isi `.env` panel ke program yang dijalankannya.
+
+Bila ada yang tidak beres: jalankan `panel doctor` dulu. Bila `panel serve` keluar dengan kode 1 dan pesan bahwa panel lain sudah menjawab di port, panel yang dijalankan runit sedang hidup; panel kedua menolak start sebelum menyentuh data. Pakai `sv restart panel`, bukan `panel serve`.
+
 ### Rollback
 
-`install-phone.sh` mencetak petunjuk ini bila panel baru gagal menyala. Manual:
+`install-phone.sh` mencetak petunjuk ini bila panel baru gagal menyala:
 
 ```sh
-sv down panel && cp ~/panel/panel.prev ~/panel/panel
-ls -t ~/panel/data/snapshots | head -1     # snapshot database terbaru
-# hanya bila versi baru sudah memigrasi database:
-cp ~/panel/data/snapshots/<snapshot> ~/panel/data/panel.db && rm -f ~/panel/data/panel.db-wal ~/panel/data/panel.db-shm
-sv up panel
+~/panel/panel rollback        # tukar panel <-> panel.prev, lalu restart layanan panel
+~/panel/panel rollback --db   # juga pulihkan panel.db dari snapshot terbaru
 ```
+
+Penukaran tidak pernah membuat `~/panel/panel` hilang, walau HP mati di tengah jalan, dan `panel.prev` tidak pernah dieksekusi. Rollback dua kali = kembali ke versi baru. Bila database sudah dimigrasi versi baru, `panel rollback` memperingatkannya; `--db` menyalin snapshot terbaru ke `panel.db` (perubahan data setelah waktu snapshot hilang), setelah lebih dulu menyimpan `panel.db` sekarang sebagai `snapshots/panel.db.before-rollback.<waktu>`. Salinan `before-rollback` tidak ikut dihapus rotasi snapshot; hapus sendiri bila tidak perlu. Tanpa terminal (skrip), tambahkan `--yes`. Setelah kembali ke 0.4.0 atau lebih lama, jangan jalankan `~/panel/panel` dengan argumen apa pun: binary lama mengabaikannya dan menyalakan panel kedua. Untuk naik lagi, jalankan perintah `install.sh`.
 
 Panel membuat snapshot `panel.db.<versi lama>.<waktu>` di `<PANEL_DATA_DIR>/snapshots/` (mode 600) setiap kali boot menemukan migrasi baru untuk database yang sudah ada, dan menyimpan 3 yang terbaru. Bila snapshot gagal (biasanya penyimpanan penuh), migrasi tidak dijalankan, log menyebut penyebabnya, dan panel keluar setelah 60 detik agar runit tidak berputar cepat. Kosongkan ruang, atau tambahkan `PANEL_SKIP_SNAPSHOT=1` ke `~/panel/.env` untuk satu kali start tanpa snapshot, lalu hapus lagi.
 
