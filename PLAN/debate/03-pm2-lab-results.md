@@ -374,3 +374,236 @@ started" maupun untuk auto-exit "0 application online".
 **Keputusan PLAN-03 (baris E4b):** cukup dicatat. Penjaga tetap wajib, dan check `pm2_guard` tidak boleh menganggap
 modul sebagai "app selain milik panel". Ini sudah sesuai dengan §3.7, yang menggolongkan `pmx_module` sebagai
 `module`.
+
+---
+
+## E11: blok bertanda PLAN/06 §3.1 pada pm2-runtime nyata (gerbang C4)
+
+Tanggal: 2026-11-27, pukul 07:34 sampai 07:52 WITA. Worker: `wkr-pm2lab-e11`. Tujuan: membuktikan bahwa blok v1 yang
+ditempel di **akhir** `ecosystem.config.js` (memodifikasi `module.exports` setelah file dievaluasi) dimuat dengan benar
+oleh pm2-runtime 7.1.2, sesuai gerbang C4 di `PLAN/debate/06-auto-fix-debate.md`.
+
+**Lingkungan POCO:** node **v24.22.3**, pm2 **7.1.2**. `/data` = **f2fs** (`/dev/block/dm-67`, opsi termasuk
+`fsync_mode=nobarrier`, `lazytime`, `inline_data`; `mount` tidak ada di PATH Termux, dibaca dari `/proc/mounts` dan
+`/system/bin/mount`).
+
+### Metode
+
+- **Isolasi:** semua file di `~/pm2lab-e11`, `PM2_HOME=~/pm2lab-e11/home`. Semua panggilan pm2 lewat wrapper
+  `lab.sh` yang mengekspor `PM2_HOME` lab sebelum `exec node …/pm2/bin/pm2`. Layanan runit sekali pakai
+  `$PREFIX/var/service/pm2lab-e11` dibuat di folder sementara dengan file `down` lebih dulu, lalu di-`mv` masuk, jadi
+  runsvdir tidak menyalakannya otomatis. Run script lab sama dengan run script `pm2` produksi (tanpa loop app yatim):
+  `exec node $PREFIX/lib/node_modules/pm2/bin/pm2-runtime $FLAGS ~/pm2lab-e11/sites/ecosystem.config.js`, dengan
+  `FLAGS` = `""` atau `--no-auto-exit`. Log `svlogd -tt`. Tidak ada satu pun perintah pm2 ke `~/.pm2`.
+- **Bentuk ecosystem POCO** dibaca dengan skrip node yang hanya mencetak bentuk: 28 baris, 0 `require`, 0 sebutan
+  `apps.json`, 1 factory (fungsi/arrow), 3 komentar, `module.exports = { apps: [...] }` dengan 2 app (`makuro-solusi`,
+  `adminneo`), kunci app `args, cwd, exp_backoff_restart_delay, interpreter, name, script`, `script` absolut,
+  `interpreter: none`, tanpa `env`. `~/sites/apps.json` = `[]`. Isi file dan nilai tidak dicetak.
+- **Ecosystem lab** meniru bentuk itu: factory `site(name, port)` → `{ name, cwd, script: "$PREFIX/bin/node",
+  args: "./server.js <port>", interpreter: "none", exp_backoff_restart_delay: 1000 }`, `module.exports = { apps: [
+  site("e11-hand-a", 19101), site("e11-hand-b", 19102) ] }` dengan komentar, lalu blok di akhir file. Varian E11d:
+  `module.exports = { apps: [] }` + blok.
+- **Entri `apps.json`** berbentuk `panelAppEntry` (`script: "./run"`, `interpreter: "none"`): `e11-blog` (`./run` ada,
+  skrip sh yang `exec node ./server.js 19110`), `e11-blog2` (sama, port 19111), `e11-ghost` (cwd ada, `./run` tidak
+  ada = binary belum ter-deploy).
+- **Pengamatan per kasus:** `sv up`, sampel pada 6 dtk dan 60 dtk (45 dtk untuk dua kasus tambahan E11d): `jlist`
+  difilter node (hanya `name:status:restart_time:pid`), `curl` tiap port, pid pm2-runtime lab, dan jumlah baris
+  `e11-start` di log runit (= berapa kali runsv menyalakan runtime).
+
+**Blok yang dipakai** (teks §3.1 apa adanya, `<PREFIX>` diganti `/data/data/com.termux/files/usr`):
+
+```js
+// >>> panel-termux:apps v1 (dikelola Panel Termux; panel mengganti blok ini utuh, jangan diedit)
+// Menambahkan situs buatan panel dari apps.json ke daftar apps di atas. Entri yang binary-nya belum ada dilewati,
+// karena satu script yang hilang membuat pm2-runtime menghentikan semua aplikasi. Bila tidak ada aplikasi tulisan
+// tangan, penjaga pm2-guard ditambahkan agar pm2-runtime tidak keluar.
+{
+  const fs = require("fs");
+  const path = require("path");
+  const cfg = module.exports;
+  const list = Array.isArray(cfg) ? cfg : cfg && Array.isArray(cfg.apps) ? cfg.apps : null;
+  if (list) {
+    let panel = [];
+    try {
+      const raw = require("./apps.json");
+      panel = Array.isArray(raw)
+        ? raw.filter(
+            (a) => a && typeof a.name === "string" && fs.existsSync(path.resolve(a.cwd || __dirname, a.script || "")),
+          )
+        : [];
+    } catch (e) {
+      console.error(`[ecosystem] apps.json dilewati: ${e.message}`);
+    }
+    const names = new Set(list.map((a) => a && a.name));
+    const handWritten = list.length > 0;
+    for (const a of panel) if (!names.has(a.name)) list.push(a);
+    if (!handWritten && !names.has("pm2-guard"))
+      list.push({
+        name: "pm2-guard",
+        script: "/data/data/com.termux/files/usr/bin/sleep",
+        args: "infinity",
+        interpreter: "none",
+        autorestart: true,
+      });
+  }
+  globalThis.__panelTermuxApps = { v: 1, listed: list !== null };
+}
+// <<< panel-termux:apps
+```
+
+### Hasil
+
+| Kasus | App tangan | `apps.json`                          | flag             | start/60 dtk | PID runtime 6 → 60 dtk | App online (restart)                      | Catatan log                                                                 |
+| ----- | ---------- | ------------------------------------ | ---------------- | ------------ | ---------------------- | ----------------------------------------- | --------------------------------------------------------------------------- |
+| E11a  | 2          | `[]`                                 | –                | 1            | 28599 → 28599          | hand-a, hand-b (r0); tanpa pm2-guard      | bersih                                                                      |
+| E11a  | 2          | `[]`                                 | `--no-auto-exit` | 1            | 29414 → 29414          | hand-a, hand-b (r0); tanpa pm2-guard      | bersih                                                                      |
+| E11b  | 2          | `[blog (ada), ghost (./run hilang)]` | –                | 1            | 30125 → 30125          | hand-a, hand-b, blog (r0); ghost dilewati | tidak ada `Script not found`; ghost tidak pernah dicoba                     |
+| E11b  | 2          | sama                                 | `--no-auto-exit` | 1            | 30668 → 30668          | hand-a, hand-b, blog (r0); ghost dilewati | sama                                                                        |
+| E11c  | 2          | `[{"name":` (rusak)                  | –                | 1            | 31191 → 31191          | hand-a, hand-b (r0)                       | `PM2 error: [ecosystem] apps.json dilewati: … Unexpected end of JSON input` |
+| E11c  | 2          | sama                                 | `--no-auto-exit` | 1            | 31824 → 31824          | hand-a, hand-b (r0)                       | sama                                                                        |
+| E11d  | 0          | `[]`                                 | –                | 1            | 32499 → 32499          | pm2-guard (r0)                            | bersih                                                                      |
+| E11d  | 0          | `[]`                                 | `--no-auto-exit` | 1            | 1228 → 1228            | pm2-guard (r0)                            | bersih                                                                      |
+| E11d2 | 0          | `[blog, ghost]`                      | –                | 1 (45 dtk)   | 3027 → 3027            | blog, pm2-guard (r0); ghost dilewati      | penjaga tetap ditambahkan karena tidak ada app **tangan**                   |
+| E11d3 | 0          | tidak ada                            | –                | 1 (45 dtk)   | 4040 → 4040            | pm2-guard (r0)                            | `apps.json dilewati: Cannot find module './apps.json'`                      |
+
+Semua app yang online juga menjawab `curl` di port masing-masing dengan pid yang sama dengan `jlist`.
+`e11-ghost` tidak pernah muncul di daftar pm2. Bandingkan dengan E1: entri native yang hilang tanpa filter membuat
+runtime keluar sekitar 54 kali per menit.
+
+**E11e: tulis file terpatch saat runtime berjalan.** Runtime dinyalakan dengan ecosystem tangan **tanpa** blok (keadaan
+POCO sebelum fix) dan `apps.json = [blog, blog2]`. Lalu skrip node menulis `teks lama + "\n" + blok` ke
+`.ecosystem.panel-candidate.config.js` di folder yang sama (`openSync(tmp,"w",mode)` → `writeSync` → `fsyncSync(fd)` →
+`close` → `renameSync` ke `ecosystem.config.js` → `fsyncSync(dirfd)`; pola C1). sha 4cf283855880 → 5baa4a578414, mode
+600 tetap, inode baru.
+
+| flag             | Sebelum tulis                 | 30 dtk setelah `rename`                                                  | Setelah `sv restart pm2lab-e11`                                 |
+| ---------------- | ----------------------------- | ------------------------------------------------------------------------ | --------------------------------------------------------------- |
+| –                | hand-a 4979, hand-b 4980 (r0) | **identik**: 4979, 4980 (r0), runtime 4947 tetap, blog/blog2 belum start | hand-a, hand-b, blog, blog2 online (r0, pid baru), runtime 5505 |
+| `--no-auto-exit` | hand-a 5974, hand-b 5975 (r0) | **identik**: 5974, 5975 (r0), runtime 5933 tetap                         | hand-a, hand-b, blog, blog2 online (r0), runtime 6534           |
+
+pm2-runtime tidak mengawasi file ecosystem. Menulis file (dengan `rename` atomik) tidak me-restart apa pun. Isi baru
+baru berlaku saat runtime dinyalakan ulang, dan saat itu blok bekerja (situs panel ikut dimuat).
+
+**E11f (C4 varian d): `pm2 start eco --only <situs>` lewat CLI saat runtime dengan blok berjalan.** Awal: hand-a,
+hand-b, blog online (`apps.json = [blog, ghost]`). `apps.json` diubah menjadi `[blog, blog2]`, lalu
+`lab.sh start ~/pm2lab-e11/sites/ecosystem.config.js --only e11-blog2`:
+
+```
+[PM2][WARN] Applications e11-blog2 not running, starting...
+[PM2] App [e11-blog2] launched (1 instances)
+tanpa flag:       hand-a 6848, hand-b 6849, blog 6851 (r0, tetap) + blog2 7145 online; runtime 6827 tetap; 1 start
+--no-auto-exit:   hand-a 7489, hand-b 7491, blog 7508 (r0, tetap) + blog2 7803 online; runtime 7451 tetap; 1 start
+```
+
+Blok juga dievaluasi di proses CLI. `--only` hanya menyalakan situs yang diminta, dan pid app lain tidak berubah.
+
+### Bongkar & bukti produksi tidak tersentuh
+
+`sv down pm2lab-e11`, `lab.sh kill` ("PM2 Daemon Stopped"), `sv exit pm2lab-e11/log`, `sv exit pm2lab-e11`, lalu
+`rm -rf $PREFIX/var/service/pm2lab-e11 ~/pm2lab-e11`. runsvdir sempat menyalakan ulang `runsv`/`svlogd` lab sesaat
+sebelum folder layanan dihapus, lalu keduanya keluar sendiri. Scan `/proc/*/cmdline` sesudahnya hanya menemukan shell
+ssh pemeriksa. Port 19101, 19102, 19110, dan 19111 bebas.
+
+Restart count produksi **tidak** dibaca lewat `pm2 jlist`, supaya pm2 tidak pernah dipanggil tanpa `PM2_HOME` lab.
+Sebagai gantinya dipakai pid + `starttime` (`/proc/<pid>/stat` kolom 22) proses yang cwd-nya di `~/sites/*`. Setiap
+restart pm2 pasti mengganti pid.
+
+| Waktu   | pm2 (runsv)            | panel                 | makuro-solusi (anak pm2)          | adminneo                    | `https://solusi.malikkurosaki.com/` |
+| ------- | ---------------------- | --------------------- | --------------------------------- | --------------------------- | ----------------------------------- |
+| sebelum | pid 10596, 155.677 dtk | pid 26688, 13.426 dtk | pid 28124 `ld.so`, start 10019821 | pid 11762 `php`, start 4754 | 200                                 |
+| sesudah | pid 10596, 156.767 dtk | pid 26688, 14.516 dtk | pid 28124, start 10019821         | pid 11762, start 4754       | 200                                 |
+
+Temuan sampingan, tidak disentuh: ada proses `fresh` pid 27794 dengan **ppid 1** dan cwd `~/sites/makuro-solusi`.
+Proses itu sudah ada sebelum lab dimulai (start 10005714), jadi itu yatim dari restart makuro-solusi sebelumnya.
+Loop "bunuh app yatim" di run script hanya berjalan saat pm2-runtime start. Ini perlu dicek pemilik: apakah proses
+itu memegang port, dan apakah check `orphan_process` perlu ditambahkan.
+
+### Kesimpulan: gerbang C4 **LULUS**
+
+Blok v1 §3.1, ditempel di akhir file dengan bentuk ecosystem POCO, bekerja di pm2-runtime 7.1.2 dengan maupun tanpa
+`--no-auto-exit`. Hasilnya: 1 start per kasus, tanpa crash loop, dan tanpa app tangan yang di-restart.
+
+1. `apps.json = []` → hanya dua app tangan yang online, tanpa penjaga (sesuai Q5: POCO tidak mendapat penjaga).
+2. Entri yang binary-nya hilang dilewati, dan app lain tetap hidup (filter E1e bekerja dari dalam blok).
+3. `apps.json` rusak/hilang → app tangan tetap online, pesan `[ecosystem] apps.json dilewati` tercatat sebagai
+   `PM2 error:`.
+4. Tanpa app tangan → `pm2-guard` online dan runtime tetap hidup (juga saat ada situs panel, E11d2).
+5. Menulis file dengan tmp + fsync + rename saat runtime berjalan tidak me-restart apa pun. Efeknya baru muncul pada
+   restart runtime berikutnya. Ini mendukung copy "pm2 tidak perlu dimulai ulang" dan C5 ("restart = pemuatan pertama
+   blok").
+6. `start --only <situs>` lewat CLI tetap berfungsi dengan blok (C4 varian d).
+
+Fix `ecosystem_block` boleh diaktifkan di build termux. Catatan untuk PLAN/06:
+
+- **Belum diuji di E11:** blok versi C11 (seluruh badan di dalam `try`, awalan `;`, `JSON.stringify(prefix)`). Teks
+  yang diuji adalah §3.1 apa adanya. Perubahan C11 hanya menambah pembungkus, tetapi bila teks final berbeda dari §3.1,
+  kasus E11a dan E11d sebaiknya diulang dengan teks final (sekitar 3 menit, skripnya sama).
+- **f2fs `fsync_mode=nobarrier`:** `fsync` di partisi ini tidak mengirim perintah flush ke cache perangkat. Pola C1
+  tetap wajib karena menjamin urutan tulis-sebelum-rename di f2fs, tetapi tidak menjamin data selamat bila listrik
+  benar-benar putus. Backup bertanggal + "Batalkan" tetap jadi jaring pengaman. Risiko ini perlu dicatat di PLAN/06
+  §13 (C1).
+- **Celah kecil di filter:** entri tanpa `script` lolos filter, karena `path.resolve(cwd, "")` = folder cwd, yang
+  memang ada. Entri seperti itu tidak dibuat oleh `panelAppEntry`, jadi cukup dicatat. Bila ingin ditutup, tambahkan
+  `typeof a.script === "string" && a.script &&` di filter.
+
+## E11 (teks final): ulangan E11a dan E11d dengan teks persis dari `ecosystemBlock()`
+
+Tanggal: 2026-11-27, pukul 07:55 sampai 08:01 WITA. Worker: `wkr-pm2lab-e11b`. Tujuan: menutup catatan "Belum diuji di
+E11" di atas. Yang diuji adalah teks versi C11 (seluruh badan di dalam `try`, awalan `;`, guard lewat
+`JSON.stringify`) ditambah filter yang kini juga mewajibkan `script` berupa string tidak kosong. Sebelumnya entri tanpa
+`script` lolos filter karena `path.resolve(cwd, "")` = folder cwd.
+
+**Teks blok:** dihasilkan di laptop dengan
+`bun -e 'process.stdout.write(ecosystemBlock("/data/data/com.termux/files/usr"))'` (LF, ASCII, sha256
+`e3803d52001e…9a00`). Hash di POCO sama. Baris filter di teks final:
+
+```js
+? raw.filter((a) => a && typeof a.name === "string" && typeof a.script === "string" && a.script !== "" && fs.existsSync(path.resolve(a.cwd || __dirname, a.script)))
+```
+
+**Metode:** sama dengan E11 (lab `~/pm2lab-e11`, `PM2_HOME` lab lewat `lab.sh`, layanan runit sekali pakai dengan
+`down` lebih dulu, `case.sh`/`st.sh` yang sama). Ada satu perbedaan: ecosystem lab = kepala + **satu baris kosong** +
+blok, sama dengan keluaran `planEcosystemFix` (`separator`). Tidak ada perintah pm2 ke `~/.pm2`.
+
+| Kasus  | App tangan | `apps.json`                                               | flag             | start | PID runtime 6 → akhir | App online (restart)                       |
+| ------ | ---------- | --------------------------------------------------------- | ---------------- | ----- | --------------------- | ------------------------------------------ |
+| E11a   | 2          | `[]`                                                      | –                | 1     | 12642 → 12642 (60 dtk) | hand-a, hand-b (r0); tanpa pm2-guard       |
+| E11a   | 2          | `[]`                                                      | `--no-auto-exit` | 1     | 13593 → 13593 (60 dtk) | hand-a, hand-b (r0); tanpa pm2-guard       |
+| E11d   | 0          | `[]`                                                      | –                | 1     | 14995 → 14995 (60 dtk) | pm2-guard (r0)                             |
+| E11d   | 0          | `[]`                                                      | `--no-auto-exit` | 1     | 15748 → 15748 (60 dtk) | pm2-guard (r0)                             |
+| E11b'  | 2          | `[blog, noscript (tanpa script), emptyscript (script "")]` | –                | 1     | 16531 → 16531 (45 dtk) | hand-a, hand-b, blog (r0); dua entri tanpa script dilewati |
+
+`curl` tiap port menjawab dengan pid yang sama dengan `jlist`. Log runit: tepat 5 baris `e11-start` untuk 5 kasus.
+`exited … via signal [SIGINT]` hanya muncul saat `sv down` di akhir kasus. Tidak ada `Script not found`, tidak ada
+`blok panel dilewati`, tidak ada `apps.json dilewati`. Satu-satunya noise adalah `getconf: not found` dari pidusage
+pm2, yang sudah dikenal. Tambahan tanpa pm2: `node -e 'require(eco)'` dengan blok final memberi `hand/[]` → hand-a,
+hand-b; `none/[]` → pm2-guard; `hand/noscript` → hand-a, hand-b, blog; `none/noscript` → blog, pm2-guard. Semuanya
+dengan `__panelTermuxApps = {"v":1,"listed":true}`.
+
+Catatan metode: `sv exit pm2lab-e11/log` di `case.sh` tidak menghentikan svlogd (pid sama sepanjang lab), dan
+`rm -f svlog/*` menghapus `current` yang masih terbuka. Log tetap dibaca utuh lewat `/proc/<svlogd>/fd`.
+
+**Bongkar:** `sv down`, `lab.sh kill` ("PM2 Daemon Stopped"), `sv exit` log + layanan, `rm -rf
+$PREFIX/var/service/pm2lab-e11 ~/pm2lab-e11`. Scan `/proc/*/cmdline` setelahnya hanya menemukan shell pemeriksa,
+dan port 19101, 19102, 19110, 19111 bebas.
+
+**Produksi tidak tersentuh** (pid + `starttime` `/proc/<pid>/stat` kolom 22, tanpa memanggil pm2). Keluaran
+sebelum dan sesudah **identik** (`diff` kosong):
+
+| Proses                     | pid   | starttime |
+| -------------------------- | ----- | --------- |
+| pm2-runtime (runsv pm2)    | 10596 | 4406      |
+| panel                      | 26688 | 14229536  |
+| makuro-solusi (`ld.so`)    | 28124 | 10019821  |
+| adminneo (`php`)           | 11762 | 4754      |
+
+`https://solusi.malikkurosaki.com/` → 200 sebelum dan sesudah. Proses yatim `fresh` pid 27794 (lihat E11) masih ada
+dan tidak disentuh.
+
+### Kesimpulan: E11 teks final **LULUS**
+
+Teks final `ecosystemBlock()` berperilaku sama dengan teks §3.1 yang diuji di E11, dengan maupun tanpa
+`--no-auto-exit`: 1 start per kasus, tanpa crash loop, dan penjaga hanya muncul bila tidak ada app tangan. Entri
+tanpa `script` atau dengan `script: ""` kini dilewati. Catatan "Belum diuji di E11" sudah tertutup. Celah filter
+juga sudah ditutup di blok (BLOCK_VERSION tetap 1 karena v1 belum dirilis). Risiko f2fs `nobarrier` sudah dicatat di
+PLAN/06 §12.

@@ -326,49 +326,49 @@ punya pm2 tulisan tangan (POCO), membuat situs, menambah domain, dan pulih dari 
 
 ### P0 (gelombang ini, wajib)
 
-| Item                                                                 | Catatan                                                          |
-| -------------------------------------------------------------------- | ---------------------------------------------------------------- |
-| `writeAtomic` dengan fsync (C1), baca byte (C2)                      | Akar, dipakai semua penulis file                                 |
-| Probe sentinel (C3) + `block`/`digests`                              | Menggantikan predikat ganda                                      |
-| Fix `ecosystem_block` (#1, #2, #3, #5) dengan C11, C12, C13, C19     | Satu tombol kartu, satu dialog, diff sederhana                   |
-| Fix `pm2_auto_exit` (#4), `pending` = ok + info (C6, C14)            | Tanpa restart                                                    |
-| Restart pm2 yang dicek + "Kembalikan dan mulai ulang" (C5)           | Satu-satunya jalur yang me-restart makuro-solusi, selalu `confirm` |
-| Restore backup terbaru (C9, C17) + `Integration.lastFix`             | Satu UI undo                                                     |
-| Bug copy `snippet_current`, copy C16, hapus aturan moot C15          |                                                                  |
-| Lab E11 (C4) sebagai gerbang aktivasi                                | Di runtime lab terisolasi                                        |
-| Skenario fake `poco` + `old_spread` + `exotic`                       | QA wajib                                                         |
+| Item                                                             | Catatan                                                            |
+| ---------------------------------------------------------------- | ------------------------------------------------------------------ |
+| `writeAtomic` dengan fsync (C1), baca byte (C2)                  | Akar, dipakai semua penulis file                                   |
+| Probe sentinel (C3) + `block`/`digests`                          | Menggantikan predikat ganda                                        |
+| Fix `ecosystem_block` (#1, #2, #3, #5) dengan C11, C12, C13, C19 | Satu tombol kartu, satu dialog, diff sederhana                     |
+| Fix `pm2_auto_exit` (#4), `pending` = ok + info (C6, C14)        | Tanpa restart                                                      |
+| Restart pm2 yang dicek + "Kembalikan dan mulai ulang" (C5)       | Satu-satunya jalur yang me-restart makuro-solusi, selalu `confirm` |
+| Restore backup terbaru (C9, C17) + `Integration.lastFix`         | Satu UI undo                                                       |
+| Bug copy `snippet_current`, copy C16, hapus aturan moot C15      |                                                                    |
+| Lab E11 (C4) sebagai gerbang aktivasi                            | Di runtime lab terisolasi                                          |
+| Skenario fake `poco` + `old_spread` + `exotic`                   | QA wajib                                                           |
 
 ### P1 (gelombang ini, setelah P0)
 
-| Item                                                                             | Alasan dikerjakan sekarang                                         |
-| -------------------------------------------------------------------------------- | ------------------------------------------------------------------ |
-| #10/#16/#26 `ServiceStartButton` di semua lokasi "jalankan `sv up`"               | Sering terjadi, murah, endpoint sudah ada                          |
-| #14/#15 tombol **Jalankan lagi** (copy + job `site.restart` yang ada)             | Kode inti sudah ada; #15 hanya untuk app yang tidak dikenal pm2    |
-| #12 bagian A: kartu record DNS siap salin + **Periksa lagi**                      | Aman, tanpa verifikasi eksternal                                   |
+| Item                                                                               | Alasan dikerjakan sekarang                                               |
+| ---------------------------------------------------------------------------------- | ------------------------------------------------------------------------ |
+| #10/#16/#26 `ServiceStartButton` di semua lokasi "jalankan `sv up`"                | Sering terjadi, murah, endpoint sudah ada                                |
+| #14/#15 tombol **Jalankan lagi** (copy + job `site.restart` yang ada)              | Kode inti sudah ada; #15 hanya untuk app yang tidak dikenal pm2          |
+| #12 bagian A: kartu record DNS siap salin + **Periksa lagi**                       | Aman, tanpa verifikasi eksternal                                         |
 | #12 bagian B: `route dns` lewat cert.pem dengan guard FQDN (C8), **tanpa migrasi** | Hanya setelah output cloudflared diverifikasi di POCO; bila belum, tunda |
-| #6 buat folder situs                                                             | Sekitar 10 baris; masuk mekanisme fix yang sama                    |
+| #6 buat folder situs                                                               | Sekitar 10 baris; masuk mekanisme fix yang sama                          |
 
 ### Ditunda (dengan alasan)
 
-| Item                                                             | Alasan                                                                                                                        |
-| ---------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------- |
-| #7 bangun ulang `apps.json`                                      | Hanya rusak bila disunting tangan; blok sudah tahan file rusak (E5). Tambahkan bila muncul di produksi                         |
-| #13 `site.repair`                                                | Job baru + `ALTER ROLE` irreversible untuk kasus langka (folder dihapus di luar panel). "Hapus situs + buat ulang" sudah ada    |
-| #37 unggah kunci data                                            | Hanya terjadi setelah pindah HP atau kunci hilang. Bila pemilik tetap mau, wajib C7. Kandidat terdepan bila ada waktu           |
+| Item                                                                               | Alasan                                                                                                                                                                                                                                                                                                                                              |
+| ---------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| #7 bangun ulang `apps.json`                                                        | Hanya rusak bila disunting tangan; blok sudah tahan file rusak (E5). Tambahkan bila muncul di produksi                                                                                                                                                                                                                                              |
+| #13 `site.repair`                                                                  | Job baru + `ALTER ROLE` irreversible untuk kasus langka (folder dihapus di luar panel). "Hapus situs + buat ulang" sudah ada                                                                                                                                                                                                                        |
+| #37 unggah kunci data                                                              | Hanya terjadi setelah pindah HP atau kunci hilang. Bila pemilik tetap mau, wajib C7. Kandidat terdepan bila ada waktu                                                                                                                                                                                                                               |
 | Semua P2 (#8, #9, #11, #17–#20, #27, #28, #31–#33, #38–#41, #43, #45–#48, #51–#54) | Keluarkan dari PLAN/06 ke `PLAN/backlog.md`. Item seperti #9 (pulihkan versi berfungsi) memakai endpoint restore P0, jadi cukup UI kecil nanti. #45/#46/#47/#48/#39 adalah fitur produk, masing-masing butuh PLAN dan debat sendiri. Teks-saja (#27, #28, #31, #32, #38) boleh disapu di gelombang copy P1 bila worker web sedang memegang file itu |
 
 Konsekuensi untuk tipe: `FixKey = "ecosystem_block" | "pm2_auto_exit" | "sites_dir_create"`. `FixFile = "ecosystem" | "pm2_run"`.
 
 ## 4. Rencana worker yang diringkas
 
-| Gelombang | Worker                 | File                                                                                                                                                 |
-| --------- | ---------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------- |
-| G1        | `wkr-fix-core-01`      | `site.files.ts` (fsync, baca byte), `ecosystem.patch.ts`, `runscript.patch.ts`, `fix.backup.ts`, `ecosystem.probe.ts` (sentinel), fixture + test      |
-| G1        | `wkr-fix-adapters-01`  | `system.fake.ts` skenario, `scripts/demo-seed*.ts`                                                                                                   |
-| G1        | `wkr-fix-lab-01`       | Lab E11 di POCO (read-only terhadap produksi, PM2_HOME lab), laporan `PLAN/debate/06-pm2-lab-e11.md`                                                  |
-| G2        | `wkr-fix-service-01`   | `integration.fix.ts`, `integration.service.ts` (C15, `lastFix`, pending), rute, restart yang dicek (C5), test API                                     |
-| G2        | `wkr-fix-web-01`       | `site.setup.tsx`, `fix.dialog.tsx`, `setup.manual.tsx`, `service-start.tsx`, `id.*` yang disentuh, kartu DNS manual                                   |
-| Akhir     | `wkr-fix-docs-05`      | README (bagian terkait), CHANGELOG 0.4.0, DECISIONS F1–F9 revisi                                                                                      |
+| Gelombang | Worker                | File                                                                                                                                             |
+| --------- | --------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------ |
+| G1        | `wkr-fix-core-01`     | `site.files.ts` (fsync, baca byte), `ecosystem.patch.ts`, `runscript.patch.ts`, `fix.backup.ts`, `ecosystem.probe.ts` (sentinel), fixture + test |
+| G1        | `wkr-fix-adapters-01` | `system.fake.ts` skenario, `scripts/demo-seed*.ts`                                                                                               |
+| G1        | `wkr-fix-lab-01`      | Lab E11 di POCO (read-only terhadap produksi, PM2_HOME lab), laporan `PLAN/debate/06-pm2-lab-e11.md`                                             |
+| G2        | `wkr-fix-service-01`  | `integration.fix.ts`, `integration.service.ts` (C15, `lastFix`, pending), rute, restart yang dicek (C5), test API                                |
+| G2        | `wkr-fix-web-01`      | `site.setup.tsx`, `fix.dialog.tsx`, `setup.manual.tsx`, `service-start.tsx`, `id.*` yang disentuh, kartu DNS manual                              |
+| Akhir     | `wkr-fix-docs-05`     | README (bagian terkait), CHANGELOG 0.4.0, DECISIONS F1–F9 revisi                                                                                 |
 
 `route dns` (#12B) baru dikerjakan bila verifikasi cloudflared ada. Worker-nya satu orang, pemilik `cloudflared.termux.ts` dan `site.steps.ts`.
 

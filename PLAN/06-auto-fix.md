@@ -610,6 +610,7 @@ berurutan. `service-start.tsx` ditulis adapters di G1 dan hanya diimpor di G2. B
 | Backup dipulihkan basi terhadap situs baru                              | Dialog menyebut situs terdampak, tier `confirm` (debat C9)                                                       |
 | `route dns` membuat record di zona yang salah                           | Guard FQDN persis + `dns_wrong_zone`; bagian B hanya setelah G0                                                  |
 | Anggaran bundle `/panel`                                                | Dialog dan diff lazy-load                                                                                        |
+| `/data` POCO = f2fs `fsync_mode=nobarrier` (E11): `fsync` menjaga urutan tulis, tetapi tidak menjamin data selamat bila listrik putus mendadak | Backup bertanggal + validasi sentinel/digest saat boot (C1, F10); bila gagal, pulihkan dari backup |
 
 ## 13. Backlog (tidak masuk 0.4.0, DECISIONS C2)
 
