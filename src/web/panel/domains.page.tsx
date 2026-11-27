@@ -22,7 +22,7 @@ import { TOUCH_HIT } from "./panel.touch";
 
 const t = tPanel.domains;
 
-/** "Situs blog · aplikasi blog-app" / "Panel Termux" / "Layanan lain (…)" / "Tanpa tujuan". */
+/** "Site blog · app blog-app" / "Panel Termux" / "Other service (…)" / "No target". */
 export function domainTarget(d: Domain): string {
   const target = d.target ?? (d.app ? "app" : d.port === null ? "none" : "other");
   if (target === "app" && d.app) return t.target.app(d.site ?? null, d.app);

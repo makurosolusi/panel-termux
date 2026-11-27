@@ -65,7 +65,7 @@ function Overview({ o, onReload }: { o: PanelOverview; onReload: () => void }) {
   );
 }
 
-/** /panel (index): problem-first Ringkasan — problems, device tiles, counts, backup, notifications, activity. */
+/** /panel (index): problem-first Overview — problems, device tiles, counts, backup, notifications, activity. */
 export function OverviewPage() {
   const query = useApiQuery<PanelOverview>(panelUrl("/overview"), PANEL_REFRESH_MS);
   const fake = query.data?.mode === "fake";

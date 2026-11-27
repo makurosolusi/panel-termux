@@ -27,7 +27,7 @@ type Count = {
   section?: OverviewSection;
 };
 
-/** Situs / Layanan / Aplikasi / Domain cards; each links to its page and carries its problems badge. */
+/** Sites / Services / Apps / Domains cards; each links to its page and carries its problems badge. */
 export function CountCards({ o, problems }: { o: PanelOverview; problems: readonly Problem[] }) {
   const unavailable = o.unavailable ?? [];
   const cards: Count[] = [

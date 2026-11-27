@@ -1,7 +1,9 @@
 import { describe, expect, test } from "bun:test";
+import { setActiveLocale } from "@/shared/i18n";
 import type { LoadBaseline, Problem, ProblemCode } from "@/shared/monitor.types";
 import type { App, Battery, Domain, DomainHealth, PanelOverview, Service } from "@/shared/panel.types";
-import { detail, title } from "@/shared/problem.copy";
+import { detail, title } from "@/shared/problem.copy.en";
+import { tOverview } from "@/web/i18n/en.overview";
 import { tPanel } from "@/web/i18n/en.panel";
 import { appColumns } from "@/web/panel/apps.page";
 import { isBackupStale } from "@/web/panel/databases.page";
@@ -27,9 +29,6 @@ import { cloudflaredPoll, needsFullReload, panelPoll } from "@/web/panel/restart
 import { serviceSince, sortServices } from "@/web/panel/services.page";
 import { consequences } from "@/web/panel/unit.actions";
 import { apiErrorMessage, errorFromResponse } from "@/web/shared/api.client";
-import { formatLocaleForFile } from "./i18n.fixture";
-
-formatLocaleForFile("id"); // Indonesian literals below until wave 1 migrates this file
 
 // test-only fixtures
 const svc = (over: Partial<Service> = {}): Service => ({
@@ -136,7 +135,7 @@ describe("domainVerdict (PLAN/02 §5.4)", () => {
     const heldBy = problem({ code: "service_down", kind: "service", target: "cloudflared" });
     expect(domainVerdict(health({ status: 530, failures: 3 }), { heldBy })).toEqual({
       key: "tunnel_down",
-      reason: r.heldBy("Layanan cloudflared mati"),
+      reason: r.heldBy("Service cloudflared is down"),
     });
   });
   test("app stopped on purpose → stopped, even when failing", () =>
@@ -164,17 +163,17 @@ describe("domainVerdict (PLAN/02 §5.4)", () => {
     } as unknown as PanelOverview;
     expect(domainRows([domain({ health: health({ status: 502, failures: 3 }) })], o)[0]?.verdict.key).toBe("stopped");
     const other = domainRows([domain({ app: null, target: "other", health: health({ status: 530, failures: 3 }) })], o);
-    expect(other[0]?.verdict.reason).toContain("Penyebabnya");
+    expect(other[0]?.verdict.reason).toContain("Cause:");
     expect(domainRows([domain({ app: null })], o)[0]?.verdict).toEqual({ key: "healthy", reason: "" });
   });
 
   test("domainTarget copy", () => {
-    expect(domainTarget(domain())).toBe("Situs blog · aplikasi blog-app");
+    expect(domainTarget(domain())).toBe("Site blog · app blog-app");
     expect(domainTarget(domain({ target: "panel", app: null }))).toBe("Panel Termux");
     expect(domainTarget(domain({ target: "other", app: null, service: "http://localhost:8080" }))).toBe(
-      "Layanan lain (http://localhost:8080)",
+      "Other service (http://localhost:8080)",
     );
-    expect(domainTarget(domain({ target: "none", app: null, port: null }))).toBe("Tanpa tujuan");
+    expect(domainTarget(domain({ target: "none", app: null, port: null }))).toBe("No target");
   });
 });
 
@@ -243,8 +242,8 @@ describe("control tiers (PLAN/02 §5.2)", () => {
     expect(isDeferredRestart("apps", "panel", "restart")).toBe(false);
   });
   test("cloudflared and panel carry their impact text", () => {
-    expect(tPanel.serviceImpact.cloudflared).toContain("Semua domain");
-    expect(tPanel.serviceImpact.panel).toContain("terputus");
+    expect(tPanel.serviceImpact.cloudflared).toContain("Every domain drops");
+    expect(tPanel.serviceImpact.panel).toContain("disconnects");
   });
 });
 
@@ -268,20 +267,20 @@ describe("restart overlay decisions (PLAN/02 §4.4)", () => {
   });
 });
 
-describe("Ringkasan state", () => {
+describe("Overview state", () => {
   const danger = problem({ code: "service_down", kind: "service", target: "postgres", href: "/panel/services" });
   const info = problem({ code: "backup_not_configured", kind: "backup", severity: "info", href: "/panel/backups" });
 
   test("info items never join the alert strip or the count badges (B4)", () => {
     expect(splitProblems([danger, info])).toEqual({ alerts: [danger], info: [info] });
-    expect(countBadge(["backup"], [info])).toEqual({ tone: "success", text: "Semua berjalan" });
+    expect(countBadge(["backup"], [info])).toEqual({ tone: "success", text: "All running" });
   });
   test("count badge: down vs needs checking", () => {
-    expect(countBadge(["service"], [danger])).toEqual({ tone: "danger", text: "1 mati" });
+    expect(countBadge(["service"], [danger])).toEqual({ tone: "danger", text: "1 down" });
     const loop = problem({ code: "app_crash_loop", kind: "app", severity: "warning" });
-    expect(countBadge(["app"], [loop])).toEqual({ tone: "warning", text: "1 perlu dicek" });
+    expect(countBadge(["app"], [loop])).toEqual({ tone: "warning", text: "1 to check" });
   });
-  test("domain tile counts held domains: 'Semua berjalan' only when every domain is healthy (QA N1)", () => {
+  test("domain tile counts held domains: 'All running' only when every domain is healthy (QA N1)", () => {
     const errored = problem({ code: "app_errored", kind: "app", target: "blog-app" });
     const held = domain({ health: health({ status: 502, failures: 3 }) });
     const healthy = domain({ hostname: "ok.example.com" });
@@ -291,8 +290,8 @@ describe("Ringkasan state", () => {
     expect(heldDomains([domain({ health: health({ status: 502, failures: 1 }) })], [errored], [])).toBe(0);
     expect(heldDomains([held], [], [app({ status: "stopped" })])).toBe(0); // stopped on purpose
     expect(heldDomains([domain({ hostname: "*.x.co", health: health({ status: 502, failures: 3 }) })], [], [])).toBe(0);
-    expect(countBadge(["domain", "network"], [errored], 1)).toEqual({ tone: "danger", text: "1 mati" });
-    expect(countBadge(["domain", "network"], [errored], 0)).toEqual({ tone: "success", text: "Semua berjalan" });
+    expect(countBadge(["domain", "network"], [errored], 1)).toEqual({ tone: "danger", text: "1 down" });
+    expect(countBadge(["domain", "network"], [errored], 0)).toEqual({ tone: "success", text: "All running" });
   });
   test("problem set key ignores order (live region speaks only on change)", () => {
     const b = problem({ code: "disk_low", kind: "disk", target: "x" });
@@ -308,25 +307,31 @@ describe("Ringkasan state", () => {
       temperatureC: 33,
       health: null,
     };
-    expect(batteryView(b, [])).toEqual({ value: "80%", hint: "Tidak mengisi", tone: undefined });
-    expect(batteryView({ ...b, status: "not_charging", plugged: "usb" }, []).hint).toBe("Dicolok, tidak mengisi");
-    expect(batteryView({ ...b, status: "charging", charging: true }, []).hint).toBe("Sedang dicas");
+    expect(batteryView(b, [])).toEqual({ value: "80%", hint: "Not charging", tone: undefined });
+    expect(batteryView({ ...b, status: "not_charging", plugged: "usb" }, []).hint).toBe("Plugged in, not charging");
+    expect(batteryView({ ...b, status: "charging", charging: true }, []).hint).toBe("Charging");
     const low = problem({ code: "battery_low", kind: "battery", severity: "warning" });
     expect(batteryView({ ...b, percent: 22 }, [low]).tone).toBe("warning");
-    expect(batteryView(null, []).value).toBe("Tidak tersedia");
+    expect(batteryView(null, []).value).toBe("Not available");
   });
   test("load is neutral without baseline, toned by ratio to the usual median (K6)", () => {
     const base: LoadBaseline = { p10: 18, p50: 20, p90: 22, spanHours: 48 };
     expect(loadView([20.9, 20.7, 20], null)).toEqual({
-      value: "Beban sistem 20,9 · 20,7 · 20,0",
-      usual: "nilai biasanya muncul setelah 1 hari pemantauan",
+      value: "System load 20.9 · 20.7 · 20.0",
+      usual: "the usual range appears after 1 day of monitoring",
       tone: undefined,
     });
     expect(loadView([20, 21, 20], base)).toEqual({
-      value: "Beban sistem 20,0 · 21,0 · 20,0",
-      usual: "biasanya 18–22",
+      value: "System load 20.0 · 21.0 · 20.0",
+      usual: "usually 18–22",
       tone: undefined,
     });
+    setActiveLocale("id");
+    try {
+      expect(loadView([20, 21, 20], base).value).toBe(tOverview.device.load("20,0 · 21,0 · 20,0"));
+    } finally {
+      setActiveLocale("en"); // module singleton: back to the default for later tests
+    }
     expect(loadView([31, 31, 30], base).tone).toBe("warning");
     expect(loadView([41, 41, 40], base).tone).toBe("danger");
   });
@@ -337,8 +342,8 @@ describe("Ringkasan state", () => {
   test("since text in whole minutes", () => {
     const now = new Date("2026-11-27T10:00:00Z");
     expect(sinceText(null, now)).toBeNull();
-    expect(sinceText("2026-11-27T09:59:30Z", now)).toBe("baru saja");
-    expect(sinceText("2026-11-27T09:47:40Z", now)).toBe("sejak 12 mnt");
+    expect(sinceText("2026-11-27T09:59:30Z", now)).toBe("just now");
+    expect(sinceText("2026-11-27T09:47:40Z", now)).toBe("for 12 min");
   });
   test("second link goes to the unit log unless the main link already is the log", () => {
     expect(problemLogHref(danger)).toBe("/panel/services/postgres/log");
@@ -362,13 +367,13 @@ describe("list pages", () => {
       svc({ name: "c", state: "down", wantUp: false }),
     ];
     expect(sortServices(list).map((s) => s.name)).toEqual(["a", "c", "b"]);
-    expect(serviceSince(svc({ uptimeSec: 10_800 }))).toBe("aktif 3 jam");
-    expect(serviceSince(svc({ state: "down", downSec: 118_800, uptimeSec: null }))).toBe("mati 1 hari 9 jam");
+    expect(serviceSince(svc({ uptimeSec: 10_800 }))).toBe("up 3 h");
+    expect(serviceSince(svc({ state: "down", downSec: 118_800, uptimeSec: null }))).toBe("down 1 d 9 h");
     expect(serviceSince(svc({ state: "down", uptimeSec: null }))).toBe("–");
     // QA #20: no seconds, under a minute reads as "baru …"
-    expect(serviceSince(svc({ uptimeSec: 1 }))).toBe("baru mulai");
-    expect(serviceSince(svc({ state: "down", downSec: 0, uptimeSec: null }))).toBe("baru berhenti");
-    expect(serviceSince(svc({ uptimeSec: 125 }))).toBe("aktif 2 mnt");
+    expect(serviceSince(svc({ uptimeSec: 1 }))).toBe("just started");
+    expect(serviceSince(svc({ state: "down", downSec: 0, uptimeSec: null }))).toBe("just stopped");
+    expect(serviceSince(svc({ uptimeSec: 125 }))).toBe("up 2 min");
   });
   test("apps table has no CPU column", () => expect(appColumns.map((c) => c.key)).not.toContain("cpu"));
   test("database backup older than 36 h is stale; never backed up is not flagged", () => {
@@ -390,18 +395,18 @@ describe("list pages", () => {
 
 describe("panel error messages", () => {
   test.each([
-    [409, "lockout", "memutus akses"],
-    [409, "job_running", "Tunggu sampai selesai"],
+    [409, "lockout", "cuts off access"],
+    [409, "job_running", "Wait until it finishes"],
     [409, "not_supervised", "runit"],
-    [503, "pm2_unavailable", "pm2 tidak berjalan"],
-    [429, "too_soon", "Tunggu sebentar"],
+    [503, "pm2_unavailable", "pm2 service isn't running"],
+    [429, "too_soon", "Wait a moment"],
   ] as const)("%i %s", (status, error, text) =>
     expect(apiErrorMessage(errorFromResponse(status, { error }), tPanel.errorCodes)).toContain(text),
   );
 });
 
 describe("W9 QA fixes", () => {
-  test("panel/cloudflared restart: the impact line replaces the generic 'beberapa detik' sentence (#20)", () => {
+  test("panel/cloudflared restart: the impact line replaces the generic 'a few seconds' sentence (#20)", () => {
     expect(consequences({ kind: "services", item: svc({ name: "panel" }) }, "restart")).toEqual([
       tPanel.serviceImpact.panel as string,
     ]);

@@ -10,7 +10,7 @@ import { TOUCH_HIT } from "./panel.touch";
 const t = tOverview;
 
 /**
- * Five newest audit entries as readable sentences (same wording as /dev/audit, QA M4); "Lihat semua" only for
+ * Five newest audit entries as readable sentences (same wording as /dev/audit, QA M4); "View all" only for
  * super_admin (the audit page is theirs). Own lazy chunk: describeAudit carries the audit/settings dictionaries.
  */
 export function ActivityList({ entries, role }: { entries: PanelOverview["recentActivity"]; role: Role }) {

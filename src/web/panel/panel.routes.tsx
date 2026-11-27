@@ -7,7 +7,7 @@ const n = tShell.nav;
 const h = (title: string): RouteHandle => ({ title });
 
 // Pages load per route (own chunk) so the first /panel load stays within the 200 KB gzip budget (PLAN/01 §3.11).
-/** Server monitoring routes (PLAN/02): Ringkasan, problem history, Layanan, Aplikasi, Domain, Database and unit logs. */
+/** Server monitoring routes (PLAN/02): Overview, problem history, Services, Apps, Domains, Databases and unit logs. */
 export const panelRoutes: RouteObject[] = [
   {
     path: "/panel",

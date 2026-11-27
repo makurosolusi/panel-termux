@@ -3,7 +3,7 @@ import { InfoIcon, OctagonXIcon, TriangleAlertIcon } from "lucide-react";
 import { lazy, Suspense, useEffect, useRef, useState } from "react";
 import { Link } from "react-router";
 import type { OverviewSection, Problem } from "@/shared/monitor.types";
-import { detail, title } from "@/shared/problem.copy";
+import { detail, title } from "@/shared/problem.copy.en";
 import { useNow } from "@/web/components/now.store";
 import { RelativeTime } from "@/web/components/relative-time";
 import { TONE_TEXT } from "@/web/components/status.tone";
@@ -28,12 +28,12 @@ import { TOUCH_HIT } from "./panel.touch";
 const t = tOverview;
 const ICON = { danger: OctagonXIcon, warning: TriangleAlertIcon, info: InfoIcon } as const;
 const LINK = cn(TOUCH_HIT, "font-medium underline-offset-4 hover:underline");
-// Lazy: the Ringkasan is on the initial /panel chunk, the button (and its panel copy) only loads with a pm2/postgres problem.
+// Lazy: the Overview is on the initial /panel chunk, the button (and its panel copy) only loads with a pm2/postgres problem.
 const ServiceStartButton = lazy(() =>
   import("@/web/shared/service-start").then((m) => ({ default: m.ServiceStartButton })),
 );
 
-/** Core service a problem row offers "Jalankan …" for (PLAN/06 §6.1), or null (pm2 daemon gone while runit runs it). */
+/** Core service a problem row offers "Start …" for (PLAN/06 §6.1), or null (pm2 daemon gone while runit runs it). */
 export function problemService(p: Pick<Problem, "code" | "target" | "params">): "pm2" | "postgres" | null {
   if (p.code === "pm2_unavailable") return p.params.reason === "service_down" ? "pm2" : null;
   if (p.code === "service_down" && (p.target === "pm2" || p.target === "postgres")) return p.target;
@@ -101,7 +101,7 @@ function useAnnouncement(alerts: readonly Problem[]): string {
   return text;
 }
 
-/** Problem-first strip of the Ringkasan: "Semua sehat" or the warning/danger list, then quiet info rows (B4). */
+/** Problem-first strip of the Overview: "All healthy" or the warning/danger list, then quiet info rows (B4). */
 export function ProblemStrip({
   problems,
   sampledAt,
@@ -113,7 +113,7 @@ export function ProblemStrip({
   sampledAt: string | null;
   unavailable: readonly OverviewSection[];
   dataAt: string | null;
-  /** Refetch of the Ringkasan after a service was started from a row. */
+  /** Refetch of the Overview after a service was started from a row. */
   onReload: () => void;
 }) {
   const [seenAt, setSeenAt] = useState<Record<string, string | null>>({});

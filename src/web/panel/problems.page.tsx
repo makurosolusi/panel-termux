@@ -2,7 +2,7 @@ import { HistoryIcon } from "lucide-react";
 import { Link } from "react-router";
 import type { Page } from "@/shared/dev.types";
 import type { ProblemEvent } from "@/shared/monitor.types";
-import { title } from "@/shared/problem.copy";
+import { title } from "@/shared/problem.copy.en";
 import { type DataColumn, DataTable } from "@/web/components/data-table";
 import { EmptyState } from "@/web/components/empty-state";
 import { useNow } from "@/web/components/now.store";
@@ -21,7 +21,7 @@ import { TOUCH_HIT } from "./panel.touch";
 
 const t = tHistory.problems;
 const PAGE_SIZE = 20;
-/** Ringkasan shows the 5 newest closed events; 10 fetched so still-open ones do not leave it short. */
+/** The Overview shows the 5 newest closed events; 10 fetched so still-open ones do not leave it short. */
 const RECENT_FETCH = 10;
 const RECENT_SHOWN = 5;
 const RECENT_REFRESH_MS = 60_000;
@@ -156,7 +156,7 @@ export function ProblemsPage() {
   );
 }
 
-/** Ringkasan "Riwayat masalah": the 5 newest closed problems + "Lihat riwayat" (lazy chunk, 60 s poll). */
+/** Overview "Problem history": the 5 newest closed problems + the history link (lazy chunk, 60 s poll). */
 export function RecentProblems() {
   const now = useNow();
   const query = useApiQuery<Page<ProblemEvent>>(

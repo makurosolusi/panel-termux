@@ -13,7 +13,7 @@ const t = tPanel.domains;
 /** Server limit per hostname (PLAN/02 §3.7: 429 `too_soon` within 10 s). */
 export const CHECK_COOLDOWN_MS = 10_000;
 
-/** "Cek ulang": probes one hostname now, then stays disabled for the server's cooldown. */
+/** "Check again": probes one hostname now, then stays disabled for the server's cooldown. */
 export function DomainCheckButton({ hostname, onChecked }: { hostname: string; onChecked: () => void }) {
   const [pending, setPending] = useState(false);
   const [cooling, setCooling] = useState(false);

@@ -19,7 +19,7 @@ const t = tPanel.databases;
 /** A database backup older than this is shown as a warning (same 36 h as the backup_stale rule). */
 export const DB_BACKUP_STALE_MS = 36 * 3_600_000;
 
-/** Whether the last good backup is older than 36 h (never backed up = neutral "Belum pernah"; backup setup has its own info row). */
+/** Whether the last good backup is older than 36 h (never backed up = neutral "Never"; backup setup has its own info row). */
 export const isBackupStale = (at: string | null | undefined, now = Date.now()): boolean =>
   !!at && now - Date.parse(at) > DB_BACKUP_STALE_MS;
 

@@ -4,9 +4,6 @@ import { heartbeatBars, heartbeatSummary } from "@/web/panel/heartbeat.strip";
 import { navBadgeView } from "@/web/panel/nav.badge.provider";
 import { closedText, eventDurationSec, groupByDay } from "@/web/panel/problems.page";
 import { seriesStats, sparklinePath, sparklineSummary, toSparkPoints } from "@/web/panel/sparkline";
-import { formatLocaleForFile } from "./i18n.fixture";
-
-formatLocaleForFile("id"); // Indonesian literals below until wave 1 migrates this file
 
 const MIN = 60_000;
 const scale = { width: 100, height: 10, min: 0, max: 100, maxGapMs: 15 * MIN };
@@ -75,10 +72,10 @@ describe("sparklinePath", () => {
     expect(battery.map((p) => p.v)).toEqual([80, null, 62]);
     expect(battery[1]?.t).toBe(Date.parse("2026-11-26T00:15:00.000Z"));
     expect(seriesStats(battery)).toEqual({ min: 62, max: 80, last: 62 });
-    expect(sparklineSummary("Baterai", "24h", battery, (v) => `${v}%`)).toBe(
-      "Baterai 24 jam terakhir: terendah 62%, tertinggi 80%, terakhir 62%.",
+    expect(sparklineSummary("Battery", "24h", battery, (v) => `${v}%`)).toBe(
+      "Battery, last 24 hours: low 62%, high 80%, latest 62%.",
     );
-    expect(sparklineSummary("Baterai", "7d", [], String)).toBe("Baterai 7 hari terakhir: belum ada data.");
+    expect(sparklineSummary("Battery", "7d", [], String)).toBe("Battery, last 7 days: no data yet.");
   });
 });
 
@@ -146,9 +143,9 @@ describe("closedText (QA #13)", () => {
   test("by local calendar day, not 24 h spans", () => {
     const at = (d: number, h: number, m: number) => new Date(2026, 10, d, h, m).toISOString();
     const now = new Date(2026, 10, 27, 2, 30);
-    expect(closedText(at(27, 1, 5), now)).toBe("hari ini 01.05");
-    expect(closedText(at(26, 21, 40), now)).toBe("kemarin 21.40");
-    // 26.5 h ago but two midnights back: not "kemarin"
-    expect(closedText(at(25, 23, 52), now)).not.toContain("kemarin");
+    expect(closedText(at(27, 1, 5), now)).toBe("today 01:05");
+    expect(closedText(at(26, 21, 40), now)).toBe("yesterday 21:40");
+    // 26.5 h ago but two midnights back: not "yesterday"
+    expect(closedText(at(25, 23, 52), now)).not.toContain("yesterday");
   });
 });

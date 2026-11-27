@@ -7,7 +7,7 @@ import { countBadge, quietDownServices, withoutStarted } from "@/web/panel/overv
 const p = (id: string, target = "pm2") =>
   ({ id, code: "service_down", kind: "service", severity: "danger", target, params: {} }) as unknown as Problem;
 
-describe("Ringkasan after Jalankan", () => {
+describe("Overview after Start", () => {
   test("a started row stays hidden while the sample is the one seen at the click, back on a newer one", () => {
     const rows = [p("a"), p("b", "postgres")];
     expect(withoutStarted(rows, {}, "t1").map((r) => r.id)).toEqual(["a", "b"]);
@@ -16,7 +16,7 @@ describe("Ringkasan after Jalankan", () => {
     expect(withoutStarted(rows, { a: null }, null).map((r) => r.id)).toEqual(["b"]); // no sample yet
   });
 
-  test("Layanan tile counts every stopped service, quiet ones without the danger tone", () => {
+  test("Services tile counts every stopped service, quiet ones without the danger tone", () => {
     const services = [
       { name: "pm2", state: "down" },
       { name: "postgres", state: "down" },
@@ -25,8 +25,8 @@ describe("Ringkasan after Jalankan", () => {
     ];
     const problems = [p("a")];
     expect(quietDownServices(services, problems)).toBe(2);
-    expect(countBadge(["service"], problems, 0, 2)).toEqual({ tone: "danger", text: "3 mati" });
-    expect(countBadge(["service"], [], 0, 2)).toEqual({ tone: "warning", text: "2 mati" });
-    expect(countBadge(["service"], [], 0, 0)).toEqual({ tone: "success", text: "Semua berjalan" });
+    expect(countBadge(["service"], problems, 0, 2)).toEqual({ tone: "danger", text: "3 down" });
+    expect(countBadge(["service"], [], 0, 2)).toEqual({ tone: "warning", text: "2 down" });
+    expect(countBadge(["service"], [], 0, 0)).toEqual({ tone: "success", text: "All running" });
   });
 });

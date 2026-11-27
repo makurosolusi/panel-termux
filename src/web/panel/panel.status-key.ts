@@ -2,7 +2,7 @@
 
 import type { Problem } from "@/shared/monitor.types";
 import type { App, AppStatus, Domain, DomainHealth, Service } from "@/shared/panel.types";
-import { title as problemTitle } from "@/shared/problem.copy";
+import { title as problemTitle } from "@/shared/problem.copy.en";
 import type { StatusKey } from "@/web/components/status.vocab";
 import { tPanel } from "@/web/i18n/en.panel";
 

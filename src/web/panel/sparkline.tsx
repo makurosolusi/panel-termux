@@ -147,7 +147,7 @@ function TrendCard(props: {
   );
 }
 
-/** "Tren" block of Ringkasan: battery % and available memory over 24 h / 7 d (lazy chunk, own 5 min poll). */
+/** "Trends" block of the Overview: battery % and available memory over 24 h / 7 d (lazy chunk, own 5 min poll). */
 export function MetricTrends() {
   const [range, setRange] = useState<MetricRange>("24h");
   const query = useApiQuery<MetricSeries>(panelUrl("/metrics", { range }), TRENDS_REFRESH_MS);

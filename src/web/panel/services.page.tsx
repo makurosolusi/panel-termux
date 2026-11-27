@@ -29,10 +29,10 @@ export const sortServices = (list: readonly Service[]): Service[] =>
       a.name.localeCompare(b.name),
   );
 
-/** Whole minutes only (content guide: no seconds): the row is polled, so a ticking "1 dtk" would freeze (QA #20). */
+/** Whole minutes only (content guide: no seconds): the row is polled, so a ticking "1 s" would freeze (QA #20). */
 const minutes = (sec: number): string | null => (sec < 60 ? null : formatDuration(sec - (sec % 60)));
 
-/** "aktif 3 jam" / "mati 33 jam" / "baru mulai" / "baru berhenti" (under a minute) / "–". */
+/** "up 3 h" / "down 33 h" / "just started" / "just stopped" (under a minute) / "–". */
 export function serviceSince(s: Service): string {
   if (s.state === "run" && s.uptimeSec !== null) {
     const d = minutes(s.uptimeSec);
