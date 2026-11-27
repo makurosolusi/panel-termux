@@ -1,5 +1,7 @@
 # Panduan konten Panel Termux
 
+> **Bahasa dokumentasi publik:** README, CHANGELOG, dan catatan rilis ditulis dalam bahasa Inggris secara bawaan (standar industri), dengan versi bahasa Indonesia di `README.id.md`. Aturan teks antarmuka di bawah tetap berlaku sampai bahasa UI/CLI diputuskan.
+
 Acuan menulis semua teks antarmuka (`src/web/i18n/*.ts`), landing page, dan pesan error. Bila ragu, pilih kata yang paling jelas untuk orang yang baru pertama kali membuka panel.
 
 ## Suara dan nada
