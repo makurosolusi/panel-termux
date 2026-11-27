@@ -565,13 +565,13 @@ E11" di atas. Yang diuji adalah teks versi C11 (seluruh badan di dalam `try`, aw
 `down` lebih dulu, `case.sh`/`st.sh` yang sama). Ada satu perbedaan: ecosystem lab = kepala + **satu baris kosong** +
 blok, sama dengan keluaran `planEcosystemFix` (`separator`). Tidak ada perintah pm2 ke `~/.pm2`.
 
-| Kasus  | App tangan | `apps.json`                                               | flag             | start | PID runtime 6 → akhir | App online (restart)                       |
-| ------ | ---------- | --------------------------------------------------------- | ---------------- | ----- | --------------------- | ------------------------------------------ |
-| E11a   | 2          | `[]`                                                      | –                | 1     | 12642 → 12642 (60 dtk) | hand-a, hand-b (r0); tanpa pm2-guard       |
-| E11a   | 2          | `[]`                                                      | `--no-auto-exit` | 1     | 13593 → 13593 (60 dtk) | hand-a, hand-b (r0); tanpa pm2-guard       |
-| E11d   | 0          | `[]`                                                      | –                | 1     | 14995 → 14995 (60 dtk) | pm2-guard (r0)                             |
-| E11d   | 0          | `[]`                                                      | `--no-auto-exit` | 1     | 15748 → 15748 (60 dtk) | pm2-guard (r0)                             |
-| E11b'  | 2          | `[blog, noscript (tanpa script), emptyscript (script "")]` | –                | 1     | 16531 → 16531 (45 dtk) | hand-a, hand-b, blog (r0); dua entri tanpa script dilewati |
+| Kasus | App tangan | `apps.json`                                                | flag             | start | PID runtime 6 → akhir  | App online (restart)                                       |
+| ----- | ---------- | ---------------------------------------------------------- | ---------------- | ----- | ---------------------- | ---------------------------------------------------------- |
+| E11a  | 2          | `[]`                                                       | –                | 1     | 12642 → 12642 (60 dtk) | hand-a, hand-b (r0); tanpa pm2-guard                       |
+| E11a  | 2          | `[]`                                                       | `--no-auto-exit` | 1     | 13593 → 13593 (60 dtk) | hand-a, hand-b (r0); tanpa pm2-guard                       |
+| E11d  | 0          | `[]`                                                       | –                | 1     | 14995 → 14995 (60 dtk) | pm2-guard (r0)                                             |
+| E11d  | 0          | `[]`                                                       | `--no-auto-exit` | 1     | 15748 → 15748 (60 dtk) | pm2-guard (r0)                                             |
+| E11b' | 2          | `[blog, noscript (tanpa script), emptyscript (script "")]` | –                | 1     | 16531 → 16531 (45 dtk) | hand-a, hand-b, blog (r0); dua entri tanpa script dilewati |
 
 `curl` tiap port menjawab dengan pid yang sama dengan `jlist`. Log runit: tepat 5 baris `e11-start` untuk 5 kasus.
 `exited … via signal [SIGINT]` hanya muncul saat `sv down` di akhir kasus. Tidak ada `Script not found`, tidak ada
@@ -590,12 +590,12 @@ dan port 19101, 19102, 19110, 19111 bebas.
 **Produksi tidak tersentuh** (pid + `starttime` `/proc/<pid>/stat` kolom 22, tanpa memanggil pm2). Keluaran
 sebelum dan sesudah **identik** (`diff` kosong):
 
-| Proses                     | pid   | starttime |
-| -------------------------- | ----- | --------- |
-| pm2-runtime (runsv pm2)    | 10596 | 4406      |
-| panel                      | 26688 | 14229536  |
-| makuro-solusi (`ld.so`)    | 28124 | 10019821  |
-| adminneo (`php`)           | 11762 | 4754      |
+| Proses                  | pid   | starttime |
+| ----------------------- | ----- | --------- |
+| pm2-runtime (runsv pm2) | 10596 | 4406      |
+| panel                   | 26688 | 14229536  |
+| makuro-solusi (`ld.so`) | 28124 | 10019821  |
+| adminneo (`php`)        | 11762 | 4754      |
 
 `https://solusi.malikkurosaki.com/` → 200 sebelum dan sesudah. Proses yatim `fresh` pid 27794 (lihat E11) masih ada
 dan tidak disentuh.
