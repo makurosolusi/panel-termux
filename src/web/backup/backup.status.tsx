@@ -16,7 +16,7 @@ const b = tBackup.banner;
 
 /** Where the fixes live (Administrasi, super_admin only). */
 const SETTINGS_PATH = "/dev/settings";
-const DATA_KEY_PATH = "/dev/health#kunci-data";
+const DATA_KEY_PATH = "/dev/health#data-key";
 const MB = 1024 * 1024;
 
 function LinkButton({ to, children }: { to: string; children: string }) {

@@ -10,7 +10,7 @@ import type { FieldProps } from "./setting.field";
 const t = tSettings.secret;
 
 /**
- * Write-only secret (PLAN/05 §5.2): a stored value shows "Ganti" / "Hapus" and is never sent back to the browser;
+ * Write-only secret (PLAN/05 §5.2): a stored value shows "Replace" / "Remove" and is never sent back to the browser;
  * "Ganti" opens an empty password input with a show toggle and "Batal". Not stored or unreadable → input right away.
  */
 export function SecretField({

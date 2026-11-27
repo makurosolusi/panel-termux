@@ -2,7 +2,14 @@ import { describe, expect, test } from "bun:test";
 import type { BackupVerify } from "@/shared/backup.types";
 import { type DevSetting, SETTING_KEYS } from "@/shared/dev.types";
 import { codeSegments } from "@/web/components/code-text";
-import { CONNECTION_KEYS, fieldDef, GROUP_ANCHOR, groupKeys, SETTING_GROUPS } from "@/web/dev/settings.registry";
+import {
+  anchorFromHash,
+  CONNECTION_KEYS,
+  fieldDef,
+  GROUP_ANCHOR,
+  groupKeys,
+  SETTING_GROUPS,
+} from "@/web/dev/settings.registry";
 import {
   changedValues,
   changesSitesDir,
@@ -49,8 +56,15 @@ describe("registry", () => {
   });
   test("health/onboarding anchors exist and every group has copy", () => {
     expect(GROUP_ANCHOR.cloudflare).toBe("cloudflare");
-    expect(GROUP_ANCHOR.backup).toBe("cadangan");
+    expect(GROUP_ANCHOR.backup).toBe("backup");
     for (const g of SETTING_GROUPS) expect(tSettings.groups[g].title.length).toBeGreaterThan(2);
+  });
+  test("0.5.x Indonesian anchors still resolve to the English card anchors", () => {
+    expect(anchorFromHash("#cadangan")).toBe(GROUP_ANCHOR.backup);
+    expect(anchorFromHash("#notifikasi")).toBe(GROUP_ANCHOR.alerts);
+    expect(anchorFromHash("#keamanan")).toBe(GROUP_ANCHOR.security);
+    expect(anchorFromHash("#cloudflare")).toBe("cloudflare");
+    expect(anchorFromHash("#other")).toBe("other");
   });
   test("secret controls match the server's secret keys", () => {
     const secrets: string[] = SETTING_KEYS.filter((k) => fieldDef(k).control === "secret");
@@ -119,17 +133,17 @@ describe("field status", () => {
   });
   test("status labels: relative time when known, plain text otherwise", () => {
     const now = new Date("2026-11-27T12:00:00Z");
-    expect(statusLabel({ kind: "stored", tone: "success", at: null }, now)).toBe("Tersimpan");
+    expect(statusLabel({ kind: "stored", tone: "success", at: null }, now)).toBe("Stored");
     expect(statusLabel({ kind: "stored", tone: "success", at: "2026-11-27T11:00:00Z" }, now)).toStartWith(
-      "Tersimpan · diubah ",
+      "Stored · changed ",
     );
-    expect(statusLabel({ kind: "unreadable", tone: "danger" }, now)).toBe("Tidak bisa dibaca");
-    expect(statusLabel({ kind: "default", tone: "neutral" }, now)).toBe("Bawaan");
+    expect(statusLabel({ kind: "unreadable", tone: "danger" }, now)).toBe("Unreadable");
+    expect(statusLabel({ kind: "default", tone: "neutral" }, now)).toBe("Default");
   });
   test("choice labels: hours, off, severity", () => {
-    expect(choiceLabel("backup.hour", "3")).toBe("03.00");
-    expect(choiceLabel("backup.hour", "off")).toBe("Mati");
-    expect(choiceLabel("alerts.min_severity", "danger")).toBe("Gawat");
+    expect(choiceLabel("backup.hour", "3")).toBe("03:00");
+    expect(choiceLabel("backup.hour", "off")).toBe("Off");
+    expect(choiceLabel("alerts.min_severity", "danger")).toBe("Critical");
   });
   test("missing required: empty secret, unreadable secret, or plain without value; a draft fills it", () => {
     const sec = setting({ key: "cloudflare.api_token", secret: true, value: null, default: null });
@@ -178,7 +192,7 @@ describe("error mapping", () => {
     expect(err.code).toBe("invalid_value");
     expect(saveFailure(err)).toBe("fields");
     expect(fieldErrorMessage("backup.s3_bucket", "invalid")).toBe(tSettings.fields["backup.s3_bucket"].invalid);
-    expect(fieldErrorMessage("backup.s3_bucket", "empty")).toBe("Wajib diisi.");
+    expect(fieldErrorMessage("backup.s3_bucket", "empty")).toBe("This field is required.");
     expect(fieldErrorMessage("backup.s3_bucket", "unknown")).toBe(tSettings.unknownKey);
   });
   test("403 reauth_required and 409 key_mismatch become notices; other failures toast", () => {
@@ -196,7 +210,7 @@ describe("test result rendering", () => {
   test("Cloudflare: zone count, no zones is a warning, codes map to copy", () => {
     expect(cloudflareOutcome({ ok: true, code: "ok", zones: 3, detail: null })).toEqual({
       tone: "success",
-      text: "Token aktif dan bisa mengakses 3 zona.",
+      text: "The token is active and can access 3 zones.",
     });
     expect(cloudflareOutcome({ ok: false, code: "no_zones", zones: 0, detail: null }).tone).toBe("warning");
     const bad = cloudflareOutcome({ ok: false, code: "key_mismatch", zones: null, detail: "d" });
@@ -212,7 +226,7 @@ describe("test result rendering", () => {
       detail: "AccessDenied",
       ...o,
     });
-    expect(s3Outcome(r({ ok: true, code: "ok", failedStep: null })).text).toContain("120 md");
+    expect(s3Outcome(r({ ok: true, code: "ok", failedStep: null })).text).toContain("120 ms");
     expect(s3Outcome(r({ code: "delete_denied" })).tone).toBe("warning");
     expect(s3Outcome(r({}))).toEqual({ tone: "danger", text: tSettings.test.s3.write_denied, detail: "AccessDenied" });
   });

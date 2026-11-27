@@ -23,7 +23,7 @@ export type FieldProps = {
   /** Inline error text under the control (from PATCH `fields`). */
   error?: string;
   disabled?: boolean;
-  /** "Hapus" of a stored secret (PATCH `{ key: null }`). */
+  /** "Remove" of a stored secret (PATCH `{ key: null }`). */
   onRemove: () => Promise<unknown>;
 };
 

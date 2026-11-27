@@ -8,7 +8,7 @@ import { tSettings } from "@/web/i18n/en.settings";
 import { useApiQuery } from "@/web/shared/use-api-query";
 import { devUrl } from "./dev.api";
 import { SettingsGroup } from "./settings.group";
-import { GROUP_ANCHOR, SETTING_GROUPS, type SettingGroup } from "./settings.registry";
+import { anchorFromHash, GROUP_ANCHOR, SETTING_GROUPS, type SettingGroup } from "./settings.registry";
 import { groupItems } from "./settings.state";
 
 const t = tSettings;
@@ -32,7 +32,7 @@ function useLeaveGuard(dirty: boolean) {
   }, [dirty]);
 }
 
-/** /dev/settings: six cards (anchors `#cloudflare`, `#cadangan`, …), each saved atomically with its own test. */
+/** /dev/settings: six cards (anchors `#cloudflare`, `#backup`, …), each saved atomically with its own test. */
 export function SettingsPage() {
   const query = useApiQuery<DevSettings>(SETTINGS_URL);
   // Last PATCH response, valid only for the GET result it was saved on top of (a newer GET wins).
@@ -50,10 +50,11 @@ export function SettingsPage() {
     });
   }, []);
 
-  // Cards render after the first load, so the browser's own jump to `#cadangan` happened too early.
+  // Cards render after the first load, so the browser's own jump to `#backup` happened too early
+  // (and never happens for a 0.5.x alias such as `#cadangan`).
   const loaded = query.data !== undefined;
   useEffect(() => {
-    if (loaded && window.location.hash) document.getElementById(window.location.hash.slice(1))?.scrollIntoView();
+    if (loaded && window.location.hash) document.getElementById(anchorFromHash(window.location.hash))?.scrollIntoView();
   }, [loaded]);
 
   return (

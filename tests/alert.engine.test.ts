@@ -19,6 +19,7 @@ const SETTINGS: AlertSettings = {
   minSeverity: "warning",
   intervalSec: 60,
   appBaseUrl: "https://panel.example.test",
+  language: "en",
 };
 
 /** problem_event in memory, with the unique-open-key rule of the real index; rows are copied like a DB would. */
@@ -147,13 +148,13 @@ describe("deliver", () => {
     await h.tick([appDown, lowBattery], T0 + MIN);
     expect(h.sent).toEqual([
       {
-        text: "<b>Panel Termux</b> · panel.example.test\nGAWAT · Aplikasi blog bermasalah · sejak 1 mnt\n\nBuka Ringkasan: https://panel.example.test/panel",
+        text: "<b>Panel Termux</b> · panel.example.test\nCRITICAL · App blog errored · since 1 min\n\nOpen Overview: https://panel.example.test/panel",
         silent: false,
       },
     ]);
     await h.tick([appDown, lowBattery], T0 + 2 * MIN);
     expect(h.sent[1]).toEqual({
-      text: expect.stringContaining("PERINGATAN · Baterai tinggal 22% dan tidak mengisi"),
+      text: expect.stringContaining("WARNING · Battery at 22% and not charging"),
       silent: true,
     });
     expect(h.sent[1]?.text).not.toContain("blog");
@@ -166,14 +167,14 @@ describe("deliver", () => {
     await h.tick([hot(46)], T0 + 2 * MIN);
     expect(h.sent).toHaveLength(1);
     await h.tick([hot(51)], T0 + 3 * MIN); // escalation 1 min after the last send
-    expect(h.sent[1]?.text).toContain("GAWAT · Baterai panas (51 °C)");
+    expect(h.sent[1]?.text).toContain("CRITICAL · Battery is hot (51 °C)");
     await h.tick([hot(51)], T0 + 4 * MIN);
     expect(h.sent).toHaveLength(2);
     await h.tick([hot(51)], T0 + 24 * 60 * MIN + 3 * MIN);
-    expect(h.sent[2]?.text).toContain("MASIH · GAWAT · Baterai panas (51 °C)");
+    expect(h.sent[2]?.text).toContain("STILL · CRITICAL · Battery is hot (51 °C)");
     await h.tick([], T0 + 24 * 60 * MIN + 4 * MIN);
     await h.tick([], T0 + 24 * 60 * MIN + 5 * MIN); // closes 2 min after the reminder: no cooldown
-    expect(h.sent[3]?.text).toContain("PULIH · Baterai panas (51 °C) · berlangsung 1 hari");
+    expect(h.sent[3]?.text).toContain("RECOVERED · Battery is hot (51 °C) · lasted 1 d");
     expect(h.sent).toHaveLength(4);
   });
 
@@ -212,7 +213,7 @@ describe("deliver", () => {
     await c.tick([], T0 + 3 * 60 * MIN);
     await c.tick([], T0 + 3 * 60 * MIN + MIN);
     expect(c.sent[0]?.text).toContain(
-      "PULIH · Aplikasi blog bermasalah · pulih saat panel tidak berjalan (terakhir terlihat 3 jam 1 mnt lalu)",
+      "RECOVERED · App blog errored · recovered while the panel wasn't running (last seen 3 h 1 min ago)",
     );
   });
 
@@ -226,7 +227,7 @@ describe("deliver", () => {
     await h.tick([], T0 + 30_000); // inside the 1 min backoff
     expect(h.sent).toHaveLength(0);
     await h.tick([], T0 + MIN);
-    expect(h.sent[0]?.text).toContain("INFO · HP baru saja menyala ulang");
+    expect(h.sent[0]?.text).toContain("INFO · The phone just restarted");
     await h.tick([], T0 + 2 * MIN);
     expect(h.sent).toHaveLength(1);
     expect(h.store.rows[0]?.notifiedState).toBe("closed");
@@ -276,13 +277,25 @@ describe("deliver", () => {
     expect(h.sent).toHaveLength(1);
   });
 
+  test("alerts.language=id: digest and overflow text in Indonesian", async () => {
+    const h = harness();
+    const s = { language: "id" as const };
+    await h.tick([appDown], T0, { s });
+    await h.tick([appDown], T0 + MIN, { s });
+    expect(h.sent[0]?.text).toBe(
+      "<b>Panel Termux</b> · panel.example.test\nGAWAT · Aplikasi blog bermasalah · sejak 1 mnt\n\nBuka Ringkasan: https://panel.example.test/panel",
+    );
+    const cap = harness();
+    for (let i = 0; i < ALERT_MAX_PER_HOUR; i++)
+      await cap.tick([problem("disk_low", `d${i}`, "danger")], T0 + i * MIN, { s });
+    expect(cap.sent.at(-1)?.text).toBe("Terlalu banyak notifikasi. Buka Ringkasan untuk melihat semuanya.");
+  });
+
   test("hourly cap: 19 digests, then one overflow notice, then silence until the hour rolls", async () => {
     const h = harness();
     for (let i = 0; i < 25; i++) await h.tick([problem("disk_low", `d${i}`, "danger")], T0 + i * MIN);
     expect(h.sent).toHaveLength(ALERT_MAX_PER_HOUR);
-    expect(h.sent[ALERT_MAX_PER_HOUR - 1]?.text).toBe(
-      "Terlalu banyak notifikasi. Buka Ringkasan untuk melihat semuanya.",
-    );
+    expect(h.sent[ALERT_MAX_PER_HOUR - 1]?.text).toBe("Too many alerts. Open Overview to see them all.");
     await h.tick([problem("disk_low", "late", "danger")], T0 + 61 * MIN);
     expect(h.sent).toHaveLength(ALERT_MAX_PER_HOUR + 1);
   });

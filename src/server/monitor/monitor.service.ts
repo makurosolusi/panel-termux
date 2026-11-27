@@ -1,5 +1,6 @@
 // The monitor of one panel (PLAN/02 §3.5, §4.1): snapshot cache + sampler + rule state + alert engine + history.
 import type { BackupStatus } from "../../shared/backup.types";
+import { DEFAULT_LOCALE, parseLocale } from "../../shared/locale";
 import type { LoadBaseline } from "../../shared/monitor.types";
 import type { Domain, Service } from "../../shared/panel.types";
 import type { SecurityStatus } from "../../shared/security.types";
@@ -136,6 +137,7 @@ export function createMonitor(deps: MonitorDeps): MonitorService {
       minSeverity,
       intervalSec,
       appBaseUrl: deps.appBaseUrl,
+      language: parseLocale(getSetting(deps, "alerts.language")) ?? DEFAULT_LOCALE,
     };
   }
 

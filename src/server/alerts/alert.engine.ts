@@ -1,11 +1,12 @@
 // Alert engine (PLAN/02 §4.6, K11): reconciles each tick's problems with the problem_event rows (the durable alert
 // state, so a restart never re-sends) and delivers at most one Telegram digest per tick.
+import type { Locale } from "../../shared/locale";
 import type { AlertErrorCode, AlertStatus, Problem, ProblemSeverity } from "../../shared/monitor.types";
 import type { problemEvent } from "../db/schema/monitor.schema";
 import { log } from "../log.service";
 import type { ProblemResult } from "../monitor/monitor.contract";
 import { alertDelayMs, severityRank } from "../panel/overview.rules";
-import { buildDigest, type DigestItem, OVERFLOW_TEXT } from "./alert.messages";
+import { ALERT_COPY, buildDigest, type DigestItem } from "./alert.messages";
 import { TelegramError } from "./telegram.client";
 
 const MIN = 60_000;
@@ -15,13 +16,13 @@ export const CLOSE_AFTER_ABSENT_TICKS = 2;
 export const REOPEN_WINDOW_MS = 15 * MIN;
 /** No second "open" message for a key within this, unless it escalates to danger. */
 export const COOLDOWN_MS = 15 * MIN;
-/** "MASIH" reminder for a problem that stays open. */
+/** "STILL" reminder for a problem that stays open. */
 export const REMIND_MS = 24 * 60 * MIN;
 /** last_seen_at is rewritten at most this often while nothing changes (bounds flash writes). */
 export const LAST_SEEN_STEP_MS = 10 * MIN;
-/** Telegram messages per rolling hour; the last slot carries OVERFLOW_TEXT. */
+/** Telegram messages per rolling hour; the last slot carries the overflow text. */
 export const ALERT_MAX_PER_HOUR = 20;
-/** internet_down shorter than this is not worth a "PULIH" line when it was never announced. */
+/** internet_down shorter than this is not worth a "RECOVERED" line when it was never announced. */
 export const INTERNET_RECOVERY_MIN_MS = 5 * MIN;
 /** Failed sends in a row that raise `alerts_failing`. */
 export const FAILING_AFTER = 3;
@@ -50,6 +51,8 @@ export type AlertSettings = {
   minSeverity: "warning" | "danger";
   intervalSec: number;
   appBaseUrl: string;
+  /** `alerts.language`: language of every message. */
+  language: Locale;
 };
 
 /** Sends one digest; throws TelegramError on failure. */
@@ -199,10 +202,11 @@ export function createAlertEngine({ store, send }: { store: AlertStore; send: Al
     try {
       await send(
         overflow
-          ? OVERFLOW_TEXT
+          ? ALERT_COPY[s.language].overflow
           : buildDigest(
               due.map((d) => d.item),
               s.appBaseUrl,
+              s.language,
             ),
         { silent: overflow ? false : silent },
       );

@@ -193,7 +193,7 @@ export async function patchSettings(values: PatchValues): Promise<DevSetting[]> 
   throw patchErrorFrom(res.status, parsed);
 }
 
-/** Status pill text of a field ("Bawaan", "Tersimpan · diubah 3 hari lalu", …). */
+/** Status pill text of a field ("Default", "Stored · changed 3 days ago", …). */
 export function statusLabel(s: FieldStatus, now: Date): string {
   const ago = (at: string | null) => (at ? formatRelative(at, now) : null);
   switch (s.kind) {

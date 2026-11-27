@@ -239,8 +239,10 @@ describe("backup api", () => {
     expect(apiErrorMessage(errorFromResponse(code, { error }), BACKUP_ERROR_CODES)).toBe(tBackup.errorCodes[error]),
   );
   test("copy", () => {
-    expect(tBackup.status.scheduleAt(3)).toBe("Tiap hari pukul 03.00");
-    expect(tBackup.status.retentionValue(14, 3)).toBe("14 hari, minimal 3 cadangan berhasil terakhir");
-    expect(tBackup.restores.done(4)).toBe("Siap: 4 tabel");
+    expect(tBackup.status.scheduleAt(3)).toBe("Daily at 03:00");
+    expect(tBackup.status.retentionValue(14, 3)).toBe("14 days, at least the last 3 successful backups");
+    expect(tBackup.status.retentionValue(1, 1)).toBe("1 day, at least the last successful backup");
+    expect(tBackup.restores.done(4)).toBe("Ready: 4 tables");
+    expect(tBackup.runs.items(1)).toBe("1 file");
   });
 });

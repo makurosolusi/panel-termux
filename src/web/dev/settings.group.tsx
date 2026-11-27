@@ -12,7 +12,7 @@ import { ApiError, apiErrorMessage } from "@/web/shared/api.client";
 import { toast } from "@/web/shared/toast.lazy";
 import { DATA_KEY_ANCHOR } from "./onboarding.state";
 import { SettingField } from "./setting.field";
-import { fieldDef, GROUP_ANCHOR, type SettingGroup } from "./settings.registry";
+import { anchorFromHash, fieldDef, GROUP_ANCHOR, type SettingGroup } from "./settings.registry";
 import {
   changedValues,
   changesSitesDir,
@@ -60,7 +60,7 @@ export function SettingsGroup({
   const dirty = Object.keys(values).length > 0;
   const incomplete = items.some((s) => missingRequired(s, !!fieldDef(s.key as SettingKey).required, draftOf(s)));
   const [open, setOpen] = useState(
-    () => incomplete || window.location.hash === `#${anchor}` || window.matchMedia(DESKTOP_QUERY).matches,
+    () => incomplete || anchorFromHash(window.location.hash) === anchor || window.matchMedia(DESKTOP_QUERY).matches,
   );
 
   useEffect(() => onDirty(group, dirty), [group, dirty, onDirty]);

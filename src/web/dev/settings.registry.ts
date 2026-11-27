@@ -1,5 +1,5 @@
 // Web-side shape of /dev/settings (PLAN/05 §5.2): which card each key sits in and which control edits it.
-// Validation stays on the server (B8); labels live in id.settings.ts.
+// Validation stays on the server (B8); labels live in en.settings.ts (Indonesian overlay in id.settings.ts).
 import { SETTING_KEYS, type SettingKey } from "@/shared/dev.types";
 import { LOCALES } from "@/shared/locale";
 
@@ -8,15 +8,30 @@ export const SETTING_GROUPS = ["cloudflare", "backup", "alerts", "sites", "monit
 /** One settings card. */
 export type SettingGroup = (typeof SETTING_GROUPS)[number];
 
-/** `#anchor` of each card; health/onboarding link to `#cloudflare` and `#cadangan`. */
+/** `#anchor` of each card; health/onboarding link to `#cloudflare` and `#backup`. */
 export const GROUP_ANCHOR = {
   cloudflare: "cloudflare",
-  backup: "cadangan",
-  alerts: "notifikasi",
-  sites: "situs",
-  monitor: "pemantauan",
-  security: "keamanan",
+  backup: "backup",
+  alerts: "alerts",
+  sites: "sites",
+  monitor: "monitor",
+  security: "security",
 } as const satisfies Record<SettingGroup, string>;
+
+/** Indonesian anchors of 0.5.x, kept as aliases so old bookmarks and README links land on the same card (PLAN/08 §5). */
+const LEGACY_ANCHOR: Partial<Record<string, string>> = {
+  cadangan: "backup",
+  notifikasi: "alerts",
+  situs: "sites",
+  pemantauan: "monitor",
+  keamanan: "security",
+};
+
+/** Card anchor named by a URL hash (`#cadangan` → `backup`); an unknown id passes through unchanged. */
+export function anchorFromHash(hash: string): string {
+  const id = hash.replace(/^#/, "");
+  return LEGACY_ANCHOR[id] ?? id;
+}
 
 /** Control that edits a key: free text, write-only secret, on/off switch, fixed choices, or a number that can be off. */
 export type SettingControl = "text" | "secret" | "switch" | "select" | "number" | "numberOrOff";
