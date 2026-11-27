@@ -15,25 +15,51 @@ export SVDIR
 SERVICE_DIR="$SVDIR/panel"
 SVLOGGER="$PREFIX/share/termux-services/svlogger"
 PANEL_LOG="$PREFIX/var/log/sv/panel/current"
+ENV_FILE="$INSTALL_DIR/.env"
 REQUIRED_VARS="APP_BASE_URL GOOGLE_CLIENT_ID GOOGLE_CLIENT_SECRET SUPER_ADMIN_EMAILS"
 DEFAULT_PORT=3200
 SUPERVISE_WAIT_SEC=15  # runsvdir scans the service dir every ~5 s
 RESTART_WAIT_SEC=130   # panel shutdown waits up to 120 s for a running site change (PLAN/03 §4.12)
 HEALTH_WAIT_SEC=30
+HEALTH_PROBE_SEC=5
 SNAPSHOT_MARGIN_KB=262144  # 256 MB on top of 2 x panel.db for the boot-time snapshot (PLAN/04 K9)
 EXIT_ENV_INCOMPLETE=3
 
 die() { echo "install-phone: $*" >&2; exit 1; }
 
-# Printed when the new binary does not come up; the snapshot itself is made by the panel at boot.
+# Printed when the new binary does not come up; `panel rollback` swaps panel.prev back without executing it.
 rollback_hint() {
   cat >&2 <<EOF
 Untuk kembali ke versi sebelumnya:
-  sv down panel && cp $INSTALL_DIR/panel.prev $INSTALL_DIR/panel
-  ls -t $INSTALL_DIR/data/snapshots | head -1   # snapshot database terbaru, dibuat panel saat boot
-  salin snapshot itu ke $INSTALL_DIR/data/panel.db bila versi baru sudah memigrasi database, lalu: sv up panel
+  $INSTALL_DIR/panel rollback
+  $INSTALL_DIR/panel rollback --db   # bila versi baru sudah memigrasi database (snapshot terbaru, dibuat panel saat boot)
 Bila log menyebut snapshot gagal karena ruang penuh, kosongkan ruang atau tambahkan PANEL_SKIP_SNAPSHOT=1 ke $INSTALL_DIR/.env.
 EOF
+}
+
+# Last PORT in .env (digits only), else the default.
+env_port() {
+  p=""
+  [ -f "$ENV_FILE" ] && p=$(sed -n 's/^[[:space:]]*PORT=["'\'']\{0,1\}\([0-9][0-9]*\).*/\1/p' "$ENV_FILE" | tail -n 1)
+  echo "${p:-$DEFAULT_PORT}"
+}
+
+# Old .env.example (<= 0.4.0) placeholders count as empty: mirror of ENV_VARS[].placeholders in src/shared/env.schema.ts (D7).
+placeholder_of() {
+  case $1 in
+    APP_BASE_URL) echo "https://panel.example.com" ;;
+    SUPER_ADMIN_EMAILS) echo "you@example.com" ;;
+  esac
+}
+
+# True when $1 has a real value in .env: non-empty, optionally quoted, not a placeholder. The value is never echoed.
+env_filled() {
+  grep -Eq "^[[:space:]]*(export[[:space:]]+)?$1=[\"']?[^\"'[:space:]#]" "$ENV_FILE" || return 1
+  ph=$(placeholder_of "$1")
+  [ -n "$ph" ] || return 0
+  val=$(sed -n "s/^[[:space:]]*\(export[[:space:]]\{1,\}\)\{0,1\}$1=//p" "$ENV_FILE" | tail -n 1 |
+    sed "s/[[:space:]]*\$//; s/^[\"']//; s/[\"']\$//")
+  [ "$val" != "$ph" ]
 }
 
 fail_started() {
@@ -77,16 +103,24 @@ else
     die "Ruang penyimpanan tidak cukup: butuh $((need_kb / 1024)) MB kosong (2 x panel.db + 256 MB untuk snapshot saat boot), tersedia $((${avail_kb:-0} / 1024)) MB. Binary lama tidak diubah."
   cp "$BIN" "$INSTALL_DIR/panel.new"
   chmod 755 "$INSTALL_DIR/panel.new"
-  [ -f "$INSTALL_DIR/panel" ] && cp -p "$INSTALL_DIR/panel" "$INSTALL_DIR/panel.prev"
+  # D12: panel.prev is replaced only by a binary known to work (the running panel answers /api/health) or when there is
+  # none yet, so rerunning a broken upgrade never overwrites the last good binary.
+  if [ -f "$INSTALL_DIR/panel" ]; then
+    if [ ! -f "$INSTALL_DIR/panel.prev" ] ||
+      curl -fsS --max-time "$HEALTH_PROBE_SEC" "http://127.0.0.1:$(env_port)/api/health" >/dev/null 2>&1; then
+      cp -p "$INSTALL_DIR/panel" "$INSTALL_DIR/panel.prev"
+      echo "previous binary kept as $INSTALL_DIR/panel.prev"
+    else
+      echo "Panel sekarang tidak sehat: $INSTALL_DIR/panel.prev (versi terakhir yang sehat) tidak ditimpa."
+    fi
+  fi
   mv -f "$INSTALL_DIR/panel.new" "$INSTALL_DIR/panel"
   echo "binary installed: $INSTALL_DIR/panel"
-  [ -f "$INSTALL_DIR/panel.prev" ] && echo "previous binary kept as $INSTALL_DIR/panel.prev"
 fi
 
 # 2. Data dir (panel.db + data secret) and .env (never overwritten).
 mkdir -p "$INSTALL_DIR/data"
 chmod 700 "$INSTALL_DIR/data"
-ENV_FILE="$INSTALL_DIR/.env"
 if [ ! -f "$ENV_FILE" ]; then
   cp "$ENV_EXAMPLE" "$ENV_FILE"
   echo "created $ENV_FILE from .env.example"
@@ -102,8 +136,7 @@ ln -sfn "$SVLOGGER" "$SERVICE_DIR/log/run"
 
 missing=""
 for v in $REQUIRED_VARS; do
-  # Non-empty value, optionally quoted; the value itself is never echoed.
-  grep -Eq "^[[:space:]]*(export[[:space:]]+)?$v=[\"']?[^\"'[:space:]#]" "$ENV_FILE" || missing="$missing $v"
+  env_filled "$v" || missing="$missing $v"
 done
 if [ -n "$missing" ]; then
   touch "$SERVICE_DIR/down"
@@ -142,8 +175,7 @@ case "$(sv status panel 2>/dev/null)" in
   *) fail_started "Panel belum berjalan setelah $RESTART_WAIT_SEC dtk (sv restart kode $rc). Lihat $PANEL_LOG." ;;
 esac
 
-PORT=$(sed -n 's/^[[:space:]]*PORT=["'\'']\{0,1\}\([0-9][0-9]*\).*/\1/p' "$ENV_FILE" | tail -n 1)
-URL="http://127.0.0.1:${PORT:-$DEFAULT_PORT}/api/health"
+URL="http://127.0.0.1:$(env_port)/api/health"
 i=0
 until curl -fsS "$URL" >/dev/null 2>&1; do
   i=$((i + 1))

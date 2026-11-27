@@ -80,6 +80,20 @@ grep -q GOOGLE_CLIENT_ID "$T/out" || fail "missing vars not reported"
 [ ! -s "$CALLS" ] || fail "sv/curl called with incomplete .env"
 [ ! -e "$HOME/sites" ] && [ ! -e "$SVD/pm2" ] || fail "pm2 set up while .env incomplete"
 
+# 1b. .env left with the 0.4.0 example placeholders (D7): they count as empty, exit 3 names exactly those two.
+{
+  echo 'APP_BASE_URL="https://panel.example.com"'
+  echo 'GOOGLE_CLIENT_ID=id.apps.googleusercontent.com'
+  echo 'GOOGLE_CLIENT_SECRET=x'
+  echo 'SUPER_ADMIN_EMAILS=you@example.com'
+} >"$HOME/panel/.env"
+run 3 "$T/bin1"
+grep -q 'Isi APP_BASE_URL SUPER_ADMIN_EMAILS di' "$T/out" || { cat "$T/out"; fail "placeholders not counted as empty"; }
+[ ! -s "$CALLS" ] || fail "sv/curl called with placeholder .env"
+# The script mirrors ENV_VARS[].placeholders; fail when the schema no longer lists them.
+grep -q '"https://panel.example.com"' "$REPO/src/shared/env.schema.ts" || fail "APP_BASE_URL placeholder gone from env.schema.ts"
+grep -q '"you@example.com"' "$REPO/src/shared/env.schema.ts" || fail "SUPER_ADMIN_EMAILS placeholder gone from env.schema.ts"
+
 # 2. Fill .env (secret never printed), rerun with the same binary: new-phone pm2 setup, one restart, healthy.
 SECRET=test-only-secret-value-123
 {
@@ -127,6 +141,19 @@ rm -rf "$HOME/sites"
 run 0 "$T/bin2"
 [ ! -e "$HOME/sites" ] || fail "ecosystem copied although \$SVDIR/pm2 exists"
 
+# 3c. D12: current panel unhealthy (no restart seen yet, so the stub health fails) and panel.prev exists → kept.
+: >"$CALLS"
+run 0 "$T/bin3"
+[ "$(cat "$HOME/panel/panel")" = v3 ] || fail "binary not upgraded while unhealthy"
+[ "$(cat "$HOME/panel/panel.prev")" = v1 ] || fail "panel.prev overwritten although the running panel was unhealthy"
+grep -q 'tidak ditimpa' "$T/out" || fail "kept-panel.prev line missing"
+grep -q 'curl -fsS --max-time 5 http://127.0.0.1:3999/api/health' "$CALLS" || fail "pre-swap health not on .env PORT"
+
+# 3d. D12: current panel healthy (the stub answers after the restart above) → panel.prev becomes that binary.
+run 0 "$T/bin2"
+[ "$(cat "$HOME/panel/panel")" = v2 ] || fail "binary not upgraded while healthy"
+[ "$(cat "$HOME/panel/panel.prev")" = v3 ] || fail "panel.prev not updated from the healthy panel"
+
 # 4. Not enough free space: refuse before swapping the binary.
 echo 1024 >"$T/df_avail"
 run 1 "$T/bin3"
@@ -139,8 +166,9 @@ echo 'down: panel: 1s, normally up' >"$T/sv_status"
 run 1 "$T/bin3"
 grep -q 'Panel belum berjalan setelah 130 dtk' "$T/out" || fail "not-running message missing"
 grep -q 'var/log/sv/panel/current' "$T/out" || fail "log path missing"
-grep -q 'panel.prev' "$T/out" || fail "rollback hint lacks panel.prev"
-grep -q 'ls -t .*/data/snapshots | head -1' "$T/out" || fail "rollback hint lacks latest snapshot"
+grep -q "$HOME/panel/panel rollback\$" "$T/out" || fail "rollback hint lacks panel rollback"
+grep -q "$HOME/panel/panel rollback --db" "$T/out" || fail "rollback hint lacks panel rollback --db"
+if grep -q 'cp .*panel.prev' "$T/out"; then fail "rollback hint still copies panel.prev by hand"; fi
 grep -q 'PANEL_SKIP_SNAPSHOT=1' "$T/out" || fail "rollback hint lacks PANEL_SKIP_SNAPSHOT"
 rm "$T/sv_status"
 
@@ -148,7 +176,7 @@ rm "$T/sv_status"
 : >"$T/curl_fail"
 run 1 "$T/bin3"
 grep -q 'Panel belum sehat' "$T/out" || fail "unhealthy message missing"
-grep -q 'panel.prev' "$T/out" || fail "rollback hint missing on health failure"
+grep -q 'panel rollback' "$T/out" || fail "rollback hint missing on health failure"
 rm "$T/curl_fail"
 
 # 7. The pm2 CLI was never called in any scenario.
