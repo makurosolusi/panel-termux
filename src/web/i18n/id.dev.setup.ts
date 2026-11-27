@@ -45,7 +45,7 @@ export const idDevSetup = {
     apps_json: {
       title: "Hubungkan `apps.json` ke pm2",
       body: "Agar situs buatan panel tetap jalan setelah HP dinyalakan ulang.",
-      action: "Buka Situs",
+      action: "Perbaiki di Situs",
     },
     first_site: {
       title: "Buat atau adopsi situs pertama",

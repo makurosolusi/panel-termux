@@ -28,9 +28,13 @@ export const idSiteDetail = {
     healthFailed: "Cek kesehatan tidak bisa dijalankan. Coba lagi sebentar lagi.",
     pm2Unknown: "Status aplikasi tidak bisa dibaca dari pm2.",
     missingFromPm2Help:
-      "pm2 tidak menjalankan aplikasi ini. Tekan Mulai ulang untuk memuatnya lagi dari `~/sites/apps.json`, atau periksa file itu lewat ssh.",
+      "pm2 tidak menjalankan situs ini. Tekan Jalankan lagi; panel memuatnya ulang dari daftar situs panel.",
     missingFromPm2Adopted:
-      "pm2 tidak menjalankan aplikasi ini. Periksa entrinya di `ecosystem.config.js` lewat ssh, lalu jalankan lagi dengan pm2.",
+      "pm2 tidak menjalankan aplikasi ini. Tekan Jalankan lagi untuk memuatnya dari `ecosystem.config.js`.",
+    /** Label of the restart button while pm2 does not run the app (PLAN/06 §6.3). */
+    runAgain: "Jalankan lagi",
+    runAgainTitle: (name: string) => `Jalankan lagi aplikasi ${name}?`,
+    runAgainBody: "Panel memuat aplikasi ini ke pm2 lagi. Situs bisa dibuka setelah aplikasinya berjalan.",
   },
   anchors: {
     label: "Bagian halaman",
@@ -52,7 +56,7 @@ export const idSiteDetail = {
       "Variabel lingkungan sudah disimpan, tetapi aplikasi belum dimulai ulang. Nilai baru berlaku setelah mulai ulang.",
     blockers: {
       integration: "pm2 belum siap menjalankan situs buatan panel. Selesaikan persiapan di halaman Situs, lalu deploy.",
-      pm2_not_running: "Layanan pm2 tidak berjalan. Jalankan sv up pm2 di HP, lalu coba lagi.",
+      pm2_not_running: "Layanan pm2 tidak berjalan, jadi semua situs ikut berhenti.",
       no_folder: "Folder situs ini tidak ada di HP. Deploy dan variabel lingkungan butuh folder itu.",
     } satisfies Record<DeployBlocker, string>,
     toSites: "Buka halaman Situs",
@@ -214,6 +218,24 @@ export const idSiteDetail = {
     invalid_settings: "Pengaturan cek kesehatan tidak valid. Periksa path dan batas waktu.",
     invalid_hostname: "Ada domain yang tidak valid. Periksa penulisannya, lalu coba lagi.",
     no_folder: "Folder situs ini tidak ada di HP, jadi .env tidak bisa ditulis.",
-    pm2_not_running: "Layanan pm2 tidak berjalan. Jalankan sv up pm2 di HP, lalu coba lagi.",
+    pm2_not_running: "Layanan pm2 tidak berjalan, jadi semua situs ikut berhenti. Tekan Jalankan pm2, lalu coba lagi.",
+  },
+  /** Copy-ready DNS record while no API token is set (PLAN/06 §6.4 A, dns.manual.tsx). */
+  dnsManual: {
+    title: (n: number) =>
+      n === 1 ? "Record DNS untuk dibuat di Cloudflare" : `${n} record DNS untuk dibuat di Cloudflare`,
+    body: "Panel belum punya token API Cloudflare, jadi record ini dibuat di dasbor Cloudflare: DNS → Records → Add record. Domain bisa dibuka setelah record ada, biasanya dalam beberapa menit.",
+    type: "Tipe",
+    name: "Nama",
+    content: "Isi (target)",
+    proxy: "Proxy",
+    proxyOn: "Aktif (awan oranye)",
+    copyName: (host: string) => `Salin nama record ${host}`,
+    copyContent: "Salin target tunnel",
+    noTunnel: "ID tunnel tidak terbaca dari konfigurasi cloudflared, jadi target record belum bisa ditampilkan.",
+    tokenHint:
+      "Dengan token API, panel membuat dan menghapus record seperti ini sendiri. Record yang dibuat tanpa token tidak ikut dihapus saat domainnya dihapus.",
+    createToken: "Buat token Cloudflare",
+    openSettings: "Isi token di Pengaturan",
   },
 };

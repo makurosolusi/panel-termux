@@ -1,16 +1,15 @@
 import type {
   AdoptCandidateApp,
-  IntegrationCheckKey,
   JobKind,
   JobParams,
   JobStepKey,
   SiteIssueCode,
   SiteNoteCode,
 } from "@/shared/site.types";
+import { idSiteSetup } from "./id.site.setup";
 
 /** Copy that may interpolate server params (`{hostname}`, `{port}` …). */
 type Copy = string | ((p: JobParams) => string);
-type CheckCopy = { ok: Copy; warning?: Copy; error?: Copy };
 const s = (v: JobParams[string] | undefined) => String(v ?? "");
 
 /** Indonesian strings of the Situs pages: list, persiapan, adopsi, wizard and the running-job banner. */
@@ -19,8 +18,8 @@ export const idSite = {
     busy: "Ada perubahan lain yang sedang berjalan. Tunggu sampai selesai, lalu coba lagi.",
     not_found: "Situs ini sudah tidak ada, mungkin baru dihapus. Buka daftar situs untuk melihat yang masih ada.",
     integration_required: "pm2 belum siap menjalankan situs buatan panel. Selesaikan persiapan di halaman Situs.",
-    pm2_unavailable: "Layanan pm2 tidak berjalan. Jalankan sv up pm2 di HP, lalu muat ulang halaman ini.",
-    pm2_not_running: "Layanan pm2 tidak berjalan. Jalankan sv up pm2 di HP, lalu coba lagi.",
+    pm2_unavailable: "Layanan pm2 tidak berjalan, jadi semua situs ikut berhenti. Jalankan pm2, lalu coba lagi.",
+    pm2_not_running: "Layanan pm2 tidak berjalan, jadi semua situs ikut berhenti. Jalankan pm2, lalu coba lagi.",
     no_free_port: "Semua port di rentang situs sudah dipakai. Isi port lain secara manual.",
     app_not_found: "Aplikasi pm2 ini sudah tidak ada. Muat ulang daftar, lalu pilih lagi.",
     app_in_use: "Aplikasi pm2 ini sudah dipakai situs lain. Pilih aplikasi lain.",
@@ -61,97 +60,7 @@ export const idSite = {
       `Perubahan ${kind} · ${target} terputus. Pulihkan agar tidak ada sisa setengah jadi.`,
     viewJob: "Lihat",
   },
-  setup: {
-    title: "Persiapan",
-    description:
-      "Sekali saja: hubungkan pm2 dengan apps.json agar situs buatan panel ikut berjalan, juga setelah HP dinyalakan ulang.",
-    checklist: "Hasil pemeriksaan",
-    recheck: "Periksa lagi",
-    checking: "Memeriksa…",
-    checkedAt: (ago: string) => `Diperiksa ${ago}`,
-    readyLine: (n: number) => `pm2 siap: ${n} aplikasi terbaca, termasuk dari apps.json.`,
-    stillFailing: (n: number) => `Masih ada ${n} hal yang perlu diperbaiki.`,
-    allOk: "Pemeriksaan wajib lolos. pm2 siap menjalankan situs buatan panel.",
-    stepsTitle: "Cara memasang blok apps.json",
-    step1: "Buka file ecosystem di Termux:",
-    step2: "Tempel blok ini di atas `module.exports`:",
-    step3: "Tambahkan `...panelApps,` di akhir daftar `apps`, seperti contoh ini:",
-    exampleExports:
-      "module.exports = {\n  apps: [\n    // …aplikasi yang sudah ada, tetap…\n    ...panelApps,\n  ],\n};",
-    step4: "Simpan, lalu tekan Periksa lagi. pm2 tidak perlu dimulai ulang.",
-    copySnippet: "Salin blok apps.json",
-    copyCommand: "Salin perintah",
-    oldSnippet: "versi lama",
-    oldSnippetBody:
-      "Ecosystem kamu masih memakai `...require('./apps.json')` tanpa pengaman. Ganti dengan blok di atas.",
-    warning:
-      "Jangan menulis `...require('./apps.json')` tanpa blok ini: bila file itu rusak atau binary situs hilang, semua aplikasi tidak akan jalan setelah HP dinyalakan ulang.",
-    tokenLink: "Isi token di Pengaturan",
-    adoptTitle: "Situs yang sudah berjalan",
-    adoptBody: (n: number) =>
-      `${n} domain sudah diarahkan ke aplikasi di HP ini tetapi belum tercatat. Adopsi agar bisa di-deploy dari panel.`,
-    adoptLink: "Lihat yang belum dikelola",
-    checks: {
-      sites_dir: {
-        ok: "Folder situs ada",
-        error: (p) => `Folder ${s(p.path)} tidak ada. Buat foldernya, atau ubah folder situs di Pengaturan.`,
-      },
-      apps_json: {
-        ok: "apps.json terbaca",
-        error: (p) =>
-          p.reason === "invalid"
-            ? "apps.json rusak (bukan daftar JSON). Tekan Periksa lagi setelah memperbaikinya, atau hapus file itu agar panel membuatnya ulang."
-            : "apps.json belum ada. Tekan Periksa lagi, panel akan membuatnya.",
-      },
-      ecosystem_file: {
-        ok: "ecosystem.config.js ada",
-        error: (p) => `File ${s(p.path)} tidak ada. pm2 di HP ini belum memakai ecosystem.`,
-      },
-      ecosystem_loads: {
-        ok: "pm2 bisa memuat ecosystem.config.js",
-        error:
-          "pm2 tidak bisa memuat ecosystem.config.js. Situs yang berjalan tidak terganggu sekarang, tetapi semua aplikasi tidak akan jalan setelah HP dinyalakan ulang. Perbaiki file, lalu periksa lagi.",
-      },
-      ecosystem_spreads_apps_json: {
-        ok: "ecosystem memuat apps.json",
-        error: "ecosystem.config.js belum memuat apps.json. Pasang blok di bawah.",
-      },
-      snippet_current: {
-        ok: "Blok apps.json versi terbaru",
-        error: "Blok apps.json di ecosystem.config.js versi lama. Ganti dengan blok terbaru di bawah.",
-      },
-      apps_entries_runnable: {
-        ok: "Semua situs di apps.json punya binary",
-        warning: (p) =>
-          `${s(p.count)} situs di apps.json belum punya binary. Blok apps.json melewatinya sampai di-deploy.`,
-        error: (p) =>
-          `${s(p.count)} situs di apps.json belum punya binary, dan blok apps.json versi lama tidak melewatinya. Ganti bloknya dulu.`,
-      },
-      pm2_runtime: {
-        ok: "Layanan pm2 berjalan",
-        error: "Layanan pm2 tidak berjalan. Jalankan `sv up pm2` di HP, lalu periksa lagi.",
-      },
-      pm2_auto_exit: {
-        ok: "pm2 tetap hidup tanpa aplikasi",
-        warning: "Run script pm2 tidak memakai `--no-auto-exit`. pm2 berhenti bila aplikasi terakhir dihapus.",
-      },
-      pm2_guard: {
-        ok: "Ada aplikasi pm2 selain situs panel",
-        warning:
-          "ecosystem.config.js hanya memuat situs panel, dan pm2 berhenti bila tidak ada aplikasi. Tambahkan aplikasi penjaga `pm2-guard` (lihat README) agar pm2 tetap hidup saat situs terakhir dihapus.",
-      },
-      tunnel: {
-        ok: "Tunnel cloudflared terdeteksi",
-        error: "Tunnel cloudflared belum terdeteksi. Periksa ~/.cloudflared/config.yml di HP, lalu periksa lagi.",
-      },
-      cloudflare_token: {
-        ok: "Token API Cloudflare terisi",
-        warning: "Token API Cloudflare belum diisi (opsional). Tanpa token, buat record DNS domain baru secara manual.",
-      },
-    } satisfies Record<IntegrationCheckKey, CheckCopy>,
-    notReady: "pm2 belum siap menjalankan situs buatan panel.",
-    notReadyLink: "Selesaikan persiapan di halaman Situs",
-  },
+  setup: idSiteSetup,
   discovered: {
     title: "Belum dikelola",
     description:

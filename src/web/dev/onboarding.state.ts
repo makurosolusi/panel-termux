@@ -75,7 +75,7 @@ export function itemAction(item: SetupItem): ItemAction | null {
     case "cloudflare_token":
       return { kind: "route", to: "/dev/settings#cloudflare", label };
     case "apps_json":
-      return { kind: "route", to: "/panel/sites", label };
+      return { kind: "route", to: "/panel/sites#persiapan", label };
     case "first_site":
       return { kind: "route", to: "/panel/sites/new", label };
     case "admins":

@@ -21,7 +21,6 @@ import {
   discoveredRows,
   editCommand,
   integrationReady,
-  oldSnippet,
   setupNeeded,
   snippetNeeded,
 } from "@/web/site/site.adopt";
@@ -301,12 +300,9 @@ describe("persiapan", () => {
     expect(integrationReady({ ...old, issues: ["x"] })).toBe(false);
   });
 
-  test("old snippet = apps.json spread without the existsSync filter; then steps show with 'versi lama'", () => {
+  test("block steps (Cara manual) needed until panel sites load through the current block", () => {
     const old = integration([chk("ecosystem_spreads_apps_json"), chk("snippet_current", "error")], false);
-    expect(oldSnippet(old)).toBe(true);
     expect(snippetNeeded(old)).toBe(true);
-    const none = integration([chk("ecosystem_spreads_apps_json", "error"), chk("snippet_current", "error")], false);
-    expect(oldSnippet(none)).toBe(false);
     expect(snippetNeeded(integration(allOk))).toBe(false);
   });
 

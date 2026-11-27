@@ -1,6 +1,6 @@
 import { cn } from "cn";
 import { InfoIcon, OctagonXIcon, TriangleAlertIcon } from "lucide-react";
-import { useEffect, useRef, useState } from "react";
+import { lazy, Suspense, useEffect, useRef, useState } from "react";
 import { Link } from "react-router";
 import type { OverviewSection, Problem } from "@/shared/monitor.types";
 import { detail, title } from "@/shared/problem.copy";
@@ -27,12 +27,24 @@ import { TOUCH_HIT } from "./panel.touch";
 const t = idOverview;
 const ICON = { danger: OctagonXIcon, warning: TriangleAlertIcon, info: InfoIcon } as const;
 const LINK = cn(TOUCH_HIT, "font-medium underline-offset-4 hover:underline");
+// Lazy: the Ringkasan is on the initial /panel chunk, the button (and its panel copy) only loads with a pm2/postgres problem.
+const ServiceStartButton = lazy(() =>
+  import("@/web/shared/service-start").then((m) => ({ default: m.ServiceStartButton })),
+);
+
+/** Core service a problem row offers "Jalankan …" for (PLAN/06 §6.1), or null (pm2 daemon gone while runit runs it). */
+export function problemService(p: Pick<Problem, "code" | "target" | "params">): "pm2" | "postgres" | null {
+  if (p.code === "pm2_unavailable") return p.params.reason === "service_down" ? "pm2" : null;
+  if (p.code === "service_down" && (p.target === "pm2" || p.target === "postgres")) return p.target;
+  return null;
+}
 
 function ProblemRow({ p, frozenAt, hidden }: { p: Problem; frozenAt: string | null; hidden: string | false }) {
   const now = useNow();
   const Icon = ICON[p.severity];
   const since = sinceText(p.since, now);
   const logHref = problemLogHref(p);
+  const service = problemService(p);
   return (
     <li className={cn("flex gap-3 px-4 py-3", hidden)}>
       <Icon className={cn("mt-0.5 size-4 shrink-0", TONE_TEXT[PROBLEM_TONE[p.severity]])} aria-hidden />
@@ -42,6 +54,13 @@ function ProblemRow({ p, frozenAt, hidden }: { p: Problem; frozenAt: string | nu
           {title(p)}
         </p>
         <p className="text-muted-foreground max-md:line-clamp-2">{detail(p)}</p>
+        {service && (
+          <div className="py-1">
+            <Suspense fallback={null}>
+              <ServiceStartButton service={service} />
+            </Suspense>
+          </div>
+        )}
         <p className="flex flex-wrap items-center gap-x-3 text-xs text-muted-foreground">
           {since && <span>{since}</span>}
           {frozenAt && <span className="text-warning">{t.frozen(formatRelative(frozenAt, now))}</span>}

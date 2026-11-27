@@ -13,7 +13,8 @@ export const idPanel = {
     confirm_required: "Ketik nama layanan untuk mengonfirmasi, lalu coba lagi.",
     job_running: "Perubahan situs, cadangan, atau pemulihan sedang berjalan. Tunggu sampai selesai, lalu coba lagi.",
     not_supervised: "Panel tidak berjalan di bawah runit, jadi tidak bisa memulai ulang dirinya sendiri.",
-    pm2_unavailable: "pm2 tidak berjalan. Mulai layanan pm2 dulu.",
+    pm2_unavailable:
+      "Layanan pm2 tidak berjalan, jadi semua situs ikut berhenti. Jalankan pm2 dari Ringkasan, lalu coba lagi.",
     postgres_down:
       "Layanan postgres tidak berjalan. Situs yang memakai database tidak bisa diakses sampai postgres berjalan lagi.",
     too_soon: "Tunggu sebentar sebelum mengecek lagi.",
@@ -115,7 +116,7 @@ export const idPanel = {
     emptyTitle: "Belum ada aplikasi",
     emptyBody: "Aplikasi muncul setelah kamu membuat situs atau menambahkannya ke `ecosystem.config.js`.",
     pm2Down: "pm2 tidak berjalan",
-    pm2DownBody: "Semua aplikasi ikut tidak berjalan. Mulai layanan pm2 dari halaman Layanan.",
+    pm2DownBody: "Layanan pm2 tidak berjalan, jadi semua situs ikut berhenti.",
     openServices: "Buka Layanan",
   },
   domains: {

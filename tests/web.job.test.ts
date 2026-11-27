@@ -1,8 +1,15 @@
 import { describe, expect, test } from "bun:test";
 import type { Job, JobStep } from "@/shared/job.types";
+import type { Problem } from "@/shared/monitor.types";
+import { detail } from "@/shared/problem.copy";
 import type { Site } from "@/shared/site.types";
 import { missingFromPm2 } from "@/shared/site.types";
+import { idDeploy } from "@/web/i18n/id.deploy";
 import { idJob } from "@/web/i18n/id.job";
+import { idPanel } from "@/web/i18n/id.panel";
+import { idSiteDetail } from "@/web/i18n/id.site-detail";
+import { problemService } from "@/web/panel/overview.problems";
+import { serviceToStart } from "@/web/site/job.failure";
 import { finalReason, liveAnnouncement, shownStepStatus, stepDurationMs, stepEndMs } from "@/web/site/job.state";
 import { deployOutcomeSuffix, JOB_STEP_STATUS_KEY } from "@/web/site/job.status-key";
 import { canRestart, siteRowTone } from "@/web/site/site.card";
@@ -51,7 +58,7 @@ describe("site missing from pm2 (D-W9-3, QA M7)", () => {
   const deployed = (status: string) =>
     ({ at: "2026-11-27T09:00:00Z", kind: "deploy", status, actorName: null }) as Site["lastDeploy"];
 
-  test("no pm2 process + successful deploy, live binary or adopted → missing (danger), restart allowed when managed", () => {
+  test("no pm2 process + successful deploy, live binary or adopted → missing (danger), Jalankan lagi allowed", () => {
     expect(missingFromPm2(facts({ lastDeploy: deployed("succeeded") }))).toBe(true);
     expect(missingFromPm2(facts({ lastDeploy: deployed("rolled_back") }))).toBe(true);
     const binary = { live: { sizeBytes: 1, modifiedAt: "2026-11-27T09:00:00Z" }, previous: null } as Facts["binary"];
@@ -59,7 +66,8 @@ describe("site missing from pm2 (D-W9-3, QA M7)", () => {
     expect(missingFromPm2(facts({ managed: false }))).toBe(true);
     expect(siteRowTone(facts({ lastDeploy: deployed("succeeded") }))).toBe("danger");
     expect(canRestart(facts({ lastDeploy: deployed("succeeded") }))).toBe(true);
-    expect(canRestart(facts({ managed: false }))).toBe(false);
+    // PLAN/06 §6.3: an adopted app is loaded from its ecosystem.config.js entry by the same restart job
+    expect(canRestart(facts({ managed: false }))).toBe(true);
   });
 
   test("'Belum di-deploy' only without a successful deploy and without a binary", () => {
@@ -86,5 +94,41 @@ describe("finalReason (QA N7)", () => {
     expect(finalReason({ error, steps: [step("health", "failed")] })).toContain("60 dtk");
     expect(finalReason({ error: { code: "interrupted", params: {}, detail: null }, steps: [] })).toBeNull();
     expect(finalReason({ error: null, steps: [] })).toBeNull();
+  });
+});
+
+describe("in-UI start of pm2/postgres instead of manual commands (PLAN/06 §6.1, criterion 8)", () => {
+  const err = (code: string) => ({ error: { code, params: {}, detail: null } });
+
+  test("failed job offers the service its error needs", () => {
+    expect(serviceToStart(err("pm2_not_running"))).toBe("pm2");
+    expect(serviceToStart(err("database_failed"))).toBe("postgres");
+    expect(serviceToStart(err("pm2_failed"))).toBeNull();
+    expect(serviceToStart({ error: null })).toBeNull();
+  });
+
+  test("Ringkasan problem rows offer the button for pm2/postgres down only", () => {
+    const p = (code: Problem["code"], target: string, params: Problem["params"] = {}) => ({ code, target, params });
+    expect(problemService(p("service_down", "pm2"))).toBe("pm2");
+    expect(problemService(p("service_down", "postgres"))).toBe("postgres");
+    expect(problemService(p("service_down", "sshd"))).toBeNull();
+    expect(problemService(p("pm2_unavailable", "pm2", { reason: "service_down" }))).toBe("pm2");
+    // runit runs pm2 but its daemon is gone: `sv up` would do nothing
+    expect(problemService(p("pm2_unavailable", "pm2", { reason: "no_daemon" }))).toBeNull();
+  });
+
+  test("no `sv up` or ssh instruction left in the P1 copy", () => {
+    const texts = [idJob, idDeploy, idPanel, idSiteDetail].map((d) =>
+      JSON.stringify(d, (_k, v) => (typeof v === "function" ? v({}) : v)),
+    );
+    for (const text of texts) expect(text).not.toContain("sv up");
+    expect(idJob.outcomes.pm2_not_running()).toBe(
+      "Layanan pm2 tidak berjalan, jadi semua situs ikut berhenti. Jalankan pm2, lalu coba lagi.",
+    );
+    const site = JSON.stringify(idSiteDetail.header);
+    expect(site).not.toContain("ssh");
+    expect(detail({ code: "pm2_unavailable", target: "pm2", params: {} })).not.toContain("Mulai layanan");
+    expect(idJob.outcomes.dns_wrong_zone({ fqdn: "a.b.contoh.com" })).toContain("(a.b.contoh.com)");
+    expect(idJob.outcomes.app_not_in_ecosystem({ name: "shop" })).toContain("shop");
   });
 });

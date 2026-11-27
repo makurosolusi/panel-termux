@@ -1,3 +1,4 @@
+import type { FixBlockReason, FixKey, FixPreview } from "@/shared/fix.types";
 import type {
   AdoptCandidateApp,
   Discovered,
@@ -109,13 +110,65 @@ export function checkText(c: IntegrationCheck): string {
 
 const stateOf = (i: Integration, key: IntegrationCheck["key"]) => checksOf(i).find((c) => c.key === key)?.state;
 
-/** The ecosystem already spreads apps.json, but without the existsSync filter: the "versi lama" snippet. */
-export const oldSnippet = (i: Integration): boolean =>
-  stateOf(i, "ecosystem_spreads_apps_json") === "ok" && stateOf(i, "snippet_current") === "error";
-
-/** The snippet steps are needed: the ecosystem does not load apps.json through the current block yet. */
+/** "Cara manual" shows the block steps: the ecosystem does not load panel sites through the current block yet. */
 export const snippetNeeded = (i: Integration): boolean =>
   stateOf(i, "ecosystem_spreads_apps_json") !== "ok" || stateOf(i, "snippet_current") !== "ok";
 
 /** The shell command that opens the ecosystem file reported by the server. */
 export const editCommand = (i: Integration): string => `nano ${i.ecosystemPath ?? "~/sites/ecosystem.config.js"}`;
+
+const fixFor = (i: Integration, key: IntegrationCheck["key"]) => (i.fixes ?? []).find((f) => f.checks.includes(key));
+
+/**
+ * Checklist rows, one problem = one row: a failing check whose fix already belongs to an earlier failing row is folded
+ * into it, and "cara lama" is not repeated while panel sites are not loaded at all (servers without `fixes`).
+ */
+export function visibleChecks(i: Integration): IntegrationCheck[] {
+  const notLoaded = (stateOf(i, "ecosystem_spreads_apps_json") ?? "ok") !== "ok";
+  const seen = new Set<FixKey>();
+  return checksOf(i).filter((c) => {
+    if (c.state === "ok") return true;
+    if (c.key === "snippet_current" && notLoaded) return false;
+    const fix = fixFor(i, c.key);
+    if (!fix) return true;
+    if (seen.has(fix.key)) return false;
+    seen.add(fix.key);
+    return true;
+  });
+}
+
+/** Fix the panel can apply now for a failing row, or null. */
+export function rowFix(i: Integration, c: IntegrationCheck): FixKey | null {
+  const fix = c.state === "ok" ? undefined : fixFor(i, c.key);
+  return fix?.available ? fix.key : null;
+}
+
+/** Why the panel cannot fix a failing row itself (copy `setup.unfixable`), or null. */
+export function rowBlocked(i: Integration, c: IntegrationCheck): FixBlockReason | null {
+  const fix = c.state === "ok" ? undefined : fixFor(i, c.key);
+  return fix && !fix.available ? fix.reason : null;
+}
+
+/** Fixes behind "Perbaiki semua (n)": one per failing row, in checklist order. */
+export const applicableFixes = (i: Integration): FixKey[] => visibleChecks(i).flatMap((c) => rowFix(i, c) ?? []);
+
+/** "Cara manual" opens by itself when a failing row has a fix the panel cannot apply. */
+export const manualOpen = (i: Integration): boolean => visibleChecks(i).some((c) => rowBlocked(i, c) !== null);
+
+/** `--no-auto-exit` is in the run script but pm2 has not restarted since (ok + info, no button). */
+export const pm2Pending = (i: Integration): boolean =>
+  Boolean(checksOf(i).find((c) => c.key === "pm2_auto_exit" && c.state === "ok")?.params.pending);
+
+/** Plain-language lines of one fix preview, for the dialog (readers who never open the diff). */
+export function fixSummary(p: FixPreview): string[] {
+  const dl = idSite.setup.dialog;
+  const e = p.effects;
+  if (p.key === "pm2_auto_exit") return [dl.pm2_auto_exit.body];
+  if (p.key === "sites_dir_create") return [dl.sites_dir_create.body(e.dir ?? "")];
+  return [
+    dl.ecosystem_block.body(e.keepApps),
+    ...(e.addApps.length ? [dl.ecosystem_block.addApps(e.addApps)] : []),
+    ...(e.oldSpread ? [dl.ecosystem_block.oldSpread] : []),
+    ...(e.guard ? [dl.ecosystem_block.guard] : []),
+  ];
+}

@@ -54,6 +54,17 @@ function logDownload(c: Ctx): string {
   return s.logDownload(c.a, c.target);
 }
 
+/** File label of an integration fix/restore: meta `file`, else the fix `key` (`sites_dir_create` has no file). */
+const fixFile = (c: Ctx): string => {
+  const k = str(c.m.file, str(c.m.key, "?"));
+  return t.fixFiles[k] ?? k;
+};
+
+function pm2Restart(c: Ctx): string {
+  const missing = num(c.m.missing);
+  return missing ? s.integrationRestartMissing(c.a, missing) : s.integrationRestart(c.a);
+}
+
 const SENTENCES = {
   "auth.sign_in": (c) => s.signIn(c.a),
   "auth.sign_out": (c) => s.signOut(c.a),
@@ -99,6 +110,9 @@ const SENTENCES = {
   "log.download": logDownload,
   "job.recover": (c) => s.jobRecover(c.a, c.target),
   "setup.update": (c) => s.setupUpdate(c.a, setupLabel(c.target), c.m.done ? t.done : t.notDone),
+  "integration.fix": (c) => s.integrationFix(c.a, fixFile(c)),
+  "integration.restore": (c) => s.integrationRestore(c.a, fixFile(c)),
+  "integration.pm2_restart": pm2Restart,
 } satisfies Record<AuditAction, (c: Ctx) => string>;
 
 /** Actions worth a coloured edge: destructive or security-relevant. */
@@ -110,10 +124,12 @@ const TONES: Partial<Record<AuditAction, StatusTone>> = {
   "session.revoke_all": "warning",
   "site.delete": "warning",
   "backup.restore": "warning",
+  "integration.restore": "warning",
 };
 
 function tone(e: DevAuditEntry, m: Record<string, unknown>): StatusTone {
   if (e.action === "backup.run" && m.status === "failed") return "danger";
+  if (e.action === "integration.pm2_restart" && num(m.missing) > 0) return "warning";
   if ((e.action === "backup.verify" || e.action === "cloudflare.verify") && m.ok === false) return "warning";
   return TONES[e.action as AuditAction] ?? "neutral";
 }

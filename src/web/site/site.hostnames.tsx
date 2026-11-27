@@ -9,6 +9,7 @@ import { idSiteDetail } from "@/web/i18n/id.site-detail";
 import { panelUrl } from "@/web/panel/panel.api";
 import { apiFetch, type ErrorCodes } from "@/web/shared/api.client";
 import { useApiQuery } from "@/web/shared/use-api-query";
+import { DnsManualCard, hostsNeedingRecord } from "./dns.manual";
 import { jobPath, siteUrl } from "./site.api";
 import { HostLink } from "./site.card";
 import { AddHostnamesDialog } from "./site.hostnames-add";
@@ -23,6 +24,7 @@ export function SiteHostnames({ site, busy, codes }: { site: SiteDetail; busy: b
   const all = [...(domains.data ?? []).map((d) => d.hostname), ...site.hostnames];
   const dnsManaged = new Map(site.dns.map((d) => [d.hostname, d.managed]));
   const last = site.hostnames.length <= 1;
+  const needRecord = hostsNeedingRecord(site.dns, domains.data);
   const start = async (method: "POST" | "DELETE", url: string, body?: HostnamesAddRequest) =>
     navigate(jobPath((await apiFetch<JobAccepted>(method, url, body)).jobId));
 
@@ -60,6 +62,7 @@ export function SiteHostnames({ site, busy, codes }: { site: SiteDetail; busy: b
         ))}
       </ul>
       {last && <p className="text-xs text-muted-foreground">{t.last}</p>}
+      {needRecord.length > 0 && <DnsManualCard hostnames={needRecord} />}
       <AddHostnamesDialog
         busy={busy}
         blinking={blinkingHosts(all)}

@@ -18,6 +18,7 @@ export const idDevAudit = {
     "service.": "Layanan",
     "app.": "Aplikasi",
     "backup.": "Cadangan",
+    "integration.": "Persiapan pm2",
   },
   time: "Waktu",
   action: "Aksi",
@@ -101,5 +102,16 @@ export const idDevAudit = {
     logDownloadService: (a: string, name: string) => `${a} mengunduh log layanan ${name}`,
     jobRecover: (a: string, target: string) => `${a} memulihkan perubahan yang terputus pada ${target}`,
     setupUpdate: (a: string, item: string, state: string) => `${a} menandai "${item}" ${state}`,
+    integrationFix: (a: string, file: string) => `${a} memperbaiki integrasi pm2 (${file})`,
+    integrationRestore: (a: string, file: string) => `${a} membatalkan perbaikan ${file}`,
+    integrationRestart: (a: string) => `${a} memulai ulang pm2 dari kartu Persiapan`,
+    integrationRestartMissing: (a: string, n: number) =>
+      `${a} memulai ulang pm2 dari kartu Persiapan, ${n} aplikasi tidak berjalan lagi`,
   },
+  /** File of an integration fix (audit meta `file` / `key`). */
+  fixFiles: {
+    ecosystem: "ecosystem.config.js",
+    pm2_run: "run script pm2",
+    sites_dir_create: "folder situs",
+  } as Record<string, string>,
 } as const;

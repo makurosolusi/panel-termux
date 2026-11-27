@@ -88,7 +88,8 @@ export const idDeploy = {
     chunk_sha_mismatch: "Potongan rusak di jalan. Lanjutkan unggahan untuk mengirim ulang.",
     no_folder: "Folder situs tidak ada. Buat ulang foldernya lewat ssh atau hapus situs ini.",
     integration_required: "pm2 belum siap menjalankan situs buatan panel. Selesaikan persiapan di halaman Situs.",
-    pm2_not_running: "Layanan pm2 tidak berjalan. Jalankan sv up pm2 di HP, lalu coba lagi.",
+    pm2_not_running:
+      "Layanan pm2 tidak berjalan, jadi semua situs ikut berhenti. Tekan Jalankan pm2 di atas, lalu coba lagi.",
     no_previous: "Belum ada versi sebelumnya. Rollback bisa dipakai setelah deploy kedua.",
     no_current: "Tidak ada binary yang berjalan, jadi tidak ada yang bisa dikembalikan.",
     invalid_binary: "Binary versi sebelumnya tidak bisa dijalankan di HP ini.",
