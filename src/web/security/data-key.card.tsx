@@ -1,5 +1,6 @@
 import { DownloadIcon, Trash2Icon } from "lucide-react";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import { useLocation } from "react-router";
 import type { SecurityStatus } from "@/shared/security.types";
 import { ConfirmAction } from "@/web/components/confirm-action";
 import { InlineCode } from "@/web/components/inline-code";
@@ -8,6 +9,7 @@ import { RelativeTime } from "@/web/components/relative-time";
 import { Section } from "@/web/components/section";
 import { StatusBadge } from "@/web/components/status-badge";
 import { Button } from "@/web/components/ui/button";
+import { DATA_KEY_ANCHOR, devAnchorFromHash } from "@/web/dev/onboarding.state";
 import { tSecurity } from "@/web/i18n/en.security";
 import { tSettings } from "@/web/i18n/en.settings";
 import { toast } from "@/web/shared/toast.lazy";
@@ -22,17 +24,23 @@ export const settingLabel = (key: string): string =>
   (tSettings.fields as Record<string, { label: string } | undefined>)[key]?.label ?? key;
 
 /**
- * "Kunci data" card (`#kunci-data`, PLAN/04 §5.2): match state, last download, "Unduh kunci data" (confirm, fresh
+ * "Data key" card (`#data-key`, old `#kunci-data` aliased, PLAN/04 §5.2): match state, last download, "Download the data key" (confirm, fresh
  * session); on mismatch the unreadable settings, restore-the-file steps and the typed reset. `onChanged` reloads the
  * security status after a download or reset.
  */
 export function DataKeyCard({ status, onChanged }: { status: SecurityStatus; onChanged: () => void }) {
   const key = status.dataKey;
   const [reauth, setReauth] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+  const { hash } = useLocation();
+  // rendered after the security fetch, so the browser's own hash jump (and any 0.5.x `#kunci-data` link) missed it
+  useEffect(() => {
+    if (devAnchorFromHash(hash) === DATA_KEY_ANCHOR) ref.current?.scrollIntoView({ block: "start" });
+  }, [hash]);
   const mismatch = key.state === "mismatch";
   const labels = key.unreadableSettings.map(settingLabel);
 
-  // A stale session is not an error of the dialog: close it and show "Masuk ulang" in the card instead.
+  // A stale session is not an error of the dialog: close it and show "Sign in again" in the card instead.
   const sensitive = async (action: () => Promise<unknown>, done: string) => {
     try {
       await action();
@@ -47,7 +55,7 @@ export function DataKeyCard({ status, onChanged }: { status: SecurityStatus; onC
   };
 
   return (
-    <div id="kunci-data" className="scroll-mt-20 rounded-lg border bg-card p-4">
+    <div ref={ref} id={DATA_KEY_ANCHOR} className="scroll-mt-20 rounded-lg border bg-card p-4">
       <Section
         title={t.title}
         description={t.help}

@@ -1,3 +1,4 @@
+import type { DataKeyResetInput } from "../../shared/security.types";
 import type { Auth } from "../auth/auth.service";
 import { assertFresh, roleGuard } from "../auth/role.guard";
 import { revokeAllSessions } from "../auth/sessions.service";
@@ -16,8 +17,8 @@ import { panelOnError } from "./panel.routes";
 /** What /dev/security needs: DB + data key, the public URL, and whether boot created the key file. */
 export type SecurityDeps = { db: Db; secret: string; appBaseUrl: string; createdThisBoot: boolean };
 
-/** RESET_CONFIRM is the word the owner types to delete unreadable secret settings (DataKeyResetInput). */
-const RESET_CONFIRM = "hapus";
+/** Words the owner may type to delete unreadable secret settings, one per UI locale (DataKeyResetInput). */
+const RESET_CONFIRM: ReadonlySet<unknown> = new Set<DataKeyResetInput["confirm"]>(["delete", "hapus"]);
 
 /** super_admin security API under /dev: status, data key download/reset (fresh session), sign out everyone. */
 export function createSecurityRoutes(auth: Auth, { db, secret, appBaseUrl, createdThisBoot }: SecurityDeps) {
@@ -45,8 +46,8 @@ export function createSecurityRoutes(auth: Auth, { db, secret, appBaseUrl, creat
       .post("/security/data-key/reset", ({ body, user, session }) => {
         assertFresh(session);
         const confirm = typeof body === "object" && body !== null ? (body as { confirm?: unknown }).confirm : undefined;
-        if (confirm !== RESET_CONFIRM)
-          throw new ApiError(400, "confirm_mismatch", `type "${RESET_CONFIRM}" to confirm the reset`);
+        if (!RESET_CONFIRM.has(confirm))
+          throw new ApiError(400, "confirm_mismatch", 'type "delete" to confirm the reset');
         if (dataKeyState(deps).state === "ok") throw new ApiError(409, "key_ok", "every secret setting is readable");
         resetUnreadableSettings(deps, user.id);
         return status();

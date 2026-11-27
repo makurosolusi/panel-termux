@@ -7,8 +7,11 @@ import { ApiError } from "../routes/http.error";
 /** Newest rows an export holds at most. */
 export const EXPORT_MAX_ROWS = 10_000;
 const EXPORT_PAGE = 500;
-/** Fixed CSV header (no raw `meta`: it may hold detail nobody should mail around). */
-export const CSV_HEADER = ["waktu", "aktor", "email_aktor", "aksi", "target", "ip_tersamar", "request_id"];
+/**
+ * Fixed CSV header, English in every locale: a data contract (renamed from the Indonesian header in 0.6.0, E14).
+ * No raw `meta`: it may hold detail nobody should mail around.
+ */
+export const CSV_HEADER = ["time", "actor", "actor_email", "action", "target", "ip_masked", "request_id"];
 
 const DATE_RE = /^(\d{4})-(\d{2})-(\d{2})$/;
 

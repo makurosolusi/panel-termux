@@ -8,7 +8,7 @@ export const SECURITY_STATUS_URL = "/api/dev/security";
 /** Security error codes → Indonesian messages. */
 export const SECURITY_ERROR_CODES: Readonly<Record<string, string>> = tSecurity.errorCodes;
 
-/** True when the error asks the user to sign in again (shown as a "Masuk ulang" action, not a toast). */
+/** True when the error asks the user to sign in again (shown as a "Sign in again" action, not a toast). */
 export const isReauthRequired = (err: unknown): boolean => err instanceof ApiError && err.code === REAUTH_REQUIRED;
 
 /**
@@ -44,7 +44,7 @@ export function attachmentName(header: string | null, fallback: string): string 
 }
 
 /** Fallback name of the data key file when the header is missing (the server always sends one). */
-const DATA_KEY_FALLBACK_NAME = "panel-termux-kunci-data.txt";
+const DATA_KEY_FALLBACK_NAME = "panel-termux-data-key.txt";
 
 /** POST data-key/export and saves the returned text file through a temporary object URL. */
 export async function exportDataKey(): Promise<void> {

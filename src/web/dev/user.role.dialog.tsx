@@ -9,7 +9,7 @@ const t = tDevUsers;
 const r = t.roleDialog;
 
 /**
- * "Ubah peran" confirmation for one target role (chosen in the ⋯ menu). Promoting to Admin is an honest confirm:
+ * "Change role" confirmation for one target role (chosen in the ⋯ menu). Promoting to Admin is an honest confirm:
  * what Admin can do on this phone, plus the reminder to add the email to the Cloudflare Access policy.
  */
 export function UserRoleDialog({

@@ -24,15 +24,15 @@ describe("security state", () => {
     expect(dataKeyStatusKey("mismatch")).toBe("key_mismatch");
   });
   test("unreadable settings use the settings labels, unknown keys stay raw", () => {
-    expect(settingLabel("cloudflare.api_token")).toBe("Token API Cloudflare");
+    expect(settingLabel("cloudflare.api_token")).toBe("Cloudflare API token");
     expect(settingLabel("x.unknown")).toBe("x.unknown");
   });
 });
 
 describe("security api", () => {
   test("attachment name", () => {
-    expect(attachmentName('attachment; filename="panel-termux-kunci-data-2026-11-27.txt"', "f")).toBe(
-      "panel-termux-kunci-data-2026-11-27.txt",
+    expect(attachmentName('attachment; filename="panel-termux-data-key-2026-11-27.txt"', "f")).toBe(
+      "panel-termux-data-key-2026-11-27.txt",
     );
     expect(attachmentName(null, "f")).toBe("f");
   });
@@ -68,9 +68,10 @@ describe("security api", () => {
 
   test("copy", () => {
     expect(tSecurity.sessions.summary(3, 2)).toBe(
-      "3 sesi aktif dari 2 pengguna. Sesi berakhir paling lama 30 hari setelah masuk.",
+      "3 active sessions from 2 users. A session ends at most 30 days after sign-in.",
     );
-    expect(tSecurity.dataKey.resetBody(["Token API Cloudflare"])).toStartWith("Token API Cloudflare dihapus");
-    expect(tSecurity.dataKey.resetWord).toBe("hapus");
+    expect(tSecurity.sessions.summary(1, 1)).toStartWith("1 active session from 1 user.");
+    expect(tSecurity.dataKey.resetBody(["Cloudflare API token"])).toStartWith("Cloudflare API token will be deleted");
+    expect(tSecurity.dataKey.resetWord).toBe("delete");
   });
 });

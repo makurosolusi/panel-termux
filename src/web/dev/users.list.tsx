@@ -32,7 +32,7 @@ export function userActions(u: DevUser, meId: string): UserActionSet {
   return { locked: null, role: true, revoke: true, delete: true };
 }
 
-/** Last activity at day resolution (K9), local calendar days: "Aktif hari ini" / "kemarin" / "N hari lalu". */
+/** Last activity at day resolution (K9), local calendar days: "Active today" / "yesterday" / "N days ago". */
 export function lastSeenText(iso: string | null, now: Date = new Date()): string {
   const d = iso ? new Date(iso) : null;
   if (!d || Number.isNaN(d.getTime())) return t.neverSeen;
@@ -62,7 +62,7 @@ function Who({ u, meId }: { u: DevUser; meId: string }) {
   );
 }
 
-/** Table/card columns of /dev/users; `now` keeps "Aktif hari ini" consistent across rows. */
+/** Table/card columns of /dev/users; `now` keeps "Active today" consistent across rows. */
 export const userColumns = (meId: string, now: Date): DataColumn<DevUser>[] => [
   { key: "name", header: t.name, mobile: "title", className: "max-w-72", cell: (u) => <Who u={u} meId={meId} /> },
   { key: "role", header: t.role, mobile: "badge", cell: (u) => <RoleBadge role={u.role} /> },

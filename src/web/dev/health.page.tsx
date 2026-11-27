@@ -63,7 +63,7 @@ function useOnboarding() {
   };
 }
 
-/** /dev Kesehatan sistem: onboarding, verdict with checks, KPI tiles, background processes, errors, info, detail. */
+/** /dev System health: onboarding, verdict with checks, KPI tiles, background processes, errors, info, detail. */
 export function HealthPage() {
   const query = useApiQuery<DevHealth>(HEALTH_URL, HEALTH_REFRESH_MS);
   const ob = useOnboarding();

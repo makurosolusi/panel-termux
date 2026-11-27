@@ -20,7 +20,7 @@ import { DISK_THRESHOLDS } from "./health.state";
 
 const t = tDevHealth;
 
-/** Four KPI tiles: Waktu aktif, Memori, Penyimpanan (bar), Request/menit; 2×2 on phones. */
+/** Four KPI tiles: Uptime, Memory, Storage (bar), Requests/min; 2×2 on phones. */
 export function HealthTiles({ h }: { h: DevHealth }) {
   const used = usedPercent(h.dataDir.freeBytes, h.dataDir.totalBytes);
   return (

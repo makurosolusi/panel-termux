@@ -9,7 +9,7 @@ import { revokeAllSessions, SECURITY_ERROR_CODES } from "./security.api";
 
 const t = tSecurity.sessions;
 
-/** "Sesi" card: active sessions summary and "Keluarkan semua pengguna" (tier confirm; this device stays signed in). */
+/** "Sessions" card: active sessions summary and "Sign out every user" (tier confirm; this device stays signed in). */
 export function SessionsAdminCard({ status, onChanged }: { status: SecurityStatus; onChanged: () => void }) {
   return (
     <div id="sesi" className="scroll-mt-20 rounded-lg border bg-card p-4">

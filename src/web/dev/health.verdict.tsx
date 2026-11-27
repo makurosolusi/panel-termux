@@ -3,7 +3,7 @@ import { ArrowRightIcon, InfoIcon } from "lucide-react";
 import { type ReactNode, useEffect, useRef, useState } from "react";
 import { Link } from "react-router";
 import type { DevHealth, HealthStatus } from "@/shared/dev.types";
-import { detail, title } from "@/shared/problem.copy";
+import { detail, title } from "@/shared/problem.copy.en";
 import { CodeText } from "@/web/components/code-text";
 import { useNow } from "@/web/components/now.store";
 import { Section } from "@/web/components/section";
@@ -118,7 +118,7 @@ export const VerdictBadge = ({ h }: { h: DevHealth }) => {
   return <StatusBadge state={HEALTH_STATUS_KEY[v]} label={t.verdict[v]} />;
 };
 
-/** "Informasi": info-tone rows that never lower the verdict (B4), each linking to the setup guide. */
+/** "Information": info-tone rows that never lower the verdict (B4), each linking to the setup guide. */
 export function InfoSection({ h, guide }: { h: DevHealth; guide: ReactNode }) {
   const rows = infoRows(h)
     .map((code) => ({ code, text: infoText(code) }))
