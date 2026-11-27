@@ -10,7 +10,7 @@ export const tLanding = msg("landing", {
     description:
       "Web panel that turns an Android phone with Termux into a server for single-binary Bun apps: monitoring, deploys, backups and domains via Cloudflare Tunnel.",
     imageAlt:
-      "Panel Termux logo and name, the words monitor · deploy · backup · domain, and a screenshot of the Overview on a phone",
+      "Panel Termux logo and name, the words monitor · deploy · backup · domains, and a screenshot of the Overview on a phone",
   },
   links: {
     github: REPO,

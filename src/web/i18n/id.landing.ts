@@ -11,7 +11,7 @@ export const idLanding: Messages<typeof tLanding> = {
     description:
       "Panel web yang mengubah HP Android dengan Termux jadi server untuk aplikasi Bun single-binary: pantau, deploy, backup, dan domain lewat Cloudflare Tunnel.",
     imageAlt:
-      "Logo dan nama Panel Termux, tulisan pantau · deploy · backup · domain, dan tangkapan layar Ringkasan di HP",
+      "Logo dan nama Panel Termux, tulisan monitor · deploy · backup · domains, dan tangkapan layar Overview di HP (gambar berbahasa Inggris)",
   },
   links: {
     github: REPO,
