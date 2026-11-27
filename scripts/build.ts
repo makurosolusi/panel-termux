@@ -9,7 +9,8 @@ if (!target || !outfile) {
 }
 
 const result = await Bun.build({
-  entrypoints: ["./src/server/index.ts"],
+  // PLAN/07 K1: thin entry; CLI commands load lazily and never evaluate the server bundle (lab L5)
+  entrypoints: ["./src/server/main.ts"],
   compile: {
     ...(target === "local" ? {} : { target: target as Bun.Build.CompileTarget }),
     outfile,
