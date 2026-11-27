@@ -11,6 +11,8 @@ export const SNAPSHOT_KEEP = 3;
 
 const SNAPSHOT_DIR = "snapshots";
 const PREFIX = "panel.db.";
+/** `panel rollback --db` copies (PLAN/07 §5.1): never counted among the version snapshots, never pruned. */
+const BEFORE_ROLLBACK = `${PREFIX}before-rollback.`;
 const TS = /\.(\d{14})$/;
 /** How long a failed boot waits before exiting, so runit does not crash-loop. */
 const FAIL_SLEEP_MS = 60_000;
@@ -28,10 +30,10 @@ function appliedMigrations(db: Db): number | null {
   return (db.$client.query("SELECT count(*) AS n FROM __drizzle_migrations").get() as { n: number }).n;
 }
 
-/** Deletes all but the newest SNAPSHOT_KEEP snapshots (by the timestamp in the name, not by version). */
+/** Deletes all but the newest SNAPSHOT_KEEP version snapshots (by name timestamp); before-rollback copies stay. */
 function prune(dir: string): void {
   const files = readdirSync(dir)
-    .filter((f) => f.startsWith(PREFIX) && TS.test(f))
+    .filter((f) => f.startsWith(PREFIX) && !f.startsWith(BEFORE_ROLLBACK) && TS.test(f))
     .sort((a, b) => (TS.exec(b)?.[1] ?? "").localeCompare(TS.exec(a)?.[1] ?? ""));
   for (const f of files.slice(SNAPSHOT_KEEP)) rmSync(join(dir, f), { force: true });
 }

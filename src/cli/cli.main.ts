@@ -25,14 +25,6 @@ const FAILED = 1;
 /** Names that are not commands in 0.5.0 but get the install.sh hint (init = 0.5.1, upgrade = C14). */
 const LATER = new Set(["init", "upgrade"]);
 
-/** G1a placeholder (PLAN/07 §10): exits 1 until the W1 command file is wired in here. */
-const pending =
-  (name: CommandName): Spec["load"] =>
-  async () =>
-  async () => {
-    throw new CliExit(FAILED, `Perintah panel ${name} belum tersedia di build ini`);
-  };
-
 const COMMANDS: Record<CommandName, Spec> = {
   // Reached only via runCli(["serve"]) directly: main.ts routes `serve` to boot before the CLI scrubs the env.
   serve: {
@@ -43,13 +35,21 @@ const COMMANDS: Record<CommandName, Spec> = {
       return 0;
     },
   },
-  doctor: { options: { json: { type: "boolean" } }, maxPositionals: 0, load: pending("doctor") },
-  docs: { options: {}, maxPositionals: 1, load: pending("docs") },
-  env: { options: { full: { type: "boolean" } }, maxPositionals: 0, load: pending("env") },
+  doctor: {
+    options: { json: { type: "boolean" } },
+    maxPositionals: 0,
+    load: async () => (await import("./doctor.command")).doctorCommand,
+  },
+  docs: { options: {}, maxPositionals: 1, load: async () => (await import("./docs.command")).docsCommand },
+  env: {
+    options: { full: { type: "boolean" } },
+    maxPositionals: 0,
+    load: async () => (await import("./env.command")).envCommand,
+  },
   rollback: {
     options: { db: { type: "boolean" }, yes: { type: "boolean", short: "y" } },
     maxPositionals: 0,
-    load: pending("rollback"),
+    load: async () => (await import("./rollback.command")).rollbackCommand,
   },
 };
 

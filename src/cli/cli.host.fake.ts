@@ -105,6 +105,7 @@ function scenarioFiles(scenario: FakeScenarioName, root: string): Record<string,
     files[p.envFile] = FAKE_ENV;
     files[join(p.cloudflaredDir, "cert.pem")] = "fake cert\n";
     files[join(p.cloudflaredDir, "config.yml")] = FAKE_CONFIG;
+    files[join(root, "sites", "apps.json")] = "[]\n"; // a booted panel has made it (ensureAppsJson)
   }
   return files;
 }

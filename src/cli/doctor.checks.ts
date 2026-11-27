@@ -1,42 +1,17 @@
 // Bootstrap checks of `panel doctor` (PLAN/07 §3.1, K5): pure DoctorProbe → DoctorCheck[]. The Persiapan card
 // checks (group `situs`) are not here: doctor.command calls the server's integration service and its copy.
-import { EnvError, parseEnv } from "../server/env";
-import { ingressHostnames, readTunnelId } from "../server/sites/ingress.editor";
-import type { DoctorAction, DoctorBootstrapKey, DoctorCheck, DoctorGroup, DoctorState } from "../shared/doctor.types";
-import { ENV_VARS, isEnvValueMissing } from "../shared/env.schema";
-import type { JobParams } from "../shared/job.types";
+import type { DoctorBootstrapKey, DoctorCheck, DoctorState } from "../shared/doctor.types";
+import { group, make, REINSTALL } from "./doctor.checks.base";
+import { panelChecks, tunnelChecks } from "./doctor.checks.panel";
 import { type DoctorProbe, HELD_PACKAGES } from "./doctor.probe";
 
 const MB = 1024 * 1024;
 /** Below this the panel cannot unpack a deploy or snapshot panel.db (PLAN/07 §3.1). */
 const DISK_ERROR_BYTES = 400 * MB;
 const DISK_WARN_BYTES = 1024 * MB;
-/** `data/` must not be readable by other Android apps' uids (secret, panel.db). */
-const GROUP_OTHER_BITS = 0o077;
-const HTTP_OK = 200;
-const HTTP_SERVER_ERROR = 500;
 const PLAY_STORE = "GOOGLE_PLAY_STORE";
-const REINSTALL = "jalankan lagi perintah install.sh (README)";
 const FDROID = "pasang ulang Termux dari F-Droid (panel docs android)";
 const FREE_SPACE = "kosongkan penyimpanan HP minimal 1 GB";
-const CF_DOCS = "panel docs cloudflare";
-
-/** A failing outcome: state, label, next step (→ line), params. */
-type Bad = [state: DoctorState, label: string, hint?: string | null, params?: JobParams];
-
-/** `action` follows from the hint, so every → line and its JSON action agree. */
-const actionOf = (hint: string | null): DoctorAction =>
-  !hint ? null : hint.includes("panel docs") ? "docs" : hint.startsWith("buka ") ? "ui" : "manual";
-
-function make(group: DoctorGroup, key: DoctorBootstrapKey, ...[state, label, hint = null, params = {}]: Bad) {
-  return { group, key, state, label, action: actionOf(hint), hint, params } satisfies DoctorCheck;
-}
-
-/** Check builder of one group: ok label when `good`, else the Bad outcome. */
-const group =
-  (g: DoctorGroup) =>
-  (key: DoctorBootstrapKey, good: boolean, ok: string, bad: Bad): DoctorCheck =>
-    good ? make(g, key, "ok", ok) : make(g, key, ...bad);
 
 const gb = (bytes: number) => `${(bytes / 1024 / MB).toFixed(1).replace(".", ",")} GB`;
 
@@ -177,162 +152,6 @@ function serviceChecks(p: DoctorProbe): DoctorCheck[] {
         REINSTALL,
       ]),
     );
-  return out;
-}
-
-/** parseEnv's message for a complete .env (names the variable, never its value), or null when valid. */
-function envError(values: NonNullable<DoctorProbe["env"]>): string | null {
-  try {
-    parseEnv(values);
-    return null;
-  } catch (e) {
-    if (e instanceof EnvError) return e.message;
-    throw e;
-  }
-}
-
-function envChecks(p: DoctorProbe): DoctorCheck[] {
-  const k = group("panel");
-  if (p.env === null)
-    return [
-      make(
-        "panel",
-        "env_complete",
-        "error",
-        "File ~/panel/.env belum ada",
-        "buat dengan: panel env > ~/panel/.env, lalu isi nilainya (panel docs google)",
-      ),
-    ];
-  const env = p.env;
-  const missing = ENV_VARS.filter((v) => v.required && isEnvValueMissing(v, env[v.name])).map((v) => v.name);
-  const complete = k("env_complete", !missing.length, ".env lengkap", [
-    "error",
-    `.env belum lengkap: ${missing.join(", ")}`,
-    "isi nilainya di ~/panel/.env (panel docs google)",
-    { missing: missing.join(",") },
-  ]);
-  if (missing.length) return [complete];
-  const invalid = envError(env);
-  return [
-    complete,
-    k("env_valid", invalid === null, ".env valid", [
-      "error",
-      `.env tidak valid: ${invalid}`,
-      "perbaiki nilainya di ~/panel/.env (panel docs google)",
-    ]),
-  ];
-}
-
-function panelChecks(p: DoctorProbe): DoctorCheck[] {
-  const k = group("panel");
-  const procs = p.panelProcs;
-  const outside = procs.length === 1 && procs[0]?.pid !== (p.services.panel?.pid ?? null);
-  const out = [
-    k("binary_installed", p.files.binary, "Panel terpasang di ~/panel/panel", [
-      "error",
-      "Panel belum terpasang di ~/panel/panel",
-      REINSTALL,
-    ]),
-    k(
-      "panel_instances",
-      procs.length <= 1 && !outside,
-      "Satu instance panel",
-      procs.length > 1
-        ? [
-            "error",
-            `${procs.length} proses panel berjalan bersamaan`,
-            "hentikan yang bukan dari runit, lalu jalankan: sv restart panel",
-            { count: procs.length },
-          ]
-        : [
-            "warning",
-            "Panel berjalan di luar runit",
-            "hentikan proses itu, lalu jalankan: sv up panel",
-            { pid: procs[0]?.pid ?? null },
-          ],
-    ),
-    ...envChecks(p),
-  ];
-  const extra = p.envExtraFiles.join(", ");
-  if (extra)
-    out.push(
-      make(
-        "panel",
-        "env_extra_files",
-        "warning",
-        `File ${extra} di ~/panel menimpa isi .env`,
-        "gabungkan isinya ke ~/panel/.env, lalu hapus file itu",
-        { files: extra },
-      ),
-    );
-  if (p.dataDirMode !== null)
-    out.push(
-      k("data_dir_private", !(p.dataDirMode & GROUP_OTHER_BITS), "Folder data panel privat", [
-        "warning",
-        "Folder data panel bisa dibaca aplikasi lain",
-        "jalankan: chmod 700 ~/panel/data",
-      ]),
-    );
-  out.push(
-    k("panel_health", p.panelHealth === HTTP_OK, `Panel menjawab di port ${p.port}`, [
-      "error",
-      `Panel tidak menjawab di port ${p.port}`,
-      "jalankan: sv restart panel",
-      { port: p.port },
-    ]),
-  );
-  return out;
-}
-
-/** Tunnel id and ingress hosts of config.yml; unparsable YAML is `broken` (cf_config reports it). */
-function parseConfig(text: string | null): { id: string | null; hosts: string[]; broken: boolean } {
-  if (text === null) return { id: null, hosts: [], broken: false };
-  try {
-    return { id: readTunnelId(text), hosts: ingressHostnames(text), broken: false };
-  } catch {
-    return { id: null, hosts: [], broken: true }; // reported as the cf_config label below
-  }
-}
-
-function tunnelChecks(p: DoctorProbe): DoctorCheck[] {
-  const k = group("tunnel");
-  const cfg = parseConfig(p.cfConfig);
-  const out = [
-    k("cf_cert", p.files.cfCert, "Login Cloudflare (cert.pem)", [
-      "error",
-      "Belum login Cloudflare (cert.pem tidak ada)",
-      CF_DOCS,
-    ]),
-    k("cf_config", cfg.id !== null, "Tunnel ada di ~/.cloudflared/config.yml", [
-      "error",
-      p.cfConfig === null
-        ? "~/.cloudflared/config.yml belum ada"
-        : cfg.broken
-          ? "config.yml tidak bisa dibaca (YAML rusak)"
-          : "config.yml tidak menyebut tunnel",
-      CF_DOCS,
-    ]),
-  ];
-  const host = p.publicHost;
-  if (host) {
-    out.push(
-      k("cf_panel_ingress", cfg.hosts.includes(host), `${host} ada di ingress`, [
-        "error",
-        `${host} belum ada di ingress config.yml`,
-        CF_DOCS,
-        { host },
-      ]),
-    );
-    const up = p.publicStatus !== null && p.publicStatus < HTTP_SERVER_ERROR;
-    out.push(
-      k("panel_public", up, `https://${host} terjangkau`, [
-        "warning",
-        `https://${host} tidak terjangkau dari HP`,
-        CF_DOCS,
-        { host },
-      ]),
-    );
-  }
   return out;
 }
 

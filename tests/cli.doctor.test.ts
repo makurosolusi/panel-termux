@@ -17,11 +17,10 @@ const tmp = mkdtempSync(join(tmpdir(), "panel-cli-doctor-"));
 afterAll(() => rmSync(tmp, { recursive: true, force: true }));
 let n = 0;
 
-/** Fake host in its own sandbox; panel scenarios get the apps.json a booted panel would have made (ensureAppsJson). */
+/** Fake host in its own sandbox; `arrange` may place files first (the scenario keeps them). */
 function host(scenario: FakeScenarioName, arrange?: (root: string) => void): FakeHost {
   const root = join(tmp, String(n++));
-  mkdirSync(join(root, "sites"), { recursive: true });
-  if (scenario !== "fresh") writeFileSync(join(root, "sites", "apps.json"), "[]\n"); // test-only
+  mkdirSync(root, { recursive: true });
   arrange?.(root);
   return createFakeHost(scenario, { root });
 }

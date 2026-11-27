@@ -1,11 +1,7 @@
 // `panel docs [topik]` (PLAN/07 §6.1): short guides embedded as text so they work offline; plain text, no ANSI.
-// @ts-expect-error TS2307: Bun embeds .md as text (`type: "text"`); tsc has no `*.md` module declaration.
 import ANDROID from "../../docs/cli/android.md" with { type: "text" };
-// @ts-expect-error TS2307: same embedded markdown import as above.
 import CLOUDFLARE from "../../docs/cli/cloudflare.md" with { type: "text" };
-// @ts-expect-error TS2307: same embedded markdown import as above.
 import GOOGLE from "../../docs/cli/google.md" with { type: "text" };
-// @ts-expect-error TS2307: same embedded markdown import as above.
 import PAKET from "../../docs/cli/paket.md" with { type: "text" };
 import type { Command } from "./cli.main";
 import { CliExit } from "./cli.output";
