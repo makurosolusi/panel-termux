@@ -8,8 +8,12 @@ import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import tailwind from "bun-plugin-tailwind";
 import { tApp } from "@/web/i18n/en.app";
+import { tCommon } from "@/web/i18n/en.common";
+import { tShell } from "@/web/i18n/en.shell";
 import { tSiteDetail } from "@/web/i18n/en.site-detail";
 import { idApp } from "@/web/i18n/id.app";
+import { idCommon } from "@/web/i18n/id.common";
+import { idShell } from "@/web/i18n/id.shell";
 import { idSiteDetail } from "@/web/i18n/id.site-detail";
 import { LANG_STORAGE_KEY } from "@/web/i18n/locale.detect";
 import type { BootProbe } from "./fixtures/i18n-boot/probe.mount";
@@ -110,6 +114,9 @@ describe("i18n boot (built output)", () => {
     expect(probe.signOut).toBe(idApp.menu.signOut);
     expect(probe.lazySignOut).toBe("Keluar");
     expect(probe.anchor).toBe(idSiteDetail.anchors.summary);
+    // shell/common sit in chunks shared by the entry side and lazy routes (still placeholders until wave 1)
+    expect(probe.retry).toBe(idCommon.retry);
+    expect(probe.shellAccount).toBe(idShell.account);
     expect(warned).toBe(0);
   }, 30_000);
 
@@ -122,6 +129,8 @@ describe("i18n boot (built output)", () => {
     expect(probe.signOut).toBe(tApp.menu.signOut);
     expect(probe.lazySignOut).toBe("Sign out");
     expect(probe.anchor).toBe(tSiteDetail.anchors.summary);
+    expect(probe.retry).toBe(tCommon.retry);
+    expect(probe.shellAccount).toBe(tShell.account);
     expect(warned).toBe(0);
   }, 30_000);
 

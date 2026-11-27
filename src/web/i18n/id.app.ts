@@ -1,7 +1,9 @@
+import type { Messages } from "@/shared/i18n";
 import type { Role } from "@/shared/roles";
+import type { tApp } from "./en.app";
 
 /** Indonesian strings for the app name, role labels and the account menu (tiny: shared by entry and shell). */
-export const idApp = {
+export const idApp: Messages<typeof tApp> = {
   appName: "Panel Termux",
   roles: { user: "Pengguna", admin: "Admin", super_admin: "Super Admin" } satisfies Record<Role, string>,
   menu: {

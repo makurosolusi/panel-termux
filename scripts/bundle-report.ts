@@ -14,13 +14,15 @@ const BUDGET = { landing: 150 * KB, panel: 215 * KB, idPack: 45 * KB } as const;
 /** Source modules that must stay out of `/` (they belong to the lazy `app` chunk). */
 const APP_ONLY = /^src\/web\/(panel|dev|site|backup|deploy|layout\/app\.layout)/;
 /** The only dictionaries `/` may carry; any other `src/web/i18n/*.ts` dictionary there is a leak. */
-const ENTRY_I18N = /^src\/web\/i18n\/(en|id)\.(app|common|shell|session|landing)\.ts$/;
+const ENTRY_I18N = /^src\/web\/i18n\/en\.(app|common|shell|session|landing)\.ts$/;
 /** The overlay pack and the detector are not dictionaries (the pack is lazy, the detector is the bootstrap's). */
 const NOT_DICTIONARY = /^src\/web\/i18n\/(id\.pack|locale\.detect)\.ts$/;
 const isDictionary = (input: string) => /^src\/web\/i18n\//.test(input) && !NOT_DICTIONARY.test(input);
 const isLeak = (input: string) => APP_ONLY.test(input) || (isDictionary(input) && !ENTRY_I18N.test(input));
 const MOUNT_INPUT = "src/web/app.mount.tsx";
 const PACK_INPUT = "src/web/i18n/id.pack.ts";
+const isIndonesian = (input: string) => /^src\/web\/i18n\/id\./.test(input) && input !== PACK_INPUT;
+const isEnglish = (input: string) => /^src\/web\/i18n\/en\./.test(input);
 const LOGIN_INPUT = "src/web/pages/login.page.tsx";
 const APP_INPUT = "src/web/app.routes.tsx";
 /** The page `/panel` opens on (its own lazy chunk since pages load per route). */
@@ -92,6 +94,10 @@ try {
   const leaked = inputsOf(entry).filter(isLeak);
   /** The bootstrap must not evaluate any dictionary before the overlay is registered (DECISIONS E5). */
   const bootDictionaries = inputsOf(boot).filter(isDictionary);
+  /** Indonesian text only in the lazy pack, and the pack pulls in no English dictionary (it loads before mount). */
+  const packClosure = closure(js.pack);
+  const strayIndonesian = inputsOf([...byName.keys()].filter((f) => !packClosure.has(f))).filter(isIndonesian);
+  const packEnglish = inputsOf(packClosure).filter(isEnglish);
 
   const rows = [
     { group: "bootstrap", files: boot.size, gzip: sum(boot), budget: null, soft: false },
@@ -108,7 +114,7 @@ try {
     },
     { group: "id pack (lazy)", files: pack.length, gzip: sum(pack), budget: BUDGET.idPack, soft: true },
   ];
-  let failed = leaked.length > 0 || bootDictionaries.length > 0;
+  let failed = leaked.length + bootDictionaries.length + strayIndonesian.length + packEnglish.length > 0;
   for (const r of rows) {
     const over = r.budget !== null && r.gzip > r.budget;
     if (!r.soft) failed ||= over;
@@ -119,6 +125,8 @@ try {
   }
   if (leaked.length) console.error(`entry contains app-only modules: ${leaked.slice(0, 5).join(", ")}`);
   if (bootDictionaries.length) console.error(`bootstrap contains dictionaries: ${bootDictionaries.join(", ")}`);
+  if (strayIndonesian.length) console.error(`id.* outside the pack: ${strayIndonesian.slice(0, 5).join(", ")}`);
+  if (packEnglish.length) console.error(`id pack pulls in English dictionaries: ${packEnglish.slice(0, 5).join(", ")}`);
   console.info(failed ? "bundle:check FAILED" : "bundle:check ok");
   process.exitCode = failed ? 1 : 0;
 } finally {

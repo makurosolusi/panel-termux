@@ -1,7 +1,10 @@
+import type { Messages } from "@/shared/i18n";
+import type { tLanding } from "./en.landing";
+
 const REPO = "https://github.com/makurosolusi/panel-termux";
 
 /** Indonesian strings of the public landing page at `/` (imported directly by src/web/landing, also `id.landing`). */
-export const idLanding = {
+export const idLanding: Messages<typeof tLanding> = {
   /** Tab title + link preview; must equal `OG_TEXT` in src/server/http/seo.ts (tests/web.landing.test.ts). */
   meta: {
     title: "Panel Termux — HP Android jadi server",

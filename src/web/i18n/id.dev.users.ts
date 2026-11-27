@@ -1,5 +1,7 @@
+import type { Messages } from "@/shared/i18n";
+import type { tDevUsers } from "./en.dev.users";
 /** Indonesian strings of /dev/users (`id.dev.users`, PLAN/05 §5.3, F5). */
-export const idDevUsers = {
+export const idDevUsers: Messages<typeof tDevUsers> = {
   title: "Pengguna",
   description: "Akun baru masuk sebagai Pengguna. Admin punya kendali penuh atas HP ini.",
   label: "Daftar pengguna",

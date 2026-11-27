@@ -1,7 +1,9 @@
+import type { Messages } from "@/shared/i18n";
 import type { BatteryStatus } from "@/shared/panel.types";
+import type { tOverview } from "./en.overview";
 
 /** Indonesian strings of the Ringkasan page (/panel). */
-export const idOverview = {
+export const idOverview: Messages<typeof tOverview> = {
   title: "Ringkasan",
   allHealthy: "Semua sehat",
   checkedAgo: (rel: string) => `dicek ${rel}`,

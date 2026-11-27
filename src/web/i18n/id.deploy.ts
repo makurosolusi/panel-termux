@@ -1,11 +1,13 @@
 import type { DeployKind } from "@/shared/deploy.types";
+import type { Messages } from "@/shared/i18n";
 import type { SiteRuntime } from "@/shared/site.types";
+import type { tDeploy } from "./en.deploy";
 
 /** Why chunk 0 is not a runnable binary (`invalid_binary.reason`). */
 type InvalidReason = "not_elf" | "not_64le" | "not_aarch64" | "interp" | "truncated";
 
 /** Indonesian strings of the site #deploy section: upload, resume, rollback and deploy history (PLAN/03 §5.8). */
-export const idDeploy = {
+export const idDeploy: Messages<typeof tDeploy> = {
   title: "Deploy",
   adoptedNote:
     "Situs ini diadopsi: entri pm2-nya ditulis manual di ecosystem.config.js. Panel hanya mengganti binary lalu memulai ulang aplikasi; runtime (native/grun) tidak diubah.",

@@ -107,6 +107,30 @@ describe("i18n import rules", () => {
     },
   );
 
+  test("only id.pack.ts (and id.* nesting) imports id.*; the bootstrap only loads the pack lazily", () => {
+    const allowed = (f: string) => /^src\/web\/i18n\/id\./.test(f) || /^tests\/i18n\.[^/]+\.test\.ts$/.test(f);
+    const importsId = /(?:from\s+|import\(\s*)["'](?:[^"']*i18n\/|\.\/)id\.[^"']+["']/;
+    const offenders = ["src/**/*.{ts,tsx}", "tests/**/*.{ts,tsx}", "scripts/**/*.ts"]
+      .flatMap((g) => [...new Bun.Glob(g).scanSync(".")])
+      .filter((f) => !allowed(f) && importsId.test(readFileSync(f, "utf8")));
+    expect(offenders).toEqual(["src/web/main.tsx"]);
+    expect(readFileSync("src/web/main.tsx", "utf8")).toContain('await import("@/web/i18n/id.pack")');
+  });
+
+  test("id.* files import English only as types, and nothing else that could evaluate a dictionary", () => {
+    const bad: string[] = [];
+    for (const file of new Bun.Glob("id.*.ts").scanSync(I18N)) {
+      if (file === "id.pack.ts") continue;
+      const src = readFileSync(`${I18N}/${file}`, "utf8");
+      for (const m of src.matchAll(/^import\s+(type\s+)?[^;]*?from\s+["']([^"']+)["']/gm)) {
+        const [, isType, spec = ""] = m;
+        const ok = isType ? true : /^\.\/id\./.test(spec) || /^@\/shared\//.test(spec);
+        if (!ok || (!isType && /en\./.test(spec))) bad.push(`${file}: ${m[0].replace(/\s+/g, " ")}`);
+      }
+    }
+    expect(bad).toEqual([]);
+  });
+
   test("the rule itself sees a runtime import and ignores a type import", () => {
     expect(RUNTIME_DICTIONARY.test('import { tShell } from "@/web/i18n/en.shell";')).toBe(true);
     expect(RUNTIME_DICTIONARY.test('import type { tShell } from "./en.shell";')).toBe(false);

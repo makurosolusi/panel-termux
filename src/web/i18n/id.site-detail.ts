@@ -1,9 +1,11 @@
+import type { Messages } from "@/shared/i18n";
 import type { SiteRuntime } from "@/shared/site.types";
+import type { tSiteDetail } from "./en.site-detail";
 
 type DeployBlocker = "integration" | "no_folder" | "pm2_not_running";
 
 /** Indonesian strings of /panel/sites/:name: header, anchors, banners, info, domains, env (+ paste), settings, delete. */
-export const idSiteDetail = {
+export const idSiteDetail: Messages<typeof tSiteDetail> = {
   back: "Semua situs",
   loading: "Memuat…",
   notFound: "Situs ini tidak ditemukan. Mungkin sudah dihapus atau namanya berubah.",

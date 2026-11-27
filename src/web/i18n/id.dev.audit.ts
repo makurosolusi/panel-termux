@@ -1,5 +1,7 @@
+import type { Messages } from "@/shared/i18n";
+import type { tDevAudit } from "./en.dev.audit";
 /** Indonesian strings of /dev/audit (`id.dev.audit`, PLAN/05 §5.4, F6). Sentences per action: `sentences`. */
-export const idDevAudit = {
+export const idDevAudit: Messages<typeof tDevAudit> = {
   title: "Audit",
   description: "Siapa melakukan apa di panel, terbaru dulu.",
   label: "Catatan audit",

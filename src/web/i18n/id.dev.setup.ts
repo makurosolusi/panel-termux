@@ -1,9 +1,11 @@
 import type { SetupItemKey, SetupLevel } from "@/shared/dev.types";
+import type { Messages } from "@/shared/i18n";
+import type { tDevSetup } from "./en.dev.setup";
 
 type SetupItemCopy = { title: string; body: string; action: string };
 
 /** Indonesian strings of the onboarding card and banner (`id.dev.setup`, PLAN/05 §5.1, F1). */
-export const idDevSetup = {
+export const idDevSetup: Messages<typeof tDevSetup> = {
   title: "Siapkan Panel Termux",
   description: "Langkah wajib dan disarankan agar panel aman dan datamu bisa dipulihkan.",
   progress: (n: number, total: number) => `${n} dari ${total} selesai`,

@@ -1,5 +1,7 @@
+import type { Messages } from "@/shared/i18n";
+import type { tCommon } from "./en.common";
 /** Indonesian strings shared by every section (imported directly, DECISIONS B30). Wording follows docs/content-guide.md. */
-export const idCommon = {
+export const idCommon: Messages<typeof tCommon> = {
   retry: "Coba lagi",
   cancel: "Batal",
   close: "Tutup",

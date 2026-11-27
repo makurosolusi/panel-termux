@@ -1,9 +1,11 @@
+import type { Messages } from "@/shared/i18n";
 import type { AppStatus, ControlAction } from "@/shared/panel.types";
+import type { tPanel } from "./en.panel";
 
 const SSH_HINT = "Bila memang perlu dihentikan, lakukan dari terminal HP.";
 
 /** Indonesian strings of the Layanan, Aplikasi, Domain, Database and log pages (Ringkasan: id.overview.ts). */
-export const idPanel = {
+export const idPanel: Messages<typeof tPanel> = {
   errorCodes: {
     busy: "Masih ada aksi lain yang berjalan. Tunggu sampai selesai, lalu coba lagi.",
     not_found:

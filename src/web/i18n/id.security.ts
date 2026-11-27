@@ -1,7 +1,9 @@
+import type { Messages } from "@/shared/i18n";
 import type { DataKeyResetInput } from "@/shared/security.types";
+import type { tSecurity } from "./en.security";
 
 /** Indonesian strings of the security cards on Administrasi → Kesehatan sistem (PLAN/04 §5.2–5.3). */
-export const idSecurity = {
+export const idSecurity: Messages<typeof tSecurity> = {
   errorCodes: {
     reauth_required: "Untuk aksi ini kamu perlu masuk ulang (sesi lebih dari 15 menit).",
     key_mismatch: "Kunci data tidak cocok, jadi kunci data tidak bisa diunduh. Perbaiki kuncinya dulu.",

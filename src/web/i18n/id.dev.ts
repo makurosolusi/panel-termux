@@ -1,3 +1,5 @@
+import type { Messages } from "@/shared/i18n";
+import type { tDev } from "./en.dev";
 import { idDevAudit } from "./id.dev.audit";
 import { idDevHealth } from "./id.dev.health";
 import { idDevLogs } from "./id.dev.logs";
@@ -6,7 +8,7 @@ import { idDevUsers } from "./id.dev.users";
 import { idSettings } from "./id.settings";
 
 /** Indonesian strings of the /dev admin area (merged into `id.dev`). The menu label is "Administrasi". */
-export const idDev = {
+export const idDev: Messages<typeof tDev> = {
   errorCodes: {
     protected: "Akun ini dilindungi dan tidak bisa diubah atau dihapus dari panel.",
     self: "Untuk sesimu sendiri, pakai halaman Profil.",

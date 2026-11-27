@@ -1,16 +1,12 @@
 import type { BackupVerifyCode } from "@/shared/backup.types";
 import type { CloudflareVerifyCode, SettingKey } from "@/shared/dev.types";
+import type { Messages } from "@/shared/i18n";
 import type { AlertErrorCode } from "@/shared/monitor.types";
 import type { SettingGroup } from "@/web/dev/settings.registry";
-
-/** Copy of one setting field. `invalid` = shown when PATCH answers `invalid` for this key. */
-export type SettingFieldCopy = { label: string; help: string; placeholder?: string; invalid: string };
-
-/** Copy of one settings card on /dev/settings. */
-export type SettingGroupCopy = { title: string; description: string };
+import type { SettingFieldCopy, SettingGroupCopy, tSettings } from "./en.settings";
 
 /** Indonesian strings of /dev/settings (`id.settings`, PLAN/05 §5.2 + §5.5). Every SettingKey must have a field. */
-export const idSettings = {
+export const idSettings: Messages<typeof tSettings> = {
   title: "Pengaturan",
   subtitle: "Nilai rahasia disimpan terenkripsi dan tidak pernah ditampilkan lagi.",
   groups: {

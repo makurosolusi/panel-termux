@@ -1,5 +1,7 @@
 import type { FixBlockReason, FixErrorCode, FixFile } from "@/shared/fix.types";
+import type { Messages } from "@/shared/i18n";
 import { type IntegrationCheckKey, type JobParams, PM2_GUARD_NAME } from "@/shared/site.types";
+import type { tSiteSetup } from "./en.site.setup";
 
 /** Copy that may interpolate server params (`{path}`, `{count}` …). */
 type Copy = string | ((p: JobParams) => string);
@@ -7,18 +9,18 @@ type CheckCopy = { ok: Copy; warning?: Copy; error?: Copy };
 const s = (v: JobParams[string] | undefined) => String(v ?? "");
 
 /** "blog", "blog dan shop", "blog, shop, dan api". */
-export function joinNames(names: readonly string[]): string {
+function joinNames(names: readonly string[]): string {
   if (names.length <= 1) return names.join("");
   if (names.length === 2) return `${names[0]} dan ${names[1]}`;
   return `${names.slice(0, -1).join(", ")}, dan ${names.at(-1)}`;
 }
 
 /** pm2 app names for people: the panel's guard gets a plain label instead of its internal name (QA fix-07 N4). */
-export const appNamesText = (names: readonly string[]): string =>
+const appNamesText = (names: readonly string[]): string =>
   joinNames(names.map((n) => (n === PM2_GUARD_NAME ? "penjaga pm2" : n)));
 
 /** Indonesian strings of the Persiapan card on /panel/sites (PLAN/03 §5.1, PLAN/06 §4.2); part of `idSite.setup`. */
-export const idSiteSetup = {
+export const idSiteSetup: Messages<typeof tSiteSetup> = {
   title: "Persiapan",
   description:
     "Sekali saja: panel menghubungkan situs buatannya ke pm2 agar tetap berjalan setelah HP dinyalakan ulang.",

@@ -1,5 +1,7 @@
+import type { Messages } from "@/shared/i18n";
+import type { tShell } from "./en.shell";
 /** Indonesian strings of the app shell, shared components and route pages (imported directly, DECISIONS B30). */
-export const idShell = {
+export const idShell: Messages<typeof tShell> = {
   skipToContent: "Lewati ke konten",
   groups: { server: "Server", admin: "Administrasi", account: "Akun" },
   nav: {

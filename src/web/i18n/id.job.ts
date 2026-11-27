@@ -1,5 +1,7 @@
 import { formatBytes } from "@/shared/format.number";
+import type { Messages } from "@/shared/i18n";
 import type { JobKind, JobNextAction, JobParams, JobStepKey, JobStepStatus } from "@/shared/job.types";
+import type { tJob } from "./en.job";
 
 /** Formats an outcome sentence from its coded params. */
 type Outcome = (p: JobParams) => string;
@@ -15,7 +17,7 @@ const lastAnswer = (v: JobParams[string] | undefined): string =>
   v === "refused" ? "port menolak koneksi" : v === "no_answer" ? "tidak menjawab" : `terakhir HTTP ${s(v)}`;
 
 /** Indonesian copy of job progress: kinds, step labels, coded outcomes, follow-up actions, recover modes (PLAN/03 §5.8). */
-export const idJob = {
+export const idJob: Messages<typeof tJob> = {
   title: "Progres perubahan",
   listTitle: "Riwayat perubahan",
   listDescription: "Semua perubahan situs yang dijalankan panel, terbaru di atas.",
