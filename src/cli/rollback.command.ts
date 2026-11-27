@@ -106,7 +106,7 @@ function latestSnapshot(dataDir: string): { file: string; version: string; stamp
     .map((f) => ({ f, m: SNAPSHOT.exec(f) }))
     .filter((x) => x.m && x.m[1] !== BEFORE)
     .map(({ f, m }) => ({ file: join(dir, f), version: m?.[1] ?? "", stamp: m?.[2] ?? "" }))
-    .sort((a, b) => b.stamp.localeCompare(a.stamp));
+    .sort((a, b) => b.stamp.localeCompare(a.stamp) || b.file.localeCompare(a.file)); // tie-break: never readdir order
   return found[0] ?? null;
 }
 

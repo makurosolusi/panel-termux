@@ -73,7 +73,8 @@ const readOrNull = (file: string): string | null => {
     });
   }
 };
-const listOrEmpty = (dir: string): string[] => (existsSync(dir) ? readdirSync(dir) : []);
+// Sorted: readdir order is filesystem-dependent and these names reach doctor output and --json.
+const listOrEmpty = (dir: string): string[] => (existsSync(dir) ? readdirSync(dir).sort() : []);
 
 /** `exec` that turns a missing tool or timeout into null (a probe answer, not a doctor failure). */
 async function tryExec(host: CliHost, tool: string, args: string[], timeoutMs?: number) {
