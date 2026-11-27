@@ -8,8 +8,9 @@ import { EMAIL_RE, HOSTNAME_RE } from "../shared/address.rules";
 import { decodeEnvValue, encodeEnvLine, envValueProblem, findEnvLine } from "../shared/env.codec";
 import { ENV_VARS, type EnvVar, type EnvVarName, isEnvValueMissing, renderEnvTemplate } from "../shared/env.schema";
 import { probePaths } from "./cli.host";
+import { activeCliLocale, tr } from "./cli.locale";
 import { CliExit } from "./cli.output";
-import { defineStep, INIT_EXIT, INIT_STEP_TITLES, type InitContext, type PlanLine } from "./init.types";
+import { defineStep, INIT_EXIT, type InitContext, type PlanLine } from "./init.types";
 
 const ENV_MODE = 0o600;
 // §4.3 question order (address and email first, then Google with the redirect URI built from the address); the
@@ -82,7 +83,8 @@ function envError(text: string): string | null {
   }
 }
 
-const usage = (message: string) => new CliExit(INIT_EXIT.usage, message, "lihat: panel init --help");
+const usage = (message: string) =>
+  new CliExit(INIT_EXIT.usage, message, tr("see: panel init --help", "lihat: panel init --help"));
 
 /** Values the flags give for missing variables (§4.3: --hostname, --admin-email, --skip tunnel → localhost). */
 function prefill(ctx: InitContext, text: string | null): EnvStepState["fill"] {
@@ -91,12 +93,24 @@ function prefill(ctx: InitContext, text: string | null): EnvStepState["fill"] {
   if (args.skip.has("tunnel")) fill.APP_BASE_URL = `http://localhost:${envValue(text, "PORT") || DEFAULT_PORT}`;
   else if (args.hostname !== null) {
     const host = normalizeHostname(args.hostname);
-    if (host === null) throw usage(`--hostname bukan alamat yang valid (contoh: panel.contoh.com)`);
+    if (host === null)
+      throw usage(
+        tr(
+          "--hostname is not a valid address (example: panel.example.com)",
+          "--hostname bukan alamat yang valid (contoh: panel.contoh.com)",
+        ),
+      );
     fill.APP_BASE_URL = `https://${host}`;
   }
   if (args.adminEmails.length > 0) {
     const emails = normalizeEmails(args.adminEmails.join(","));
-    if (emails === null) throw usage("--admin-email berisi alamat email yang tidak valid");
+    if (emails === null)
+      throw usage(
+        tr(
+          "--admin-email holds an email address that is not valid",
+          "--admin-email berisi alamat email yang tidak valid",
+        ),
+      );
     fill.SUPER_ADMIN_EMAILS = emails;
   }
   return fill;
@@ -121,28 +135,42 @@ const shown = (ctx: InitContext, file: string) => file.replace(ctx.host.paths.ho
 function plan(ctx: InitContext, s: EnvStepState): PlanLine[] {
   const name = shown(ctx, s.file);
   const lines: PlanLine[] = [];
-  if (s.text === null) lines.push({ kind: "action", text: `Membuat ${name} (izin 600)` });
-  else if (s.wideMode) lines.push({ kind: "action", text: `Mengatur izin ${name} menjadi 600` });
+  if (s.text === null)
+    lines.push({ kind: "action", text: tr(`Creating ${name} (mode 600)`, `Membuat ${name} (izin 600)`) });
+  else if (s.wideMode)
+    lines.push({
+      kind: "action",
+      text: tr(`Setting the mode of ${name} to 600`, `Mengatur izin ${name} menjadi 600`),
+    });
   if (s.missing.length > 0) {
-    lines.push({ kind: "action", text: `Mengisi ${name}: ${s.missing.join(", ")}` });
-    const unanswered = s.missing.filter((n) => s.fill[n] === undefined);
-    if (!ctx.tty && unanswered.length > 0)
+    const names = s.missing.join(", ");
+    lines.push({ kind: "action", text: tr(`Filling in ${name}: ${names}`, `Mengisi ${name}: ${names}`) });
+    const unanswered = s.missing.filter((n) => s.fill[n] === undefined).join(", ");
+    if (!ctx.tty && unanswered)
       lines.push({
         kind: "warning",
-        text: `Tanpa terminal, ${unanswered.join(", ")} tidak bisa ditanyakan`,
-        hint: `jalankan ${ctx.resumeCommand()} di terminal`,
+        text: tr(
+          `Without a terminal, ${unanswered} cannot be asked`,
+          `Tanpa terminal, ${unanswered} tidak bisa ditanyakan`,
+        ),
+        hint: tr(`run ${ctx.resumeCommand()} in a terminal`, `jalankan ${ctx.resumeCommand()} di terminal`),
       });
   }
-  if (s.invalid !== null)
-    lines.push({ kind: "error", text: `.env tidak valid: ${s.invalid}`, hint: `perbaiki nilainya di ${name}` });
+  if (s.invalid !== null) lines.push({ kind: "error", text: invalidText(s.invalid), hint: fixHint(name) });
   return lines;
 }
 
+const invalidText = (why: string) => tr(`.env is not valid: ${why}`, `.env tidak valid: ${why}`);
+const fixHint = (where: string) => tr(`fix the value in ${where}`, `perbaiki nilainya di ${where}`);
+
 const GOOGLE_BLOCK = (baseUrl: string) => [
-  'Buat OAuth client Google (tipe "Web application") di console.cloud.google.com → APIs & Services → Credentials.',
-  'Tempel alamat ini di "Authorized redirect URIs":',
+  tr(
+    'Create a Google OAuth client (type "Web application") at console.cloud.google.com → APIs & Services → Credentials.',
+    'Buat OAuth client Google (tipe "Web application") di console.cloud.google.com → APIs & Services → Credentials.',
+  ),
+  tr('Paste this address under "Authorized redirect URIs":', 'Tempel alamat ini di "Authorized redirect URIs":'),
   `  ${baseUrl.replace(/\/+$/, "")}/api/auth/callback/google`,
-  "Panduan: panel docs google",
+  tr("Guide: panel docs google", "Panduan: panel docs google"),
 ];
 
 /** Asks one variable until the answer is valid; null = EOF. Never echoes or prints the secret. */
@@ -152,33 +180,53 @@ async function askValue(ctx: InitContext, name: EnvVarName): Promise<string | nu
     let answer: string | null;
     let value: string | null;
     if (name === "APP_BASE_URL") {
-      answer = await prompt.ask("Alamat panel (mis. panel.contoh.com):");
+      answer = await prompt.ask(tr("Panel address (e.g. panel.example.com):", "Alamat panel (mis. panel.contoh.com):"));
       const host = answer === null ? null : normalizeHostname(answer);
       value = host && `https://${host}`;
-      if (answer !== null && !host) out.note("❌ Itu bukan alamat yang valid. Contoh: panel.contoh.com");
+      if (answer !== null && !host)
+        out.note(
+          tr(
+            "❌ That is not a valid address. Example: panel.example.com",
+            "❌ Itu bukan alamat yang valid. Contoh: panel.contoh.com",
+          ),
+        );
     } else if (name === "SUPER_ADMIN_EMAILS") {
-      answer = await prompt.ask("Email Google pemilik panel (super admin):");
+      answer = await prompt.ask(
+        tr("Google email of the panel owner (super admin):", "Email Google pemilik panel (super admin):"),
+      );
       value = answer === null ? null : normalizeEmails(answer);
-      if (answer !== null && !value) out.note("❌ Email tidak valid. Beberapa email pisahkan dengan koma.");
+      if (answer !== null && !value)
+        out.note(
+          tr(
+            "❌ Not a valid email. Separate several emails with commas.",
+            "❌ Email tidak valid. Beberapa email pisahkan dengan koma.",
+          ),
+        );
     } else {
       const secret = name === "GOOGLE_CLIENT_SECRET";
       answer = await (secret ? prompt.secret("Client secret:") : prompt.ask("Client ID:"));
       value = answer?.trim() || null;
-      if (answer !== null && !value) out.note("❌ Tidak boleh kosong.");
+      if (answer !== null && !value) out.note(tr("❌ Cannot be empty.", "❌ Tidak boleh kosong."));
     }
     if (answer === null) return null;
     if (value === null) continue;
     if (envValueProblem(value) !== null) {
-      out.note("❌ Nilai ini tidak bisa disimpan di .env (terlalu panjang atau berisi tanda kutip/baris baru).");
+      out.note(
+        tr(
+          "❌ This value cannot be stored in .env (too long, or it holds quotes/new lines).",
+          "❌ Nilai ini tidak bisa disimpan di .env (terlalu panjang atau berisi tanda kutip/baris baru).",
+        ),
+      );
       continue;
     }
-    if (name === "GOOGLE_CLIENT_SECRET") out.line(`(tersimpan, ${value.length} karakter)`);
+    if (name === "GOOGLE_CLIENT_SECRET")
+      out.line(tr(`(saved, ${value.length} characters)`, `(tersimpan, ${value.length} karakter)`));
     return value;
   }
 }
 
 async function apply(ctx: InitContext, s: EnvStepState): Promise<void> {
-  let text = s.text ?? renderEnvTemplate({ full: true });
+  let text = s.text ?? renderEnvTemplate({ full: true, locale: activeCliLocale().locale });
   const save = () => {
     writeAtomic(s.file, text, { mode: ENV_MODE });
     if (!ctx.state.changed.includes(s.file)) ctx.state.changed.push(s.file);
@@ -210,13 +258,15 @@ async function apply(ctx: InitContext, s: EnvStepState): Promise<void> {
   if (left.length > 0)
     throw new CliExit(
       INIT_EXIT.needsUser,
-      `${where} belum lengkap: ${left.join(", ")}.`,
-      `jalankan ${ctx.resumeCommand()} di terminal (ssh: pakai -t), atau isi nilainya di ${where}`,
+      tr(`${where} is not complete: ${left.join(", ")}.`, `${where} belum lengkap: ${left.join(", ")}.`),
+      tr(
+        `run ${ctx.resumeCommand()} in a terminal (ssh: use -t), or fill in the values in ${where}`,
+        `jalankan ${ctx.resumeCommand()} di terminal (ssh: pakai -t), atau isi nilainya di ${where}`,
+      ),
     );
   const invalid = envError(text);
-  if (invalid !== null)
-    throw new CliExit(INIT_EXIT.failed, `.env tidak valid: ${invalid}`, `perbaiki nilainya di ${where}`);
+  if (invalid !== null) throw new CliExit(INIT_EXIT.failed, invalidText(invalid), fixHint(where));
 }
 
 /** Step 5 `.env`. */
-export const envStep = defineStep<EnvStepState>({ id: "env", title: INIT_STEP_TITLES.env, detect, plan, apply });
+export const envStep = defineStep<EnvStepState>({ id: "env", detect, plan, apply });

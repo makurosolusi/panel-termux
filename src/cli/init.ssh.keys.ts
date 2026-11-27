@@ -1,5 +1,6 @@
 // Public-key parsing for step 3a `ssh` (PLAN/07 K22): `--ssh-key` source lines, authorized_keys ids, fingerprints.
 import { createHash } from "node:crypto";
+import { tr } from "./cli.locale";
 import { CliExit } from "./cli.output";
 import { INIT_EXIT } from "./init.types";
 
@@ -34,7 +35,11 @@ export function parseKey(line: string): PublicKey | null {
 /** Every key of a source text (blank and `#` lines skipped); any other line is an error naming its number, not its text. */
 export function parseKeys(text: string, source: string): PublicKey[] {
   if (/-----BEGIN [A-Z ]*PRIVATE KEY-----/.test(text))
-    throw new CliExit(INIT_EXIT.failed, `${source} berisi kunci PRIVAT, bukan kunci publik.`, "pakai file .pub");
+    throw new CliExit(
+      INIT_EXIT.failed,
+      tr(`${source} holds a PRIVATE key, not a public key.`, `${source} berisi kunci PRIVAT, bukan kunci publik.`),
+      tr("use the .pub file", "pakai file .pub"),
+    );
   const keys: PublicKey[] = [];
   for (const [i, raw] of text.split(/\r?\n/).entries()) {
     const line = raw.trim();
@@ -43,12 +48,19 @@ export function parseKeys(text: string, source: string): PublicKey[] {
     if (!key)
       throw new CliExit(
         INIT_EXIT.failed,
-        `${source} baris ${i + 1} bukan kunci publik SSH (harus diawali ssh-ed25519, ssh-rsa, ecdsa-sha2-… atau sk-…).`,
-        "baris yang diawali opsi seperti command= tidak diterima",
+        tr(
+          `${source} line ${i + 1} is not an SSH public key (it must start with ssh-ed25519, ssh-rsa, ecdsa-sha2-… or sk-…).`,
+          `${source} baris ${i + 1} bukan kunci publik SSH (harus diawali ssh-ed25519, ssh-rsa, ecdsa-sha2-… atau sk-…).`,
+        ),
+        tr(
+          "lines that start with options such as command= are not accepted",
+          "baris yang diawali opsi seperti command= tidak diterima",
+        ),
       );
     if (!keys.some((k) => k.id === key.id)) keys.push(key);
   }
-  if (keys.length === 0) throw new CliExit(INIT_EXIT.failed, `${source} tidak berisi kunci publik.`);
+  if (keys.length === 0)
+    throw new CliExit(INIT_EXIT.failed, tr(`${source} holds no public key.`, `${source} tidak berisi kunci publik.`));
   return keys;
 }
 

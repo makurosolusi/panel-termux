@@ -9,11 +9,11 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/web/components/ui/dropdown-menu";
-import { idPanel } from "@/web/i18n/id.panel";
+import { tPanel } from "@/web/i18n/en.panel";
 import { type ControlTarget, controlPlan } from "./panel.control";
 import type { PanelControl } from "./use-panel-control";
 
-const t = idPanel;
+const t = tPanel;
 
 /** Consequence lines of a confirmation (exported for tests): the generic sentence, then the service/site specific impact. */
 export function consequences(target: ControlTarget, action: "stop" | "restart"): string[] {

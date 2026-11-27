@@ -23,8 +23,8 @@ import {
   uploadProgress,
 } from "@/web/deploy/deploy.upload";
 import { fileProblem } from "@/web/deploy/deploy.uploader";
-import { idDeploy } from "@/web/i18n/id.deploy";
-import { idJob } from "@/web/i18n/id.job";
+import { tDeploy } from "@/web/i18n/en.deploy";
+import { tJob } from "@/web/i18n/en.job";
 import { ApiError, apiErrorMessage, errorFromResponse } from "@/web/shared/api.client";
 import {
   BLIP_TOLERANCE_MS,
@@ -103,8 +103,8 @@ describe("chunk plan", () => {
   });
 
   test("picked file: empty and over 300 MB are refused before sending", () => {
-    expect(fileProblem({ size: 0 })).toBe(idDeploy.upload.empty);
-    expect(fileProblem({ size: 300 * 1000 * 1000 + 1 })).toContain("batas");
+    expect(fileProblem({ size: 0 })).toBe(tDeploy.upload.empty);
+    expect(fileProblem({ size: 300 * 1000 * 1000 + 1 })).toContain("limit");
     expect(fileProblem({ size: 89_000_000 })).toBeNull();
   });
 });
@@ -148,7 +148,7 @@ describe("resume plan from server `received`", () => {
     expect(chunkAction(2, "c0", have)).toBe("send"); // same name+size but different bytes
   });
 
-  test("missing chunks drive '6 dari 11 potongan'", () => {
+  test("missing chunks drive '6 of 11 chunks'", () => {
     expect(missingChunks(upload({ received: [{ index: 1, sha256: "x" }] }))).toEqual([0, 2]);
     expect(missingChunks(upload({ chunks: 0 }))).toEqual([]);
   });
@@ -172,7 +172,7 @@ describe("resume plan from server `received`", () => {
 describe("upload failures", () => {
   test("network and 5xx pause with Lanjutkan; chunk_sha_mismatch resumes", () => {
     expect(uploadFailure(new ApiError("network", null, null, null))).toEqual({
-      message: idDeploy.upload.paused,
+      message: tDeploy.upload.paused,
       next: "resume",
     });
     expect(uploadFailure(deployErr(502, {})).next).toBe("resume");
@@ -181,25 +181,25 @@ describe("upload failures", () => {
 
   test("early rejections spell out the fix", () => {
     expect(uploadFailure(deployErr(400, { error: "invalid_binary", reason: "not_aarch64" }))).toEqual({
-      message: idDeploy.invalidBinary.not_aarch64,
+      message: tDeploy.invalidBinary.not_aarch64,
       next: "repick",
     });
     const mismatch = uploadFailure(deployErr(409, { error: "runtime_mismatch", expected: "native", got: "grun" }));
-    expect(mismatch.message).toContain("glibc lewat grun");
+    expect(mismatch.message).toContain("glibc through grun");
     expect(mismatch.message).toContain("Android native");
     const space = uploadFailure(
       deployErr(507, { error: "no_space", needBytes: 300 * 1024 * 1024, freeBytes: 120 * 1024 * 1024 }),
     );
-    expect(space).toEqual({ message: idDeploy.noSpace("300 MB", "120 MB"), next: "retry" });
+    expect(space).toEqual({ message: tDeploy.noSpace("300 MB", "120 MB"), next: "retry" });
     expect(uploadFailure(deployErr(404, { error: "upload_expired" }))).toEqual({
-      message: idDeploy.upload.expired,
+      message: tDeploy.upload.expired,
       next: "repick",
     });
   });
 
   test("deploy codes over site codes", () => {
     expect(apiErrorMessage(errorFromResponse(409, { error: "no_previous" }), DEPLOY_ERROR_CODES)).toBe(
-      idDeploy.errorCodes.no_previous,
+      tDeploy.errorCodes.no_previous,
     );
   });
 });
@@ -211,10 +211,10 @@ describe("rollback + history", () => {
     expect(canRollback({})).toBe(false);
   });
 
-  test("Dari → Ke lines: recorded binary vs untracked", () => {
+  test("From → To lines: recorded binary vs untracked", () => {
     const at = () => "26 Nov 22.40";
-    expect(binaryLine(bin(), at)).toBe("3f9a2c1b7e0d · app-v2 · 89,2 MB · 26 Nov 22.40");
-    expect(binaryLine(bin({ sha256: null, deployId: null }), at)).toBe(idDeploy.rollback.untracked("89,2 MB", at()));
+    expect(binaryLine(bin(), at)).toBe("3f9a2c1b7e0d · app-v2 · 89.2 MB · 26 Nov 22.40");
+    expect(binaryLine(bin({ sha256: null, deployId: null }), at)).toBe(tDeploy.rollback.untracked("89.2 MB", at()));
     expect(shortSha("0123456789abcdef")).toBe("0123456789ab");
   });
 
@@ -238,21 +238,23 @@ describe("stepper state", () => {
   ];
 
   test("labels come from coded keys; legacy rows fall back to their label", () => {
-    expect(stepLabel(step("swap", "done"))).toBe("Menukar binary");
+    expect(stepLabel(step("swap", "done"))).toBe("Swapping the binary");
     expect(stepLabel(step("restart", "done", { legacyLabel: "Restart app" }))).toBe("Restart app");
-    expect(outcomeText("staged", { sizeBytes: Math.round(89.2 * 1024 * 1024) })).toBe("Binary 89,2 MB siap.");
+    expect(outcomeText("staged", { sizeBytes: Math.round(89.2 * 1024 * 1024) })).toBe("Binary ready (89.2 MB).");
     expect(outcomeText("healthy", { status: 200, path: "/api/health", ms: 85, seconds: 3 })).toBe(
-      "HTTP 200 dari `/api/health` dalam 85 ms, stabil.",
+      "HTTP 200 from `/api/health` in 85 ms, stable.",
     );
-    expect(outcomeText("health_timeout", { seconds: 60, last: "refused", path: "/" })).toContain("menolak koneksi");
-    expect(outcomeText("brand_new_code")).toBe("Hasil: brand_new_code");
+    expect(outcomeText("health_timeout", { seconds: 60, last: "refused", path: "/" })).toContain(
+      "refused the connection",
+    );
+    expect(outcomeText("brand_new_code")).toBe("Result: brand_new_code");
     expect(outcomeText(null)).toBeNull();
   });
 
   test("current step, live sentence, progress", () => {
     expect(currentStepIndex(steps)).toBe(2);
     expect(currentStepIndex([step("a", "done"), step("b", "failed"), step("c", "pending")])).toBe(1);
-    expect(liveAnnouncement({ steps, status: "running" })).toBe("Langkah 3 dari 4: Menukar binary… sedang berjalan");
+    expect(liveAnnouncement({ steps, status: "running" })).toBe("Step 3 of 4: Swapping the binary… running");
     expect(jobProgress(job({ steps }))).toBe(50);
     expect(jobProgress(job({ status: "rolled_back", steps }))).toBe(100);
   });
@@ -261,8 +263,8 @@ describe("stepper state", () => {
     const now = new Date("2026-11-27T09:00:12Z").getTime();
     expect(stepDurationMs(steps[2] as JobStep, now)).toBe(12_000);
     expect(stepDurationMs(step("x", "pending"), now)).toBeNull();
-    expect(durationText(300)).toBe("< 1 dtk");
-    expect(durationText(65_000)).toBe("1 mnt 5 dtk");
+    expect(durationText(300)).toBe("< 1 s");
+    expect(durationText(65_000)).toBe("1 min 5 s");
   });
 
   test("poll errors: hidden during cloudflared restart up to 120 s, then lost", () => {
@@ -275,7 +277,7 @@ describe("stepper state", () => {
     expect(pollErrorView(job({ status: "succeeded", steps }), true, t0, t0 + 5_000)).toBe("stale");
   });
 
-  test("every server outcome code has Indonesian copy (compile-time steps, scan for outcomes)", () => {
+  test("every server outcome code has copy (compile-time steps, scan for outcomes)", () => {
     const codes = new Set<string>();
     for (const dir of ["src/server/sites", "src/server/deploy"]) {
       for (const f of readdirSync(dir)) {
@@ -283,7 +285,7 @@ describe("stepper state", () => {
         for (const m of src.matchAll(/(?:StepError\(|code: )"([a-z0-9_]+)"/g)) codes.add(m[1] as string);
       }
     }
-    const missing = [...codes].filter((c) => !(c in idJob.outcomes));
+    const missing = [...codes].filter((c) => !(c in tJob.outcomes));
     expect(codes.size).toBeGreaterThan(50);
     expect(missing).toEqual([]);
   });
@@ -293,15 +295,15 @@ describe("recover and next actions", () => {
   test("cleanup is a plain button, retry is confirmed with a kind-specific label", () => {
     expect(recoverAction(job({ status: "interrupted", recoverMode: "cleanup" }))).toEqual({
       mode: "cleanup",
-      label: "Pulihkan",
+      label: "Recover",
       confirm: false,
     });
     expect(recoverAction(job({ kind: "site.delete", status: "failed", recoverMode: "retry" }))).toEqual({
       mode: "retry",
-      label: "Ulangi hapus situs",
+      label: "Retry site deletion",
       confirm: true,
     });
-    expect(recoverAction(job({ kind: "hostname.remove", recoverMode: "retry" }))?.label).toBe("Ulangi hapus domain");
+    expect(recoverAction(job({ kind: "hostname.remove", recoverMode: "retry" }))?.label).toBe("Retry domain removal");
     expect(recoverAction(job({ recoverMode: "cleanup", resolvedBy: "j2" }))).toBeNull();
     expect(recoverAction(job({ recoverMode: null }))).toBeNull();
   });

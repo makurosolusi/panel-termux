@@ -6,7 +6,7 @@ import { EmptyState } from "@/web/components/empty-state";
 import { QueryView } from "@/web/components/query-view";
 import { RelativeTime } from "@/web/components/relative-time";
 import { StatusBadge } from "@/web/components/status-badge";
-import { idDeploy } from "@/web/i18n/id.deploy";
+import { tDeploy } from "@/web/i18n/en.deploy";
 import { formatBytes } from "@/web/shared/format";
 import { useApiQuery } from "@/web/shared/use-api-query";
 import { durationText } from "@/web/site/job.state";
@@ -15,7 +15,7 @@ import { DEPLOY_ERROR_CODES } from "./deploy.api";
 import { shortSha } from "./deploy.state";
 import { DEPLOY_STATUS_KEY } from "./deploy.status-key";
 
-const t = idDeploy.history;
+const t = tDeploy.history;
 /** Rows per history page (PLAN/03 §5.4). */
 const HISTORY_PAGE_SIZE = 10;
 
@@ -38,7 +38,7 @@ const COLUMNS: DataColumn<Deploy>[] = [
     ),
   },
   { key: "size", header: t.columns.size, align: "right", cell: (d) => formatBytes(d.sizeBytes) },
-  { key: "runtime", header: t.columns.runtime, cell: (d) => idDeploy.runtimes[d.runtime] },
+  { key: "runtime", header: t.columns.runtime, cell: (d) => tDeploy.runtimes[d.runtime] },
   { key: "actor", header: t.columns.actor, cell: (d) => d.actor?.name || t.unknownActor },
   { key: "duration", header: t.columns.duration, align: "right", cell: durationOf },
   {

@@ -16,7 +16,7 @@ import {
   SheetTitle,
   SheetTrigger,
 } from "@/web/components/ui/sheet";
-import { idBackup } from "@/web/i18n/id.backup";
+import { tBackup } from "@/web/i18n/en.backup";
 import { formatBytes, formatDateTime } from "@/web/shared/format";
 import { toast } from "@/web/shared/toast.lazy";
 import { BACKUP_ERROR_CODES, startRestore } from "./backup.api";
@@ -24,7 +24,7 @@ import { ItemDownload } from "./backup.download";
 import { CheckedBadge } from "./backup.runs";
 import { canDownload, canRestore, type DownloadAccess, findItem, type LastGoodRow, lastGoodRows } from "./backup.state";
 
-const t = idBackup.lastGood;
+const t = tBackup.lastGood;
 
 function CommandSheet({ name, command }: { name: string; command: string }) {
   return (
@@ -54,7 +54,7 @@ const columns: DataColumn<LastGoodRow>[] = [
     mobile: "title",
     cell: (r) => (
       <span className="flex min-w-0 flex-col">
-        <span>{idBackup.kinds[r.kind]}</span>
+        <span>{tBackup.kinds[r.kind]}</span>
         <span className="truncate text-xs font-normal text-muted-foreground">{r.name}</span>
       </span>
     ),
@@ -76,7 +76,7 @@ const columns: DataColumn<LastGoodRow>[] = [
     key: "size",
     header: t.size,
     align: "right",
-    cell: (r) => (r.good?.sizeBytes == null ? idBackup.runs.noSize : formatBytes(r.good.sizeBytes)),
+    cell: (r) => (r.good?.sizeBytes == null ? tBackup.runs.noSize : formatBytes(r.good.sizeBytes)),
   },
   { key: "check", header: t.check, cell: (r) => (r.good ? <CheckedBadge checked={r.good.checked} /> : null) },
 ];
@@ -98,7 +98,7 @@ export function LastGoodSection({
     const g = r.good;
     if (!g) return null;
     const hint = findItem(runs, g.runId, g.itemIndex)?.restoreHint;
-    const size = g.sizeBytes == null ? idBackup.runs.noSize : formatBytes(g.sizeBytes);
+    const size = g.sizeBytes == null ? tBackup.runs.noSize : formatBytes(g.sizeBytes);
     // Wraps on narrow cards (QA M3): download + restore + command did not fit 390 px in one line.
     return (
       <div className="flex min-w-0 flex-wrap items-center justify-end gap-1 max-md:justify-start">
@@ -107,19 +107,19 @@ export function LastGoodSection({
         )}
         {canRestore(g.kind, status) && (
           <ConfirmAction
-            title={idBackup.restore.title(g.name)}
-            description={idBackup.restore.body(idBackup.restore.newTarget(g.name), formatDateTime(g.at), size)}
-            confirmLabel={idBackup.restore.button}
+            title={tBackup.restore.title(g.name)}
+            description={tBackup.restore.body(tBackup.restore.newTarget(g.name), formatDateTime(g.at), size)}
+            confirmLabel={tBackup.restore.button}
             codes={BACKUP_ERROR_CODES}
             onConfirm={async () => {
               const { targetDb } = await startRestore(g.runId, g.itemIndex);
-              toast.success(idBackup.restore.started(targetDb));
+              toast.success(tBackup.restore.started(targetDb));
               onRestoreStarted();
             }}
             trigger={
               <Button variant="outline" size="sm">
                 <DatabaseBackupIcon aria-hidden />
-                {idBackup.restore.button}
+                {tBackup.restore.button}
               </Button>
             }
           />

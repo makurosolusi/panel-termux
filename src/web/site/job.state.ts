@@ -1,8 +1,9 @@
 // Pure state of the job progress page (PLAN/03 §4.5, §5.5): stepper labels from coded keys, durations, live
 // announcement, cloudflared-blip tolerance and recover/next-action decisions.
-import { formatDuration } from "@/shared/format.id";
+
 import type { Job, JobNextAction, JobParams, JobStep, JobStepKey, JobStepStatus } from "@/shared/job.types";
-import { idJob } from "@/web/i18n/id.job";
+import { tJob } from "@/web/i18n/en.job";
+import { formatDuration } from "@/web/shared/format";
 
 /** Poll interval of the job progress view while it runs. */
 export const JOB_POLL_MS = 1_000;
@@ -24,19 +25,19 @@ export function jobProgress(job: Pick<Job, "status" | "steps">): number {
   return Math.round((settled / job.steps.length) * 100);
 }
 
-/** Indonesian step label from its key; unknown keys (pre-0007 rows) fall back to the stored legacy label, then the key. */
+/** Step label from its key; unknown keys (pre-0007 rows) fall back to the stored legacy label, then the key. */
 export const stepLabel = (step: Pick<JobStep, "key" | "legacyLabel" | "label">): string =>
-  idJob.steps[step.key as JobStepKey] ?? step.legacyLabel ?? step.label ?? step.key;
+  tJob.steps[step.key as JobStepKey] ?? step.legacyLabel ?? step.label ?? step.key;
 
-/** Sentence for an outcome code with its params; null code → null; unknown code → "Hasil: <code>". */
+/** Sentence for an outcome code with its params; null code → null; unknown code → "Result: <code>". */
 export function outcomeText(code: string | null | undefined, params: JobParams = {}): string | null {
   if (!code) return null;
-  const fmt = (idJob.outcomes as Record<string, ((p: JobParams) => string) | undefined>)[code];
-  return fmt ? fmt(params) : idJob.unknownOutcome(code);
+  const fmt = (tJob.outcomes as Record<string, ((p: JobParams) => string) | undefined>)[code];
+  return fmt ? fmt(params) : tJob.unknownOutcome(code);
 }
 
-/** "< 1 dtk", "12 dtk", "1 mnt 5 dtk". */
-export const durationText = (ms: number): string => (ms < 1_000 ? "< 1 dtk" : formatDuration(ms / 1_000));
+/** "< 1 s", "12 s", "1 min 5 s" (page locale). */
+export const durationText = (ms: number): string => (ms < 1_000 ? tJob.underSecond : formatDuration(ms / 1_000));
 
 /** How long a step took (or has been running at `now`); null when it never started. */
 export function stepDurationMs(step: Pick<JobStep, "startedAt" | "finishedAt">, now: number): number | null {
@@ -64,12 +65,12 @@ export function currentStepIndex(steps: readonly Pick<JobStep, "status">[]): num
   return 0;
 }
 
-/** The one live-region sentence: "Langkah 4 dari 8: Menukar binary… selesai". */
+/** The one live-region sentence: "Step 4 of 8: Swapping the binary… done". */
 export function liveAnnouncement(job: Pick<Job, "steps" | "status">): string {
   const i = currentStepIndex(job.steps);
   const step = job.steps[i];
   if (!step) return "";
-  return idJob.liveStep(i + 1, job.steps.length, stepLabel(step), idJob.stepStatuses[shownStepStatus(step, job)]);
+  return tJob.liveStep(i + 1, job.steps.length, stepLabel(step), tJob.stepStatuses[shownStepStatus(step, job)]);
 }
 
 /**
@@ -89,14 +90,14 @@ export function pollErrorView(
   return step && BLIP_STEPS.has(step.key) ? "blip" : "stale";
 }
 
-/** The recover button of a job: plain "Pulihkan", or a confirmed "Ulangi hapus situs/domain"; null = none. */
+/** The recover button of a job: plain "Recover", or a confirmed "Retry site deletion/domain removal"; null = none. */
 export type RecoverAction = { mode: "cleanup" | "retry"; label: string; confirm: boolean };
 
 /** Decides the recover button from `recoverMode` (server rules, PLAN/03 §3.5) and the job kind. */
 export function recoverAction(job: Pick<Job, "kind" | "recoverMode" | "resolvedBy">): RecoverAction | null {
   if (!job.recoverMode || job.resolvedBy) return null;
-  if (job.recoverMode === "cleanup") return { mode: "cleanup", label: idJob.recover.cleanup, confirm: false };
-  const label = job.kind === "site.delete" ? idJob.recover.retryDelete : idJob.recover.retryHostname;
+  if (job.recoverMode === "cleanup") return { mode: "cleanup", label: tJob.recover.cleanup, confirm: false };
+  const label = job.kind === "site.delete" ? tJob.recover.retryDelete : tJob.recover.retryHostname;
   return { mode: "retry", label, confirm: true };
 }
 

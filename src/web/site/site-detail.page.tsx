@@ -10,7 +10,7 @@ import { RelativeTime } from "@/web/components/relative-time";
 import { Button } from "@/web/components/ui/button";
 import { DeploySection } from "@/web/deploy/deploy.section";
 import { type Uploader, useUploader } from "@/web/deploy/deploy.uploader";
-import { idSiteDetail } from "@/web/i18n/id.site-detail";
+import { tSiteDetail } from "@/web/i18n/en.site-detail";
 import { panelUrl } from "@/web/panel/panel.api";
 import type { ErrorCodes } from "@/web/shared/api.client";
 import { useApiQuery } from "@/web/shared/use-api-query";
@@ -24,7 +24,7 @@ import { SiteHostnames } from "./site.hostnames";
 import { SiteSettings } from "./site.settings";
 import { siteBusy } from "./site-detail.state";
 
-const t = idSiteDetail;
+const t = tSiteDetail;
 /** Detail refresh while nothing runs; status and the busy banner follow the active job. */
 const DETAIL_REFRESH_MS = 30_000;
 const CODES: ErrorCodes = { ...SITE_ERROR_CODES, ...t.errorCodes };
@@ -70,7 +70,7 @@ function SiteSections({ site, reload, deleting, setDeleting, uploader }: Section
         onChanged={reload}
         onDelete={() => setDeleting(true)}
       />
-      <AnchorSection id="ringkasan" title={t.anchors.summary}>
+      <AnchorSection id="overview" title={t.anchors.summary}>
         <Summary site={site} />
       </AnchorSection>
       <AnchorSection id="deploy" title={t.anchors.deploy}>

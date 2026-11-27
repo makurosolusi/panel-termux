@@ -2,9 +2,9 @@ import { ServerCrashIcon, TriangleAlertIcon, WifiOffIcon } from "lucide-react";
 import { useRevalidator, useRouteError } from "react-router";
 import { Button } from "@/web/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/web/components/ui/card";
-import { idSession } from "@/web/i18n/id.session";
-import { idShell } from "@/web/i18n/id.shell";
-import { ApiError } from "@/web/shared/api.client";
+import { tSession } from "@/web/i18n/en.session";
+import { tShell } from "@/web/i18n/en.shell";
+import { ApiError } from "@/web/shared/api.error";
 import { isChunkLoadError } from "@/web/shared/chunk.error";
 import { useChunkRecovery } from "@/web/shared/use-chunk-recovery";
 
@@ -26,22 +26,16 @@ export function SessionError() {
   const recovery = useChunkRecovery(kind === "chunk");
   const offline = kind === "chunk" && recovery.state === "offline";
   const chunk = kind === "chunk" && !offline;
-  const c = idShell.chunkError;
+  const c = tShell.chunkError;
   const Icon = chunk ? TriangleAlertIcon : kind === "network" || offline ? WifiOffIcon : ServerCrashIcon;
   const title = offline
     ? c.offlineTitle
     : chunk
       ? c.title
       : kind === "network"
-        ? idSession.errorTitle
-        : idSession.serverTitle;
-  const body = offline
-    ? c.offlineBody
-    : chunk
-      ? c.body
-      : kind === "network"
-        ? idSession.errorBody
-        : idSession.serverBody;
+        ? tSession.errorTitle
+        : tSession.serverTitle;
+  const body = offline ? c.offlineBody : chunk ? c.body : kind === "network" ? tSession.errorBody : tSession.serverBody;
   return (
     <main className="mx-auto flex min-h-svh max-w-md flex-col justify-center p-4">
       <Card>
@@ -55,7 +49,7 @@ export function SessionError() {
         <CardContent>
           {kind === "chunk" ? (
             <Button className="w-full" disabled={recovery.state === "checking"} onClick={recovery.retry}>
-              {offline ? c.retry : c.reload}
+              {offline ? tSession.retry : c.reload}
             </Button>
           ) : (
             <Button
@@ -63,7 +57,7 @@ export function SessionError() {
               disabled={revalidator.state === "loading"}
               onClick={() => void revalidator.revalidate()}
             >
-              {idSession.retry}
+              {tSession.retry}
             </Button>
           )}
         </CardContent>

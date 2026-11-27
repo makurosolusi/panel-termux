@@ -5,12 +5,13 @@ import { CodeText } from "@/web/components/code-text";
 import { type DataColumn, DataTable } from "@/web/components/data-table";
 import { Section } from "@/web/components/section";
 import { Button } from "@/web/components/ui/button";
-import { idSite } from "@/web/i18n/id.site";
+import { tSite } from "@/web/i18n/en.site";
 import type { ApiQuery } from "@/web/shared/use-api-query";
 import { AdoptDialog } from "./adopt.dialog";
 import { type DiscoveredRow, discoveredRows } from "./site.adopt";
+import { LegacyAnchor } from "./site.legacy-anchor";
 
-const t = idSite.discovered;
+const t = tSite.discovered;
 
 const COLUMNS: readonly DataColumn<DiscoveredRow>[] = [
   { key: "hostname", header: t.cols.hostname, mobile: "title", cell: (r) => r.hostname },
@@ -31,7 +32,7 @@ const COLUMNS: readonly DataColumn<DiscoveredRow>[] = [
 ];
 
 /**
- * "Belum dikelola" (PLAN/03 §5.1): cloudflared domains without a site; Adopsi opens the dialog driven by real pm2
+ * "Not managed yet" (PLAN/03 §5.1): cloudflared domains without a site; Adopt opens the dialog driven by real pm2
  * apps. The panel's own host is listed without a button. Hidden when there is nothing (or pm2 cannot be read).
  */
 export function SiteDiscovered({ query }: { query: ApiQuery<Discovered> }) {
@@ -47,7 +48,8 @@ export function SiteDiscovered({ query }: { query: ApiQuery<Discovered> }) {
   const byHost = new Map(data.ingress.map((i) => [i.hostname, i]));
 
   return (
-    <div id="belum-dikelola" className="scroll-mt-20">
+    <div id="not-managed" className="scroll-mt-20">
+      <LegacyAnchor of="not-managed" scrollMargin="scroll-mt-20" />
       <Section title={t.title} description={t.description}>
         <DataTable
           label={t.label}

@@ -1,0 +1,174 @@
+// URL fragment scroll after the deferred mount (QA 29 M1): alias resolution, the bounded wait, and which
+// navigations scroll (first load and PUSH/REPLACE, not back/forward).
+import { afterEach, describe, expect, test } from "bun:test";
+import type { DataRouter } from "react-router";
+import { followUrlHash, keepAligned, resolveHashTarget, waitFor } from "@/web/shared/hash.scroll";
+
+const el = (id: string) => ({ id }) as unknown as Element;
+const byIds =
+  (...ids: string[]) =>
+  (id: string) =>
+    ids.includes(id) ? el(id) : null;
+
+describe("resolveHashTarget", () => {
+  test("the id itself first (landing/site aliases are real elements)", () => {
+    expect(resolveHashTarget("#pasang", byIds("pasang", "install"))).toEqual(el("pasang"));
+    expect(resolveHashTarget("#not-managed", byIds("not-managed"))).toEqual(el("not-managed"));
+  });
+  test("/dev and /dev/settings 0.5.x ids map to the new anchors", () => {
+    expect(resolveHashTarget("#kunci-data", byIds("data-key"))).toEqual(el("data-key"));
+    expect(resolveHashTarget("#penyiapan", byIds("setup"))).toEqual(el("setup"));
+    expect(resolveHashTarget("#cadangan", byIds("backup"))).toEqual(el("backup"));
+  });
+  test("empty, missing and malformed hashes", () => {
+    expect(resolveHashTarget("", byIds("x"))).toBeNull();
+    expect(resolveHashTarget("#", byIds(""))).toBeNull();
+    expect(resolveHashTarget("#nope", byIds("x"))).toBeNull();
+    expect(resolveHashTarget("#%E0%A4%A", byIds("%E0%A4%A"))).toEqual(el("%E0%A4%A"));
+    expect(resolveHashTarget("#a%20b", byIds("a b"))).toEqual(el("a b"));
+  });
+});
+
+describe("waitFor", () => {
+  test("resolves as soon as the target appears", async () => {
+    let calls = 0;
+    expect(await waitFor(() => (++calls >= 3 ? "found" : null), { intervalMs: 1, timeoutMs: 1000 })).toBe("found");
+    expect(calls).toBe(3);
+  });
+  test("gives up after the timeout", async () => {
+    const start = Date.now();
+    expect(await waitFor(() => null, { intervalMs: 5, timeoutMs: 30 })).toBeNull();
+    expect(Date.now() - start).toBeLessThan(500);
+  });
+  test("stops when aborted (user scrolled, newer navigation)", async () => {
+    const ac = new AbortController();
+    const p = waitFor(() => null, { intervalMs: 5, timeoutMs: 5000, signal: ac.signal });
+    ac.abort();
+    expect(await p).toBeNull();
+  });
+});
+
+describe("keepAligned", () => {
+  // Fake target: scrollIntoView puts it at `margin` only once the document is scrollable (`room` = how far it can go).
+  const target = (top: number, margin = 0) => {
+    const t = {
+      top,
+      room: 0,
+      calls: 0,
+      getBoundingClientRect: () => ({ top: t.top }) as DOMRect,
+      scrollIntoView: () => {
+        t.calls++;
+        const by = Math.min(t.top - margin, t.room);
+        t.top -= by;
+        t.room -= by;
+      },
+    };
+    return t;
+  };
+  const opts = { intervalMs: 2, timeoutMs: 400 };
+
+  test("re-aligns when content rendered above pushes the target down (cold /panel/sites)", async () => {
+    const t = target(300); // document not scrollable yet: the first scrollIntoView is a no-op
+    const p = keepAligned(t, 0, opts);
+    await Bun.sleep(10);
+    expect(t.top).toBe(300);
+    t.top = 1198; // the list above rendered
+    t.room = 2000;
+    await p;
+    expect(t.top).toBe(0);
+  });
+  test("honours scroll-margin-top and stops once settled", async () => {
+    const t = target(800, 64);
+    t.room = 5000;
+    const start = Date.now();
+    await keepAligned(t, 64, opts);
+    expect(t.top).toBe(64);
+    expect(t.calls).toBe(1);
+    expect(Date.now() - start).toBeLessThan(300);
+  });
+  test("gives up after the timeout when it can never be in place", async () => {
+    const t = target(300);
+    const start = Date.now();
+    await keepAligned(t, 0, { intervalMs: 5, timeoutMs: 40 });
+    expect(Date.now() - start).toBeLessThan(300);
+    expect(t.top).toBe(300);
+  });
+  test("user input (abort) stops the re-alignment", async () => {
+    const ac = new AbortController();
+    const t = target(300);
+    const p = keepAligned(t, 0, { ...opts, signal: ac.signal });
+    ac.abort();
+    t.top = 1198;
+    t.room = 2000;
+    await p;
+    await Bun.sleep(10);
+    expect(t.top).toBe(1198);
+  });
+});
+
+describe("followUrlHash", () => {
+  const saved = {
+    window: globalThis.window,
+    document: globalThis.document,
+    getComputedStyle: globalThis.getComputedStyle,
+  };
+  afterEach(() => Object.assign(globalThis, saved));
+
+  type State = DataRouter["state"];
+  const state = (key: string, hash: string, historyAction: string, idle = true) =>
+    ({
+      initialized: true,
+      navigation: { state: idle ? "idle" : "loading" },
+      location: { key, hash, pathname: "/", search: "", state: null },
+      historyAction,
+    }) as unknown as State;
+
+  const setup = (initial: State) => {
+    const scrolled: string[] = [];
+    Object.assign(globalThis, {
+      window: { addEventListener() {}, removeEventListener() {} },
+      document: {
+        getElementById: (id: string) => {
+          if (!["install", "data-key"].includes(id)) return null;
+          let top = 500;
+          return {
+            getBoundingClientRect: () => ({ top }),
+            scrollIntoView: () => {
+              scrolled.push(id);
+              top = 0;
+            },
+          };
+        },
+      },
+      getComputedStyle: () => ({ scrollMarginTop: "0px" }),
+    });
+    let listener: ((s: State) => void) | undefined;
+    const subscribe = (fn: (s: State) => void) => {
+      listener = fn;
+      return () => {};
+    };
+    const router = { state: initial, subscribe };
+    followUrlHash(router as unknown as DataRouter);
+    const flush = () => new Promise((r) => setTimeout(r, 30));
+    return { scrolled, emit: (s: State) => listener?.(s), flush };
+  };
+
+  test("first load (POP) with a hash scrolls once", async () => {
+    const h = setup(state("default", "#install", "POP"));
+    h.emit(state("default", "#install", "POP")); // same key again: ignored
+    await h.flush();
+    expect(h.scrolled).toEqual(["install"]);
+  });
+  test("PUSH with a 0.5.x alias scrolls; back/forward and loading states do not", async () => {
+    const h = setup(state("default", "", "POP"));
+    h.emit(state("k1", "#kunci-data", "PUSH", false)); // loaders still running
+    await h.flush();
+    expect(h.scrolled).toEqual([]);
+    h.emit(state("k1", "#kunci-data", "PUSH"));
+    await h.flush();
+    expect(h.scrolled).toEqual(["data-key"]);
+    h.emit(state("k2", "#install", "POP"));
+    await h.flush();
+    expect(h.scrolled).toEqual(["data-key"]);
+  });
+});

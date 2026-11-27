@@ -27,7 +27,7 @@ export function checkDataKeyOnBoot(deps: SettingsDeps, created: boolean): DataKe
   if (state === "mismatch") {
     log.error(
       `[secret] data key does not match: ${unreadable.length} secret setting(s) unreadable (${unreadable.join(", ")}). ` +
-        "Restore the old data/secret file, or reset them in Administrasi → Kesehatan sistem.",
+        "Restore the old data/secret file, or reset them in Administration → System health.",
     );
     recordAudit(deps.db, {
       actorId: null,
@@ -53,18 +53,18 @@ export function resetUnreadableSettings(deps: SettingsDeps, actorId: string): Se
 const pad = (n: number) => String(n).padStart(2, "0");
 const localDate = (d: Date) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
 
-/** File name of the data key download, e.g. `panel-termux-kunci-data-2026-11-26.txt`. */
-export const dataKeyFileName = (now: Date): string => `panel-termux-kunci-data-${localDate(now)}.txt`;
+/** File name of the data key download, e.g. `panel-termux-data-key-2026-11-26.txt` (English only, E13). */
+export const dataKeyFileName = (now: Date): string => `panel-termux-data-key-${localDate(now)}.txt`;
 
-/** Text of the data key download (PLAN/04 §3.6): what it is, where to keep it, how to put it back. */
+/** Text of the data key download (PLAN/04 §3.6, English only per E13): what it is, where to keep it, how to restore it. */
 export function exportDataKeyText(secret: string, appBaseUrl: string, now: Date): string {
-  const made = `${localDate(now)} ${pad(now.getHours())}.${pad(now.getMinutes())}`;
+  const made = `${localDate(now)} ${pad(now.getHours())}:${pad(now.getMinutes())}`;
   return [
-    "Panel Termux — kunci data (data/secret)",
-    `Panel: ${appBaseUrl} · dibuat ${made}`,
-    "Simpan di pengelola kata sandi, di luar HP ini dan di luar bucket cadangan. Siapa pun yang memegang",
-    "file ini bersama panel.db bisa membaca pengaturan rahasia dan memalsukan sesi.",
-    'Pakai di HP baru (lihat README "Pulihkan ke HP baru" langkah 10):',
+    "Panel Termux — data key (data/secret)",
+    `Panel: ${appBaseUrl} · created ${made}`,
+    "Keep it in a password manager, off this phone and outside the backup bucket. Anyone who holds",
+    "this file together with panel.db can read the secret settings and forge sessions.",
+    'Use on a new phone (see README "Restore to a new phone", step 10):',
     `  printf '%s' '${secret}' > ~/panel/data/secret && chmod 600 ~/panel/data/secret`,
     "",
     secret,

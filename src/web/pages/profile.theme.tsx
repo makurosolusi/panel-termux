@@ -1,14 +1,14 @@
 import { cn } from "cn";
 import { MonitorIcon, MoonIcon, SunIcon } from "lucide-react";
 import { Section } from "@/web/components/section";
-import { idAccount } from "@/web/i18n/id.account";
+import { tAccount } from "@/web/i18n/en.account";
 import { THEME_PREFERENCES, type ThemePreference } from "@/web/theme/theme.preference";
 import { setThemePreference, useTheme } from "@/web/theme/theme.store";
 
-const t = idAccount.theme;
+const t = tAccount.theme;
 const ICON: Record<ThemePreference, typeof SunIcon> = { system: MonitorIcon, light: SunIcon, dark: MoonIcon };
 
-/** "Tema" card: system/light/dark segmented control on the shell theme store. */
+/** "Theme" card: system/light/dark segmented control on the shell theme store. */
 export function ProfileTheme() {
   const { preference } = useTheme();
   return (

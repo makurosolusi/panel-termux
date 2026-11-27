@@ -3,6 +3,7 @@ import { createBrowserRouter, type PatchRoutesOnNavigationFunction, useRouteLoad
 import { isProtectedPath } from "@/shared/roles";
 import { LandingPage } from "@/web/landing/landing.page";
 import { PublicNotFoundPage } from "@/web/pages/public-not-found.page";
+import { syncStoredLocale } from "@/web/session/locale.sync";
 import { fetchMe, type MeResult } from "@/web/session/session.api";
 import { SessionError } from "@/web/session/session.error";
 import { SessionFallback } from "@/web/session/session.fallback";
@@ -47,7 +48,11 @@ export const router = createBrowserRouter(
     {
       id: ROOT_ROUTE_ID,
       path: "/",
-      loader: fetchMe,
+      loader: async () => {
+        const r = await fetchMe();
+        if (r.status === "ok") syncStoredLocale(r.me); // cache the account language for the next boot (PLAN/08 §3.1)
+        return r;
+      },
       Component: SessionGate,
       HydrateFallback: SessionFallback,
       ErrorBoundary: SessionError,

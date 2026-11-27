@@ -1,5 +1,7 @@
-/** Indonesian strings of /dev/audit (`id.dev.audit`, PLAN/05 §5.4, F6). Sentences per action: `sentences`. */
-export const idDevAudit = {
+import type { Messages } from "@/shared/i18n";
+import type { tDevAudit } from "./en.dev.audit";
+/** Indonesian strings of /dev/audit (PLAN/05 §5.4, F6). One sentence per action: `s`. */
+export const idDevAudit: Messages<typeof tDevAudit> = {
   title: "Audit",
   description: "Siapa melakukan apa di panel, terbaru dulu.",
   label: "Catatan audit",
@@ -27,6 +29,8 @@ export const idDevAudit = {
   removeActor: "Hapus filter aktor",
   filterActor: (name: string) => `Tampilkan aksi ${name} saja`,
   device: "IP/perangkat",
+  /** Device of a request whose stored label is empty or the old "Perangkat tidak dikenal" (E10). */
+  unknownDevice: "Perangkat tidak dikenal",
   details: "Detail",
   detailsOf: (text: string) => `Detail: ${text}`,
   detailLabels: { action: "Aksi", target: "Target", ip: "IP", ua: "Perangkat", requestId: "ID permintaan" },
@@ -92,7 +96,7 @@ export const idDevAudit = {
     sessionAll: (a: string, n: number) => `${a} mengeluarkan semua pengguna (${n} sesi)`,
     secretMismatch: (n: number) => `Kunci data tidak cocok: ${n} rahasia tersimpan tidak bisa dibaca`,
     secretExport: (a: string) => `${a} mengunduh kunci data`,
-    secretReset: (a: string) => `${a} mengatur ulang kunci data`,
+    secretReset: (a: string) => `${a} menghapus pengaturan rahasia yang tidak terbaca`,
     panelStart: (version: string) => `Panel dimulai, versi ${version}`,
     auditPrune: (n: number) => `Sistem menghapus ${n} entri audit lama`,
     auditExport: (a: string) => `${a} mengunduh audit sebagai CSV`,

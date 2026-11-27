@@ -7,31 +7,23 @@ import {
   existsSync,
   lstatSync,
   mkdirSync,
-  readFileSync,
   readlinkSync,
   renameSync,
   rmdirSync,
   rmSync,
-  statSync,
   symlinkSync,
 } from "node:fs";
 import { dirname, join, resolve } from "node:path";
-import { BinaryError, detectRuntime } from "../server/deploy/elf.runtime";
-import { ENV_VARS, type EnvVar, type EnvVarName } from "../shared/env.schema";
 import { fsyncPath, linkOrCopy } from "../shared/file.link";
 import { type CliHost, probePaths } from "./cli.host";
+import { tr } from "./cli.locale";
 import { CliExit } from "./cli.output";
-import { readEnvFile } from "./env.file";
+import { blockerOf, servesBinary } from "./init.binary.checks";
 import { downloadPath, srcDir, srcEntries } from "./init.binary.paths";
-import { releaseTag, SELF_VERSION } from "./init.mode";
+import { SELF_VERSION } from "./init.mode";
 import { tilde } from "./init.plan";
-import { defineStep, INIT_EXIT, INIT_STEP_TITLES, type InitContext, type PlanLine } from "./init.types";
+import { defineStep, INIT_EXIT, type InitContext, type PlanLine } from "./init.types";
 import { previewVerify, verifyInstall } from "./init.verify";
-
-/** Headroom on top of 2 × panel.db + the new binary + the old one when kept (E16: Termux copies panel.prev, E9). */
-export const SPACE_HEADROOM_BYTES = 256 * 1024 * 1024;
-/** Lets a phone install a local build without a release tag (developers only; the bun runtime is still refused). */
-export const DEV_INSTALL_ENV = "PANEL_DEV_INSTALL";
 
 /** What step 1 found; detect only reads. */
 export type BinaryState = {
@@ -55,33 +47,23 @@ export type BinaryState = {
   preview: PlanLine | null;
 };
 
-const envDefault = (name: EnvVarName) => (ENV_VARS as readonly EnvVar[]).find((v) => v.name === name)?.default ?? "";
 const errCode = (e: unknown) => (e as NodeJS.ErrnoException).code ?? (e as Error).message;
-const mb = (n: number) => `${Math.ceil(n / 1024 / 1024)} MB`;
 const binLink = (host: CliHost) => join(host.paths.prefix, "bin", "panel");
+
+const blockerHint = () =>
+  tr("free up space or download the Android release binary", "kosongkan ruang atau unduh binary rilis Android");
 
 /** Runs one filesystem write; failure = exit 1 naming the operation and the errno. */
 function step(what: string, fn: () => void): void {
   try {
     fn();
   } catch (e) {
-    throw new CliExit(INIT_EXIT.failed, `Gagal ${what}: ${errCode(e)}.`, "periksa izin folder ~/panel, lalu ulangi");
+    throw new CliExit(
+      INIT_EXIT.failed,
+      tr(`Could not ${what}: ${errCode(e)}.`, `Gagal ${what}: ${errCode(e)}.`),
+      tr("check the permissions of ~/panel, then try again", "periksa izin folder ~/panel, lalu ulangi"),
+    );
   }
-}
-
-function envOf(host: CliHost) {
-  return readEnvFile(probePaths(host.paths).envFile) ?? {};
-}
-
-/** C21: the running panel answers /api/health and runit's pid executes exactly ~/panel/panel (dev+ino). */
-async function servesBinary(host: CliHost): Promise<boolean> {
-  const binary = probePaths(host.paths).binary;
-  if (!(await host.health(Number(envOf(host).PORT || envDefault("PORT"))))) return false;
-  const pidFile = join(host.paths.svdir, "panel", "supervise", "pid");
-  if (!existsSync(pidFile)) return false;
-  const exe = host.proc.exeId(Number(readFileSync(pidFile, "utf8").trim()));
-  const file = statSync(binary);
-  return exe !== null && exe.dev === file.dev && exe.ino === file.ino;
 }
 
 function linkState(host: CliHost): BinaryState["link"] {
@@ -90,41 +72,6 @@ function linkState(host: CliHost): BinaryState["link"] {
   if (!st) return "create";
   if (!st.isSymbolicLink()) return "foreign";
   return resolve(dirname(link), readlinkSync(link)) === probePaths(host.paths).binary ? "ok" : "foreign";
-}
-
-/**
- * Only a compiled panel is installed: the bun runtime (`bun src/cli/main.ts init`) never, and a build without an
- * embedded release tag (no SHA256SUMS to check against) only with PANEL_DEV_INSTALL=1. Null = allowed.
- */
-export function releaseBlocker(tag: string, devInstall: boolean, compiled: boolean): string | null {
-  if (!compiled) return "Ini runtime bun, bukan binary panel; jalankan binary rilis (./panel-termux init)";
-  if (!tag && !devInstall) return "Binary ini bukan build rilis (tanpa tag rilis), jadi tidak bisa dicek";
-  return null;
-}
-
-/**
- * Not a release build, wrong build (not aarch64 bionic) or too little space for 2 × panel.db + 256 MB + binary, plus
- * a copy of the old binary when it is kept as panel.prev (E16; Android refuses the hard link, E9).
- */
-function blockerOf(host: CliHost, keepPrev: boolean): string | null {
-  if (host.mode === "termux") {
-    // a compiled binary runs its entry from Bun's embedded filesystem (/$bunfs/…); plain bun runs a real file
-    const blocked = releaseBlocker(releaseTag(), process.env[DEV_INSTALL_ENV] === "1", Bun.main.startsWith("/$bunfs/"));
-    if (blocked) return blocked;
-    try {
-      if (detectRuntime(host.selfPath) !== "native") return "Binary ini build glibc, bukan build Android (bionic)";
-    } catch (e) {
-      if (!(e instanceof BinaryError)) throw e;
-      return `Binary ini tidak bisa dijalankan di HP ini: ${e.message}`;
-    }
-  }
-  const env = envOf(host);
-  const db = join(resolve(host.paths.panelDir, env.PANEL_DATA_DIR || envDefault("PANEL_DATA_DIR")), "panel.db");
-  const prev = keepPrev ? statSync(probePaths(host.paths).binary).size : 0;
-  const need =
-    2 * (existsSync(db) ? statSync(db).size : 0) + SPACE_HEADROOM_BYTES + statSync(host.selfPath).size + prev;
-  const free = host.freeBytes(existsSync(host.paths.panelDir) ? host.paths.panelDir : host.paths.home);
-  return free < need ? `Ruang kosong ${mb(free)}, butuh ${mb(need)} untuk memasang panel` : null;
 }
 
 async function detect(ctx: InitContext): Promise<BinaryState> {
@@ -148,34 +95,62 @@ function plan(ctx: InitContext, s: BinaryState): PlanLine[] {
   const { host } = ctx;
   const p = probePaths(host.paths);
   const lines: PlanLine[] = [];
-  if (s.blocker)
-    lines.push({ kind: "error", text: s.blocker, hint: "kosongkan ruang atau unduh binary rilis Android" });
+  if (s.blocker) lines.push({ kind: "error", text: s.blocker, hint: blockerHint() });
   if (s.preview) lines.push(s.preview);
   if (s.install) {
     const old = ctx.decision.installed.version;
-    const prev = s.keepPrev ? ` (${old ? `v${old}` : "yang lama"} disimpan sebagai panel.prev)` : "";
+    const kept = old ? `v${old}` : tr("the old one", "yang lama");
+    const prev = s.keepPrev ? tr(` (${kept} kept as panel.prev)`, ` (${kept} disimpan sebagai panel.prev)`) : "";
+    const cmd = s.link === "create" ? tr(" (command: panel)", " (perintah: panel)") : "";
     lines.push({
       kind: "action",
       text: existsSync(p.binary)
-        ? `Mengganti ~/panel/panel dengan v${SELF_VERSION}${prev}`
-        : `Memasang panel ke ~/panel/panel${s.link === "create" ? " (perintah: panel)" : ""}`,
+        ? tr(
+            `Replacing ~/panel/panel with v${SELF_VERSION}${prev}`,
+            `Mengganti ~/panel/panel dengan v${SELF_VERSION}${prev}`,
+          )
+        : tr(`Installing the panel to ~/panel/panel${cmd}`, `Memasang panel ke ~/panel/panel${cmd}`),
     });
   }
   if (s.link === "create" && !(s.install && !existsSync(p.binary)))
-    lines.push({ kind: "action", text: `Membuat perintah panel (${binLink(host)} → ~/panel/panel)` });
+    lines.push({
+      kind: "action",
+      text: tr(
+        `Creating the panel command (${binLink(host)} → ~/panel/panel)`,
+        `Membuat perintah panel (${binLink(host)} → ~/panel/panel)`,
+      ),
+    });
   if (s.link === "foreign")
     lines.push({
       kind: "warning",
-      text: `${binLink(host)} sudah ada dan bukan milik panel; tidak diubah`,
-      hint: "pakai ~/panel/panel, atau hapus file itu lalu jalankan lagi panel init",
+      text: tr(
+        `${binLink(host)} already exists and does not belong to the panel; left unchanged`,
+        `${binLink(host)} sudah ada dan bukan milik panel; tidak diubah`,
+      ),
+      hint: tr(
+        "use ~/panel/panel, or delete that file and run panel init again",
+        "pakai ~/panel/panel, atau hapus file itu lalu jalankan lagi panel init",
+      ),
     });
-  if (s.download) lines.push({ kind: "action", text: `Menghapus file unduhan ${tilde(host, s.download)}` });
-  if (s.prune.length > 0)
+  if (s.download) {
+    const file = tilde(host, s.download);
+    lines.push({ kind: "action", text: tr(`Deleting the download ${file}`, `Menghapus file unduhan ${file}`) });
+  }
+  if (s.prune.length > 0) {
+    const old = s.prune.map((f) => f.slice(srcDir(host).length + 1)).join(", ");
     lines.push({
       kind: "action",
-      text: `Menghapus unduhan lama di ~/panel-src: ${s.prune.map((f) => f.slice(srcDir(host).length + 1)).join(", ")}`,
+      text: tr(`Deleting old downloads in ~/panel-src: ${old}`, `Menghapus unduhan lama di ~/panel-src: ${old}`),
     });
-  if (s.makeDataDir) lines.push({ kind: "action", text: "Membuat folder data ~/panel/data (hanya untuk kamu)" });
+  }
+  if (s.makeDataDir)
+    lines.push({
+      kind: "action",
+      text: tr(
+        "Creating the data folder ~/panel/data (for you only)",
+        "Membuat folder data ~/panel/data (hanya untuk kamu)",
+      ),
+    });
   return lines;
 }
 
@@ -188,7 +163,7 @@ async function installSelf(ctx: InitContext, s: BinaryState): Promise<void> {
   const p = probePaths(host.paths);
   const next = join(host.paths.panelDir, "panel.new");
   const madeDir = !existsSync(host.paths.panelDir);
-  step(`menyalin binary ke ${next}`, () => {
+  step(tr(`copy the binary to ${next}`, `menyalin binary ke ${next}`), () => {
     mkdirSync(host.paths.panelDir, { recursive: true, mode: 0o700 });
     copyFileSync(host.selfPath, next);
     chmodSync(next, 0o755);
@@ -203,7 +178,7 @@ async function installSelf(ctx: InitContext, s: BinaryState): Promise<void> {
   }
   if (s.keepPrev && existsSync(p.binary)) {
     const prevNew = `${p.prev}.new`;
-    step(`menyimpan ${p.binary} sebagai ${p.prev}`, () => {
+    step(tr(`keep ${p.binary} as ${p.prev}`, `menyimpan ${p.binary} sebagai ${p.prev}`), () => {
       rmSync(prevNew, { force: true });
       linkOrCopy(p.binary, prevNew, { link: host.link });
       renameSync(prevNew, p.prev);
@@ -211,7 +186,7 @@ async function installSelf(ctx: InitContext, s: BinaryState): Promise<void> {
     });
     ctx.state.changed.push(p.prev);
   }
-  step(`memasang ${p.binary}`, () => {
+  step(tr(`install ${p.binary}`, `memasang ${p.binary}`), () => {
     renameSync(next, p.binary);
     fsyncPath(host.paths.panelDir);
   });
@@ -221,16 +196,17 @@ async function installSelf(ctx: InitContext, s: BinaryState): Promise<void> {
 async function apply(ctx: InitContext, s: BinaryState): Promise<void> {
   const { host } = ctx;
   const p = probePaths(host.paths);
-  if (s.blocker)
-    throw new CliExit(INIT_EXIT.failed, `${s.blocker}.`, "kosongkan ruang atau unduh binary rilis Android");
+  if (s.blocker) throw new CliExit(INIT_EXIT.failed, `${s.blocker}.`, blockerHint());
   if (s.install) await installSelf(ctx, s);
   if (s.makeDataDir) {
-    step(`membuat ${p.dataDir}`, () => mkdirSync(p.dataDir, { recursive: true, mode: 0o700 }));
+    step(tr(`create ${p.dataDir}`, `membuat ${p.dataDir}`), () =>
+      mkdirSync(p.dataDir, { recursive: true, mode: 0o700 }),
+    );
     ctx.state.changed.push(p.dataDir);
   }
   if (s.link === "create") {
     const link = binLink(host);
-    step(`membuat ${link}`, () => {
+    step(tr(`create ${link}`, `membuat ${link}`), () => {
       mkdirSync(dirname(link), { recursive: true });
       symlinkSync(p.binary, link);
     });
@@ -238,20 +214,25 @@ async function apply(ctx: InitContext, s: BinaryState): Promise<void> {
   }
   if (s.download) {
     const file = s.download;
-    step(`menghapus file unduhan ${file}`, () => rmSync(file, { force: true }));
+    step(tr(`delete the download ${file}`, `menghapus file unduhan ${file}`), () => rmSync(file, { force: true }));
     ctx.state.changed.push(file);
   }
   for (const dir of s.prune) {
-    step(`menghapus ${dir}`, () => rmSync(dir, { recursive: true, force: true }));
+    step(tr(`delete ${dir}`, `menghapus ${dir}`), () => rmSync(dir, { recursive: true, force: true }));
     ctx.state.changed.push(dir);
   }
-  for (const name of s.stray) ctx.state.manual.push(`~/panel-src/${name} tidak dipakai lagi; hapus bila tidak perlu`);
+  for (const name of s.stray)
+    ctx.state.manual.push(
+      tr(
+        `~/panel-src/${name} is no longer used; delete it if you do not need it`,
+        `~/panel-src/${name} tidak dipakai lagi; hapus bila tidak perlu`,
+      ),
+    );
 }
 
 /** Step 1 `binary` (§4.1). */
 export const binaryStep = defineStep<BinaryState>({
   id: "binary",
-  title: INIT_STEP_TITLES.binary,
   detect,
   plan,
   apply,

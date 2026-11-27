@@ -1,9 +1,7 @@
 import { afterAll, describe, expect, test } from "bun:test";
-import { buildDigest, DIGEST_MAX_CHARS, escapeHtml } from "@/server/alerts/alert.messages";
+import { ALERT_COPY, buildDigest, DIGEST_MAX_CHARS, escapeHtml } from "@/server/alerts/alert.messages";
 import { createTelegramClient, redactToken, splitText, TelegramError } from "@/server/alerts/telegram.client";
 import { problem } from "@/server/panel/overview.rules";
-import type { ProblemCode } from "@/shared/monitor.types";
-import { detail, title } from "@/shared/problem.copy";
 
 const TOKEN = "123456789:AAEhBOweik6ad9r_QXMENQjcrGbqCr4K-ab"; // test-only fake token
 
@@ -155,102 +153,44 @@ describe("redaction and digest text", () => {
   test("escapeHtml and digest escaping of problem text", () => {
     expect(escapeHtml(`a<b>&"c"`)).toBe("a&lt;b&gt;&amp;&quot;c&quot;");
     const p = problem("service_down", "<x&y>", "danger");
-    const text = buildDigest([{ type: "open", problem: p, sinceSec: 180 }], "https://p.test/");
+    const text = buildDigest([{ type: "open", problem: p, sinceSec: 180 }], "https://p.test/", "en");
     expect(text).toBe(
-      "<b>Panel Termux</b> · p.test\nGAWAT · Layanan &lt;x&amp;y&gt; mati · sejak 3 mnt\n\nBuka Ringkasan: https://p.test/panel",
+      "<b>Panel Termux</b> · p.test\nCRITICAL · Service &lt;x&amp;y&gt; is down · since 3 min\n\nOpen Overview: https://p.test/panel",
     );
   });
 
-  test("digest caps at 15 lines and 3,500 chars with '… dan N lainnya'", () => {
+  test("alerts.language=id renders the digest, overflow and test texts in Indonesian", () => {
+    const p = problem("service_down", "web", "danger");
+    expect(buildDigest([{ type: "open", problem: p, sinceSec: 180 }], "https://p.test", "id")).toBe(
+      "<b>Panel Termux</b> · p.test\nGAWAT · Layanan web mati · sejak 3 mnt\n\nBuka Ringkasan: https://p.test/panel",
+    );
+    const remind = buildDigest([{ type: "remind", problem: p, sinceSec: 90_000 }], "https://p.test", "id");
+    expect(remind).toContain("MASIH · GAWAT · Layanan web mati · sejak 1 hari 1 jam");
+    expect(buildDigest([{ type: "recovered", problem: p, durationSec: 60 }], "https://p.test", "id")).toContain(
+      "PULIH · Layanan web mati · berlangsung 1 mnt",
+    );
+    expect(ALERT_COPY.id.overflow).toBe("Terlalu banyak notifikasi. Buka Ringkasan untuk melihat semuanya.");
+    expect(ALERT_COPY.id.test).toStartWith("Notifikasi uji dari Panel Termux.");
+    expect(ALERT_COPY.en.overflow).toBe("Too many alerts. Open Overview to see them all.");
+    expect(ALERT_COPY.en.test).toStartWith("Test message from Panel Termux.");
+  });
+
+  test("digest caps at 15 lines and 3,500 chars with '… and N more'", () => {
     const items = Array.from({ length: 40 }, (_, i) => ({
       type: "open" as const,
       problem: problem("service_down", `svc-${i}`, "danger"),
       sinceSec: 0,
     }));
-    const lines = buildDigest(items, "https://p.test").split("\n");
+    const lines = buildDigest(items, "https://p.test", "en").split("\n");
     expect(lines).toHaveLength(1 + 15 + 1 + 2);
-    expect(lines[16]).toBe("… dan 25 lainnya");
+    expect(lines[16]).toBe("… and 25 more");
+    expect(buildDigest(items, "https://p.test", "id").split("\n")[16]).toBe("… dan 25 lainnya");
     const long = items.map((it, i) => ({
       ...it,
       problem: problem("service_down", `${"x".repeat(400)}${i}`, "danger"),
     }));
-    const text = buildDigest(long, "https://p.test");
+    const text = buildDigest(long, "https://p.test", "en");
     expect(text.length).toBeLessThanOrEqual(DIGEST_MAX_CHARS);
-    expect(text).toMatch(/… dan \d+ lainnya/);
-  });
-});
-
-describe("problem copy", () => {
-  test("every ProblemCode has an Indonesian title and detail", () => {
-    const params = {
-      downSec: 125,
-      restarts: 15,
-      restarts10m: 4,
-      status: 502,
-      local: 200,
-      port: 3001,
-      hours: 40,
-      name: "blog",
-      freePct: 4.5,
-      freeBytes: 2 * 1024 ** 3,
-      percent: 22,
-      temperatureC: 46.5,
-      reason: "telegram_forbidden",
-      uptimeMin: 4,
-    };
-    const codes = {
-      service_down: 1,
-      service_crash_loop: 1,
-      pm2_unavailable: 1,
-      app_errored: 1,
-      app_crash_loop: 1,
-      domain_unreachable: 1,
-      domain_http_error: 1,
-      internet_down: 1,
-      backup_not_configured: 1,
-      backup_failed: 1,
-      backup_partial: 1,
-      backup_stale: 1,
-      backup_item_stale: 1,
-      backup_status_error: 1,
-      backup_secrets_included: 1,
-      key_mismatch: 1,
-      access_not_seen: 1,
-      disk_low: 1,
-      battery_low: 1,
-      battery_hot: 1,
-      alerts_failing: 1,
-      site_job_failed: 1,
-      host_rebooted: 1,
-      panel_restarted_unexpectedly: 1,
-    } satisfies Record<ProblemCode, 1>;
-    for (const code of Object.keys(codes) as ProblemCode[]) {
-      const p = { code, target: "blog", params };
-      expect(title(p).length).toBeGreaterThan(5);
-      expect(detail(p).length).toBeGreaterThan(5);
-    }
-    expect(title({ code: "battery_low", target: "battery", params })).toBe("Baterai tinggal 22% dan tidak mengisi");
-    expect(title({ code: "battery_hot", target: "battery", params })).toBe("Baterai panas (46,5 °C)");
-    expect(detail({ code: "disk_low", target: "disk", params })).toBe("Tinggal 4,5% (2,0 GB) bebas.");
-    expect(detail({ code: "service_down", target: "x", params })).toBe("Seharusnya berjalan. Mati sejak 2 mnt 5 dtk.");
-    expect(detail({ code: "domain_unreachable", target: "x", params })).toBe(
-      "Aplikasi di HP menjawab 200, jadi masalahnya di tunnel.",
-    );
-    expect(detail({ code: "domain_http_error", target: "x", params: { status: 530 } })).toBe(
-      "Cloudflare tidak terhubung ke tunnel cloudflared di HP.",
-    );
-    expect(detail({ code: "alerts_failing", target: "telegram", params: { reason: "telegram_unreachable" } })).toBe(
-      "Telegram tidak bisa dijangkau dari HP.",
-    );
-    expect(title({ code: "backup_item_stale", target: "database:blog", params: { name: "blog", hours: null } })).toBe(
-      "Cadangan blog belum pernah berhasil",
-    );
-    expect(
-      title({
-        code: "backup_item_stale",
-        target: "globals:globals",
-        params: { itemKind: "globals", name: "globals", hours: 30 },
-      }),
-    ).toBe("Cadangan role Postgres sudah 30 jam tidak berhasil");
+    expect(text).toMatch(/… and \d+ more/);
   });
 });

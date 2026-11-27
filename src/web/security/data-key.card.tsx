@@ -8,21 +8,22 @@ import { RelativeTime } from "@/web/components/relative-time";
 import { Section } from "@/web/components/section";
 import { StatusBadge } from "@/web/components/status-badge";
 import { Button } from "@/web/components/ui/button";
-import { idSecurity } from "@/web/i18n/id.security";
-import { idSettings } from "@/web/i18n/id.settings";
+import { tSecurity } from "@/web/i18n/en.security";
+import { tSettings } from "@/web/i18n/en.settings";
+import { DATA_KEY_ANCHOR } from "@/web/shared/dev.anchors";
 import { toast } from "@/web/shared/toast.lazy";
 import { exportDataKey, isReauthRequired, resetDataKey, SECURITY_ERROR_CODES } from "./security.api";
 import { Notice, ReauthNotice } from "./security.notice";
 import { dataKeyStatusKey } from "./security.state";
 
-const t = idSecurity.dataKey;
+const t = tSecurity.dataKey;
 
 /** Field label of a setting key from the settings copy, or the raw key when it has none. */
 export const settingLabel = (key: string): string =>
-  (idSettings.fields as Record<string, { label: string } | undefined>)[key]?.label ?? key;
+  (tSettings.fields as Record<string, { label: string } | undefined>)[key]?.label ?? key;
 
 /**
- * "Kunci data" card (`#kunci-data`, PLAN/04 §5.2): match state, last download, "Unduh kunci data" (confirm, fresh
+ * "Data key" card (`#data-key`, old `#kunci-data` aliased, PLAN/04 §5.2): match state, last download, "Download the data key" (confirm, fresh
  * session); on mismatch the unreadable settings, restore-the-file steps and the typed reset. `onChanged` reloads the
  * security status after a download or reset.
  */
@@ -32,7 +33,7 @@ export function DataKeyCard({ status, onChanged }: { status: SecurityStatus; onC
   const mismatch = key.state === "mismatch";
   const labels = key.unreadableSettings.map(settingLabel);
 
-  // A stale session is not an error of the dialog: close it and show "Masuk ulang" in the card instead.
+  // A stale session is not an error of the dialog: close it and show "Sign in again" in the card instead.
   const sensitive = async (action: () => Promise<unknown>, done: string) => {
     try {
       await action();
@@ -47,7 +48,7 @@ export function DataKeyCard({ status, onChanged }: { status: SecurityStatus; onC
   };
 
   return (
-    <div id="kunci-data" className="scroll-mt-20 rounded-lg border bg-card p-4">
+    <div id={DATA_KEY_ANCHOR} className="scroll-mt-20 rounded-lg border bg-card p-4">
       <Section
         title={t.title}
         description={t.help}

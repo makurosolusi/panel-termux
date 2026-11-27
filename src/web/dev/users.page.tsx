@@ -13,8 +13,8 @@ import { SearchField } from "@/web/components/search-field";
 import { Button } from "@/web/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/web/components/ui/select";
 import { usePageParam } from "@/web/components/use-page-param";
-import { idApp } from "@/web/i18n/id.app";
-import { idDevUsers } from "@/web/i18n/id.dev.users";
+import { tApp } from "@/web/i18n/en.app";
+import { tDevUsers } from "@/web/i18n/en.dev.users";
 import { revokeAllSessions } from "@/web/security/security.api";
 import { useMe } from "@/web/session/use-me";
 import { apiUrl } from "@/web/shared/api.client";
@@ -22,7 +22,7 @@ import { toast } from "@/web/shared/toast.lazy";
 import { useApiQuery } from "@/web/shared/use-api-query";
 import { UserRowActions, userColumns } from "./users.list";
 
-const t = idDevUsers;
+const t = tDevUsers;
 const PAGE_SIZE = 20;
 const ALL = "all";
 /** Typing pause before the search reaches the URL (and the API). */
@@ -68,7 +68,7 @@ export function UsersPage() {
           <SelectItem value={ALL}>{t.allRoles}</SelectItem>
           {ROLES.map((r) => (
             <SelectItem key={r} value={r}>
-              {idApp.roles[r]}
+              {tApp.roles[r]}
             </SelectItem>
           ))}
         </SelectContent>

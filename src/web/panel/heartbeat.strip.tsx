@@ -1,8 +1,8 @@
 import { cn } from "cn";
 import type { DomainCheck } from "@/shared/monitor.types";
-import { idHistory } from "@/web/i18n/id.history";
+import { tHistory } from "@/web/i18n/en.history";
 
-const t = idHistory.heartbeat;
+const t = tHistory.heartbeat;
 
 /** Slots in the strip (the server sends up to 30 newest checks, oldest first). */
 export const HEARTBEAT_SLOTS = 30;

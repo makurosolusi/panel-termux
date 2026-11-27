@@ -12,70 +12,21 @@ import {
   writeFileSync,
 } from "node:fs";
 import { userInfo } from "node:os";
-import { basename, join, resolve } from "node:path";
+import { basename, join } from "node:path";
 import { probePaths } from "./cli.host";
+import { tr } from "./cli.locale";
 import { CliExit } from "./cli.output";
 import { INIT_TIMING, type InitTiming, sv } from "./init.runit";
-import { appendKeys, existingKeyIds, type PublicKey, parseKey, parseKeys } from "./init.ssh.keys";
-import { defineStep, INIT_EXIT, INIT_STEP_TITLES, type InitContext, type PlanLine } from "./init.types";
+import { appendKeys, existingKeyIds, type PublicKey, parseKey } from "./init.ssh.keys";
+import { loadKeys } from "./init.ssh.source";
+import { defineStep, INIT_EXIT, type InitContext, type PlanLine } from "./init.types";
 
 /** Termux sshd's port (openssh package default). */
 export const SSHD_PORT = 8022;
 /** Our drop-in (K22); written only when absent and sshd_config includes sshd_config.d. */
 export const DROP_IN_NAME = "10-key-only.conf";
-const DROP_IN = "# panel init --ssh-key: masuk hanya dengan kunci (PLAN/07 K22)\nPasswordAuthentication no\n";
-const FETCH_TIMEOUT_MS = 15_000;
-const MAX_SOURCE_CHARS = 100_000; // a GitHub .keys page is a few hundred bytes per key
-const PASTE_PROMPT = "Tempel satu baris kunci publik:";
-
-/** Reads the `--ssh-key` source: https URL (fetch), `-` (one line from the terminal/stdin), or a local file. */
-async function readSource(ctx: InitContext, src: string): Promise<{ text: string; label: string }> {
-  if (src === "-") {
-    const line = await ctx.prompt.ask(PASTE_PROMPT);
-    if (line === null || line.trim() === "")
-      throw new CliExit(INIT_EXIT.needsUser, "--ssh-key -: tidak ada kunci yang ditempel.", "tempel satu baris kunci");
-    return { text: line, label: "kunci yang ditempel" };
-  }
-  if (/^[a-z][a-z0-9+.-]*:\/\//i.test(src)) {
-    if (!/^https:\/\//i.test(src))
-      throw new CliExit(
-        INIT_EXIT.usage,
-        "--ssh-key hanya menerima URL https://.",
-        "contoh: https://github.com/<akun>.keys",
-      );
-    let res: Response;
-    try {
-      res = await ctx.host.fetch(src, { signal: AbortSignal.timeout(FETCH_TIMEOUT_MS) });
-    } catch (e) {
-      throw new CliExit(INIT_EXIT.failed, `Gagal mengunduh kunci dari ${src}: ${(e as Error).message}`, "cek internet");
-    }
-    // fetch follows redirects: a hop to http:// would hand us keys anyone on the path could have swapped
-    if (!/^https:\/\//i.test(res.url || src))
-      throw new CliExit(INIT_EXIT.failed, `${src} dialihkan ke alamat yang bukan https; kunci tidak dipakai.`);
-    if (!res.ok) throw new CliExit(INIT_EXIT.failed, `Gagal mengunduh kunci dari ${src}: HTTP ${res.status}.`);
-    const text = await res.text();
-    if (text.length > MAX_SOURCE_CHARS) throw new CliExit(INIT_EXIT.failed, `${src} terlalu besar untuk daftar kunci.`);
-    return { text, label: src };
-  }
-  const file = resolve(src);
-  try {
-    return { text: readFileSync(file, "utf8"), label: file };
-  } catch (e) {
-    const code = (e as NodeJS.ErrnoException).code ?? (e as Error).message;
-    throw new CliExit(INIT_EXIT.failed, `Gagal membaca file kunci ${file}: ${code}.`);
-  }
-}
-
-// detect runs twice (plan, then before apply): read the source once per run, so `-` asks once and a URL is fetched once
-const sourceCache = new WeakMap<InitContext, Promise<PublicKey[]>>();
-const loadKeys = (ctx: InitContext, src: string) => {
-  let p = sourceCache.get(ctx);
-  if (!p) {
-    p = readSource(ctx, src).then(({ text, label }) => parseKeys(text, label));
-    sourceCache.set(ctx, p);
-  }
-  return p;
-};
+// File comment in English for every locale: a config file on the phone, not CLI output.
+const DROP_IN = "# panel init --ssh-key: sign-in with a key only (PLAN/07 K22)\nPasswordAuthentication no\n";
 
 /** Paths of the step, from the host's HOME/PREFIX/SVDIR. */
 export function sshPaths(ctx: InitContext) {
@@ -159,26 +110,47 @@ const plan = (ctx: InitContext, s: SshState): PlanLine[] => {
       : [
           {
             kind: "warning",
-            text: "SSH dilewati saat upgrade",
-            hint: `jalankan lagi panel init --ssh-key ${ctx.args.sshKey} setelah upgrade`,
+            text: tr("SSH is skipped during an upgrade", "SSH dilewati saat upgrade"),
+            hint: tr(
+              `run panel init --ssh-key ${ctx.args.sshKey} again after the upgrade`,
+              `jalankan lagi panel init --ssh-key ${ctx.args.sshKey} setelah upgrade`,
+            ),
           },
         ];
   const lines: PlanLine[] = [];
-  if (s.add.length > 0)
+  if (s.add.length > 0) {
+    const fps = s.add.map((k) => k.fingerprint).join(", ");
     lines.push({
       kind: "action",
-      text: `Tambah ${s.add.length} kunci SSH ke ~/.ssh/authorized_keys: ${s.add.map((k) => k.fingerprint).join(", ")}`,
+      text: tr(
+        `Add ${s.add.length} SSH ${s.add.length === 1 ? "key" : "keys"} to ~/.ssh/authorized_keys: ${fps}`,
+        `Tambah ${s.add.length} kunci SSH ke ~/.ssh/authorized_keys: ${fps}`,
+      ),
     });
-  else lines.push({ kind: "ok", text: `Kunci SSH sudah terdaftar (${s.keys.length})` });
+  } else
+    lines.push({
+      kind: "ok",
+      text: tr(`SSH keys already registered (${s.keys.length})`, `Kunci SSH sudah terdaftar (${s.keys.length})`),
+    });
   if (s.dropIn === "write" || s.dropIn === "no-config")
-    lines.push({ kind: "action", text: "Matikan masuk SSH dengan kata sandi (hanya kunci)" });
+    lines.push({
+      kind: "action",
+      text: tr("Turn off SSH password login (keys only)", "Matikan masuk SSH dengan kata sandi (hanya kunci)"),
+    });
   if (s.manual !== null)
     lines.push({
       kind: "warning",
-      text: `SSH sudah dinyalakan manual (pid ${s.manual}), bukan lewat runit; dibiarkan`,
-      hint: `agar menyala sendiri setelah HP restart: kill ${s.manual}, lalu sv up sshd`,
+      text: tr(
+        `SSH was started by hand (pid ${s.manual}), not through runit; left as is`,
+        `SSH sudah dinyalakan manual (pid ${s.manual}), bukan lewat runit; dibiarkan`,
+      ),
+      hint: tr(
+        `to have it start automatically when the phone boots: kill ${s.manual}, then sv up sshd`,
+        `agar menyala sendiri setelah HP restart: kill ${s.manual}, lalu sv up sshd`,
+      ),
     });
-  else if (!s.running) lines.push({ kind: "action", text: `Nyalakan SSH (port ${SSHD_PORT})` });
+  else if (!s.running)
+    lines.push({ kind: "action", text: tr(`Start SSH (port ${SSHD_PORT})`, `Nyalakan SSH (port ${SSHD_PORT})`) });
   return lines;
 };
 
@@ -208,9 +180,18 @@ const apply = async (ctx: InitContext, s: SshState, timing: InitTiming): Promise
   const p = sshPaths(ctx);
   if (s.add.length > 0) {
     for (const k of s.add) out.line(`  ${k.fingerprint} (${k.type})`);
-    if (ctx.tty && !(await ctx.prompt.confirm(`Tambahkan ${s.add.length} kunci ini?`, true))) {
-      out.line("  SSH dilewati: kunci tidak ditambahkan.");
-      state.manual.push(`SSH belum disiapkan: jalankan lagi ${ctx.resumeCommand()} --ssh-key <kunci yang benar>`);
+    const n = s.add.length;
+    if (
+      ctx.tty &&
+      !(await ctx.prompt.confirm(tr(`Add these ${n} ${n === 1 ? "key" : "keys"}?`, `Tambahkan ${n} kunci ini?`), true))
+    ) {
+      out.line(tr("  SSH skipped: the keys were not added.", "  SSH dilewati: kunci tidak ditambahkan."));
+      state.manual.push(
+        tr(
+          `SSH is not set up: run ${ctx.resumeCommand()} --ssh-key <the right key> again`,
+          `SSH belum disiapkan: jalankan lagi ${ctx.resumeCommand()} --ssh-key <kunci yang benar>`,
+        ),
+      );
       return;
     }
     state.changed.push(...writeKeys(p, s.add));
@@ -220,15 +201,35 @@ const apply = async (ctx: InitContext, s: SshState, timing: InitTiming): Promise
     writeFileSync(p.dropIn, DROP_IN, { mode: 0o644 });
     state.changed.push(p.dropIn);
     if (s.running || s.manual !== null)
-      state.manual.push("SSH: masuk hanya dengan kunci berlaku setelah sshd dinyalakan ulang (sv restart sshd)");
+      state.manual.push(
+        tr(
+          "SSH: key-only login applies after sshd restarts (sv restart sshd)",
+          "SSH: masuk hanya dengan kunci berlaku setelah sshd dinyalakan ulang (sv restart sshd)",
+        ),
+      );
   } else if (s.dropIn === "no-include" || s.dropIn === "user-set") {
-    out.check("info", "Pengaturan sshd tidak diubah (masuk dengan kata sandi diatur sshd_config)");
+    out.check(
+      "info",
+      tr(
+        "sshd settings not changed (password sign-in is set in sshd_config)",
+        "Pengaturan sshd tidak diubah (masuk dengan kata sandi diatur sshd_config)",
+      ),
+    );
   }
   if (s.manual !== null)
-    state.manual.push(`SSH berjalan manual (pid ${s.manual}); agar ikut runit: kill ${s.manual}, lalu sv up sshd`);
+    state.manual.push(
+      tr(
+        `SSH runs by hand (pid ${s.manual}); to put it under runit: kill ${s.manual}, then sv up sshd`,
+        `SSH berjalan manual (pid ${s.manual}); agar ikut runit: kill ${s.manual}, lalu sv up sshd`,
+      ),
+    );
   else if (!s.running) {
     if (!existsSync(p.service))
-      throw new CliExit(INIT_EXIT.failed, `Layanan sshd tidak ada di ${p.service}.`, "pasang: pkg install openssh");
+      throw new CliExit(
+        INIT_EXIT.failed,
+        tr(`The sshd service is missing at ${p.service}.`, `Layanan sshd tidak ada di ${p.service}.`),
+        tr("install it: pkg install openssh", "pasang: pkg install openssh"),
+      );
     if (s.down) {
       rmSync(p.down, { force: true });
       state.changed.push(p.down);
@@ -238,17 +239,27 @@ const apply = async (ctx: InitContext, s: SshState, timing: InitTiming): Promise
   const host = existsSync(p.hostKey) ? parseKey(readFileSync(p.hostKey, "utf8")) : null;
   out.check(
     host ? "ok" : "warning",
-    host ? `Sidik jari HP (host): ${host.fingerprint}` : "Sidik jari HP belum ada (kunci host sshd belum dibuat)",
+    host
+      ? tr(`Phone (host) fingerprint: ${host.fingerprint}`, `Sidik jari HP (host): ${host.fingerprint}`)
+      : tr(
+          "No phone fingerprint yet (the sshd host key is not created yet)",
+          "Sidik jari HP belum ada (kunci host sshd belum dibuat)",
+        ),
   );
   // ponytail: IP is not guessed (K22: no `ip` on POCO, Tailscale vs Wi-Fi differ); the user reads it off the phone
-  out.line(`  Masuk dari komputer: ssh -p ${SSHD_PORT} ${userInfo().username}@<IP HP: lihat Tailscale/Wi-Fi>`);
+  const user = userInfo().username;
+  out.line(
+    tr(
+      `  Connect from a computer: ssh -p ${SSHD_PORT} ${user}@<phone IP: see Tailscale/Wi-Fi>`,
+      `  Masuk dari komputer: ssh -p ${SSHD_PORT} ${user}@<IP HP: lihat Tailscale/Wi-Fi>`,
+    ),
+  );
 };
 
 /** Step 3a with `timing` (tests shorten the `sv` retry). */
 export const createSshStep = (timing: InitTiming = INIT_TIMING) =>
   defineStep<SshState>({
     id: "ssh",
-    title: INIT_STEP_TITLES.ssh,
     detect,
     plan,
     apply: (ctx, s) => apply(ctx, s, timing),

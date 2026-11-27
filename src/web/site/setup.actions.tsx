@@ -6,13 +6,13 @@ import type { Integration } from "@/shared/site.types";
 import { CodeText } from "@/web/components/code-text";
 import { ConfirmAction } from "@/web/components/confirm-action";
 import { Button } from "@/web/components/ui/button";
-import { idSite } from "@/web/i18n/id.site";
+import { tSite } from "@/web/i18n/en.site";
 import { toast } from "@/web/shared/toast.lazy";
 import { UndoRow } from "./setup.undo";
 import { pm2Pending } from "./site.adopt";
 import { FIX_ERROR_CODES, restartPm2, restoreFix } from "./site.api";
 
-const t = idSite.setup;
+const t = tSite.setup;
 /** The restart's 404 means runit has no pm2 service, not a missing backup. */
 const RESTART_CODES = { ...FIX_ERROR_CODES, not_found: t.restartNotFound };
 
@@ -96,8 +96,8 @@ function RestartFailed({
 }
 
 /**
- * Bottom of the Persiapan card (PLAN/06 §4.1): "Diperbaiki panel … Batalkan perubahan" and the checked "Mulai ulang
- * pm2 sekarang" inside <details>, plus the warning when apps did not come back. Nothing when there is nothing to undo
+ * Bottom of the Setup card (PLAN/06 §4.1): "Changes by the panel … Undo change" and the checked "Restart
+ * pm2 now" inside <details>, plus the warning when apps did not come back. Nothing when there is nothing to undo
  * and no restart pending.
  */
 export function SetupActions({
@@ -109,7 +109,7 @@ export function SetupActions({
 }: {
   integration: Integration;
   onChange: () => void;
-  /** The Persiapan card: focus lands there once undo / restart removed the button that was pressed. */
+  /** The Setup card: focus lands there once undo / restart removed the button that was pressed. */
   focusCard: () => HTMLElement | null;
   /** A fix just applied takes effect when pm2 starts again: show the restart like a pending one. */
   restartWanted?: boolean;

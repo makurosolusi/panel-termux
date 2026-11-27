@@ -12,7 +12,7 @@ import { HeaderSkeleton, RowsSkeleton } from "@/web/components/skeletons";
 import { StatusBadge } from "@/web/components/status-badge";
 import { Button } from "@/web/components/ui/button";
 import { usePageParam } from "@/web/components/use-page-param";
-import { idBackup } from "@/web/i18n/id.backup";
+import { tBackup } from "@/web/i18n/en.backup";
 import { SECURITY_STATUS_URL } from "@/web/security/security.api";
 import { useMe } from "@/web/session/use-me";
 import { runApiAction } from "@/web/shared/api.action";
@@ -25,7 +25,7 @@ import { BACKUP_POLL_MS, backupBanners, isBackupBusy, isPageBusy, runBlock } fro
 import { BackupBanners, BackupStatusSection } from "./backup.status";
 import { backupHeadline } from "./backup.status-key";
 
-const t = idBackup;
+const t = tBackup;
 
 /** Newest restores shown in "Uji pemulihan" (older ones stay in the audit log). */
 const RESTORES_SHOWN = 10;

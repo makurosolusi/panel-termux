@@ -5,18 +5,18 @@ import { RelativeTime } from "@/web/components/relative-time";
 import { Section } from "@/web/components/section";
 import { StatusBadge } from "@/web/components/status-badge";
 import { Button } from "@/web/components/ui/button";
-import { idBackup } from "@/web/i18n/id.backup";
+import { tBackup } from "@/web/i18n/en.backup";
 import { Notice } from "@/web/security/security.notice";
 import { formatBytes, formatDateTime } from "@/web/shared/format";
 import { type BackupBanner, contentKinds } from "./backup.state";
 import { runStatusKey } from "./backup.status-key";
 
-const t = idBackup.status;
-const b = idBackup.banner;
+const t = tBackup.status;
+const b = tBackup.banner;
 
 /** Where the fixes live (Administrasi, super_admin only). */
 const SETTINGS_PATH = "/dev/settings";
-const DATA_KEY_PATH = "/dev/health#kunci-data";
+const DATA_KEY_PATH = "/dev/health#data-key";
 const MB = 1024 * 1024;
 
 function LinkButton({ to, children }: { to: string; children: string }) {
@@ -108,7 +108,7 @@ export function BackupStatusSection({ status }: { status: BackupStatus }) {
   if (status.maxItemMb !== undefined) items.push({ label: t.maxItem, value: formatBytes(status.maxItemMb * MB) });
   items.push({
     label: t.contents,
-    value: kinds.length ? kinds.map((k) => idBackup.kinds[k]).join(", ") : t.none,
+    value: kinds.length ? kinds.map((k) => tBackup.kinds[k]).join(", ") : t.none,
   });
   if (excluded.length)
     items.push({
@@ -116,7 +116,7 @@ export function BackupStatusSection({ status }: { status: BackupStatus }) {
       value: (
         <ul className="flex list-disc flex-col gap-1 pl-4">
           {excluded.map((x) => (
-            <li key={x}>{idBackup.excluded[x]}</li>
+            <li key={x}>{tBackup.excluded[x]}</li>
           ))}
         </ul>
       ),
@@ -133,7 +133,7 @@ export function BackupStatusSection({ status }: { status: BackupStatus }) {
     ),
   });
   items.push({
-    label: idBackup.restores.lastTest,
+    label: tBackup.restores.lastTest,
     value: status.lastRestoreTest ? (
       <span>
         <RelativeTime at={status.lastRestoreTest.at} /> · {status.lastRestoreTest.sourceName}

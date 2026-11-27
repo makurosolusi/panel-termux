@@ -1,4 +1,4 @@
-import { idLanding } from "@/web/i18n/id.landing";
+import { tLanding } from "@/web/i18n/en.landing";
 import { useDocumentTitle } from "@/web/layout/document.title";
 import { ArchSection } from "./arch.section";
 import { AccountDeletedNotice } from "./deleted.notice";
@@ -15,7 +15,7 @@ import { WhySection } from "./why.section";
 
 /** `/`: public product page for people who want Panel Termux on their own phone (signed in or not). */
 export function LandingPage() {
-  useDocumentTitle(idLanding.meta.title, { raw: true });
+  useDocumentTitle(tLanding.meta.title, { raw: true });
   return (
     <div className="relative min-h-svh overflow-x-clip bg-lp-paper text-lp-ink selection:bg-lp-signal selection:text-lp-signal-ink">
       <div

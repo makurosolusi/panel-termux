@@ -21,5 +21,5 @@ export type SecurityStatus = {
 /** POST /api/dev/users/:id/sessions/revoke and POST /api/dev/sessions/revoke-all. */
 export type RevokedSessions = { revoked: number };
 
-/** Body of the data key reset (typed confirmation). */
-export type DataKeyResetInput = { confirm: "hapus" };
+/** Body of the data key reset: the confirm word of the UI locale (en "delete", id "hapus"). */
+export type DataKeyResetInput = { confirm: "delete" | "hapus" };

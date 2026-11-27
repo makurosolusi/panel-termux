@@ -3,7 +3,7 @@ import { TriangleAlertIcon } from "lucide-react";
 import type { ReactNode } from "react";
 import { CodeText } from "@/web/components/code-text";
 import { Button } from "@/web/components/ui/button";
-import { idCommon } from "@/web/i18n/id.common";
+import { tCommon } from "@/web/i18n/en.common";
 
 /**
  * Failed load: danger-toned panel with message and optional retry (and any extra action). `compact` = one line,
@@ -30,7 +30,7 @@ export function ErrorState({
     <div className="flex shrink-0 gap-2">
       {onRetry && (
         <Button size="sm" variant="outline" onClick={onRetry} disabled={retrying} aria-busy={retrying || undefined}>
-          {idCommon.retry}
+          {tCommon.retry}
         </Button>
       )}
       {action}

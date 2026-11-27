@@ -1,21 +1,24 @@
+import type { Messages } from "@/shared/i18n";
+import type { tLanding } from "./en.landing";
+
 const REPO = "https://github.com/makurosolusi/panel-termux";
 
-/** Indonesian strings of the public landing page at `/` (imported directly by src/web/landing, also `id.landing`). */
-export const idLanding = {
-  /** Tab title + link preview; must equal `OG_TEXT` in src/server/http/seo.ts (tests/web.landing.test.ts). */
+/** Indonesian strings of the public landing page at `/` (overlay of `tLanding`, loaded through id.pack). */
+export const idLanding: Messages<typeof tLanding> = {
+  /** Tab title in Indonesian; the link preview (OG) stays English only (DECISIONS E13). */
   meta: {
     title: "Panel Termux — HP Android jadi server",
     description:
       "Panel web yang mengubah HP Android dengan Termux jadi server untuk aplikasi Bun single-binary: pantau, deploy, backup, dan domain lewat Cloudflare Tunnel.",
     imageAlt:
-      "Logo dan nama Panel Termux, tulisan pantau · deploy · backup · domain, dan tangkapan layar Ringkasan di HP",
+      "Logo dan nama Panel Termux, tulisan monitor · deploy · backup · domains, dan tangkapan layar Overview di HP (gambar berbahasa Inggris)",
   },
   links: {
     github: REPO,
     releases: `${REPO}/releases`,
     license: `${REPO}/blob/main/LICENSE`,
     changelog: `${REPO}/blob/main/CHANGELOG.md`,
-    readmeInstall: `${REPO}#instal-di-hp`,
+    readmeInstall: `${REPO}/blob/main/README.id.md#instal-di-hp`,
   },
   nav: {
     label: "Navigasi halaman",

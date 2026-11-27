@@ -2,7 +2,7 @@
 import type { RouteObject } from "react-router";
 import { backupRoutes } from "@/web/backup/backup.routes";
 import { devRoutes } from "@/web/dev/dev.routes";
-import { idShell } from "@/web/i18n/id.shell";
+import { tShell } from "@/web/i18n/en.shell";
 import { AppLayout } from "@/web/layout/app.layout";
 import type { RouteHandle } from "@/web/layout/shell.page";
 import { NotFoundPage } from "@/web/pages/not-found.page";
@@ -21,7 +21,7 @@ export const appRoutes: RouteObject[] = [
         children: [
           {
             path: "/profile",
-            handle: { title: idShell.nav.profile } satisfies RouteHandle,
+            handle: { title: tShell.nav.profile } satisfies RouteHandle,
             lazy: { Component: () => import("@/web/pages/profile.page").then((m) => m.ProfilePage) },
           },
           ...panelRoutes,

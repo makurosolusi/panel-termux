@@ -31,7 +31,7 @@ describe("seo.ts (pure)", () => {
       `<meta property="og:image" content="${BASE}/og.png" />`,
       `<meta property="og:image:width" content="1200" />`,
       `<meta property="og:image:height" content="630" />`,
-      `<meta property="og:locale" content="id_ID" />`,
+      `<meta property="og:locale" content="en_US" />`,
       `<meta name="twitter:card" content="summary_large_image" />`,
     ]) {
       expect(r.html).toContain(tag);

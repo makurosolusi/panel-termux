@@ -3,11 +3,11 @@ import type { LoadBaseline, Problem } from "@/shared/monitor.types";
 import type { DeviceInfo } from "@/shared/panel.types";
 import { StatTile } from "@/web/components/stat-tile";
 import { TONE_TEXT } from "@/web/components/status.tone";
-import { idOverview } from "@/web/i18n/id.overview";
+import { tOverview } from "@/web/i18n/en.overview";
 import { formatBytes, formatDuration, formatMegabytes, formatTemperature, usedPercent } from "@/web/shared/format";
 import { batteryView, loadView, temperatureTone } from "./overview.state";
 
-const t = idOverview.device;
+const t = tOverview.device;
 const GRID = "grid grid-cols-2 gap-3 lg:grid-cols-4";
 /** Tighter phone tiles: the 2×2 block stays ≤ 200 px at 390 px (PLAN/02 §6, QA M7). */
 const TILE = "max-md:gap-0.5 max-md:py-2.5";
@@ -30,7 +30,7 @@ export function DeviceTiles({
     return (
       <div className={GRID}>
         {[t.battery, t.temperature, t.memory, t.disk].map((label) => (
-          <StatTile key={label} className={TILE} label={label} value="–" hint={idOverview.unavailable} />
+          <StatTile key={label} className={TILE} label={label} value="–" hint={tOverview.unavailable} />
         ))}
       </div>
     );

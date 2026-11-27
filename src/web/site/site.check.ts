@@ -7,7 +7,7 @@ import type {
   SiteIssue,
   SiteNote,
 } from "@/shared/site.types";
-import { idSite } from "@/web/i18n/id.site";
+import { tSite } from "@/web/i18n/en.site";
 import { type EnvRow, envRecord, envRowsValid } from "./env.rows";
 
 /** Domains per site: one primary + up to 4 extra (one job, one cloudflared restart). */
@@ -22,12 +22,12 @@ export const renderCopy = (copy: Copy, params: JobParams = {}): string =>
 
 /** Indonesian text of a check issue from its code; the server's text only for codes this build does not know. */
 export function issueText(i: SiteIssue): string {
-  const copy = (idSite.issues as Readonly<Record<string, Copy>>)[i.code];
+  const copy = (tSite.issues as Readonly<Record<string, Copy>>)[i.code];
   return copy ? renderCopy(copy, { hostname: i.hostname ?? null, ...i.params }) : i.message;
 }
 
 /** Indonesian text of a non-blocking DNS note. */
-export const noteText = (n: SiteNote): string => renderCopy(idSite.notes[n.code], n.params);
+export const noteText = (n: SiteNote): string => renderCopy(tSite.notes[n.code], n.params);
 
 /** Port text → number; "" → undefined (server suggests one); anything not 1–65535 → "invalid". */
 export function parsePort(text: string): number | undefined | "invalid" {
@@ -140,7 +140,7 @@ export function wizardDns(i: Integration | null | undefined): WizardDns {
 
 /** What creating `body` will do, step by step (mirrors the server's site.create steps). */
 export function createPlan(body: SiteCreateRequest, dns: WizardDns): string[] {
-  const p = idSite.wizard.plan;
+  const p = tSite.wizard.plan;
   const hosts = [body.hostname, ...(body.extraHostnames ?? [])].join(", ");
   const params: JobParams = {
     name: body.name,

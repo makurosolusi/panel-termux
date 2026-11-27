@@ -1,5 +1,7 @@
+import type { Messages } from "@/shared/i18n";
+import type { tCommon } from "./en.common";
 /** Indonesian strings shared by every section (imported directly, DECISIONS B30). Wording follows docs/content-guide.md. */
-export const idCommon = {
+export const idCommon: Messages<typeof tCommon> = {
   retry: "Coba lagi",
   cancel: "Batal",
   close: "Tutup",
@@ -23,13 +25,5 @@ export const idCommon = {
     forbidden: "Minta Super Admin mengubah peranmu bila perlu.",
     server: "Coba lagi beberapa saat lagi.",
   },
-  errors: {
-    network: "Tidak bisa terhubung ke server. Periksa koneksi internet, lalu coba lagi.",
-    unauthorized: "Sesi kamu sudah berakhir. Mengalihkan ke halaman masuk…",
-    access:
-      "Sesi Cloudflare Access belum ada atau sudah berakhir. Buka alamat panel langsung di address bar untuk masuk lewat Access. Bila tetap ditolak, minta admin memastikan email kamu diizinkan di kebijakan Access.",
-    forbidden: "Peran kamu tidak punya akses ke halaman ini. Minta Super Admin mengubah peranmu bila perlu.",
-    server: "Server sedang mengalami gangguan. Coba lagi beberapa saat lagi.",
-    generic: "Permintaan tidak berhasil. Coba lagi; bila terus gagal, muat ulang halaman.",
-  },
+  genericError: "Permintaan tidak berhasil. Coba lagi; bila terus gagal, muat ulang halaman.",
 } as const;

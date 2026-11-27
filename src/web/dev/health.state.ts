@@ -1,12 +1,12 @@
 import type { DevHealth, HealthStatus, PanelCheck } from "@/shared/dev.types";
 import type { Problem } from "@/shared/panel.types";
 import type { StatusKey } from "@/web/components/status.vocab";
-import { idDevHealth } from "@/web/i18n/id.dev.health";
+import { tDevHealth } from "@/web/i18n/en.dev.health";
 import { formatRelative } from "@/web/shared/format";
 
-// Pure decisions of /dev Kesehatan sistem (PLAN/05 §3.4, F2): verdict, check rows, info rows. Status keys per B12.
+// Pure decisions of /dev System health (PLAN/05 §3.4, F2): verdict, check rows, info rows. Status keys per B12.
 
-const t = idDevHealth;
+const t = tDevHealth;
 
 /** Verdict → canonical status key (badge tone); the label comes from `id.dev.health.verdict`. */
 export const HEALTH_STATUS_KEY: Readonly<Record<HealthStatus, StatusKey>> = {
@@ -24,7 +24,7 @@ export const PROBLEM_STATUS_KEY = { warning: "attention", danger: "errored" } as
 /** Codes that never lower the verdict (B4); used only while the server omits `infoCodes`. */
 export const DEFAULT_INFO_CODES: readonly string[] = ["backup_not_configured", "access_not_seen"];
 
-/** Used-disk percentage at which the Penyimpanan bar turns warning / danger (server DISK_*_RATIO: 10% / 5% free). */
+/** Used-disk percentage at which the Storage bar turns warning / danger (server DISK_*_RATIO: 10% / 5% free). */
 export const DISK_THRESHOLDS = { warn: 90, danger: 95 } as const;
 
 const RANK: Record<HealthStatus, number> = { ok: 0, warn: 1, fail: 2 };
@@ -39,7 +39,7 @@ const problemStatus = (p: Problem): HealthStatus => (p.severity === "danger" ? "
 export const verdictProblems = (h: DevHealth): Problem[] =>
   (h.problems ?? []).filter((p) => !isInfo(h, p)).sort((a, b) => RANK[problemStatus(b)] - RANK[problemStatus(a)]);
 
-/** Info rows ("Informasi"): codes present in problems that do not count, de-duplicated, in server order. */
+/** Info rows ("Information"): codes present in problems that do not count, de-duplicated, in server order. */
 export const infoRows = (h: DevHealth): string[] => [
   ...new Set((h.problems ?? []).filter((p) => isInfo(h, p) && p.code).map((p) => p.code as string)),
 ];

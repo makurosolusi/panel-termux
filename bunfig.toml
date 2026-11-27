@@ -4,3 +4,7 @@
 
 [serve.static]
 plugins = ["bun-plugin-tailwind"]
+
+# Reset module-wide CLI state before and after every test (tests/cli.locale.preload.ts).
+[test]
+preload = ["./tests/cli.locale.preload.ts"]

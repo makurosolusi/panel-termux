@@ -1,10 +1,10 @@
 import type { BackupRestoreStarted, BackupRunStarted } from "@/shared/backup.types";
-import { idBackup } from "@/web/i18n/id.backup";
+import { tBackup } from "@/web/i18n/en.backup";
 import { sensitiveFetch } from "@/web/security/security.api";
 import { apiFetch, apiUrl } from "@/web/shared/api.client";
 
 /** Backup error codes (409 `busy`, 400 `not_configured`, restore/drop codes) → Indonesian messages. */
-export const BACKUP_ERROR_CODES: Readonly<Record<string, string>> = idBackup.errorCodes;
+export const BACKUP_ERROR_CODES: Readonly<Record<string, string>> = tBackup.errorCodes;
 
 /** `/api/panel/backups<path>?<query>`. */
 export const backupUrl = (path = "", query?: Parameters<typeof apiUrl>[2]): string =>

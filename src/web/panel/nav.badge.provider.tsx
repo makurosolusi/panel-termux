@@ -2,7 +2,7 @@ import { cn } from "cn";
 import { createContext, type ReactNode, useContext } from "react";
 import type { PanelStatus } from "@/shared/monitor.types";
 import { canAccess } from "@/shared/roles";
-import { idHistory } from "@/web/i18n/id.history";
+import { tHistory } from "@/web/i18n/en.history";
 import { useMe } from "@/web/session/use-me";
 import { useApiQuery } from "@/web/shared/use-api-query";
 import { panelUrl } from "./panel.api";
@@ -15,7 +15,7 @@ export const NAV_BADGE_ROUTE = "/panel";
 /** Active problems on a nav item: count (> 0) and tone, or null for no badge. */
 export type NavBadgeView = { count: number; tone: "danger" | "warning" };
 
-/** Badge of the Ringkasan item from the thin status: danger + warning (info is never counted); null when 0/unknown. */
+/** Badge of the Overview item from the thin status: danger + warning (info is never counted); null when 0/unknown. */
 export function navBadgeView(status: PanelStatus | undefined): NavBadgeView | null {
   if (!status) return null;
   const count = status.danger + status.warning;
@@ -36,7 +36,7 @@ export function NavBadgeProvider({ children }: { children: ReactNode }) {
   );
 }
 
-/** Badge for a nav link `to`; null for every item but Ringkasan, or when nothing is active. */
+/** Badge for a nav link `to`; null for every item but Overview, or when nothing is active. */
 export function useNavBadge(to: string): NavBadgeView | null {
   const view = useContext(NavBadgeContext);
   return to === NAV_BADGE_ROUTE ? view : null;
@@ -49,7 +49,7 @@ const DOT = { danger: "bg-danger", warning: "bg-warning" } as const;
 export function NavBadge({ to, dot = false, className }: { to: string; dot?: boolean; className?: string }) {
   const view = useNavBadge(to);
   if (!view) return null;
-  const label = idHistory.navBadge(view.count);
+  const label = tHistory.navBadge(view.count);
   if (dot)
     return <span role="img" aria-label={label} className={cn("size-2 rounded-full", DOT[view.tone], className)} />;
   return (
@@ -61,7 +61,7 @@ export function NavBadge({ to, dot = false, className }: { to: string; dot?: boo
       )}
     >
       <span aria-hidden>{view.count > 99 ? "99+" : view.count}</span>
-      {/* leading ", " so the link reads "Ringkasan, 9 masalah aktif", not "Ringkasan9 …" (QA #10) */}
+      {/* leading ", " so the link reads "Overview, 9 active problems", not "Overview9 …" (QA #10) */}
       <span className="sr-only">{`, ${label}`}</span>
     </span>
   );

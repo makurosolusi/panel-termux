@@ -2,9 +2,9 @@ import { formatDateTime, formatRelative } from "@/web/shared/format";
 import { useNow } from "./now.store";
 
 /**
- * "3 mnt lalu" that keeps itself current on the shared clock (`useNow`); `absolute` shows the local date-time
- * without seconds instead ("20 Nov 2026, 09.52"; detail and history pages; the `title` tooltip keeps seconds). Readers get the exact time (sr-only text; `aria-label` is not supported on `<time>`), pointers via `title`. `format`
- * wraps the visible text, e.g. `idCommon.updatedAgo` → "Diperbarui 3 mnt lalu".
+ * "3 min ago" that keeps itself current on the shared clock (`useNow`); `absolute` shows the local date-time
+ * without seconds instead ("Nov 20, 2026, 09:52"; detail and history pages; the `title` tooltip keeps seconds). Readers get the exact time (sr-only text; `aria-label` is not supported on `<time>`), pointers via `title`. `format`
+ * wraps the visible text, e.g. `tCommon.updatedAgo` → "Updated 3 min ago".
  */
 export function RelativeTime({
   at,

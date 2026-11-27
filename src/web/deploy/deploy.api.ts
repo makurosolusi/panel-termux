@@ -2,7 +2,7 @@
 // (`reason`, `expected`, `got`, `needBytes`, `freeBytes`, `index`) so the card can explain early rejections.
 import { CHUNK_SHA_HEADER, type ChunkReceived, type UploadState } from "@/shared/deploy.types";
 import type { JobAccepted } from "@/shared/site.types";
-import { idDeploy } from "@/web/i18n/id.deploy";
+import { tDeploy } from "@/web/i18n/en.deploy";
 import { panelUrl } from "@/web/panel/panel.api";
 import { AJAX_HEADERS, ApiError, failedResponse } from "@/web/shared/api.client";
 import { SITE_ERROR_CODES, siteUrl } from "@/web/site/site.api";
@@ -19,7 +19,7 @@ import {
 } from "./deploy.upload";
 
 /** Site error codes plus the deploy/rollback ones. */
-export const DEPLOY_ERROR_CODES: Readonly<Record<string, string>> = { ...SITE_ERROR_CODES, ...idDeploy.errorCodes };
+export const DEPLOY_ERROR_CODES: Readonly<Record<string, string>> = { ...SITE_ERROR_CODES, ...tDeploy.errorCodes };
 
 /** ApiError plus the `{ error, message, ...extra }` body fields. */
 export class DeployApiError extends ApiError {

@@ -319,7 +319,7 @@ describe("computeProblems", () => {
       );
       const r = compute({ security: sec, backup: ok(backup({ keyMismatch: true, lastRun: run("failed") })) });
       expect(r.problems.map((p) => `${p.id}:${p.params.count}:${p.href}`)).toEqual([
-        "key_mismatch:data_key:2:/dev/health#kunci-data",
+        "key_mismatch:data_key:2:/dev/health#data-key",
       ]);
       expect(r.suppressed.map((p) => p.code)).toEqual(["backup_failed"]);
       expect(ids({ backup: failed("KeyMismatchError: cannot decrypt") })).toEqual(["key_mismatch:data_key:danger"]);

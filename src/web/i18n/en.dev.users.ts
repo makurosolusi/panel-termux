@@ -1,0 +1,62 @@
+import { msg } from "@/shared/i18n";
+
+/** UI strings of /dev/users (PLAN/05 §5.3, F5). */
+export const tDevUsers = msg("dev.users", {
+  title: "Users",
+  description: "New accounts sign in as User. An Admin has full control of this phone.",
+  label: "User list",
+  search: "Search users",
+  searchPlaceholder: "Search by name or email…",
+  roleFilter: "Filter by role",
+  allRoles: "All roles",
+  clearFilters: "Clear filters",
+  name: "Name",
+  role: "Role",
+  lastSeen: "Last active",
+  sessionCount: "Active sessions",
+  sessions: (n: number) => (n === 0 ? "No sessions" : `${n} ${n === 1 ? "session" : "sessions"}`),
+  seenToday: "Active today",
+  seenYesterday: "Active yesterday",
+  seenDaysAgo: (n: number) => `Active ${n} ${n === 1 ? "day" : "days"} ago`,
+  neverSeen: "Never active",
+  more: (name: string) => `Actions for ${name}`,
+  you: "You",
+  lockedSelf: "Your own account. Manage your sessions and account on the Profile page.",
+  lockedEnv: "Super Admin from SUPER_ADMIN_EMAILS. Their role and account are managed in the .env file, not here.",
+  empty: "No other users yet. Users show up here after they first sign in with Google.",
+  emptyFiltered: "No users match. Change or clear the filters to see every user.",
+  roleChangedTo: (name: string, role: string) => `Role of ${name} changed to ${role}.`,
+  roleDialog: {
+    title: (name: string) => `Change the role of ${name}?`,
+    user: "User — can only open Profile.",
+    admin: "Admin — manages services, apps, sites, deploys, databases, and backups.",
+    accessNote: (email: string) =>
+      `If the panel uses Cloudflare Access, add ${email} to the Access policy too, or they can't open the panel.`,
+    accessLink: "See the Access recipe",
+    immediate: "The change takes effect right away.",
+    makeAdmin: "Make Admin",
+    makeUser: "Make User",
+  },
+  revoke: "Sign out of all devices",
+  revokeTitle: (name: string) => `Sign ${name} out of all devices?`,
+  revokeBody: "They'll have to sign in with Google again. Their role doesn't change.",
+  revoked: (name: string, n: number) => `${name} was signed out of ${n} ${n === 1 ? "session" : "sessions"}.`,
+  revokeAll: "Sign out every user",
+  revokeAllTitle: "Sign every user out of all devices?",
+  revokeAllBody:
+    "Everyone, other Super Admins included, will have to sign in with Google again. Your own session stays active.",
+  revokeAllWord: "sign out",
+  revokedAll: (n: number) => `${n} ${n === 1 ? "session" : "sessions"} signed out.`,
+  delete: "Delete user",
+  deleted: "User deleted.",
+  deleteTitle: (name: string) => `Delete the user ${name}?`,
+  deleteBody: (name: string) =>
+    `${name} will be signed out of all devices and their account deleted. This can't be undone. They can still sign in with Google again as a new User.`,
+  /** 409/404 answers of the users API (F5 edge cases). */
+  errorCodes: {
+    protected: "This account is protected and can't be changed or deleted from the panel.",
+    self: "To manage your own sessions, use the Profile page.",
+    not_found: "This user no longer exists; they may have just been deleted. The list was reloaded.",
+    invalid_role: "Unknown role filter. Pick a role from the list.",
+  },
+} as const);

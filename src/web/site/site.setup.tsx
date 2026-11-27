@@ -5,7 +5,7 @@ import type { FixKey } from "@/shared/fix.types";
 import type { Integration } from "@/shared/site.types";
 import { RelativeTime } from "@/web/components/relative-time";
 import { Button } from "@/web/components/ui/button";
-import { idSite } from "@/web/i18n/id.site";
+import { tSite } from "@/web/i18n/en.site";
 import { panelUrl } from "@/web/panel/panel.api";
 import { ERROR_TOAST_MS } from "@/web/shared/api.action";
 import { apiErrorMessage, apiFetch } from "@/web/shared/api.client";
@@ -15,15 +15,16 @@ import { SetupChecklist } from "./setup.checklist";
 import { SetupManual } from "./setup.manual";
 import { applicableFixes, checkText, pm2Pending, remainingProblems, setupNeeded } from "./site.adopt";
 import { SITE_ERROR_CODES } from "./site.api";
+import { LegacyAnchor } from "./site.legacy-anchor";
 
-// preview dialog + diff only load when Perbaiki is pressed (bundle budget, PLAN/06 §4.1)
+// preview dialog + diff only load when Fix is pressed (bundle budget, PLAN/06 §4.1)
 const FixDialog = lazy(() => import("./fix.dialog").then((m) => ({ default: m.FixDialog })));
 
-const t = idSite.setup;
-/** Anchor of the card (onboarding "Perbaiki di Situs" links to /panel/sites#persiapan). */
-const SETUP_ANCHOR = "persiapan";
+const t = tSite.setup;
+/** Anchor of the card (onboarding links to /panel/sites#setup; the old #persiapan is a LegacyAnchor). */
+const SETUP_ANCHOR = "setup";
 
-/** One line once pm2 is ready, plus "Periksa lagi", the pending pm2 note and the undo/restart details. */
+/** One line once pm2 is ready, plus "Check again", the pending pm2 note and the undo/restart details. */
 function ReadyLine({
   integration,
   verify,
@@ -55,8 +56,8 @@ function ReadyLine({
 }
 
 /**
- * Persiapan card (PLAN/03 §5.1, PLAN/06 §4): checklist with Perbaiki per problem and "Perbaiki semua (n)", the preview
- * dialog, "Cara manual" folded, undo + checked pm2 restart. Collapses to one line once pm2 is ready without warnings.
+ * Setup card (PLAN/03 §5.1, PLAN/06 §4): checklist with Fix per problem and "Fix all (n)", the preview
+ * dialog, "Manual steps" folded, undo + checked pm2 restart. Collapses to one line once pm2 is ready without warnings.
  * `adoptable` = unmanaged domains that can be adopted now; `onVerified` reloads the integration after any action.
  * The <section> stays mounted in both shapes, so it is where focus lands once an action removed its own button.
  */
@@ -70,7 +71,7 @@ export function SiteSetup({
   onVerified: () => void;
 }) {
   const [verifying, setVerifying] = useState(false);
-  const [checked, setChecked] = useState<Integration | null>(null); // answer of the last "Periksa lagi"
+  const [checked, setChecked] = useState<Integration | null>(null); // answer of the last "Check again"
   const [fixing, setFixing] = useState<FixKey[] | null>(null);
   const [restartWanted, setRestartWanted] = useState(false); // a fix applied here waits for a pm2 restart
   const card = useRef<HTMLElement>(null);
@@ -131,6 +132,7 @@ export function SiteSetup({
         ready ? "gap-1.5 rounded-md" : "gap-4 rounded-lg border bg-card p-4",
       )}
     >
+      <LegacyAnchor of="setup" scrollMargin="scroll-mt-20" />
       {ready ? (
         <>
           <ReadyLine integration={integration} verify={verifyButton} actions={actions} />
@@ -175,7 +177,7 @@ export function SiteSetup({
             <div className="flex flex-col gap-1 border-t pt-3 text-sm">
               <h3 className="font-semibold">{t.adoptTitle}</h3>
               <p className="text-muted-foreground">{t.adoptBody(adoptable)}</p>
-              <a href="#belum-dikelola" className="w-fit font-medium underline underline-offset-2 pointer-coarse:py-3">
+              <a href="#not-managed" className="w-fit font-medium underline underline-offset-2 pointer-coarse:py-3">
                 {t.adoptLink}
               </a>
             </div>

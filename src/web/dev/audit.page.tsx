@@ -10,10 +10,11 @@ import { RelativeTime } from "@/web/components/relative-time";
 import { Button } from "@/web/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/web/components/ui/dialog";
 import { usePageParam } from "@/web/components/use-page-param";
-import { idDevAudit } from "@/web/i18n/id.dev.audit";
+import { tDevAudit } from "@/web/i18n/en.dev.audit";
 import { useApiQuery } from "@/web/shared/use-api-query";
 import {
   auditActor,
+  auditDevice,
   auditExportUrl,
   auditListUrl,
   describeAudit,
@@ -22,7 +23,7 @@ import {
 } from "./audit.describe";
 import { AuditFilters } from "./audit.filters";
 
-const t = idDevAudit;
+const t = tDevAudit;
 const PAGE_SIZE = 20;
 
 /** Raw detail of one row (meta as key/value, never a JSON blob). */
@@ -39,7 +40,7 @@ function AuditDetail({ e, text }: { e: DevAuditEntry; text: string }) {
     ...opt(L.target, e.target),
     ...meta,
     ...opt(L.ip, e.ipMasked),
-    ...opt(L.ua, e.userAgent, false),
+    ...opt(L.ua, auditDevice(e), false),
     ...opt(L.requestId, e.requestId),
   ];
   return (
@@ -113,7 +114,7 @@ export function AuditPage() {
       className: "max-w-56",
       cell: (e) => (
         <span className="block truncate text-muted-foreground" title={e.userAgent ?? undefined}>
-          {[e.ipMasked, e.userAgent].filter(Boolean).join(" · ") || "–"}
+          {[e.ipMasked, auditDevice(e)].filter(Boolean).join(" · ") || "–"}
         </span>
       ),
     },

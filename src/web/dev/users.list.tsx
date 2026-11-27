@@ -14,12 +14,12 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/web/components/ui/dropdown-menu";
-import { idDevUsers } from "@/web/i18n/id.dev.users";
+import { tDevUsers } from "@/web/i18n/en.dev.users";
 import { apiFetch } from "@/web/shared/api.client";
 import { toast } from "@/web/shared/toast.lazy";
 import { UserRoleDialog } from "./user.role.dialog";
 
-const t = idDevUsers;
+const t = tDevUsers;
 const DAY_MS = 86_400_000;
 
 /** Which row actions a user gets: none for yourself (gembok), only "keluarkan" for env super admins (F5.5, K21). */
@@ -32,7 +32,7 @@ export function userActions(u: DevUser, meId: string): UserActionSet {
   return { locked: null, role: true, revoke: true, delete: true };
 }
 
-/** Last activity at day resolution (K9), local calendar days: "Aktif hari ini" / "kemarin" / "N hari lalu". */
+/** Last activity at day resolution (K9), local calendar days: "Active today" / "yesterday" / "N days ago". */
 export function lastSeenText(iso: string | null, now: Date = new Date()): string {
   const d = iso ? new Date(iso) : null;
   if (!d || Number.isNaN(d.getTime())) return t.neverSeen;
@@ -62,7 +62,7 @@ function Who({ u, meId }: { u: DevUser; meId: string }) {
   );
 }
 
-/** Table/card columns of /dev/users; `now` keeps "Aktif hari ini" consistent across rows. */
+/** Table/card columns of /dev/users; `now` keeps "Active today" consistent across rows. */
 export const userColumns = (meId: string, now: Date): DataColumn<DevUser>[] => [
   { key: "name", header: t.name, mobile: "title", className: "max-w-72", cell: (u) => <Who u={u} meId={meId} /> },
   { key: "role", header: t.role, mobile: "badge", cell: (u) => <RoleBadge role={u.role} /> },

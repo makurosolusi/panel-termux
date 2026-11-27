@@ -5,14 +5,14 @@ import type { Domain } from "@/shared/panel.types";
 import { hasRole } from "@/shared/roles";
 import type { Integration } from "@/shared/site.types";
 import { CopyButton } from "@/web/components/copy-button";
-import { idSiteDetail } from "@/web/i18n/id.site-detail";
+import { tSiteDetail } from "@/web/i18n/en.site-detail";
 import { DomainCheckButton } from "@/web/panel/domain.check";
 import { panelUrl } from "@/web/panel/panel.api";
 import { TOUCH_BOX } from "@/web/panel/panel.touch";
 import { useMe } from "@/web/session/use-me";
 import { useApiQuery } from "@/web/shared/use-api-query";
 
-const t = idSiteDetail.dnsManual;
+const t = tSiteDetail.dnsManual;
 /** Cloudflare's API token page (generic: the permission-template URL is not verified, PLAN/06 §6.4 A). */
 export const CLOUDFLARE_TOKENS_URL = "https://dash.cloudflare.com/profile/api-tokens";
 /** Settings card of the Cloudflare token (super_admin page). */
@@ -112,7 +112,7 @@ export function DnsManualCard({ hostnames, open = false }: { hostnames: readonly
             {t.createToken}
             <ExternalLinkIcon className="size-3.5" aria-hidden />
           </a>
-          {/* the settings page is super_admin's: an admin would be sent back to Ringkasan (QA fix-07 N7) */}
+          {/* the settings page is super_admin's: an admin would be sent back to Overview (QA fix-07 N7) */}
           {hasRole(me.role, "super_admin") && (
             <Link className={link} to={SETTINGS_TOKEN_PATH}>
               {t.openSettings}

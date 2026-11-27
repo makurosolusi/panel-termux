@@ -6,8 +6,9 @@ import { join } from "node:path";
 // @ts-expect-error TS2307: Bun embeds the shipped run script as text (`type: "text"`); tsc has no module for it.
 import PANEL_RUN from "../../deploy/sv/panel/run" with { type: "text" };
 import { writeAtomic } from "../server/sites/site.files";
+import { tr } from "./cli.locale";
 import { installServiceDir } from "./init.runit";
-import { defineStep, INIT_STEP_TITLES, type InitContext, type PlanLine } from "./init.types";
+import { defineStep, type InitContext, type PlanLine } from "./init.types";
 
 /** Current template (embedded at build). */
 export const PANEL_RUN_TEMPLATE = PANEL_RUN as string;
@@ -45,7 +46,6 @@ export function classifyPanelRun(ctx: InitContext): PanelSvState {
 /** Step 6 (§4.1). */
 export const panelSvStep = defineStep<PanelSvState>({
   id: "panel-sv",
-  title: INIT_STEP_TITLES["panel-sv"],
   detect: async (ctx) => classifyPanelRun(ctx),
   plan(ctx, s): PlanLine[] {
     const run = join(s.dir, "run");
@@ -53,21 +53,44 @@ export const panelSvStep = defineStep<PanelSvState>({
       return [
         {
           kind: "action",
-          text: `Memperbarui run script layanan panel (yang lama disimpan sebagai run.bak-${s.oldVersion})`,
+          text: tr(
+            `Updating the panel service run script (the old one is kept as run.bak-${s.oldVersion})`,
+            `Memperbarui run script layanan panel (yang lama disimpan sebagai run.bak-${s.oldVersion})`,
+          ),
         },
       ];
     if (s.kind === "custom")
       return [
         {
           kind: "warning",
-          text: `Run script layanan panel (${run}) bukan buatan panel; tidak diubah`,
-          hint: `bila panel tidak menyala, pindahkan folder ${s.dir} lalu jalankan lagi panel init`,
+          text: tr(
+            `The panel service run script (${run}) was not made by the panel; left unchanged`,
+            `Run script layanan panel (${run}) bukan buatan panel; tidak diubah`,
+          ),
+          hint: tr(
+            `if the panel does not start, move the folder ${s.dir} away and run panel init again`,
+            `bila panel tidak menyala, pindahkan folder ${s.dir} lalu jalankan lagi panel init`,
+          ),
         },
       ];
     if (s.kind === "current") return [];
     // C23: upgrade mode only refreshes a known old run script; a missing service is reported for the next run.
-    if (ctx.mode === "upgrade") return [{ kind: "warning", text: "Layanan panel belum dipasang di runit" }];
-    return [{ kind: "action", text: "Memasang layanan panel di runit (menyala otomatis setelah HP hidup)" }];
+    if (ctx.mode === "upgrade")
+      return [
+        {
+          kind: "warning",
+          text: tr("The panel service is not installed in runit yet", "Layanan panel belum dipasang di runit"),
+        },
+      ];
+    return [
+      {
+        kind: "action",
+        text: tr(
+          "Installing the panel service in runit (starts automatically when the phone boots)",
+          "Memasang layanan panel di runit (menyala otomatis setelah HP hidup)",
+        ),
+      },
+    ];
   },
   async apply(ctx, s) {
     if (s.kind === "missing") {
@@ -80,6 +103,12 @@ export const panelSvStep = defineStep<PanelSvState>({
     writeAtomic(bak, readFileSync(run), { mode: 0o755 });
     writeAtomic(run, PANEL_RUN_TEMPLATE, { mode: 0o755 });
     ctx.state.changed.push(run, bak);
-    ctx.out.check("ok", `Run script layanan panel diperbarui; yang lama: ${bak}`);
+    ctx.out.check(
+      "ok",
+      tr(
+        `Panel service run script updated; the old one: ${bak}`,
+        `Run script layanan panel diperbarui; yang lama: ${bak}`,
+      ),
+    );
   },
 });

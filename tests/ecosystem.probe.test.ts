@@ -3,7 +3,7 @@ import { afterAll, describe, expect, test } from "bun:test";
 import { copyFileSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { ECOSYSTEM_CANDIDATE, ecosystemBlock } from "@/server/sites/ecosystem.patch";
+import { BLOCK_VERSION, ECOSYSTEM_CANDIDATE, ecosystemBlock } from "@/server/sites/ecosystem.patch";
 import { type EcosystemProbe, PROBE_SENTINEL, probeEcosystem } from "@/server/sites/ecosystem.probe";
 import type { SystemAdapters } from "@/server/system/system.types";
 
@@ -45,7 +45,7 @@ describe.skipIf(!node)("probe under node", () => {
     expect(ok(await probeText(fixture("old-spread"))).spreads).toBe(true);
     const withBlock = ok(await probeText(`${fixture("poco").toString()}\n${block}`));
     expect(withBlock.spreads).toBe(true);
-    expect(withBlock.block).toEqual({ v: 1, listed: true });
+    expect(withBlock.block).toEqual({ v: BLOCK_VERSION, listed: true });
     // apps.json missing: resolution fails as under pm2; the block survives it, the old spread does not
     expect((await probeText(fixture("old-spread"), null)).ok).toBe(false);
     const noFile = ok(await probeText(`${fixture("poco").toString()}\n${block}`, null));
@@ -83,7 +83,7 @@ describe.skipIf(!node)("probe under node", () => {
     expect(frozen.names).toEqual(["hand"]);
     expect(frozen.block).toBeNull();
     const fn = ok(await probeText(`${fixture("exports-function").toString()}\n${block}`));
-    expect(fn.block).toEqual({ v: 1, listed: false });
+    expect(fn.block).toEqual({ v: BLOCK_VERSION, listed: false });
   });
 
   test("digest is stable against key order and changes with values", async () => {

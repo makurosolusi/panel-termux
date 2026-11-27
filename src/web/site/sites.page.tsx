@@ -8,7 +8,7 @@ import { EmptyState } from "@/web/components/empty-state";
 import { PageHeader } from "@/web/components/page-header";
 import { QueryView, StaleNotice } from "@/web/components/query-view";
 import { Button } from "@/web/components/ui/button";
-import { idSite } from "@/web/i18n/id.site";
+import { tSite } from "@/web/i18n/en.site";
 import { PANEL_REFRESH_MS, panelUrl } from "@/web/panel/panel.api";
 import { useApiQuery } from "@/web/shared/use-api-query";
 import { discoveredRows, integrationReady } from "./site.adopt";
@@ -17,12 +17,12 @@ import { SITE_COLUMNS, SiteRowActions, siteRowTone } from "./site.card";
 import { SiteDiscovered } from "./site.discovered";
 import { SiteSetup } from "./site.setup";
 
-const t = idSite.list;
+const t = tSite.list;
 
 /** Running change (info) or an interrupted one still to recover (warning), with a link to its job page. */
 function JobBanner({ job, interrupted }: { job: Pick<Job, "id" | "kind" | "target">; interrupted?: boolean }) {
   const Icon = interrupted ? UnplugIcon : LoaderCircleIcon;
-  const text = (interrupted ? t.interrupted : t.running)(idSite.job.kinds[job.kind], job.target);
+  const text = (interrupted ? t.interrupted : t.running)(tSite.job.kinds[job.kind], job.target);
   return (
     <div
       role="status"
@@ -43,7 +43,7 @@ function JobBanner({ job, interrupted }: { job: Pick<Job, "id" | "kind" | "targe
   );
 }
 
-/** Buat situs: disabled with the reason while pm2 is not ready for panel-built sites. */
+/** Create site: disabled with the reason while pm2 is not ready for panel-built sites. */
 function CreateButton({ ready }: { ready: boolean }) {
   if (ready) {
     return (
@@ -68,7 +68,7 @@ function CreateButton({ ready }: { ready: boolean }) {
   );
 }
 
-/** /panel/sites: Persiapan first, then the site list (problems first) and domains not managed yet. */
+/** /panel/sites: Setup first, then the site list (problems first) and domains not managed yet. */
 export function SitesPage() {
   const sites = useApiQuery<Site[]>(panelUrl("/sites"), PANEL_REFRESH_MS);
   const integration = useApiQuery<Integration>(panelUrl("/integration"));
@@ -78,7 +78,7 @@ export function SitesPage() {
   const unresolved = interrupted.data?.items.find((j) => j.recoverMode && !j.resolvedBy);
   const ready = integration.data ? integrationReady(integration.data) : true;
   const adoptable = discovered.data ? discoveredRows(discovered.data).filter((r) => r.adoptable).length : 0;
-  // stale notice goes above the (long) Persiapan card, not below it; QueryView then renders the list without one
+  // stale notice goes above the (long) Setup card, not below it; QueryView then renders the list without one
   const stale = Boolean(sites.error && sites.data);
   const refresh = () => {
     sites.reload();

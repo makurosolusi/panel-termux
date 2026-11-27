@@ -4,10 +4,10 @@ import { homeFor } from "@/shared/roles";
 import { EmptyState } from "@/web/components/empty-state";
 import { PageHeader } from "@/web/components/page-header";
 import { Button } from "@/web/components/ui/button";
-import { idShell } from "@/web/i18n/id.shell";
+import { tLayout } from "@/web/i18n/en.layout";
 import { useMe } from "@/web/session/use-me";
 
-const t = idShell.notFound;
+const t = tLayout.notFound;
 
 /** 404 inside the shell: unknown path for a signed-in user, with a way back to their home. */
 export function NotFoundPage() {

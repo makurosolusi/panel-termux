@@ -1,20 +1,21 @@
-// Audit entry → readable Indonesian sentence (PLAN/05 §5.4). Pure: tested in tests/web.dev.test.ts.
+// Audit entry → readable sentence in the active locale (PLAN/05 §5.4). Pure: tested in tests/web.dev.test.ts.
 import type { AuditAction } from "@/shared/audit.types";
 import type { DevAuditEntry } from "@/shared/dev.types";
+import { normalizeDeviceLabel } from "@/shared/device.label";
 import { isRole } from "@/shared/roles";
 import type { StatusTone } from "@/web/components/status.tone";
-import { idApp } from "@/web/i18n/id.app";
-import { idDevAudit } from "@/web/i18n/id.dev.audit";
-import { idDevSetup } from "@/web/i18n/id.dev.setup";
-import { idSettings } from "@/web/i18n/id.settings";
+import { tApp } from "@/web/i18n/en.app";
+import { tDevAudit } from "@/web/i18n/en.dev.audit";
+import { tDevSetup } from "@/web/i18n/en.dev.setup";
+import { tSettings } from "@/web/i18n/en.settings";
 
-const t = idDevAudit;
+const t = tDevAudit;
 const s = t.s;
 
 /** Sentence + row tone; `neutral` rows get no coloured edge. */
 export type AuditDescription = { text: string; tone: StatusTone };
 
-/** Display name of who did it: Sistem / "{label} (terhapus)" / name / Tidak diketahui (label survives deletion). */
+/** Display name of who did it: System / "{label} (deleted)" / name / Unknown (label survives deletion). */
 export function auditActor(e: DevAuditEntry): string {
   const kind = e.actorKind ?? (e.actor ? "user" : "unknown");
   if (kind === "system") return t.system;
@@ -23,16 +24,25 @@ export function auditActor(e: DevAuditEntry): string {
   return e.actorDeleted || !e.actor ? t.deletedActor(label) : label;
 }
 
+/**
+ * Device of the request behind a row: stored label normalized (old "Chrome di Android" → "Chrome · Android", E10),
+ * unknown → `tDevAudit.unknownDevice`; null for rows without a request (no IP and no label, e.g. system actions).
+ */
+export function auditDevice(e: DevAuditEntry): string | null {
+  if (!e.ipMasked && !e.userAgent) return null;
+  return normalizeDeviceLabel(e.userAgent ?? null) ?? t.unknownDevice;
+}
+
 type Ctx = { a: string; target: string; m: Record<string, unknown>; e: DevAuditEntry };
 
 const str = (v: unknown, fallback = ""): string => (typeof v === "string" && v ? v : fallback);
 const num = (v: unknown): number => (typeof v === "number" ? v : 0);
-const role = (v: unknown): string => (typeof v === "string" && isRole(v) ? idApp.roles[v] : str(v, "?"));
+const role = (v: unknown): string => (typeof v === "string" && isRole(v) ? tApp.roles[v] : str(v, "?"));
 const who = (c: Ctx): string => str(c.m.targetEmail, t.otherUser);
 const settingLabel = (key: string): string =>
-  (idSettings.fields as Record<string, { label: string } | undefined>)[key]?.label ?? key;
+  (tSettings.fields as Record<string, { label: string } | undefined>)[key]?.label ?? key;
 const setupLabel = (key: string): string =>
-  (idDevSetup.items as Record<string, { title: string } | undefined>)[key]?.title ?? key;
+  (tDevSetup.items as Record<string, { title: string } | undefined>)[key]?.title ?? key;
 
 function backupRun(c: Ctx): string {
   const base = c.e.actorKind === "system" || c.m.trigger === "schedule" ? s.backupScheduled : s.backupRun(c.a);
@@ -42,7 +52,7 @@ function backupRun(c: Ctx): string {
 function sessionRevoke(c: Ctx): string {
   if (c.m.scope === "one") return s.sessionOne(c.a);
   if (c.m.scope === "others") return s.sessionOthers(c.a, num(c.m.count));
-  // No count in the meta (older rows) → "dari semua sesinya", never a made-up "0 sesi" (QA m3).
+  // No count in the meta (older rows) → "out of all sessions", never a made-up "0 sessions" (QA m3).
   return s.sessionUser(c.a, who(c), typeof c.m.revoked === "number" ? c.m.revoked : null);
 }
 
@@ -134,7 +144,7 @@ function tone(e: DevAuditEntry, m: Record<string, unknown>): StatusTone {
   return TONES[e.action as AuditAction] ?? "neutral";
 }
 
-/** Sentence for one audit row; unknown/retired actions → "{aktor} menjalankan {action}". */
+/** Sentence for one audit row; unknown/retired actions → "{actor} ran {action}". */
 export function describeAudit(e: DevAuditEntry): AuditDescription {
   const c: Ctx = { a: auditActor(e), target: e.target ?? "?", m: e.meta ?? {}, e };
   const fn = (SENTENCES as Record<string, ((c: Ctx) => string) | undefined>)[e.action];
@@ -170,7 +180,7 @@ export function auditExportUrl(params: URLSearchParams): string {
   return `/api/dev/audit/export.csv${q ? `?${q}` : ""}`;
 }
 
-/** Any filter active (decides between "belum ada" and "tidak ada yang cocok"). */
+/** Any filter active (decides between "nothing yet" and "nothing matches"). */
 export const isAuditFiltered = (params: URLSearchParams): boolean => auditFilterParams(params).size > 0;
 
 /** `from` after `to` (local YYYY-MM-DD compares lexically): show the inline date error, do not query. */

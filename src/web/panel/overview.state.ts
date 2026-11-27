@@ -1,11 +1,11 @@
-// Ringkasan decisions (PLAN/02 §5.1), pure so they are unit-tested: problem split, count badges, battery and load.
+// Overview decisions (PLAN/02 §5.1), pure so they are unit-tested: problem split, count badges, battery and load.
 import type { LoadBaseline, OverviewSection, Problem, ProblemKind } from "@/shared/monitor.types";
 import type { App, Battery, Domain } from "@/shared/panel.types";
 import type { StatusTone } from "@/web/components/status.tone";
-import { idOverview } from "@/web/i18n/id.overview";
+import { tOverview } from "@/web/i18n/en.overview";
 import { formatDuration, formatNumber } from "@/web/shared/format";
 
-const t = idOverview;
+const t = tOverview;
 
 /**
  * Problem rows shown before "Tampilkan N lainnya": 3 on a phone so the strip + 4 tiles fit above the fold at 390×844
@@ -49,7 +49,7 @@ const KIND_SECTION: Partial<Record<ProblemKind, OverviewSection>> = {
   battery: "device",
 };
 
-/** Whether a problem comes from a section that could not be read this time ("data terakhir X lalu"). */
+/** Whether a problem comes from a section that could not be read this time ("last data X ago"). */
 export const isFrozen = (p: Pick<Problem, "kind">, unavailable: readonly OverviewSection[]): boolean => {
   const s = KIND_SECTION[p.kind];
   return s !== undefined && unavailable.includes(s);
@@ -58,7 +58,7 @@ export const isFrozen = (p: Pick<Problem, "kind">, unavailable: readonly Overvie
 const DOWN_CODES = new Set<Problem["code"]>(["service_down", "pm2_unavailable", "app_errored", "domain_unreachable"]);
 
 /**
- * Badge of a count card: "Semua berjalan", "1 mati" or "1 perlu dicek", from the problems of that kind plus `held`
+ * Badge of a count card: "All running", "1 down" or "1 to check", from the problems of that kind plus `held`
  * items that are down but whose own problem the server holds back behind a root cause (K3; QA N1), plus `quietDown`
  * items down on purpose (counted, warning tone at most).
  */
@@ -114,13 +114,15 @@ export function temperatureTone(problems: readonly Problem[]): StatusTone | unde
   return hot && hot.severity !== "info" ? hot.severity : undefined;
 }
 
-/** "Beban sistem 20,9 · 20,7 · 20,0" + usual range and K6 tone, or the no-baseline note (neutral). */
+/** "System load 20.9 · 20.7 · 20.0" + usual range and K6 tone, or the no-baseline note (neutral). */
 export function loadView(
   load: readonly number[],
   baseline: LoadBaseline | null | undefined,
 ): { value: string; usual: string; tone: StatusTone | undefined } {
-  // Always one decimal ("20,0", not "20"; QA #11). Load never reaches 1.000, so no thousands grouping is needed.
-  const value = t.device.load(load.map((n) => n.toFixed(1).replace(".", ",")).join(" · "));
+  // Always one decimal ("20.0", not "20"; QA #11). Load never reaches 1,000, so no thousands grouping is needed;
+  // formatNumber drops trailing zeros, so only its decimal separator is borrowed.
+  const decimal = formatNumber(1.5, 1).charAt(1);
+  const value = t.device.load(load.map((n) => n.toFixed(1).replace(".", decimal)).join(" · "));
   if (!baseline) return { value, usual: t.device.loadNoBaseline, tone: undefined };
   const load5 = load[1] ?? 0;
   const ratio = baseline.p50 > 0 ? load5 / baseline.p50 : 0;
@@ -133,7 +135,7 @@ export function loadView(
   };
 }
 
-/** "sejak 12 mnt" (whole minutes), "baru saja" under a minute; null before the problem was persisted. */
+/** "for 12 min" (whole minutes), "just now" under a minute; null before the problem was persisted. */
 export function sinceText(since: string | null, now: Date): string | null {
   if (since === null) return null;
   const sec = Math.floor((now.getTime() - Date.parse(since)) / 1000);
@@ -164,7 +166,7 @@ export function withoutStarted<P extends { id: string }>(
 
 /**
  * Services that are down without a problem of their own (stopped on purpose, so the monitor raises none): they still
- * count as "mati" on the Layanan tile, quietly (no danger tone; QA fix-04 MINOR-7).
+ * count as "down" on the Services tile, quietly (no danger tone; QA fix-04 MINOR-7).
  */
 export const quietDownServices = (
   services: readonly { name: string; state: string }[],

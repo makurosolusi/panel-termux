@@ -1,7 +1,7 @@
 import type { FixChange, FixFilePreview } from "@/shared/fix.types";
-import { idSite } from "@/web/i18n/id.site";
+import { tSite } from "@/web/i18n/en.site";
 
-const t = idSite.setup.diff;
+const t = tSite.setup.diff;
 
 /** One rendered diff line: `line` = number in the current file (removed) or after `afterLine` (added). */
 export type DiffLine = { sign: "+" | "-"; line: number; text: string };

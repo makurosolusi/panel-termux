@@ -6,8 +6,8 @@ import { QueryView } from "@/web/components/query-view";
 import { StatTilesSkeleton } from "@/web/components/skeletons";
 import { StatusBadge } from "@/web/components/status-badge";
 import { Button } from "@/web/components/ui/button";
-import { idDevHealth } from "@/web/i18n/id.dev.health";
-import { idDevSetup } from "@/web/i18n/id.dev.setup";
+import { tDevHealth } from "@/web/i18n/en.dev.health";
+import { tDevSetup } from "@/web/i18n/en.dev.setup";
 import { apiUrl } from "@/web/shared/api.client";
 import { useApiQuery } from "@/web/shared/use-api-query";
 import { BackgroundSection, DetailSection, HealthTiles, LastErrorsSection, SecuritySection } from "./health.sections";
@@ -26,7 +26,7 @@ import {
 /** Poll interval of GET /api/dev/health (F2.1); paused in hidden tabs by the poller. */
 const HEALTH_REFRESH_MS = 15_000;
 const HEALTH_URL = apiUrl("/api/dev", "/health");
-const t = idDevHealth;
+const t = tDevHealth;
 
 /** Onboarding state + actions of /dev: server-side dismiss, local "reopened" so a complete guide can be shown again. */
 function useOnboarding() {
@@ -63,12 +63,12 @@ function useOnboarding() {
   };
 }
 
-/** /dev Kesehatan sistem: onboarding, verdict with checks, KPI tiles, background processes, errors, info, detail. */
+/** /dev System health: onboarding, verdict with checks, KPI tiles, background processes, errors, info, detail. */
 export function HealthPage() {
   const query = useApiQuery<DevHealth>(HEALTH_URL, HEALTH_REFRESH_MS);
   const ob = useOnboarding();
   const h = query.data;
-  const s = idDevSetup;
+  const s = tDevSetup;
   const guideLink = ob.visible ? (
     <a
       href={`#${ONBOARDING_ANCHOR}`}

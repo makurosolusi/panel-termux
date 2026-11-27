@@ -1,21 +1,26 @@
 // Web-side shape of /dev/settings (PLAN/05 §5.2): which card each key sits in and which control edits it.
-// Validation stays on the server (B8); labels live in id.settings.ts.
+// Validation stays on the server (B8); labels live in en.settings.ts (Indonesian overlay in id.settings.ts).
 import { SETTING_KEYS, type SettingKey } from "@/shared/dev.types";
+import { LOCALES } from "@/shared/locale";
+import { settingsAnchorFromHash } from "@/web/shared/dev.anchors";
 
 /** Settings cards, in page order. */
 export const SETTING_GROUPS = ["cloudflare", "backup", "alerts", "sites", "monitor", "security"] as const;
 /** One settings card. */
 export type SettingGroup = (typeof SETTING_GROUPS)[number];
 
-/** `#anchor` of each card; health/onboarding link to `#cloudflare` and `#cadangan`. */
+/** `#anchor` of each card; health/onboarding link to `#cloudflare` and `#backup`. */
 export const GROUP_ANCHOR = {
   cloudflare: "cloudflare",
-  backup: "cadangan",
-  alerts: "notifikasi",
-  sites: "situs",
-  monitor: "pemantauan",
-  security: "keamanan",
+  backup: "backup",
+  alerts: "alerts",
+  sites: "sites",
+  monitor: "monitor",
+  security: "security",
 } as const satisfies Record<SettingGroup, string>;
+
+/** Card anchor named by a URL hash (`#cadangan` → `backup`); aliases live in shared/dev.anchors.ts. */
+export const anchorFromHash = settingsAnchorFromHash;
 
 /** Control that edits a key: free text, write-only secret, on/off switch, fixed choices, or a number that can be off. */
 export type SettingControl = "text" | "secret" | "switch" | "select" | "number" | "numberOrOff";
@@ -66,6 +71,7 @@ export const SETTING_FIELDS = {
   "alerts.telegram_bot_token": { group: "alerts", control: "secret", required: true, helpUrl: BOTFATHER_HELP },
   "alerts.telegram_chat_id": { group: "alerts", control: "text", required: true },
   "alerts.min_severity": { group: "alerts", control: "select", choices: ["warning", "danger"] },
+  "alerts.language": { group: "alerts", control: "select", choices: LOCALES },
   "monitor.sample_interval_sec": { group: "monitor", control: "number" },
   "monitor.battery_warn_percent": { group: "monitor", control: "numberOrOff" },
 } as const satisfies Record<SettingKey, SettingFieldDef>;

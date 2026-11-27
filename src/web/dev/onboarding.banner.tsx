@@ -3,15 +3,15 @@ import { useState } from "react";
 import { Link } from "react-router";
 import type { DevSetup } from "@/shared/dev.types";
 import { Button } from "@/web/components/ui/button";
-import { idDevSetup } from "@/web/i18n/id.dev.setup";
+import { tDevSetup } from "@/web/i18n/en.dev.setup";
 import { useMe } from "@/web/session/use-me";
 import { useApiQuery } from "@/web/shared/use-api-query";
 import { bannerVisible, ONBOARDING_ANCHOR, SETUP_URL, saveDismissed, setupProgress } from "./onboarding.state";
 
-const t = idDevSetup;
+const t = tDevSetup;
 
 /**
- * Compact onboarding prompt for Ringkasan (PLAN/05 F1.2): "Siapkan Panel Termux: n dari total selesai" + Lanjutkan
+ * Compact onboarding prompt for Overview (PLAN/05 F1.2): "Set up Panel Termux: n of total done" + Continue
  * (→ /dev) + hide. Renders nothing for non-super_admin (and never calls /api/dev/* for them), when dismissed or complete.
  */
 export function OnboardingBanner() {

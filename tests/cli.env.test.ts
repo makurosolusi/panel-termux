@@ -10,7 +10,9 @@ const ROOT = join(import.meta.dir, "..");
 const RUNNER = `
 import { envCommand } from ${JSON.stringify(join(ROOT, "src/cli/env.command.ts"))};
 import { createCliOut } from ${JSON.stringify(join(ROOT, "src/cli/cli.output.ts"))};
+import { setCliLocale } from ${JSON.stringify(join(ROOT, "src/cli/cli.locale.ts"))};
 const full = process.argv.includes("--full");
+if (process.argv.includes("--id")) setCliLocale({ locale: "id", source: "flag" });
 process.exitCode = await envCommand({ values: { full }, positionals: [] }, { out: createCliOut(), host: () => { throw new Error("env must not ask for the host"); } });
 `;
 const T = mkdtempSync(join(tmpdir(), "panel-cli-env-"));
@@ -20,7 +22,7 @@ afterAll(() => rmSync(T, { recursive: true, force: true }));
 
 let n = 0;
 /** Fresh cwd + HOME; `redirect` is the shell redirection of stdout (default: captured pipe). */
-function run(opts: { full?: boolean; redirect?: string; cwdEnv?: string; homeEnv?: string } = {}) {
+function run(opts: { full?: boolean; id?: boolean; redirect?: string; cwdEnv?: string; homeEnv?: string } = {}) {
   const dir = join(T, `case-${n++}`);
   const cwd = join(dir, "work");
   const home = join(dir, "home");
@@ -28,7 +30,8 @@ function run(opts: { full?: boolean; redirect?: string; cwdEnv?: string; homeEnv
   mkdirSync(join(home, "panel"), { recursive: true });
   if (opts.cwdEnv !== undefined) writeFileSync(join(cwd, ".env"), opts.cwdEnv);
   if (opts.homeEnv !== undefined) writeFileSync(join(home, "panel", ".env"), opts.homeEnv);
-  const cmd = `exec bun ${JSON.stringify(runnerFile)}${opts.full ? " --full" : ""} ${opts.redirect ?? ""}`;
+  const flags = `${opts.full ? " --full" : ""}${opts.id ? " --id" : ""}`;
+  const cmd = `exec bun ${JSON.stringify(runnerFile)}${flags} ${opts.redirect ?? ""}`;
   const r = Bun.spawnSync(["sh", "-c", cmd], { cwd, env: { PATH: process.env.PATH, HOME: home } });
   return { code: r.exitCode, stdout: r.stdout.toString(), stderr: r.stderr.toString(), cwd, home };
 }
@@ -63,12 +66,22 @@ describe("panel env template", () => {
 
   test("no example for secrets and no placeholder is printed", () => {
     const text = renderEnvTemplate({ full: true });
-    expect(text).not.toContain("GOOGLE_CLIENT_SECRET. Contoh");
+    expect(text).toContain("Example: https://panel.example.org\n");
+    expect(text).not.toContain("never share or commit it. Example");
     for (const v of ENV_VARS) for (const p of "placeholders" in v ? v.placeholders : []) expect(text).not.toContain(p);
   });
 
   test(".env.example is renderEnvTemplate({ full: true }) byte for byte", () => {
     expect(readFileSync(join(ROOT, ".env.example"), "utf8")).toBe(renderEnvTemplate({ full: true }));
+  });
+
+  test("--lang id: Indonesian comments, same keys and values", () => {
+    const r = run({ full: true, id: true });
+    expect(r.code).toBe(0);
+    expect(r.stdout).toBe(renderEnvTemplate({ full: true, locale: "id" }));
+    expect(r.stdout).toStartWith("# Panel Termux — .env minimal. Isi nilai yang kosong");
+    expect(r.stdout).toContain("# --- Opsional: hapus tanda # untuk mengubah nilai bawaan ---");
+    expect(keys(r.stdout)).toEqual(keys(renderEnvTemplate({ full: true })));
   });
 
   test("--env is normalized to env", () => {
@@ -80,8 +93,8 @@ describe("panel env next to an existing .env", () => {
   test("./.env and ~/panel/.env with values: noted on stderr, values never printed, files unchanged", () => {
     const r = run({ cwdEnv: FILLED, homeEnv: FILLED, redirect: "> out.env" });
     expect(r.code).toBe(0);
-    expect(r.stderr).toContain("./.env sudah ada");
-    expect(r.stderr).toContain("~/panel/.env sudah ada");
+    expect(r.stderr).toContain("./.env already exists");
+    expect(r.stderr).toContain("~/panel/.env already exists");
     expect(r.stderr).toContain("noclobber");
     const printed = readFileSync(join(r.cwd, "out.env"), "utf8");
     expect(printed).toBe(renderEnvTemplate({ full: false }));
@@ -93,15 +106,21 @@ describe("panel env next to an existing .env", () => {
   test("stdout = ./.env truncated by the shell: template written, warned, exit 0", () => {
     const r = run({ cwdEnv: FILLED, redirect: "> .env" });
     expect(r.code).toBe(0);
-    expect(r.stderr).toContain("dikosongkan oleh shell");
-    expect(r.stderr).not.toContain("sudah ada");
+    expect(r.stderr).toContain("The shell emptied this .env");
+    expect(r.stderr).not.toContain("already exists");
     expect(readFileSync(join(r.cwd, ".env"), "utf8")).toBe(renderEnvTemplate({ full: false }));
+  });
+
+  test("Indonesian notes with --lang id", () => {
+    const r = run({ id: true, cwdEnv: FILLED, redirect: "> out.env" });
+    expect(r.code).toBe(0);
+    expect(r.stderr).toContain("./.env sudah ada");
   });
 
   test("stdout = ~/panel/.env with data (append): nothing written, exit 1 (m10)", () => {
     const r = run({ homeEnv: FILLED, redirect: '>> "$HOME/panel/.env"' });
     expect(r.code).toBe(1);
-    expect(r.stderr).toContain("tidak menambah ke .env yang berisi");
+    expect(r.stderr).toContain("panel env does not append to a .env that has values");
     expect(r.stderr).not.toContain(SENTINEL);
     expect(readFileSync(join(r.home, "panel", ".env"), "utf8")).toBe(FILLED);
   });

@@ -6,17 +6,19 @@ import { RoleBadge } from "@/web/components/role-badge";
 import { Section } from "@/web/components/section";
 import { Button } from "@/web/components/ui/button";
 import { UserAvatar } from "@/web/components/user-avatar";
-import { idAccount } from "@/web/i18n/id.account";
+import { tAccount } from "@/web/i18n/en.account";
 import type { Me } from "@/web/session/session.api";
 import { useMe } from "@/web/session/use-me";
+import { formatDate } from "@/web/shared/format";
 import { canSelfDelete, ProfileDelete } from "./profile.delete";
+import { ProfileLanguage } from "./profile.language";
 import { needsAccess, ProfileNoAccess } from "./profile.no-access";
 import { ProfileSessions } from "./profile.sessions";
 import { ProfileTheme } from "./profile.theme";
 
-const t = idAccount.profile;
+const t = tAccount.profile;
 
-/** /profile: [no-access card for `user`] → account → sessions → theme → [self-delete for `user`] (PLAN/05 §5.6, F8). */
+/** /profile: [no-access card for `user`] → account → sessions → theme → language → [self-delete for `user`] (PLAN/05 §5.6, F8). */
 export function ProfilePage() {
   const me = useMe();
   return (
@@ -27,14 +29,12 @@ export function ProfilePage() {
         <AccountCard me={me} />
         <ProfileSessions />
         <ProfileTheme />
+        <ProfileLanguage locale={me.locale} />
         {canSelfDelete(me.role) && <ProfileDelete email={me.email} />}
       </div>
     </>
   );
 }
-
-/** Join date as "26 November 2026" (local calendar). */
-const memberSince = (iso: string): string => new Date(iso).toLocaleDateString("id-ID", { dateStyle: "long" });
 
 function AccountCard({ me }: { me: Me }) {
   const { signOut, pending, error } = useSignOut();
@@ -50,7 +50,7 @@ function AccountCard({ me }: { me: Me }) {
           <KeyValue
             items={[
               { label: t.role, value: <RoleBadge role={me.role} /> },
-              { label: t.memberSince, value: <time dateTime={me.createdAt}>{memberSince(me.createdAt)}</time> },
+              { label: t.memberSince, value: <time dateTime={me.createdAt}>{formatDate(me.createdAt, "long")}</time> },
             ]}
           />
           {error && (

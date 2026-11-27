@@ -27,7 +27,7 @@ export const postControl = (
 /** Whether a control answer is the 202 of a deferred restart. */
 export const isDeferred = (r: ControlResult): r is DeferredRestart => "deferred" in r && r.deferred === true;
 
-/** Auto-refresh interval of Ringkasan, Layanan and Aplikasi (PLAN/02 §5.9). */
+/** Auto-refresh interval of the Overview, Services and Apps (PLAN/02 §5.9). */
 export const PANEL_REFRESH_MS = 10_000;
 
 /** Auto-refresh interval of Domain (the sampler probes every 60 s). */

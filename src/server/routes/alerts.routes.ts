@@ -1,6 +1,7 @@
 // Telegram setup endpoints for super admins (PLAN/02 §3.7, §4.7): test send and chat discovery, under /dev/alerts.
+import { DEFAULT_LOCALE, parseLocale } from "../../shared/locale";
 import type { AlertTestResult, TelegramChats } from "../../shared/monitor.types";
-import { TEST_TEXT } from "../alerts/alert.messages";
+import { ALERT_COPY } from "../alerts/alert.messages";
 import { createTelegramClient, TELEGRAM_API_URL, TelegramError } from "../alerts/telegram.client";
 import type { Auth } from "../auth/auth.service";
 import { roleGuard } from "../auth/role.guard";
@@ -58,8 +59,9 @@ export function createAlertRoutes({
           retryAfterSec: Math.ceil(wait / 1000),
         });
       lastTestAt = Date.now();
+      const language = parseLocale(getSetting({ db, secret }, "alerts.language")) ?? DEFAULT_LOCALE;
       await client(token)
-        .sendMessage(chat, TEST_TEXT, { onChatMigrated: (id) => onChatMigrated({ db }, id) })
+        .sendMessage(chat, ALERT_COPY[language].test, { onChatMigrated: (id) => onChatMigrated({ db }, id) })
         .catch(asApiError);
       monitor.resetAlertFailures();
       return { ok: true, sentAt: new Date().toISOString() };

@@ -8,6 +8,6 @@ export type AccessState = "not_https" | "seen" | "not_seen";
 export const accessState = (a: SecurityStatus["access"]): AccessState =>
   !a.https ? "not_https" : a.lastSeenAt ? "seen" : "not_seen";
 
-/** Badge of the data key card: "Cocok" (ok) or "Kunci tidak cocok" (danger). */
+/** Badge of the data key card: "Matches" (ok) or "Doesn't match" (danger). */
 export const dataKeyStatusKey = (state: SecurityStatus["dataKey"]["state"]): StatusKey =>
   state === "ok" ? "succeeded" : "key_mismatch";

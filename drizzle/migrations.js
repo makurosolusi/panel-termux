@@ -8,6 +8,7 @@ import m0005 from './0005_drop_invites.sql';
 import m0006 from './0006_data_safety.sql';
 import m0007 from './0007_sites_lifecycle.sql';
 import m0008 from './0008_monitor.sql';
+import m0009 from './0009_user_locale.sql';
 
   export default {
     journal,
@@ -20,7 +21,8 @@ m0004,
 m0005,
 m0006,
 m0007,
-m0008
+m0008,
+m0009
     }
   }
   

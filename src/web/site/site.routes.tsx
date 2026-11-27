@@ -1,10 +1,10 @@
 import type { RouteObject } from "react-router";
-import { idShell } from "@/web/i18n/id.shell";
+import { tShell } from "@/web/i18n/en.shell";
 import type { RouteHandle } from "@/web/layout/shell.page";
 
 // Fallback titles while a page chunk loads (its PageHeader then registers the real one). Shell copy only, so the
 // eager route table does not pull the site/job dictionaries into the initial bundle (B30).
-const n = idShell.nav;
+const n = tShell.nav;
 
 /** Site routes (PLAN/03): list, new-site wizard (task route), detail, change history and job progress. */
 export const siteRoutes: RouteObject[] = [

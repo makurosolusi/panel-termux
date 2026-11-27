@@ -104,6 +104,7 @@ describe("GET /settings", () => {
     expect(item(items, "monitor.battery_warn_percent")?.value).toBe("25");
     expect(item(items, "backup.include_secrets")?.value).toBe("off");
     expect(item(items, "alerts.min_severity")?.value).toBe("warning");
+    expect(item(items, "alerts.language")).toMatchObject({ value: "en", default: "en", secret: false });
     expect(items.filter((s) => s.secret).map((s) => s.key)).toEqual([
       "cloudflare.api_token",
       "backup.s3_access_key_id",
@@ -275,6 +276,8 @@ describe("setSetting wrapper and registry", () => {
     bad("alerts.enabled", "yes");
     ok("alerts.min_severity", "warning", "danger");
     bad("alerts.min_severity", "info");
+    ok("alerts.language", "en", "id");
+    bad("alerts.language", "fr", "en-US", "ID");
     ok("alerts.telegram_bot_token", TG_TOKEN);
     bad("alerts.telegram_bot_token", "123:short", "abc:abcdefghijklmnopqrstuvwxyz0123456789");
     ok("alerts.telegram_chat_id", "-1001234567890", "42", "@my_channel");

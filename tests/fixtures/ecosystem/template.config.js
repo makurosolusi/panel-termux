@@ -1,4 +1,4 @@
-// test-only: copy of deploy/pm2/ecosystem.config.js as shipped in 0.3.0
+// test-only: copy of deploy/pm2/ecosystem.config.js as shipped in 0.3.0 up to the English template (Indonesian comments)
 // Daftar app yang dijalankan PM2 di HP ini. Tambah site('<nama>') untuk situs yang kamu tulis sendiri.
 // Situs buatan Panel Termux ada di apps.json dan dimuat otomatis oleh blok panelApps di bawah.
 // Sumber: PLAN/03 §7.2, sama dengan files/sites/ecosystem.config.js di repo server-termux.

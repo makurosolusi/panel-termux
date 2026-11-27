@@ -1,5 +1,7 @@
+import type { Messages } from "@/shared/i18n";
+import type { tHistory } from "./en.history";
 /** Indonesian strings of the monitor history: trends, heartbeat strip, problem history and the nav badge (PLAN/02 W4). */
-export const idHistory = {
+export const idHistory: Messages<typeof tHistory> = {
   trends: {
     title: "Tren",
     description: "Rata-rata per interval dari sampel pemantauan.",

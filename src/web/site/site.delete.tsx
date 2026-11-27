@@ -8,7 +8,7 @@ import { RelativeTime } from "@/web/components/relative-time";
 import { Button } from "@/web/components/ui/button";
 import { Checkbox } from "@/web/components/ui/checkbox";
 import { Label } from "@/web/components/ui/label";
-import { idSiteDetail } from "@/web/i18n/id.site-detail";
+import { tSiteDetail } from "@/web/i18n/en.site-detail";
 import { panelUrl } from "@/web/panel/panel.api";
 import { TOUCH_BOX } from "@/web/panel/panel.touch";
 import { apiFetch, type ErrorCodes } from "@/web/shared/api.client";
@@ -16,7 +16,7 @@ import { useApiQuery } from "@/web/shared/use-api-query";
 import { jobPath, siteUrl } from "./site.api";
 import { deleteDefaults, deleteQuery, siteDbBackup } from "./site-detail.state";
 
-const t = idSiteDetail.remove;
+const t = tSiteDetail.remove;
 
 type Keep = { data: boolean; database: boolean };
 
@@ -50,7 +50,7 @@ function DeleteDetails({ site, keep, onKeep }: { site: SiteDetail; keep: Keep; o
           {backup.error ? (
             t.backupUnknown
           ) : !lastGood ? (
-            idSiteDetail.loading
+            tSiteDetail.loading
           ) : dbBackup ? (
             <RelativeTime at={dbBackup.at} absolute format={(at) => t.backup(site.database ?? "", at)} />
           ) : (

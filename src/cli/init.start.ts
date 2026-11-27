@@ -7,11 +7,12 @@ import { join } from "node:path";
 import type { SuperviseState } from "../server/system/system.types";
 import { ENV_VARS } from "../shared/env.schema";
 import { type PanelHealth, probePaths } from "./cli.host";
+import { tr } from "./cli.locale";
 import { CliExit } from "./cli.output";
 import { readEnvFile } from "./env.file";
 import { SELF_VERSION, staleProcess } from "./init.mode";
 import { INIT_TIMING, type InitTiming, removeDown, sv, waitFor } from "./init.runit";
-import { defineStep, INIT_EXIT, INIT_STEP_TITLES, type InitContext, type PlanLine } from "./init.types";
+import { defineStep, INIT_EXIT, type InitContext, type PlanLine } from "./init.types";
 
 /** `sv -w` seconds: panel shutdown waits up to 120 s for a running site change (PLAN/03 §4.12). */
 export const RESTART_WAIT_SEC = 130;
@@ -27,6 +28,8 @@ const running = (s: StartState) => s.service?.state === "run";
 /** `panel <sub>` spelled like the resume command (m8). */
 const panelCmd = (ctx: InitContext, sub: string) => ctx.resumeCommand().replace(/ init$/, ` ${sub}`);
 
+const checkHint = (ctx: InitContext) => tr(`check: ${panelCmd(ctx, "doctor")}`, `periksa: ${panelCmd(ctx, "doctor")}`);
+
 /** Waits for /api/health = this version, then checks runit runs ~/panel/panel; else exit 1 (+ rollback hint). */
 async function checkHealth(ctx: InitContext, timing: InitTiming): Promise<void> {
   let last: PanelHealth | null = null;
@@ -41,31 +44,42 @@ async function checkHealth(ctx: InitContext, timing: InitTiming): Promise<void> 
   );
   const log = join(ctx.host.paths.logdir, "sv", "panel", "current");
   const hint = existsSync(probePaths(ctx.host.paths).prev)
-    ? `untuk kembali ke versi sebelumnya: ${panelCmd(ctx, "rollback")} (tambah --db bila database sudah dimigrasi)`
-    : `periksa: ${panelCmd(ctx, "doctor")}`;
+    ? tr(
+        `to go back to the previous version: ${panelCmd(ctx, "rollback")} (add --db if the database was migrated)`,
+        `untuk kembali ke versi sebelumnya: ${panelCmd(ctx, "rollback")} (tambah --db bila database sudah dimigrasi)`,
+      )
+    : checkHint(ctx);
   const seen = last as PanelHealth | null;
   if (!ok)
     throw new CliExit(
       INIT_EXIT.failed,
       seen
-        ? `Panel yang menjawab masih v${seen.version}, bukan v${SELF_VERSION}. Lihat ${log}.`
-        : `Panel belum menjawab di port ${port} setelah ${Math.round(timing.healthMs / 1000)} dtk. Lihat ${log}.`,
+        ? tr(
+            `The panel that answers is still v${seen.version}, not v${SELF_VERSION}. See ${log}.`,
+            `Panel yang menjawab masih v${seen.version}, bukan v${SELF_VERSION}. Lihat ${log}.`,
+          )
+        : tr(
+            `The panel does not answer on port ${port} after ${Math.round(timing.healthMs / 1000)} s. See ${log}.`,
+            `Panel belum menjawab di port ${port} setelah ${Math.round(timing.healthMs / 1000)} dtk. Lihat ${log}.`,
+          ),
       hint,
     );
   if (staleProcess(ctx.host))
     throw new CliExit(
       INIT_EXIT.failed,
-      `Layanan panel masih menjalankan file lama, bukan ${probePaths(ctx.host.paths).binary}.`,
+      tr(
+        `The panel service still runs the old file, not ${probePaths(ctx.host.paths).binary}.`,
+        `Layanan panel masih menjalankan file lama, bukan ${probePaths(ctx.host.paths).binary}.`,
+      ),
       hint,
     );
-  ctx.out.check("ok", `Panel v${SELF_VERSION} berjalan dan sehat`);
+  ctx.out.check("ok", tr(`Panel v${SELF_VERSION} is running and healthy`, `Panel v${SELF_VERSION} berjalan dan sehat`));
 }
 
 /** Step 10 with `timing` (tests shorten the waits). */
 export const createStartStep = (timing: InitTiming = INIT_TIMING) =>
   defineStep<StartState>({
     id: "start",
-    title: INIT_STEP_TITLES.start,
     async detect(ctx) {
       return {
         service: await ctx.host.system().runit.supervise("panel"),
@@ -79,17 +93,35 @@ export const createStartStep = (timing: InitTiming = INIT_TIMING) =>
         return [
           {
             kind: "action",
-            text: "Memulai ulang layanan panel (situs dan pm2 tidak disentuh; snapshot database dibuat panel saat start)",
+            text: tr(
+              "Restarting the panel service (sites and pm2 are not touched; the panel takes a database snapshot when it starts)",
+              "Memulai ulang layanan panel (situs dan pm2 tidak disentuh; snapshot database dibuat panel saat start)",
+            ),
           },
         ];
-      if (!running(s)) return [{ kind: "action", text: "Menyalakan panel dan memeriksanya" }];
-      if (s.down) return [{ kind: "action", text: "Membuat panel menyala otomatis setelah HP hidup" }];
+      if (!running(s))
+        return [
+          { kind: "action", text: tr("Starting the panel and checking it", "Menyalakan panel dan memeriksanya") },
+        ];
+      if (s.down)
+        return [
+          {
+            kind: "action",
+            text: tr(
+              "Making the panel start automatically when the phone boots",
+              "Membuat panel menyala otomatis setelah HP hidup",
+            ),
+          },
+        ];
       if (s.health?.version !== SELF_VERSION || s.stale)
         return [
           {
             kind: "warning",
-            text: "Panel berjalan tetapi belum sehat; tidak dimulai ulang",
-            hint: `periksa: ${panelCmd(ctx, "doctor")}`,
+            text: tr(
+              "The panel is running but not healthy; not restarted",
+              "Panel berjalan tetapi belum sehat; tidak dimulai ulang",
+            ),
+            hint: checkHint(ctx),
           },
         ];
       return [];
@@ -99,13 +131,25 @@ export const createStartStep = (timing: InitTiming = INIT_TIMING) =>
       if (!running(s)) await sv(ctx, ["up", "panel"], timing);
       else if (ctx.mode === "upgrade") {
         const manual = `SVDIR=${ctx.host.paths.svdir} sv -w ${RESTART_WAIT_SEC} restart panel`;
-        const go = await ctx.confirmRisky("restart-panel", "Mulai ulang panel sekarang?", manual);
+        const go = await ctx.confirmRisky(
+          "restart-panel",
+          tr("Restart the panel now?", "Mulai ulang panel sekarang?"),
+          manual,
+        );
         if (!go) {
-          ctx.state.manual.push(`Mulai ulang panel agar versi baru dipakai: ${manual}`);
+          ctx.state.manual.push(
+            tr(
+              `Restart the panel so the new version is used: ${manual}`,
+              `Mulai ulang panel agar versi baru dipakai: ${manual}`,
+            ),
+          );
           return;
         }
         ctx.out.line(
-          "Memulai ulang panel. Bila ada perubahan situs yang sedang berjalan, panel menunggu sampai 2 menit.",
+          tr(
+            "Restarting the panel. If a site change is running, the panel waits up to 2 minutes.",
+            "Memulai ulang panel. Bila ada perubahan situs yang sedang berjalan, panel menunggu sampai 2 menit.",
+          ),
         );
         // Once, no retry (a retried restart would restart twice); the health check below judges the result.
         await ctx.host.exec("sv", ["-w", String(RESTART_WAIT_SEC), "restart", "panel"], {

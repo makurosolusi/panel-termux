@@ -1,10 +1,10 @@
 import { TriangleAlertIcon } from "lucide-react";
 import { Link } from "react-router";
-import { idSite } from "@/web/i18n/id.site";
+import { tSite } from "@/web/i18n/en.site";
 
-const t = idSite.setup;
+const t = tSite.setup;
 
-/** Compact "pm2 belum siap" notice for the wizard; the full Persiapan card lives on /panel/sites. */
+/** Compact "pm2 is not ready" notice for the wizard; the full Setup card lives on /panel/sites. */
 export function IntegrationBanner() {
   return (
     <div

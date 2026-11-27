@@ -2,13 +2,13 @@ import { Loader2Icon, PlayIcon } from "lucide-react";
 import { useState } from "react";
 import type { Service } from "@/shared/panel.types";
 import { Button } from "@/web/components/ui/button";
-import { idPanel } from "@/web/i18n/id.panel";
-import { idServiceStart as t } from "@/web/i18n/id.service-start";
+import { tPanel } from "@/web/i18n/en.panel";
+import { tServiceStart as t } from "@/web/i18n/en.service-start";
 import { postControl } from "@/web/panel/panel.api";
 import { runApiAction } from "./api.action";
 import { ApiError } from "./api.client";
 
-/** Core services the panel offers to start wherever "… tidak berjalan" is shown. */
+/** Core services the panel offers to start wherever "… is not running" is shown. */
 export type StartableService = "pm2" | "postgres";
 
 /**
@@ -16,7 +16,7 @@ export type StartableService = "pm2" | "postgres";
  * `onStarted` when the service now runs, and resolves to that.
  */
 export async function startService(service: StartableService, onStarted?: () => void): Promise<boolean> {
-  const codes = { ...idPanel.errorCodes, not_running: t.notRunning(service) };
+  const codes = { ...tPanel.errorCodes, not_running: t.notRunning(service) };
   const ok = await runApiAction(
     async () => {
       const s = (await postControl("services", service, "start")) as Service;
@@ -29,7 +29,7 @@ export async function startService(service: StartableService, onStarted?: () => 
   return ok;
 }
 
-/** "Jalankan pm2" / "Jalankan postgres" button; `onStarted` runs after a successful start (e.g. re-check). */
+/** "Start pm2" / "Start postgres" button; `onStarted` runs after a successful start (e.g. re-check). */
 export function ServiceStartButton({ service, onStarted }: { service: StartableService; onStarted?: () => void }) {
   const [busy, setBusy] = useState(false);
   const start = async () => {

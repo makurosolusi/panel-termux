@@ -2,7 +2,7 @@ import { HistoryIcon } from "lucide-react";
 import { Link } from "react-router";
 import type { Page } from "@/shared/dev.types";
 import type { ProblemEvent } from "@/shared/monitor.types";
-import { title } from "@/shared/problem.copy";
+import { title } from "@/shared/problem.copy.en";
 import { type DataColumn, DataTable } from "@/web/components/data-table";
 import { EmptyState } from "@/web/components/empty-state";
 import { useNow } from "@/web/components/now.store";
@@ -12,16 +12,16 @@ import { Section } from "@/web/components/section";
 import { PROBLEM_TONE } from "@/web/components/status.vocab";
 import { StatusBadge } from "@/web/components/status-badge";
 import { usePageParam } from "@/web/components/use-page-param";
-import { idHistory } from "@/web/i18n/id.history";
-import { idPanel } from "@/web/i18n/id.panel";
+import { tHistory } from "@/web/i18n/en.history";
+import { tPanel } from "@/web/i18n/en.panel";
 import { formatClock, formatDateTime, formatDayLabel, formatDuration } from "@/web/shared/format";
 import { useApiQuery } from "@/web/shared/use-api-query";
 import { panelUrl } from "./panel.api";
 import { TOUCH_HIT } from "./panel.touch";
 
-const t = idHistory.problems;
+const t = tHistory.problems;
 const PAGE_SIZE = 20;
-/** Ringkasan shows the 5 newest closed events; 10 fetched so still-open ones do not leave it short. */
+/** The Overview shows the 5 newest closed events; 10 fetched so still-open ones do not leave it short. */
 const RECENT_FETCH = 10;
 const RECENT_SHOWN = 5;
 const RECENT_REFRESH_MS = 60_000;
@@ -122,7 +122,7 @@ export function ProblemsPage() {
       />
       <QueryView
         query={query}
-        codes={idPanel.errorCodes}
+        codes={tPanel.errorCodes}
         empty={<EmptyState icon={HistoryIcon} title={t.empty} description={t.emptyHint} />}
       >
         {(d) => {
@@ -156,7 +156,7 @@ export function ProblemsPage() {
   );
 }
 
-/** Ringkasan "Riwayat masalah": the 5 newest closed problems + "Lihat riwayat" (lazy chunk, 60 s poll). */
+/** Overview "Problem history": the 5 newest closed problems + the history link (lazy chunk, 60 s poll). */
 export function RecentProblems() {
   const now = useNow();
   const query = useApiQuery<Page<ProblemEvent>>(

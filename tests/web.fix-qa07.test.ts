@@ -1,14 +1,14 @@
-// QA fix-07 follow-ups in the UI: apps a template ecosystem drops (MAJOR-N2), the "Periksa lagi" count (MAJOR-N1)
+// QA fix-07 follow-ups in the UI: apps a template ecosystem drops (MAJOR-N2), the "Check again" count (MAJOR-N1)
 // and the plain label of pm2's guard (N4).
 import { describe, expect, test } from "bun:test";
 import type { FixEffects, FixPreview } from "@/shared/fix.types";
 import type { Integration, IntegrationCheck } from "@/shared/site.types";
-import { idSite } from "@/web/i18n/id.site";
-import { appNamesText } from "@/web/i18n/id.site.setup";
+import { tSite } from "@/web/i18n/en.site";
+import { appNamesText } from "@/web/i18n/en.site.setup";
 import { restartDescription, restartTier } from "@/web/site/setup.actions";
 import { applicableFixes, fixSummary, remainingProblems } from "@/web/site/site.adopt";
 
-const t = idSite.setup;
+const t = tSite.setup;
 const sd = t.dialog.sites_dir_create;
 
 // test-only fixtures
@@ -41,7 +41,7 @@ describe("new ecosystem from the template while hand-written apps run (MAJOR-N2)
     const lines = fixSummary(preview({ stopApps: ["makuro-solusi", "adminneo"] }));
     expect(lines).toContain(sd.stopApps(["makuro-solusi", "adminneo"]));
     expect(lines).not.toContain(sd.runningSafe);
-    expect(lines.join(" ")).toContain("makuro-solusi dan adminneo sedang berjalan tetapi tidak ada di file baru ini");
+    expect(lines.join(" ")).toContain("Running but not in this new file: makuro-solusi and adminneo.");
     // missing folder too: same warning after the folder line
     expect(fixSummary(preview({ dir: "/h/sites", stopApps: ["adminneo"] }))[1]).toBe(sd.stopApps(["adminneo"]));
   });
@@ -50,34 +50,34 @@ describe("new ecosystem from the template while hand-written apps run (MAJOR-N2)
     const i = integration({ wouldStop: ["makuro-solusi", "adminneo"] });
     const text = restartDescription(i);
     expect(text.startsWith(t.restartPm2Stops(["makuro-solusi", "adminneo"]))).toBe(true);
-    expect(text).toContain("makuro-solusi dan adminneo akan berhenti dan tidak dijalankan lagi");
+    expect(text).toContain("so they stop and don't start again: makuro-solusi and adminneo");
     expect(restartTier(i)).toEqual({ tier: "typed", typedValue: "pm2", destructive: true });
     expect(restartTier(integration({ wouldStop: [] }))).toEqual({ tier: "confirm" });
-    expect(restartDescription(integration({}))).not.toContain("tidak dijalankan lagi");
+    expect(restartDescription(integration({}))).not.toContain("don't start again");
   });
 
-  test("a missing app the file does not list gets the way back, not a restore hint", () => {
+  test("a missing app the file doesn't list gets the way back, not a restore hint", () => {
     expect(t.restartNotListed(["adminneo"])).toBe(
-      "adminneo tidak ada di `ecosystem.config.js`, jadi pm2 tidak menjalankannya lagi. Tambahkan lagi entrinya ke file itu, lalu mulai ulang pm2.",
+      "Not in `ecosystem.config.js`, so pm2 doesn't run them again: adminneo. Add their entries back to that file, then restart pm2.",
     );
   });
 });
 
 describe("pm2's guard reads as a plain label (N4)", () => {
   test("restart copy never shows the internal name", () => {
-    expect(appNamesText(["pm2-guard", "toko-kopi"])).toBe("penjaga pm2 dan toko-kopi");
-    expect(restartDescription(integration({}))).toContain("penjaga pm2 dan toko-kopi");
+    expect(appNamesText(["pm2-guard", "toko-kopi"])).toBe("pm2 guard and toko-kopi");
+    expect(restartDescription(integration({}))).toContain("pm2 guard and toko-kopi");
     expect(restartDescription(integration({}))).not.toContain("pm2-guard");
     expect(t.restartCheckFailed(["pm2-guard"])).not.toContain("pm2-guard");
   });
 });
 
-describe("'Periksa lagi' count matches 'Perbaiki semua (n)' (MAJOR-N1)", () => {
+describe("'Check again' count matches 'Fix all (n)' (MAJOR-N1)", () => {
   const fixes = [
     { key: "ecosystem_block" as const, checks: ["snippet_current" as const], available: true as const },
     { key: "pm2_auto_exit" as const, checks: ["pm2_auto_exit" as const], available: true as const },
   ];
-  test("a warning with a fix counts, an optional warning without one does not", () => {
+  test("a warning with a fix counts, an optional warning without one doesn't", () => {
     const i = integration({
       checks: [
         check("snippet_current", "error"),

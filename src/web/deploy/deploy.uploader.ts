@@ -3,10 +3,10 @@
 import { useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router";
 import { DEPLOY_MAX_BYTES, type UploadState } from "@/shared/deploy.types";
-import { formatBytes } from "@/shared/format.id";
-import { idDeploy } from "@/web/i18n/id.deploy";
+import { tDeploy } from "@/web/i18n/en.deploy";
 import { ERROR_TOAST_MS } from "@/web/shared/api.action";
 import { apiErrorMessage } from "@/web/shared/api.client";
+import { formatBytes } from "@/web/shared/format";
 import { toast } from "@/web/shared/toast.lazy";
 import { useApiQuery } from "@/web/shared/use-api-query";
 import { jobPath, siteUrl } from "@/web/site/site.api";
@@ -14,7 +14,7 @@ import { cancelUpload, DEPLOY_ERROR_CODES, runUpload, type UploadPhase } from ".
 import { type UploadFailure, uploadFailure } from "./deploy.state";
 import { resumeChoice } from "./deploy.upload";
 
-const t = idDeploy.upload;
+const t = tDeploy.upload;
 
 /** Card state; `startedAt`/`now` drive the speed figure. */
 export type UploaderState =

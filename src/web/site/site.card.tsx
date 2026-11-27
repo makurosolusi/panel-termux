@@ -16,12 +16,12 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/web/components/ui/dropdown-menu";
-import { idSite } from "@/web/i18n/id.site";
+import { tSite } from "@/web/i18n/en.site";
 import { apiFetch } from "@/web/shared/api.client";
 import { deployOutcomeSuffix } from "./job.status-key";
 import { jobPath, SITE_ERROR_CODES, siteUrl } from "./site.api";
 
-const t = idSite.list;
+const t = tSite.list;
 
 const APP_STATUS_KEY: Readonly<Record<SiteAppStatus, StatusKey>> = {
   online: "running",
@@ -50,7 +50,7 @@ export const canRestart = (s: StatusFacts): boolean => s.appStatus !== "not_depl
 export const siteRowTone = (s: StatusFacts): StatusTone | undefined =>
   missingFromPm2(s) ? "danger" : ROW_TONE[s.appStatus];
 
-/** pm2 status badge of a site's app: "Tidak berjalan di pm2" (danger) when it should be there. */
+/** pm2 status badge of a site's app: "Not running in pm2" (danger) when it should be there. */
 export function SiteAppBadge({ site }: { site: StatusFacts }) {
   return missingFromPm2(site) ? (
     <StatusBadge state="down" label={t.missingFromPm2} />
@@ -75,7 +75,7 @@ export function HostLink({ host }: { host: string }) {
   );
 }
 
-/** Columns of the Situs list (phone card: name + status, then domain · deploy · port). */
+/** Columns of the Sites list (phone card: name + status, then domain · deploy · port). */
 export const SITE_COLUMNS: readonly DataColumn<Site>[] = [
   {
     key: "name",

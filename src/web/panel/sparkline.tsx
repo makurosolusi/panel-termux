@@ -3,12 +3,12 @@ import type { MetricPoint, MetricRange, MetricSeries } from "@/shared/monitor.ty
 import { QueryView } from "@/web/components/query-view";
 import { Section } from "@/web/components/section";
 import { Button } from "@/web/components/ui/button";
-import { idHistory } from "@/web/i18n/id.history";
+import { tHistory } from "@/web/i18n/en.history";
 import { formatMegabytes, formatPercent } from "@/web/shared/format";
 import { useApiQuery } from "@/web/shared/use-api-query";
 import { panelUrl } from "./panel.api";
 
-const t = idHistory.trends;
+const t = tHistory.trends;
 
 /** One sample on the time axis; `v` null = no value (draws a gap). */
 export type SparkPoint = { t: number; v: number | null };
@@ -147,7 +147,7 @@ function TrendCard(props: {
   );
 }
 
-/** "Tren" block of Ringkasan: battery % and available memory over 24 h / 7 d (lazy chunk, own 5 min poll). */
+/** "Trends" block of the Overview: battery % and available memory over 24 h / 7 d (lazy chunk, own 5 min poll). */
 export function MetricTrends() {
   const [range, setRange] = useState<MetricRange>("24h");
   const query = useApiQuery<MetricSeries>(panelUrl("/metrics", { range }), TRENDS_REFRESH_MS);

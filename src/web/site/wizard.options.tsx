@@ -1,10 +1,10 @@
 import { Label } from "@/web/components/ui/label";
 import { Switch } from "@/web/components/ui/switch";
-import { idSite } from "@/web/i18n/id.site";
+import { tSite } from "@/web/i18n/en.site";
 import { EnvRowsEditor } from "./env.editor";
 import type { SiteForm } from "./site.check";
 
-const t = idSite.wizard;
+const t = tSite.wizard;
 
 /** Wizard step 2: database toggle and extra env rows. */
 export function WizardOptions({ form, onChange }: { form: SiteForm; onChange: (patch: Partial<SiteForm>) => void }) {

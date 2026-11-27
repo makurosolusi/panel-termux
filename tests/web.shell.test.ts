@@ -1,5 +1,6 @@
-import { describe, expect, test } from "bun:test";
-import * as sharedFormat from "@/shared/format.id";
+import { afterAll, beforeAll, describe, expect, test } from "bun:test";
+import * as sharedFormat from "@/shared/format.number";
+import { activeLocale, setActiveLocale } from "@/shared/i18n";
 import type { Role } from "@/shared/roles";
 import { backupRoutes } from "@/web/backup/backup.routes";
 import { typedMatches } from "@/web/components/confirm-action";
@@ -43,11 +44,11 @@ import {
 describe("navigation by role", () => {
   const links = (role: Role) => navGroupsFor(role).map((g) => [g.key, g.items.map((i) => i.to)]);
 
-  test("user sees only Profil", () => {
+  test("user sees only Profile", () => {
     expect(links("user")).toEqual([["account", ["/profile"]]]);
   });
 
-  test("admin sees Server + Profil, never Administrasi", () => {
+  test("admin sees Server + Profile, never Administration", () => {
     const groups = links("admin");
     expect(groups.map(([k]) => k)).toEqual(["server", "account"]);
     expect(groups[0]?.[1]).toEqual([
@@ -78,32 +79,32 @@ describe("route meta", () => {
   });
 
   test("breadcrumbs: at most 3, intermediate URL segments never become crumbs", () => {
-    expect(breadcrumbsFor("/panel/services/sshd/log", "Log sshd")).toEqual([
+    expect(breadcrumbsFor("/panel/services/sshd/log", "sshd log")).toEqual([
       { label: "Server" },
-      { label: "Layanan", to: "/panel/services" },
-      { label: "Log sshd" },
+      { label: "Services", to: "/panel/services" },
+      { label: "sshd log" },
     ]);
     const uuid = "0b7e2a4c-3f1d-4a8e-9c2b-5d6e7f8a9b0c"; // test-only
-    const job = breadcrumbsFor(`/panel/jobs/${uuid}`, "Progres perubahan");
+    const job = breadcrumbsFor(`/panel/jobs/${uuid}`, "Change progress");
     expect(job).toEqual([
       { label: "Server" },
-      { label: "Riwayat perubahan", to: "/panel/jobs" },
-      { label: "Progres perubahan" },
+      { label: "Change history", to: "/panel/jobs" },
+      { label: "Change progress" },
     ]);
     expect(JSON.stringify(job)).not.toContain(uuid);
-    expect(breadcrumbsFor("/panel/sites", "Situs")).toEqual([{ label: "Server" }, { label: "Situs" }]);
+    expect(breadcrumbsFor("/panel/sites", "Sites")).toEqual([{ label: "Server" }, { label: "Sites" }]);
     expect(breadcrumbsFor("/panel/sites/blog", null)).toEqual([
       { label: "Server" },
-      { label: "Situs", to: "/panel/sites" },
+      { label: "Sites", to: "/panel/sites" },
     ]);
     expect(breadcrumbsFor("/nope", "x")).toEqual([]);
   });
 
-  test("breadcrumbs: problem history is a hidden Server page, not in the 'Lainnya' sheet", () => {
+  test("breadcrumbs: problem history is a hidden Server page, not in the 'More' sheet", () => {
     expect(navMatch("/panel/problems")?.item.to).toBe("/panel/problems");
-    expect(breadcrumbsFor("/panel/problems", "Riwayat masalah")).toEqual([
+    expect(breadcrumbsFor("/panel/problems", "Problem history")).toEqual([
       { label: "Server" },
-      { label: "Riwayat masalah" },
+      { label: "Problem history" },
     ]);
     expect(activeInMore("/panel/problems", mobileNavFor("super_admin").more)).toBe(false);
   });
@@ -119,7 +120,7 @@ describe("route meta", () => {
   });
 
   test("document title", () => {
-    expect(documentTitle("Situs")).toBe("Situs · Panel Termux");
+    expect(documentTitle("Sites")).toBe("Sites · Panel Termux");
   });
 });
 
@@ -136,13 +137,13 @@ describe("phone navigation", () => {
     ]);
   });
 
-  test("super_admin: Administrasi first in the sheet, then Domain/Database/Cadangan; Akun never a group", () => {
+  test("super_admin: Administration first in the sheet, then Domains/Databases/Backups; Account never a group", () => {
     const { primary, more } = mobileNavFor("super_admin");
     expect(primary).toHaveLength(4);
     expect(more.map((g) => g.key)).toEqual(["admin", "server"]);
   });
 
-  test("'Lainnya' marks pages that live in the sheet", () => {
+  test("'More' marks pages that live in the sheet", () => {
     const { more } = mobileNavFor("super_admin");
     expect(activeInMore("/dev/users", more)).toBe(true);
     expect(activeInMore("/panel/backups", more)).toBe(true);
@@ -179,7 +180,7 @@ describe("route titles", () => {
     const all = leaves([...panelRoutes, ...siteRoutes, ...backupRoutes, ...devRoutes] as R[]);
     // 19 = every leaf of the four arrays; a new route must bump this and carry a title
     expect(all.length).toBe(19);
-    expect(routeMeta(all.filter((r) => r.path === "/panel/problems")).title).toBe("Riwayat masalah");
+    expect(routeMeta(all.filter((r) => r.path === "/panel/problems")).title).toBe("Problem history");
     for (const r of all) expect(routeMeta([r]).title, r.path).toBeTruthy();
     expect(routeMeta(all.filter((r) => r.path === "/panel/sites/new")).task).toBe(true);
     expect(routeMeta(all.filter((r) => r.path === "/panel/sites")).task).toBe(false);
@@ -232,71 +233,76 @@ describe("status → tone", () => {
 });
 
 describe("formatters (shell)", () => {
+  // English (default locale) output, literal; the Indonesian number/date variants are pinned in the block below and
+  // byte-exact in tests/format.number.test.ts.
+
   test("durations", () => {
-    expect(formatDuration(3)).toBe("3 dtk");
-    expect(formatDuration(120)).toBe("2 mnt");
-    expect(formatDuration(437)).toBe("7 mnt 17 dtk");
+    expect(formatDuration(3)).toBe("3 s");
+    expect(formatDuration(120)).toBe("2 min");
+    expect(formatDuration(437)).toBe("7 min 17 s");
     expect(formatDuration(Number.NaN)).toBe("–");
   });
 
   test("relative time", () => {
     const now = new Date("2026-11-26T12:00:00Z");
     const ago = (s: number) => new Date(now.getTime() - s * 1000);
-    expect(formatRelative(ago(2), now)).toBe("baru saja");
-    expect(formatRelative(ago(-30), now)).toBe("baru saja");
-    expect(formatRelative(ago(59), now)).toBe("baru saja"); // D16: seconds are never shown
-    expect(formatRelative(ago(60), now)).toBe("1 mnt lalu");
-    expect(formatRelative(ago(3 * 60 + 20), now)).toBe("3 mnt lalu");
-    expect(formatRelative(ago(2 * 3600 + 5), now)).toBe("2 jam lalu");
-    expect(formatRelative(ago(2 * 3600 + 5 * 60 + 9), now)).toBe("2 jam 5 mnt lalu");
-    expect(formatRelative(ago(86_400 + 60), now)).toBe("kemarin");
-    expect(formatRelative(ago(-57 * 60), now)).toBe("dalam 57 mnt"); // a coming backup is never "baru saja"
+    expect(formatRelative(ago(2), now)).toBe("just now");
+    expect(formatRelative(ago(-30), now)).toBe("just now");
+    expect(formatRelative(ago(59), now)).toBe("just now"); // D16: seconds are never shown
+    expect(formatRelative(ago(60), now)).toBe("1 min ago");
+    expect(formatRelative(ago(3 * 60 + 20), now)).toBe("3 min ago");
+    expect(formatRelative(ago(2 * 3600 + 5), now)).toBe("2 h ago");
+    expect(formatRelative(ago(2 * 3600 + 5 * 60 + 9), now)).toBe("2 h 5 min ago");
+    expect(formatRelative(ago(86_400 + 60), now)).toBe("yesterday");
+    expect(formatRelative(ago(-57 * 60), now)).toBe("in 57 min"); // a coming backup is never "just now"
     expect(formatRelative(ago(-2 * 86_400), now)).toMatch(/2026/);
-    expect(formatRelative(ago(4 * 86_400), now)).toBe("4 hari lalu");
+    expect(formatRelative(ago(4 * 86_400), now)).toBe("4 days ago");
     expect(formatRelative(ago(30 * 86_400), now)).toMatch(/2026/);
     expect(formatRelative("nope", now)).toBe("–");
     expect(formatRelative(null, now)).toBe("–");
   });
 
   test("relative days follow the local calendar, not 24 h blocks", () => {
-    const now = new Date(2026, 10, 27, 2, 30); // 27 Nov 02.30 local
-    expect(formatRelative(new Date(2026, 10, 25, 23, 52), now)).toBe("2 hari lalu"); // 26 h ago, 2 calendar days
-    expect(formatRelative(new Date(2026, 10, 26, 1, 0), now)).toBe("kemarin");
-    expect(formatRelative(new Date(2026, 10, 26, 20, 0), now)).toBe("6 jam 30 mnt lalu");
+    const now = new Date(2026, 10, 27, 2, 30); // 27 Nov 02:30 local
+    expect(formatRelative(new Date(2026, 10, 25, 23, 52), now)).toBe("2 days ago"); // 26 h ago, 2 calendar days
+    expect(formatRelative(new Date(2026, 10, 26, 1, 0), now)).toBe("yesterday");
+    expect(formatRelative(new Date(2026, 10, 26, 20, 0), now)).toBe("6 h 30 min ago");
   });
 
   test("bytes, megabytes, numbers, percent", () => {
-    expect(formatMegabytes(3776)).toBe("3,7 GB");
-    expect(formatMegabytes(11_269)).toBe("11,0 GB");
+    expect(formatMegabytes(3776)).toBe("3.7 GB");
+    expect(formatMegabytes(11_269)).toBe("11.0 GB");
     expect(formatMegabytes(512)).toBe("512 MB");
-    expect(formatBytes(1.5 * 1024 ** 3)).toBe("1,5 GB");
-    expect(formatBytes(64 * 1024 ** 3)).toBe("64,0 GB");
-    expect(formatBytes(232 * 1024 ** 3)).toBe("232,0 GB");
+    expect(formatBytes(1.5 * 1024 ** 3)).toBe("1.5 GB");
+    expect(formatBytes(64 * 1024 ** 3)).toBe("64.0 GB");
+    expect(formatBytes(232 * 1024 ** 3)).toBe("232.0 GB");
     expect(formatBytes(512 * 1024 ** 2)).toBe("512 MB");
-    expect(formatBytes(1.5 * 1024)).toBe("1,5 KB");
-    expect(formatNumber(12_345.67, 1)).toBe("12.345,7");
+    expect(formatBytes(1.5 * 1024)).toBe("1.5 KB");
+    expect(formatNumber(12_345.67, 1)).toBe("12,345.7");
     expect(formatPercent(42.25)).toBe("42%");
-    expect(formatPercent(42.25, 1)).toBe("42,3%");
+    expect(formatPercent(42.25, 1)).toBe("42.3%");
     expect(formatPercent(Number.POSITIVE_INFINITY)).toBe("–");
   });
 
-  test("web re-exports the shared Indonesian formatters unchanged", () => {
-    expect(webFormat.formatBytes).toBe(sharedFormat.formatBytes);
-    expect(webFormat.formatDuration).toBe(sharedFormat.formatDuration);
-    expect(webFormat.formatNumber).toBe(sharedFormat.formatNumber);
-    expect(webFormat.formatPercent).toBe(sharedFormat.formatPercent);
-    expect(webFormat.formatMegabytes).toBe(sharedFormat.formatMegabytes);
-    expect(webFormat.formatTemperature).toBe(sharedFormat.formatTemperature);
+  test("web formatters are the shared ones bound to the active locale", () => {
+    const l = activeLocale();
+    expect(l).toBe("en");
+    expect(webFormat.formatBytes(1536)).toBe(sharedFormat.formatBytes(1536, l));
+    expect(webFormat.formatDuration(437)).toBe(sharedFormat.formatDuration(437, l));
+    expect(webFormat.formatNumber(1234.5, 1)).toBe(sharedFormat.formatNumber(1234.5, 1, l));
+    expect(webFormat.formatPercent(42.25, 1)).toBe(sharedFormat.formatPercent(42.25, 1, l));
+    expect(webFormat.formatMegabytes(3776)).toBe(sharedFormat.formatMegabytes(3776, l));
+    expect(webFormat.formatTemperature(36.5)).toBe(sharedFormat.formatTemperature(36.5, l));
   });
 
   test("log clock and day label in local time", () => {
     const prevTz = process.env.TZ;
     process.env.TZ = "Asia/Jakarta"; // test-only: UTC+7, restored below so other files keep the host zone
     try {
-      expect(formatClock("2026-11-26T14:54:07.234Z")).toBe("21.54.07");
+      expect(formatClock("2026-11-26T14:54:07.234Z")).toBe("21:54:07");
       expect(formatClock(null)).toBe("");
       expect(formatClock("nope")).toBe("");
-      expect(formatDayLabel("2026-11-26T14:54:07Z")).toBe("Kamis, 26 Nov 2026");
+      expect(formatDayLabel("2026-11-26T14:54:07Z")).toBe("Thursday, Nov 26, 2026");
       expect(formatDayLabel(null)).toBe("");
     } finally {
       if (prevTz === undefined) delete process.env.TZ;
@@ -305,11 +311,32 @@ describe("formatters (shell)", () => {
   });
 
   test("load average per core", () => {
-    expect(formatLoadPerCore(17.55, 8)).toEqual({ text: "17,6 / 8 inti", tone: "danger" });
-    expect(formatLoadPerCore(6, 8)).toEqual({ text: "6 / 8 inti", tone: "warning" });
-    expect(formatLoadPerCore(1.2, 8)).toEqual({ text: "1,2 / 8 inti", tone: "success" });
-    expect(formatLoadPerCore(1.2, null)).toEqual({ text: "1,2", tone: "neutral" });
+    expect(formatLoadPerCore(17.55, 8)).toEqual({ text: "17.6 / 8 cores", tone: "danger" });
+    expect(formatLoadPerCore(6, 8)).toEqual({ text: "6 / 8 cores", tone: "warning" });
+    expect(formatLoadPerCore(1.2, 8)).toEqual({ text: "1.2 / 8 cores", tone: "success" });
+    expect(formatLoadPerCore(1.2, null)).toEqual({ text: "1.2", tone: "neutral" });
     expect(formatLoadPerCore(-1, 8)).toEqual({ text: "–", tone: "neutral" });
+  });
+});
+
+describe("formatters (shell, id)", () => {
+  // Intl- and format.number-backed output in Indonesian; dictionary words come from the id pack (tests/i18n.boot).
+  beforeAll(() => setActiveLocale("id"));
+  afterAll(() => setActiveLocale("en")); // module singleton: restore so later files run in the default locale
+
+  test("numbers, clock and day label", () => {
+    expect(formatBytes(1.5 * 1024 ** 3)).toBe("1,5 GB");
+    expect(formatNumber(12_345.67, 1)).toBe("12.345,7");
+    expect(formatDuration(437)).toBe("7 mnt 17 dtk");
+    const prevTz = process.env.TZ;
+    process.env.TZ = "Asia/Jakarta"; // test-only: UTC+7, restored below so other files keep the host zone
+    try {
+      expect(formatClock("2026-11-26T14:54:07.234Z")).toBe("21.54.07");
+      expect(formatDayLabel("2026-11-26T14:54:07Z")).toBe("Kamis, 26 Nov 2026");
+    } finally {
+      if (prevTz === undefined) delete process.env.TZ;
+      else process.env.TZ = prevTz;
+    }
   });
 });
 

@@ -10,13 +10,13 @@ import { RelativeTime } from "@/web/components/relative-time";
 import { Section } from "@/web/components/section";
 import { StatusBadge } from "@/web/components/status-badge";
 import { Button } from "@/web/components/ui/button";
-import { idBackup } from "@/web/i18n/id.backup";
+import { tBackup } from "@/web/i18n/en.backup";
 import type { ApiQuery } from "@/web/shared/use-api-query";
 import { BACKUP_ERROR_CODES, dropRestoreDb } from "./backup.api";
 import { ItemError } from "./backup.runs";
 import { restoreStatusKey } from "./backup.status-key";
 
-const t = idBackup.restores;
+const t = tBackup.restores;
 
 /** Failures before pg_restore ran: the target database was never created, so there is nothing to drop (QA #19). */
 const NO_DATABASE_CODES: ReadonlySet<BackupRestore["errorCode"]> = new Set(["download_failed", "checksum_mismatch"]);
@@ -28,7 +28,7 @@ export const canDropRestore = (r: BackupRestore): boolean =>
 function Result({ r }: { r: BackupRestore }) {
   if (r.droppedAt) return <span className="text-muted-foreground">{t.droppedAt}</span>;
   if (r.status === "succeeded")
-    return <span>{r.tableCount === null ? idBackup.runs.noSize : t.done(r.tableCount)}</span>;
+    return <span>{r.tableCount === null ? tBackup.runs.noSize : t.done(r.tableCount)}</span>;
   if (r.status === "failed")
     return (
       <ItemError item={{ error: r.error, errorCode: null }} message={r.errorCode ? t.errors[r.errorCode] : t.failed} />

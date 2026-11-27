@@ -5,14 +5,14 @@ import { CodeText } from "@/web/components/code-text";
 import { ConfirmAction } from "@/web/components/confirm-action";
 import { CopyButton } from "@/web/components/copy-button";
 import { Button } from "@/web/components/ui/button";
-import { idDeploy } from "@/web/i18n/id.deploy";
+import { tDeploy } from "@/web/i18n/en.deploy";
 import { formatBytes, formatDateTime } from "@/web/shared/format";
 import { blockerText } from "./deploy.state";
 import { missingChunks } from "./deploy.upload";
 import type { Uploader } from "./deploy.uploader";
 import { UploadProgress } from "./upload.progress";
 
-const t = idDeploy.upload;
+const t = tDeploy.upload;
 
 /** Copyable build commands for both supported targets. */
 function BuildHelp() {

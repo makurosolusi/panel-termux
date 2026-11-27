@@ -62,7 +62,7 @@ inits() { grep -c '^panel ' "$CALLS" || true; }
 # 1. Not arm64: refuse before downloading anything.
 echo x86_64 >"$T/arch"
 run 1
-grep -q 'butuh HP Android 64-bit (arm64)' "$T/out" || fail "arch message"
+grep -q 'needs a 64-bit Android phone (arm64)' "$T/out" || fail "arch message"
 [ "$(downloads)" = 0 ] || fail "downloaded on a non-arm64 phone"
 echo aarch64 >"$T/arch"
 
@@ -71,7 +71,7 @@ echo aarch64 >"$T/arch"
 PREFIX="$T/nope"
 run 1
 PREFIX="$T/usr"
-grep -q 'jalankan skrip ini di Termux' "$T/out" || fail "Termux message"
+grep -q 'run this script in Termux' "$T/out" || fail "Termux message"
 
 # 3. Baked-in version: downloads only SHA256SUMS + panel, checks, execs `panel init <args>` with mode 755.
 run 0 --yes
@@ -96,7 +96,7 @@ rm -rf "$TMPDIR"/*
 : >"$CALLS"
 export PANEL_VERSION=$BAD
 run 1
-grep -q 'Checksum tidak cocok' "$T/out" || fail "checksum message"
+grep -q 'Checksum mismatch' "$T/out" || fail "checksum message"
 [ "$(inits)" = 0 ] || fail "panel ran after a checksum failure"
 [ -z "$(ls "$TMPDIR")" ] || fail "temp dir not cleaned after failure"
 
@@ -105,7 +105,7 @@ grep -q 'Checksum tidak cocok' "$T/out" || fail "checksum message"
 PANEL_VERSION=v0.0.404
 run 1
 unset PANEL_VERSION
-grep -q 'Gagal mengunduh SHA256SUMS v0.0.404' "$T/out" || fail "download-failure message"
+grep -q 'Downloading SHA256SUMS v0.0.404 failed' "$T/out" || fail "download-failure message"
 [ "$(inits)" = 0 ] || fail "panel ran without a download"
 
 echo "install-release.test.sh: all checks passed"

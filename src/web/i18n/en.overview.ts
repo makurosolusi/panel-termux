@@ -1,0 +1,82 @@
+import { msg } from "@/shared/i18n";
+import type { BatteryStatus } from "@/shared/panel.types";
+
+/** UI strings of the Overview page (/panel). */
+export const tOverview = msg("overview", {
+  title: "Overview",
+  allHealthy: "All healthy",
+  checkedAgo: (rel: string) => `checked ${rel}`,
+  startingMonitor: "Starting background monitoring…",
+  problemsLabel: "Problems to check",
+  infoLabel: "Information",
+  problemsAnnounce: (n: number) =>
+    n === 0 ? "All healthy." : n === 1 ? "1 problem to check." : `${n} problems to check.`,
+  sinceAgo: (d: string) => `for ${d}`,
+  sinceJustNow: "just now",
+  severity: { danger: "Critical", warning: "Warning", info: "Info" },
+  frozen: (rel: string) => `last data ${rel}`,
+  view: "View",
+  viewLog: "View log",
+  showMore: (n: number) => `Show ${n} more`,
+  showLess: "Show less",
+  unavailable: "Can't be read right now",
+  device: {
+    battery: "Battery",
+    batteryNone: "Not available",
+    batteryNoneHint: "Install Termux:API to read the battery.",
+    charge: {
+      charging: "Charging",
+      full: "Full",
+      discharging: "On battery",
+      not_charging: "Plugged in, not charging",
+      unknown: "Unknown",
+    } satisfies Record<BatteryStatus, string>,
+    temperature: "Battery temperature",
+    temperatureNone: "Not available",
+    memory: "Memory",
+    // Value stays one short figure so a phone tile does not wrap (2×2 ≤ 200 px, PLAN/02 §6); the word goes in the hint.
+    memoryOf: (total: string) => `available of ${total}`,
+    disk: "Storage",
+    diskOf: (total: string) => `free of ${total}`,
+    load: (v: string) => `System load ${v}`,
+    loadUsual: (lo: string, hi: string) => `usually ${lo}–${hi}`,
+    loadNoBaseline: "the usual range appears after 1 day of monitoring",
+    loadInfo: "About system load",
+    loadHelp:
+      "On Android this number includes system processes and every app on the phone, so it's usually high. What matters is the change from the usual range.",
+    uptime: (d: string) => `Phone uptime ${d}`,
+  },
+  counts: {
+    sites: "Sites",
+    services: "Services",
+    apps: "Apps",
+    domains: "Domains",
+    allRunning: "All running",
+    down: (n: number) => `${n} down`,
+    attention: (n: number) => `${n} to check`,
+    deployed: (n: number, total: number) => `${n} of ${total} deployed`,
+    noSites: "No sites yet",
+  },
+  backup: {
+    title: "Backup",
+    lastRun: "Last",
+    nextRun: "Next",
+    never: "Never",
+    notScheduled: "Not scheduled",
+    open: "Open Backups",
+  },
+  alerts: {
+    title: "Alerts",
+    ok: "Telegram alerts are on",
+    disabled: "Telegram alerts are off",
+    notConfigured: "Alerts aren't set up. Without them, you only see new problems when you open the panel.",
+    configure: "Set up in Settings",
+    askSuperAdmin: "Ask a Super Admin to set them up",
+  },
+  activity: {
+    title: "Recent activity",
+    empty: "No activity yet.",
+    viewAll: "View all",
+  },
+  sectionsLabel: "System overview",
+} as const);

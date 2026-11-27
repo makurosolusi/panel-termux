@@ -2,19 +2,21 @@ import { isRouteErrorResponse, Link, useRouteError } from "react-router";
 import { homeFor } from "@/shared/roles";
 import { ErrorState } from "@/web/components/error-state";
 import { Button } from "@/web/components/ui/button";
-import { idShell } from "@/web/i18n/id.shell";
+import { tCommon } from "@/web/i18n/en.common";
+import { tLayout } from "@/web/i18n/en.layout";
+import { tShell } from "@/web/i18n/en.shell";
 import { useMe } from "@/web/session/use-me";
 import { isChunkLoadError } from "@/web/shared/chunk.error";
 import { useChunkRecovery } from "@/web/shared/use-chunk-recovery";
 import { NotFoundPage } from "./not-found.page";
 
-const t = idShell.routeError;
-const c = idShell.chunkError;
+const t = tLayout.routeError;
+const c = tShell.chunkError;
 
 /**
  * Route ErrorBoundary inside the shell (sidebar stays usable): a thrown 404 response shows the 404 page; a failed
  * chunk reloads once when the server answers (newer bundle after a deploy) and otherwise shows the offline message
- * with a retry; anything else offers "Ke beranda" and a full reload.
+ * with a retry; anything else offers "Go home" and a full reload.
  */
 export function RouteErrorPage() {
   const error = useRouteError();
@@ -43,7 +45,7 @@ export function RouteErrorPage() {
           </Button>
           {chunk ? (
             <Button size="sm" disabled={recovery.state === "checking"} onClick={recovery.retry}>
-              {offline ? c.retry : c.reload}
+              {offline ? tCommon.retry : c.reload}
             </Button>
           ) : (
             <Button size="sm" onClick={() => window.location.reload()}>

@@ -1,5 +1,5 @@
 import type { Me } from "@/shared/me.types";
-import { AJAX_HEADERS, ApiError } from "@/web/shared/api.client";
+import { AJAX_HEADERS, ApiError } from "@/web/shared/api.error";
 
 /** Signed-in account as returned by `GET /api/me` (re-exported from the shared contract). */
 export type { Me };

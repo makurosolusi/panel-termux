@@ -3,7 +3,7 @@ import type { BackupLastGood } from "@/shared/backup.types";
 import type { JobStep } from "@/shared/job.types";
 import type { Domain } from "@/shared/panel.types";
 import type { Job, SiteCheckResult, SiteDetail } from "@/shared/site.types";
-import { idSiteDetail } from "@/web/i18n/id.site-detail";
+import { tSiteDetail } from "@/web/i18n/en.site-detail";
 import { CLOUDFLARE_TOKENS_URL, dnsRecords, hostsNeedingRecord, manualDnsHosts } from "@/web/site/dns.manual";
 import { applyPaste, parseEnvPaste, pasteApplicable } from "@/web/site/env.paste";
 import {
@@ -180,10 +180,10 @@ describe("site detail decisions", () => {
     const p = { path: "/api/health", checkedAt: "" };
     expect(healthToast({ ...p, ok: true, status: 200, ms: 85 })).toEqual({
       ok: true,
-      text: "Sehat: HTTP 200 dari /api/health dalam 85 ms.",
+      text: "Healthy: HTTP 200 from /api/health in 85 ms.",
     });
-    expect(healthToast({ ...p, ok: false, status: 502, ms: 9 }).text).toContain("menjawab 502");
-    expect(healthToast({ ...p, ok: false, status: null, ms: null }).text).toContain("tidak menjawab");
+    expect(healthToast({ ...p, ok: false, status: 502, ms: 9 }).text).toContain("answered 502");
+    expect(healthToast({ ...p, ok: false, status: null, ms: null }).text).toContain("didn't answer");
   });
 
   test("domains dialog: normalize, check request, blinking hosts, per-domain feedback", () => {
@@ -259,7 +259,7 @@ describe("DNS record card without a token (PLAN/06 §6.4 A)", () => {
     expect(manualDnsHosts([step("dns_no_token", {})])).toEqual([]); // 0.3.0 job rows carry no hostnames
   });
 
-  test("site detail: unmanaged domains that do not answer yet", () => {
+  test("site detail: unmanaged domains that don't answer yet", () => {
     const dns = [
       { hostname: "own.contoh.com", managed: true },
       { hostname: "ok.contoh.com", managed: false },
@@ -274,11 +274,11 @@ describe("DNS record card without a token (PLAN/06 §6.4 A)", () => {
     expect(hostsNeedingRecord(dns)).toEqual(["ok.contoh.com", "down.contoh.com", "new.contoh.com"]);
   });
 
-  test("missing-from-pm2 copy offers Jalankan lagi, not ssh", () => {
-    const h = idSiteDetail.header;
-    expect(h.runAgain).toBe("Jalankan lagi");
+  test("missing-from-pm2 copy offers Start again, not ssh", () => {
+    const h = tSiteDetail.header;
+    expect(h.runAgain).toBe("Start again");
     for (const text of [h.missingFromPm2Help, h.missingFromPm2Adopted]) {
-      expect(text).toContain("Jalankan lagi");
+      expect(text).toContain("Start again");
       expect(text).not.toContain("ssh");
     }
   });

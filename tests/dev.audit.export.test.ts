@@ -61,7 +61,7 @@ describe("exportAuditCsv", () => {
     expect(res.headers.get("content-disposition")).toBe('attachment; filename="audit-20261127.csv"');
     const out = await lines(res);
     expect(out).toEqual([
-      "waktu,aktor,email_aktor,aksi,target,ip_tersamar,request_id",
+      "time,actor,actor_email,action,target,ip_masked,request_id",
       `"${new Date(2026, 1, 2, 9).toISOString()}","Root","","csv.b","'@evil","",""`,
       `"${new Date(2026, 1, 1, 9).toISOString()}","Root","","csv.a","'=HYPERLINK(""x"")","",""`,
     ]);

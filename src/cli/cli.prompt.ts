@@ -4,6 +4,7 @@
 // without -t, D6). Without a terminal only `ask` answers, from one stdin line (`--ssh-key -`, C26).
 import { closeSync, openSync, readSync, writeSync } from "node:fs";
 import { ReadStream } from "node:tty";
+import { tr } from "./cli.locale";
 import { CliExit } from "./cli.output";
 import { INIT_EXIT } from "./init.types";
 
@@ -42,7 +43,7 @@ export function readAnswer(next: ByteSource, echo: ((bytes: Uint8Array) => void)
   for (;;) {
     const c = next();
     if (c === null || (c === CTRL_D && bytes.length === 0)) return null;
-    if (c === CTRL_C) throw new CliExit(INIT_EXIT.interrupted, "Dibatalkan (Ctrl-C).");
+    if (c === CTRL_C) throw new CliExit(INIT_EXIT.interrupted, tr("Cancelled (Ctrl-C).", "Dibatalkan (Ctrl-C)."));
     if (ENTER.has(c)) return Buffer.from(bytes).toString("utf8");
     if (BACKSPACE.has(c)) {
       if (bytes.length === 0) continue;

@@ -1,49 +1,49 @@
-# Login Google: membuat OAuth client
+# Google sign-in: creating an OAuth client
 
-Panel Termux memakai login Google. Kamu butuh satu OAuth client dari Google Cloud.
-`panel init` menanyakan Client ID dan Client secret, lalu menyimpannya di `~/panel/.env`.
-Buat client-nya dulu (boleh dari browser HP), lalu tempel saat ditanya.
+Panel Termux uses Google sign-in. You need one OAuth client from Google Cloud.
+`panel init` asks for the Client ID and Client secret, then saves them in `~/panel/.env`.
+Create the client first (the phone's browser works), then paste the values when asked.
 
-## Langkah
+## Steps
 
-1. Buka console.cloud.google.com, pilih atau buat project.
-2. Buka APIs & Services → OAuth consent screen. Isi nama aplikasi dan email kamu.
-   Selama aplikasi berstatus Testing, tambahkan email setiap orang yang boleh login di Test users.
-3. Buka APIs & Services → Credentials → Create credentials → OAuth client ID.
-4. Application type: Web application. Nama bebas, mis. Panel Termux.
-5. Di Authorized redirect URIs, tambahkan alamat ini (persis, tanpa garis miring di akhir):
+1. Open console.cloud.google.com and pick or create a project.
+2. Open APIs & Services → OAuth consent screen. Fill in the app name and your email.
+   While the app is in Testing, add the email of everyone who may sign in under Test users.
+3. Open APIs & Services → Credentials → Create credentials → OAuth client ID.
+4. Application type: Web application. Any name works, e.g. Panel Termux.
+5. Under Authorized redirect URIs, add this address (exactly, no trailing slash):
 
 ```
 <APP_BASE_URL>/api/auth/callback/google
 ```
 
-Contoh: `https://panel.example.com/api/auth/callback/google`
-Untuk mencoba di HP tanpa domain: `http://localhost:3200/api/auth/callback/google`
-(ganti 3200 bila `PORT` kamu berbeda).
+Example: `https://panel.example.com/api/auth/callback/google`
+To try it on the phone without a domain: `http://localhost:3200/api/auth/callback/google`
+(replace 3200 if your `PORT` is different).
 
-6. Tekan Create. Salin Client ID dan Client secret, lalu tempel saat `panel init` bertanya.
-   Secret tidak tampil saat diketik; init hanya mencetak panjangnya.
-7. Tanpa init (atau untuk mengganti nilai): isi sendiri `~/panel/.env`:
+6. Press Create. Copy the Client ID and Client secret, then paste them when `panel init` asks.
+   The secret is not shown while you type; init only prints its length.
+7. Without init (or to change a value): edit `~/panel/.env` yourself:
 
 ```
 APP_BASE_URL=https://panel.example.com
 GOOGLE_CLIENT_ID=<Client ID>
 GOOGLE_CLIENT_SECRET=<Client secret>
-SUPER_ADMIN_EMAILS=kamu@example.com
+SUPER_ADMIN_EMAILS=you@example.com
 ```
 
-8. Mulai ulang panel: `sv restart panel`.
+8. Restart the panel: `sv restart panel`.
 
-## Penting
+## Important
 
-- `APP_BASE_URL` harus sama persis dengan awal redirect URI: http/https, domain, dan port.
-- Google hanya menerima domain https publik atau `localhost`. IP LAN atau Tailscale ditolak.
-- Client secret itu rahasia. Jangan dibagikan atau ditempel di chat.
-- Email di `SUPER_ADMIN_EMAILS` menjadi Super Admin saat login pertama. Pisahkan dengan koma.
+- `APP_BASE_URL` must match the start of the redirect URI exactly: http/https, domain and port.
+- Google only accepts public https domains or `localhost`. LAN or Tailscale IPs are refused.
+- The Client secret is a secret. Do not share it or paste it in a chat.
+- Emails in `SUPER_ADMIN_EMAILS` become Super Admin on their first sign-in. Separate them with commas.
 
-## Bila login gagal
+## When sign-in fails
 
-- `redirect_uri_mismatch`: redirect URI di Google berbeda dengan `APP_BASE_URL`.
-  Samakan, simpan, tunggu beberapa menit, lalu coba lagi.
-- `access_denied` saat status Testing: email belum ada di Test users.
-- Template `.env` kosong: `panel env > .env.new`. Pemeriksaan isi `.env`: `panel doctor`.
+- `redirect_uri_mismatch`: the redirect URI in Google differs from `APP_BASE_URL`.
+  Make them match, save, wait a few minutes, then try again.
+- `access_denied` while in Testing: the email is not in Test users yet.
+- Empty `.env` template: `panel env > .env.new`. Check what `.env` contains: `panel doctor`.

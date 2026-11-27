@@ -6,14 +6,23 @@ import { join } from "node:path";
 import tailwind from "bun-plugin-tailwind";
 
 const KB = 1024;
-/** gzip budgets: `/` = entry JS; `/panel` = entry + app (shell) + Ringkasan page JS on first load (DECISIONS B30). */
-const BUDGET = { landing: 150 * KB, panel: 215 * KB } as const;
-/** Source modules that must stay out of the entry (they belong to the lazy `app` chunk). */
+/**
+ * gzip budgets (DECISIONS B30, E6): `/` = bootstrap entry + `app.mount` chunk with their static imports; `/panel` =
+ * that plus the app (shell) and Ringkasan page JS on first load. The id pack has a soft budget (warning only).
+ */
+const BUDGET = { landing: 150 * KB, panel: 215 * KB, idPack: 45 * KB } as const;
+/** Source modules that must stay out of `/` (they belong to the lazy `app` chunk). */
 const APP_ONLY = /^src\/web\/(panel|dev|site|backup|deploy|layout\/app\.layout)/;
-/** The only dictionaries the entry may carry; any other `src/web/i18n/id*.ts` there (domain or aggregate) is a leak. */
-const ENTRY_I18N = /^src\/web\/i18n\/id\.(app|common|shell|session|landing)\.ts$/;
-const isLeak = (input: string) =>
-  APP_ONLY.test(input) || (input.startsWith("src/web/i18n/") && !ENTRY_I18N.test(input));
+/** The only dictionaries `/` may carry; any other `src/web/i18n/*.ts` dictionary there is a leak. */
+const ENTRY_I18N = /^src\/web\/i18n\/en\.(app|common|shell|session|landing)\.ts$/;
+/** The overlay pack and the detector are not dictionaries (the pack is lazy, the detector is the bootstrap's). */
+const NOT_DICTIONARY = /^src\/web\/i18n\/(id\.pack|locale\.detect)\.ts$/;
+const isDictionary = (input: string) => /^src\/web\/i18n\//.test(input) && !NOT_DICTIONARY.test(input);
+const isLeak = (input: string) => APP_ONLY.test(input) || (isDictionary(input) && !ENTRY_I18N.test(input));
+const MOUNT_INPUT = "src/web/app.mount.tsx";
+const PACK_INPUT = "src/web/i18n/id.pack.ts";
+const isIndonesian = (input: string) => /^src\/web\/i18n\/id\./.test(input) && input !== PACK_INPUT;
+const isEnglish = (input: string) => /^src\/web\/i18n\/en\./.test(input);
 const LOGIN_INPUT = "src/web/pages/login.page.tsx";
 const APP_INPUT = "src/web/app.routes.tsx";
 /** The page `/panel` opens on (its own lazy chunk since pages load per route). */
@@ -58,38 +67,66 @@ try {
   };
   const jsFor = (entryPoint: string) =>
     [...byName.keys()].find((f) => f.endsWith(".js") && byName.get(f)?.entryPoint === entryPoint);
-  const entryJs = jsFor("src/web/index.html");
-  const loginJs = jsFor(LOGIN_INPUT);
-  const appJs = jsFor(APP_INPUT);
-  const homeJs = jsFor(PANEL_HOME_INPUT);
-  if (!entryJs || !loginJs || !appJs || !homeJs)
-    throw new Error(`bundle-report: chunk not found (entry=${entryJs} login=${loginJs} app=${appJs})`);
+  const found = {
+    boot: jsFor("src/web/index.html"),
+    mount: jsFor(MOUNT_INPUT),
+    pack: jsFor(PACK_INPUT),
+    login: jsFor(LOGIN_INPUT),
+    app: jsFor(APP_INPUT),
+    home: jsFor(PANEL_HOME_INPUT),
+  };
+  const missing = Object.entries(found).filter(([, f]) => !f);
+  if (missing.length) throw new Error(`bundle-report: chunk not found for ${missing.map(([k]) => k).join(", ")}`);
+  const js = found as Record<keyof typeof found, string>;
 
-  const entry = closure(entryJs);
+  const boot = closure(js.boot);
+  /** `/` = what loads before first render: the bootstrap, then the `app.mount` chunk (one extra hop). */
+  const entry = new Set([...boot, ...closure(js.mount)]);
   const sum = (files: Iterable<string>) => [...files].reduce((n, f) => n + (gz.get(f) ?? 0), 0);
-  const only = (s: Set<string>) => [...s].filter((f) => !entry.has(f));
-  const login = only(closure(loginJs));
-  const app = only(closure(appJs));
-  const panel = new Set([...app, ...only(closure(homeJs))]);
+  const only = (s: Set<string>, base: Set<string> = entry) => [...s].filter((f) => !base.has(f));
+  const mount = only(entry, boot);
+  const pack = only(closure(js.pack), boot);
+  const login = only(closure(js.login));
+  const app = only(closure(js.app));
+  const panel = new Set([...app, ...only(closure(js.home))]);
   const kb = (n: number) => `${(n / KB).toFixed(1)} KB`;
-  const leaked = [...entry].flatMap((f) => Object.keys(byName.get(f)?.inputs ?? {}).filter(isLeak));
+  const inputsOf = (files: Iterable<string>) => [...files].flatMap((f) => Object.keys(byName.get(f)?.inputs ?? {}));
+  const leaked = inputsOf(entry).filter(isLeak);
+  /** The bootstrap must not evaluate any dictionary before the overlay is registered (DECISIONS E5). */
+  const bootDictionaries = inputsOf(boot).filter(isDictionary);
+  /** Indonesian text only in the lazy pack, and the pack pulls in no English dictionary (it loads before mount). */
+  const packClosure = closure(js.pack);
+  const strayIndonesian = inputsOf([...byName.keys()].filter((f) => !packClosure.has(f))).filter(isIndonesian);
+  const packEnglish = inputsOf(packClosure).filter(isEnglish);
 
   const rows = [
-    { group: "entry (/)", files: entry.size, gzip: sum(entry), budget: BUDGET.landing },
-    { group: "login (lazy)", files: login.length, gzip: sum(login), budget: null },
-    { group: "app (lazy)", files: app.length, gzip: sum(app), budget: null },
-    { group: "/panel initial", files: entry.size + panel.size, gzip: sum(entry) + sum(panel), budget: BUDGET.panel },
+    { group: "bootstrap", files: boot.size, gzip: sum(boot), budget: null, soft: false },
+    { group: "mount (hop 2)", files: mount.length, gzip: sum(mount), budget: null, soft: false },
+    { group: "entry (/)", files: entry.size, gzip: sum(entry), budget: BUDGET.landing, soft: false },
+    { group: "login (lazy)", files: login.length, gzip: sum(login), budget: null, soft: false },
+    { group: "app (lazy)", files: app.length, gzip: sum(app), budget: null, soft: false },
+    {
+      group: "/panel initial",
+      files: entry.size + panel.size,
+      gzip: sum(entry) + sum(panel),
+      budget: BUDGET.panel,
+      soft: false,
+    },
+    { group: "id pack (lazy)", files: pack.length, gzip: sum(pack), budget: BUDGET.idPack, soft: true },
   ];
-  let failed = leaked.length > 0;
+  let failed = leaked.length + bootDictionaries.length + strayIndonesian.length + packEnglish.length > 0;
   for (const r of rows) {
     const over = r.budget !== null && r.gzip > r.budget;
-    failed ||= over;
-    const limit = r.budget === null ? "" : ` / ${kb(r.budget)} ${over ? "OVER" : "ok"}`;
+    if (!r.soft) failed ||= over;
+    const limit = r.budget === null ? "" : ` / ${kb(r.budget)} ${over ? (r.soft ? "OVER (soft)" : "OVER") : "ok"}`;
     console.info(
       `${r.group.padEnd(16)} ${String(r.files).padStart(2)} file(s)  ${kb(r.gzip).padStart(9)} gzip${limit}`,
     );
   }
   if (leaked.length) console.error(`entry contains app-only modules: ${leaked.slice(0, 5).join(", ")}`);
+  if (bootDictionaries.length) console.error(`bootstrap contains dictionaries: ${bootDictionaries.join(", ")}`);
+  if (strayIndonesian.length) console.error(`id.* outside the pack: ${strayIndonesian.slice(0, 5).join(", ")}`);
+  if (packEnglish.length) console.error(`id pack pulls in English dictionaries: ${packEnglish.slice(0, 5).join(", ")}`);
   console.info(failed ? "bundle:check FAILED" : "bundle:check ok");
   process.exitCode = failed ? 1 : 0;
 } finally {

@@ -8,6 +8,7 @@ import {
   type EcosystemFixPlan,
   ecosystemBlock,
   planEcosystemFix,
+  snippetCurrent,
 } from "@/server/sites/ecosystem.patch";
 import { type EcosystemProbe, probeEcosystem } from "@/server/sites/ecosystem.probe";
 import type { SystemAdapters } from "@/server/system/system.types";
@@ -66,6 +67,27 @@ describe.skipIf(!node)("fixtures under node", () => {
     const { p } = await plan(fixture);
     expect(p.kind).toBe(kind as EcosystemFixPlan["kind"]);
     if (p.kind === "manual") expect(p.reason as string).toBe(reason as string);
+  });
+
+  test("old Indonesian template and the shipped English one are both current: no Fix, no rewrite", async () => {
+    const old = readFileSync(join(FIXTURES, "template.config.js"), "utf8");
+    const shipped = readFileSync(join(import.meta.dir, "..", "deploy", "pm2", "ecosystem.config.js"), "utf8");
+    expect(old).toContain("apps.json dilewati: ");
+    expect(shipped).toContain("apps.json skipped: ");
+    expect(snippetCurrent(old)).toBe(true);
+    expect(snippetCurrent(shipped)).toBe(true);
+    const { dir, eco } = sitesWith("template");
+    writeFileSync(eco, shipped);
+    const p = planEcosystemFix({
+      bytes: Buffer.from(shipped),
+      path: eco,
+      realDir: dir,
+      sitesDirReal: dir,
+      nlink: 1,
+      probeBefore: await probe(dir, eco),
+      prefix: PREFIX,
+    });
+    expect(p.kind).toBe("unchanged");
   });
 
   test("POCO: candidate = original bytes + blank line + block; hand apps kept, no guard", async () => {
@@ -146,6 +168,29 @@ describe.skipIf(!node)("fixtures under node", () => {
     expect(r.changes.at(-1)).toMatchObject({ kind: "add", afterLine: 3 });
   });
 
+  test("v1 block (Indonesian comments) replaced whole by the v2 block; nothing else changes", async () => {
+    const { p, bytes } = await plan("marked-v1");
+    const r = patched(p);
+    const text = bytes.toString("utf8");
+    const from = text.indexOf("// >>>");
+    expect(text.slice(from)).toStartWith("// >>> panel-termux:apps v1 ");
+    expect(r.candidate.toString("utf8")).toBe(text.slice(0, from) + ecosystemBlock(PREFIX));
+    expect(r.effects).toMatchObject({ keepApps: ["hand"], oldSpread: false });
+    // Only the comment lines, the version marker and the two console.error messages (translated in v2 before its
+    // release, the v1 fixture keeps what 0.3.x phones carry) differ between v1 and v2; the logic is the same.
+    const oldLines = text.slice(from).split("\n");
+    const newLines = ecosystemBlock(PREFIX).split("\n");
+    const diff = newLines.map((l, i) => (l === oldLines[i] ? null : i)).filter((i) => i !== null);
+    expect(diff).toEqual([0, 1, 2, 3, 18, 26, 28]);
+    const unlog = (l: string | undefined) => l?.replace(/console\.error\(".*?" \+/, "console.error(MSG +");
+    expect(unlog(newLines[18])).toBe(unlog(oldLines[18]));
+    expect(unlog(newLines[28])).toBe(unlog(oldLines[28]));
+    expect([newLines[18], newLines[28]].map((l) => l?.trim())).toEqual([
+      'console.error("[ecosystem] apps.json skipped: " + e.message);',
+      'console.error("[ecosystem] panel block skipped: " + e.message);',
+    ]);
+  });
+
   test("BOM kept as the first bytes; CRLF file gets a CRLF block", async () => {
     const bom = patched((await plan("bom")).p);
     expect([...bom.candidate.subarray(0, 3)]).toEqual([0xef, 0xbb, 0xbf]);
@@ -220,7 +265,7 @@ describe("ecosystemBlock", () => {
   test("guard script inserted via JSON.stringify, not raw", () => {
     const b = ecosystemBlock('/p/we"ird');
     expect(b).toContain('script: "/p/we\\"ird/bin/sleep"');
-    expect(b.startsWith("// >>> panel-termux:apps v1 ")).toBe(true);
+    expect(b.startsWith("// >>> panel-termux:apps v2 (managed by Panel Termux;")).toBe(true);
     expect(b.endsWith("// <<< panel-termux:apps\n")).toBe(true);
   });
 });

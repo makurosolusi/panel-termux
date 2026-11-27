@@ -4,14 +4,14 @@ import type { DevSetting, DevSettings } from "@/shared/dev.types";
 import { EmptyState } from "@/web/components/empty-state";
 import { PageHeader } from "@/web/components/page-header";
 import { QueryView } from "@/web/components/query-view";
-import { idSettings } from "@/web/i18n/id.settings";
+import { tSettings } from "@/web/i18n/en.settings";
 import { useApiQuery } from "@/web/shared/use-api-query";
 import { devUrl } from "./dev.api";
 import { SettingsGroup } from "./settings.group";
 import { GROUP_ANCHOR, SETTING_GROUPS, type SettingGroup } from "./settings.registry";
 import { groupItems } from "./settings.state";
 
-const t = idSettings;
+const t = tSettings;
 const SETTINGS_URL = devUrl("/settings");
 
 /** Warns before leaving with unsaved cards: in-app navigation (router blocker) and tab close/reload (beforeunload). */
@@ -32,7 +32,7 @@ function useLeaveGuard(dirty: boolean) {
   }, [dirty]);
 }
 
-/** /dev/settings: six cards (anchors `#cloudflare`, `#cadangan`, …), each saved atomically with its own test. */
+/** /dev/settings: six cards (anchors `#cloudflare`, `#backup`, …), each saved atomically with its own test. */
 export function SettingsPage() {
   const query = useApiQuery<DevSettings>(SETTINGS_URL);
   // Last PATCH response, valid only for the GET result it was saved on top of (a newer GET wins).
@@ -49,12 +49,6 @@ export function SettingsPage() {
       return next;
     });
   }, []);
-
-  // Cards render after the first load, so the browser's own jump to `#cadangan` happened too early.
-  const loaded = query.data !== undefined;
-  useEffect(() => {
-    if (loaded && window.location.hash) document.getElementById(window.location.hash.slice(1))?.scrollIntoView();
-  }, [loaded]);
 
   return (
     <div className="flex flex-col">

@@ -3,13 +3,13 @@ import type { SecurityStatus } from "@/shared/security.types";
 import { ConfirmAction } from "@/web/components/confirm-action";
 import { Section } from "@/web/components/section";
 import { Button } from "@/web/components/ui/button";
-import { idSecurity } from "@/web/i18n/id.security";
+import { tSecurity } from "@/web/i18n/en.security";
 import { toast } from "@/web/shared/toast.lazy";
 import { revokeAllSessions, SECURITY_ERROR_CODES } from "./security.api";
 
-const t = idSecurity.sessions;
+const t = tSecurity.sessions;
 
-/** "Sesi" card: active sessions summary and "Keluarkan semua pengguna" (tier confirm; this device stays signed in). */
+/** "Sessions" card: active sessions summary and "Sign out every user" (tier confirm; this device stays signed in). */
 export function SessionsAdminCard({ status, onChanged }: { status: SecurityStatus; onChanged: () => void }) {
   return (
     <div id="sesi" className="scroll-mt-20 rounded-lg border bg-card p-4">

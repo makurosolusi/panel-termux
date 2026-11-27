@@ -1,3 +1,4 @@
+import type { Messages } from "@/shared/i18n";
 import type {
   AdoptCandidateApp,
   JobKind,
@@ -6,6 +7,7 @@ import type {
   SiteIssueCode,
   SiteNoteCode,
 } from "@/shared/site.types";
+import type { tSite } from "./en.site";
 import { idSiteSetup } from "./id.site.setup";
 
 /** Copy that may interpolate server params (`{hostname}`, `{port}` …). */
@@ -13,7 +15,7 @@ type Copy = string | ((p: JobParams) => string);
 const s = (v: JobParams[string] | undefined) => String(v ?? "");
 
 /** Indonesian strings of the Situs pages: list, persiapan, adopsi, wizard and the running-job banner. */
-export const idSite = {
+export const idSite: Messages<typeof tSite> = {
   errorCodes: {
     busy: "Ada perubahan lain yang sedang berjalan. Tunggu sampai selesai, lalu coba lagi.",
     not_found: "Situs ini sudah tidak ada, mungkin baru dihapus. Buka daftar situs untuk melihat yang masih ada.",

@@ -3,12 +3,12 @@ import { Link } from "react-router";
 import type { SiteCheckResult } from "@/shared/site.types";
 import { Button } from "@/web/components/ui/button";
 import { Input } from "@/web/components/ui/input";
-import { idSite } from "@/web/i18n/id.site";
+import { tSite } from "@/web/i18n/en.site";
 import { FormField } from "./form.field";
 import { jobPath } from "./site.api";
 import { cleanHost, MAX_HOSTNAMES, notesByHost, parsePort, type SiteForm, targetIssues } from "./site.check";
 
-const t = idSite.wizard;
+const t = tSite.wizard;
 
 type Check = { result: SiteCheckResult | undefined; error: string | undefined; checking: boolean };
 

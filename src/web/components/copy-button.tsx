@@ -1,9 +1,9 @@
 import { CheckIcon, CopyIcon } from "lucide-react";
 import { useEffect, useState } from "react";
 import { Button } from "@/web/components/ui/button";
-import { idShell } from "@/web/i18n/id.shell";
+import { tShell } from "@/web/i18n/en.shell";
 
-const t = idShell.copy;
+const t = tShell.copy;
 const RESET_MS = 1_500;
 
 /**

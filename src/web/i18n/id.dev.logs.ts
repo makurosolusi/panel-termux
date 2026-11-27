@@ -1,7 +1,9 @@
 import type { LogLevel } from "@/shared/dev.types";
+import type { Messages } from "@/shared/i18n";
+import type { tDevLogs } from "./en.dev.logs";
 
 /** Indonesian strings of /dev/logs (`id.dev.logs`, PLAN/05 §5.4, F7). */
-export const idDevLogs = {
+export const idDevLogs: Messages<typeof tDevLogs> = {
   title: "Log panel",
   description: "Catatan kerja Panel Termux sendiri, terbaru di bawah.",
   label: "Log panel",

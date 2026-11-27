@@ -6,7 +6,7 @@ import { PageHeader } from "@/web/components/page-header";
 import { QueryView } from "@/web/components/query-view";
 import { STATUS_META } from "@/web/components/status.vocab";
 import { StatusBadge } from "@/web/components/status-badge";
-import { idPanel } from "@/web/i18n/id.panel";
+import { tPanel } from "@/web/i18n/en.panel";
 import { formatDuration } from "@/web/shared/format";
 import { useApiQuery } from "@/web/shared/use-api-query";
 import { CodeText } from "./code.text";
@@ -16,8 +16,8 @@ import { RestartOverlay } from "./restart.overlay";
 import { UnitActions } from "./unit.actions";
 import { usePanelControl } from "./use-panel-control";
 
-const t = idPanel.services;
-const CODES = { ...idPanel.errorCodes, system_error: t.error };
+const t = tPanel.services;
+const CODES = { ...tPanel.errorCodes, system_error: t.error };
 
 const TONE_RANK = { danger: 0, warning: 1, info: 2, neutral: 3, accent: 3, success: 4 } as const;
 
@@ -29,10 +29,10 @@ export const sortServices = (list: readonly Service[]): Service[] =>
       a.name.localeCompare(b.name),
   );
 
-/** Whole minutes only (content guide: no seconds): the row is polled, so a ticking "1 dtk" would freeze (QA #20). */
+/** Whole minutes only (content guide: no seconds): the row is polled, so a ticking "1 s" would freeze (QA #20). */
 const minutes = (sec: number): string | null => (sec < 60 ? null : formatDuration(sec - (sec % 60)));
 
-/** "aktif 3 jam" / "mati 33 jam" / "baru mulai" / "baru berhenti" (under a minute) / "–". */
+/** "up 3 h" / "down 33 h" / "just started" / "just stopped" (under a minute) / "–". */
 export function serviceSince(s: Service): string {
   if (s.state === "run" && s.uptimeSec !== null) {
     const d = minutes(s.uptimeSec);
@@ -42,7 +42,7 @@ export function serviceSince(s: Service): string {
     const d = minutes(s.downSec);
     return d ? t.downFor(d) : t.downJustNow;
   }
-  return idPanel.dash;
+  return tPanel.dash;
 }
 
 const columns: DataColumn<Service>[] = [
@@ -55,7 +55,7 @@ const columns: DataColumn<Service>[] = [
         <span className="font-mono">{s.name}</span>
         {s.protected && (
           <span className="rounded border px-1 text-[0.6875rem] font-normal text-muted-foreground">
-            {idPanel.coreBadge}
+            {tPanel.coreBadge}
           </span>
         )}
       </span>
@@ -68,7 +68,7 @@ const columns: DataColumn<Service>[] = [
     header: t.cols.pid,
     align: "right",
     mobile: "hidden",
-    cell: (s) => <span className="font-mono text-muted-foreground">{s.pid ?? idPanel.dash}</span>,
+    cell: (s) => <span className="font-mono text-muted-foreground">{s.pid ?? tPanel.dash}</span>,
   },
 ];
 

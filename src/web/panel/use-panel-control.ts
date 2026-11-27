@@ -1,12 +1,12 @@
 import { useState } from "react";
 import type { ControlAction, DeferredRestart } from "@/shared/panel.types";
-import { idPanel } from "@/web/i18n/id.panel";
+import { tPanel } from "@/web/i18n/en.panel";
 import { ERROR_TOAST_MS } from "@/web/shared/api.action";
 import { ApiError, apiErrorMessage } from "@/web/shared/api.client";
 import { toast } from "@/web/shared/toast.lazy";
 import { type ControlKind, isDeferred, postControl } from "./panel.api";
 
-const t = idPanel;
+const t = tPanel;
 
 /** Control state of a list page: which unit is in flight, and a deferred restart waiting for the overlay. */
 export type PanelControl = {

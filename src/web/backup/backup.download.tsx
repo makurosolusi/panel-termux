@@ -2,15 +2,15 @@ import { DownloadIcon } from "lucide-react";
 import { useState } from "react";
 import type { BackupItem } from "@/shared/backup.types";
 import { Button } from "@/web/components/ui/button";
-import { idBackup } from "@/web/i18n/id.backup";
-import { idSecurity } from "@/web/i18n/id.security";
+import { tBackup } from "@/web/i18n/en.backup";
+import { tSecurity } from "@/web/i18n/en.security";
 import { isReauthRequired, reauthenticate } from "@/web/security/security.api";
 import { ERROR_TOAST_MS } from "@/web/shared/api.action";
 import { apiErrorMessage } from "@/web/shared/api.client";
 import { toast } from "@/web/shared/toast.lazy";
 import { BACKUP_ERROR_CODES, backupItemDownloadUrl, downloadSecretsItem } from "./backup.api";
 
-const t = idBackup;
+const t = tBackup;
 
 /**
  * "Unduh" for one stored item: a plain link (302 to the bucket), except `secrets`, which is probed first so a stale
@@ -37,7 +37,7 @@ export function ItemDownload({ runId, index, kind }: { runId: string; index: num
       if (isReauthRequired(err))
         toast.warning(t.reauthDownload, {
           duration: ERROR_TOAST_MS,
-          action: { label: idSecurity.reauth.button, onClick: () => void reauthenticate() },
+          action: { label: tSecurity.reauth.button, onClick: () => void reauthenticate() },
         });
       else toast.error(apiErrorMessage(err, BACKUP_ERROR_CODES), { duration: ERROR_TOAST_MS });
     } finally {

@@ -1,12 +1,11 @@
 import { cn } from "cn";
 import { CircleCheckIcon, CircleDashedIcon, ExternalLinkIcon } from "lucide-react";
-import { useEffect, useRef } from "react";
-import { Link, useLocation } from "react-router";
+import { Link } from "react-router";
 import type { DevSetup, SetupItem, SetupItemKey } from "@/shared/dev.types";
 import { CodeText } from "@/web/components/code-text";
 import { InlineCode } from "@/web/components/inline-code";
 import { Button } from "@/web/components/ui/button";
-import { idDevSetup } from "@/web/i18n/id.dev.setup";
+import { tDevSetup } from "@/web/i18n/en.dev.setup";
 import {
   type ItemAction,
   itemAction,
@@ -18,7 +17,7 @@ import {
   visibleItems,
 } from "./onboarding.state";
 
-const t = idDevSetup;
+const t = tDevSetup;
 
 function ActionLink({ action }: { action: ItemAction }) {
   if (action.kind === "route")
@@ -103,15 +102,8 @@ export function OnboardingCard({
   onHide: () => void;
 }) {
   const { done, total } = setupProgress(setup);
-  const ref = useRef<HTMLElement>(null);
-  const { hash } = useLocation();
-  // the card renders after its own fetch, so the browser's hash scroll (banner "Lanjutkan") has already missed it
-  useEffect(() => {
-    if (hash === `#${ONBOARDING_ANCHOR}`) ref.current?.scrollIntoView({ block: "start" });
-  }, [hash]);
   return (
     <section
-      ref={ref}
       id={ONBOARDING_ANCHOR}
       aria-labelledby="onboarding-title"
       className="scroll-mt-20 rounded-lg border border-brand-text/20 bg-card shadow-xs"

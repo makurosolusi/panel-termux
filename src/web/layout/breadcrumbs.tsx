@@ -1,13 +1,13 @@
 import { ChevronRightIcon } from "lucide-react";
 import { Link } from "react-router";
-import { idShell } from "@/web/i18n/id.shell";
+import { tLayout } from "@/web/i18n/en.layout";
 import type { Crumb } from "./nav.items";
 
-/** "Server › Situs › blog" trail; the last crumb is the current page (aria-current). */
+/** "Server › Sites › blog" trail; the last crumb is the current page (aria-current). */
 export function Breadcrumbs({ crumbs }: { crumbs: readonly Crumb[] }) {
   if (crumbs.length === 0) return null;
   return (
-    <nav aria-label={idShell.breadcrumb} className="min-w-0">
+    <nav aria-label={tLayout.breadcrumb} className="min-w-0">
       <ol className="flex items-center gap-1.5 text-sm text-muted-foreground">
         {crumbs.map((c, i) => {
           const last = i === crumbs.length - 1;

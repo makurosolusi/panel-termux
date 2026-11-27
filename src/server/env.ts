@@ -1,5 +1,6 @@
 import { EMAIL_RE } from "../shared/address.rules";
 import { ENV_VARS, type EnvVarName } from "../shared/env.schema";
+import { type Locale, parseLocale } from "../shared/locale";
 import { log } from "./log.service";
 
 /** Validated runtime configuration. Values are never printed; errors name the variable only. */
@@ -14,6 +15,8 @@ export type Env = {
   PANEL_CONNECTIVITY_URL?: string;
   /** `PANEL_SKIP_SNAPSHOT=1`: migrate even when the pre-migration snapshot fails (PLAN/04 K9). */
   PANEL_SKIP_SNAPSHOT: boolean;
+  /** CLI-only language (DECISIONS E12); the server never reads it. Invalid → undefined (the CLI default applies). */
+  PANEL_LANG?: Locale;
 };
 
 /** Default of `name` from the env schema (K17: the one place defaults live). */
@@ -73,6 +76,7 @@ export function parseEnv(src: Record<string, string | undefined> = process.env):
     PANEL_DATA_DIR: src.PANEL_DATA_DIR?.trim() || DEFAULT_DATA_DIR,
     PANEL_CONNECTIVITY_URL: connectivity ? httpUrl("PANEL_CONNECTIVITY_URL", connectivity) : undefined,
     PANEL_SKIP_SNAPSHOT: src.PANEL_SKIP_SNAPSHOT?.trim() === "1",
+    PANEL_LANG: parseLocale(src.PANEL_LANG) ?? undefined,
   };
 }
 

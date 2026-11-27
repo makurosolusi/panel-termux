@@ -75,7 +75,7 @@ describe("detectCliHost (K13, D1)", () => {
 
   test("neither and no PANEL_CLI_FAKE: not Termux", async () => {
     await expect(detectCliHost()).rejects.toBeInstanceOf(NotTermuxError);
-    await expect(detectCliHost()).rejects.toThrow("bukan Termux");
+    await expect(detectCliHost()).rejects.toThrow("not Termux");
   });
 
   test("PANEL_CLI_FAKE picks the fake host only when named; unknown scenario is an error", async () => {

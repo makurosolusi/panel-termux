@@ -1,7 +1,7 @@
-import { idLanding } from "@/web/i18n/id.landing";
+import { tLanding } from "@/web/i18n/en.landing";
 import { imgLoading, type Shot } from "./landing.shots";
 
-const t = idLanding.shots;
+const t = tLanding.shots;
 
 /** Light + dark variant of a screenshot, swapped by the `dark` variant (follows `data-theme`). */
 export function Screenshot({ shot, priority = false }: { shot: Shot; priority?: boolean }) {

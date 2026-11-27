@@ -1,7 +1,9 @@
+import type { Messages } from "@/shared/i18n";
 import type { BatteryStatus } from "@/shared/panel.types";
+import type { tOverview } from "./en.overview";
 
 /** Indonesian strings of the Ringkasan page (/panel). */
-export const idOverview = {
+export const idOverview: Messages<typeof tOverview> = {
   title: "Ringkasan",
   allHealthy: "Semua sehat",
   checkedAgo: (rel: string) => `dicek ${rel}`,
@@ -25,9 +27,9 @@ export const idOverview = {
     charge: {
       charging: "Sedang dicas",
       full: "Penuh",
-      discharging: "Tidak mengisi",
+      discharging: "Memakai baterai",
       not_charging: "Dicolok, tidak mengisi",
-      unknown: "Tidak mengisi",
+      unknown: "Tidak diketahui",
     } satisfies Record<BatteryStatus, string>,
     temperature: "Suhu baterai",
     temperatureNone: "Tidak tersedia",

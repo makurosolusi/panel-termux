@@ -1,11 +1,11 @@
 import type { CSSProperties } from "react";
-import { idLanding } from "@/web/i18n/id.landing";
+import { tLanding } from "@/web/i18n/en.landing";
 import { InstallCta } from "./cta.link";
 import { PhoneFrame } from "./device.frame";
 import { SHOTS } from "./landing.shots";
 import { Screenshot } from "./screenshot";
 
-const t = idLanding;
+const t = tLanding;
 const stagger = (i: number) => ({ "--lp-i": i }) as CSSProperties;
 
 /** Hero: headline, lead, install + GitHub CTAs, the phone screenshot and the spec strip. */

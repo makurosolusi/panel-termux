@@ -92,11 +92,11 @@ describe("data key file", () => {
   test("text holds the key, the panel URL and the restore command; name carries the local date", () => {
     const now = new Date(2026, 10, 26, 21, 30);
     const text = exportDataKeyText(KEY, BASE, now);
-    expect(text).toStartWith("Panel Termux — kunci data (data/secret)\n");
-    expect(text).toContain(`Panel: ${BASE} · dibuat 2026-11-26 21.30`);
+    expect(text).toStartWith("Panel Termux — data key (data/secret)\n");
+    expect(text).toContain(`Panel: ${BASE} · created 2026-11-26 21:30`);
     expect(text).toContain(`printf '%s' '${KEY}' > ~/panel/data/secret && chmod 600 ~/panel/data/secret`);
     expect(text.trimEnd().split("\n").at(-1)).toBe(KEY);
-    expect(dataKeyFileName(now)).toBe("panel-termux-kunci-data-2026-11-26.txt");
+    expect(dataKeyFileName(now)).toBe("panel-termux-data-key-2026-11-26.txt");
   });
 });
 
@@ -173,7 +173,7 @@ describe("/api/dev/security routes", () => {
     expect(res.status).toBe(200);
     expect(res.headers.get("cache-control")).toBe("no-store");
     expect(res.headers.get("content-disposition")).toMatch(
-      /^attachment; filename="panel-termux-kunci-data-\d{4}-\d\d-\d\d\.txt"$/,
+      /^attachment; filename="panel-termux-data-key-\d{4}-\d\d-\d\d\.txt"$/,
     );
     expect(await res.text()).toContain(KEY);
     expect(audits("secret.export")).toHaveLength(1);
@@ -188,18 +188,22 @@ describe("/api/dev/security routes", () => {
     expect(((await r403.json()) as { error: string }).error).toBe("reauth_required");
   });
 
-  test("reset: typed `hapus` + fresh session; 400 confirm_mismatch, 409 key_ok, 403 stale", async () => {
+  test("reset: typed `delete` (or the old `hapus`) + fresh session; 400 confirm_mismatch, 409 key_ok, 403 stale", async () => {
     put("cloudflare.api_token", OLD_KEY);
-    const bad = await call("POST", "/security/data-key/reset", root, { confirm: "HAPUS" });
+    const bad = await call("POST", "/security/data-key/reset", root, { confirm: "DELETE" });
     expect(bad.status).toBe(400);
     expect(((await bad.json()) as { error: string }).error).toBe("confirm_mismatch");
-    const ok = await call("POST", "/security/data-key/reset", root, { confirm: "hapus" });
+    expect((await call("POST", "/security/data-key/reset", root, { confirm: "reset" })).status).toBe(400);
+    const ok = await call("POST", "/security/data-key/reset", root, { confirm: "delete" });
     expect(ok.status).toBe(200);
     expect(((await ok.json()) as SecurityStatus).dataKey.state).toBe("ok");
     expect(db.select().from(setting).all()).toHaveLength(0);
-    const again = await call("POST", "/security/data-key/reset", root, { confirm: "hapus" });
+    const again = await call("POST", "/security/data-key/reset", root, { confirm: "delete" });
     expect(again.status).toBe(409);
     expect(((await again.json()) as { error: string }).error).toBe("key_ok");
+    put("cloudflare.api_token", OLD_KEY);
+    // the Indonesian UI word, accepted alongside the English one (PLAN/08 §5)
+    expect((await call("POST", "/security/data-key/reset", root, { confirm: "hapus" })).status).toBe(200);
     put("cloudflare.api_token", OLD_KEY);
     stale(rootSession);
     expect((await call("POST", "/security/data-key/reset", root, { confirm: "hapus" })).status).toBe(403);

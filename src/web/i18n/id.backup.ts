@@ -7,10 +7,12 @@ import type {
   BackupRunStatus,
   BackupTrigger,
 } from "@/shared/backup.types";
+import type { Messages } from "@/shared/i18n";
 import type { RunBlock } from "@/web/backup/backup.state";
+import type { tBackup } from "./en.backup";
 
 /** Indonesian strings of the /panel/backups page (PLAN/04 §5.3; merged into `id.backup`). Term: "Cadangan". */
-export const idBackup = {
+export const idBackup: Messages<typeof tBackup> = {
   section: "Cadangan",
   title: "Cadangan",
   subtitle: "Cadangan harian database, panel, dan file situs ke penyimpanan R2/S3.",

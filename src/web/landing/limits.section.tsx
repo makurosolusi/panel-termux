@@ -1,16 +1,18 @@
-import { idLanding } from "@/web/i18n/id.landing";
+import { tLanding } from "@/web/i18n/en.landing";
+import { LandingLegacyAnchor } from "./landing.anchors";
 import { SectionHead } from "./section.head";
 
-const t = idLanding.limits;
+const t = tLanding.limits;
 
-/** `#batasan`: honest limitations, as a numbered two-column list. */
+/** `#limits`: honest limitations, as a numbered two-column list. */
 export function LimitsSection() {
   return (
     <section
-      id="batasan"
+      id="limits"
       aria-labelledby="limits-title"
       className="mx-auto max-w-6xl scroll-mt-16 px-4 py-16 sm:px-6 md:py-24"
     >
+      <LandingLegacyAnchor of="limits" />
       <SectionHead id="limits-title" kicker={t.kicker} title={t.title} />
       <ol className="mt-12 grid gap-x-10 border-t border-lp-ink/80 md:grid-cols-2">
         {t.items.map((item, i) => (

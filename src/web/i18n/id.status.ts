@@ -1,7 +1,9 @@
+import type { Messages } from "@/shared/i18n";
 import type { StatusKey } from "@/web/components/status.vocab";
+import type { tStatus, tStatusHelp } from "./en.status";
 
 /** Badge label of every canonical status (PLAN/01 §3.1; frozen after W3, DECISIONS B12). */
-export const idStatus = {
+export const idStatus: Messages<typeof tStatus> = {
   running: "Berjalan",
   healthy: "Sehat",
   succeeded: "Berhasil",
@@ -33,7 +35,7 @@ export const idStatus = {
 } as const satisfies Record<StatusKey, string>;
 
 /** Help text shown next to a badge (or via `aria-describedby`) for statuses whose label alone could mislead. */
-export const idStatusHelp: Partial<Record<StatusKey, string>> = {
+export const idStatusHelp: Messages<typeof tStatusHelp> = {
   rolled_back: "Perubahan gagal; versi lama dipulihkan.",
   interrupted: "Panel dimulai ulang saat perubahan berjalan. Periksa lalu bersihkan.",
   auth_required: "Domain menjawab, tetapi meminta login (mis. Cloudflare Access).",

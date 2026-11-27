@@ -1,5 +1,7 @@
-import { formatBytes } from "@/shared/format.id";
+import { formatBytes } from "@/shared/format.number";
+import type { Messages } from "@/shared/i18n";
 import type { JobKind, JobNextAction, JobParams, JobStepKey, JobStepStatus } from "@/shared/job.types";
+import type { tJob } from "./en.job";
 
 /** Formats an outcome sentence from its coded params. */
 type Outcome = (p: JobParams) => string;
@@ -7,7 +9,7 @@ type Outcome = (p: JobParams) => string;
 /** Param as display text; missing → "–". */
 const s = (v: JobParams[string] | undefined): string => (v === undefined || v === null ? "–" : String(v));
 /** Byte param as "89,2 MB". */
-const b = (v: JobParams[string] | undefined): string => (typeof v === "number" ? formatBytes(v) : s(v));
+const b = (v: JobParams[string] | undefined): string => (typeof v === "number" ? formatBytes(v, "id") : s(v));
 const runtime = (v: JobParams[string] | undefined): string =>
   v === "native" ? "Android native" : v === "grun" ? "glibc (lewat grun)" : s(v);
 /** `health_timeout.last`: "refused", "no_answer" or an HTTP status. */
@@ -15,7 +17,7 @@ const lastAnswer = (v: JobParams[string] | undefined): string =>
   v === "refused" ? "port menolak koneksi" : v === "no_answer" ? "tidak menjawab" : `terakhir HTTP ${s(v)}`;
 
 /** Indonesian copy of job progress: kinds, step labels, coded outcomes, follow-up actions, recover modes (PLAN/03 §5.8). */
-export const idJob = {
+export const idJob: Messages<typeof tJob> = {
   title: "Progres perubahan",
   listTitle: "Riwayat perubahan",
   listDescription: "Semua perubahan situs yang dijalankan panel, terbaru di atas.",
@@ -216,6 +218,7 @@ export const idJob = {
   liveStep: (n: number, total: number, label: string, state: string) =>
     `Langkah ${n} dari ${total}: ${label}… ${state}`,
   progress: (pct: number) => `${pct}%`,
+  underSecond: "< 1 dtk",
   blip: "Panel terputus sebentar karena cloudflared dimulai ulang. Halaman ini lanjut sendiri.",
   lostTitle: "Progres tidak bisa dimuat",
   lostBody: "Panel tidak menjawab lebih dari 2 menit. Periksa koneksi dan HP server, lalu coba lagi.",

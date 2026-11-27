@@ -3,7 +3,7 @@ import { InfoIcon, LogInIcon, type LucideIcon, OctagonXIcon, TriangleAlertIcon }
 import type { ReactNode } from "react";
 import { TONE_CLASS, TONE_TEXT } from "@/web/components/status.tone";
 import { Button } from "@/web/components/ui/button";
-import { idSecurity } from "@/web/i18n/id.security";
+import { tSecurity } from "@/web/i18n/en.security";
 import { reauthenticate } from "./security.api";
 
 /** Tones a notice can have. */
@@ -45,8 +45,8 @@ export function Notice({
 }
 
 /** "Sign in again" notice shown after a 403 `reauth_required`; the button starts Google sign-in back to this page. */
-export function ReauthNotice({ message = idSecurity.reauth.body }: { message?: string }) {
-  const t = idSecurity.reauth;
+export function ReauthNotice({ message = tSecurity.reauth.body }: { message?: string }) {
+  const t = tSecurity.reauth;
   return (
     <Notice
       tone="warning"

@@ -7,21 +7,21 @@ import type {
   IntegrationCheck,
   SiteAdoptRequest,
 } from "@/shared/site.types";
-import { idSite } from "@/web/i18n/id.site";
+import { tSite } from "@/web/i18n/en.site";
 import { renderCopy } from "./site.check";
 
-const d = idSite.discovered;
+const d = tSite.discovered;
 type CheckCopyEntry = Parameters<typeof renderCopy>[0];
-const a = idSite.adopt;
+const a = tSite.adopt;
 
-/** One "Belum dikelola" row: where the domain points and whether it can be adopted (and why not). */
+/** One "Not managed yet" row: where the domain points and whether it can be adopted (and why not). */
 export type DiscoveredRow = { hostname: string; target: string; adoptable: boolean; reason: string | null };
 
 /** "port 3005 → makuro-solusi"; the panel's own host reads "Panel Termux (domain ini)". */
 export function discoveredRow(i: DiscoveredIngress, apps: readonly AdoptCandidateApp[]): DiscoveredRow {
   if (i.self || i.blockers?.includes("self"))
     return { hostname: i.hostname, target: d.self, adoptable: false, reason: null };
-  const port = i.port === null ? d.noPort : idSite.list.port(i.port);
+  const port = i.port === null ? d.noPort : tSite.list.port(i.port);
   const match = i.match ?? i.app ?? null;
   const target = `${port} → ${match ?? d.noApp}`;
   if (i.blockers?.includes("wildcard")) return { hostname: i.hostname, target, adoptable: false, reason: d.wildcard };
@@ -32,7 +32,7 @@ export function discoveredRow(i: DiscoveredIngress, apps: readonly AdoptCandidat
   return { hostname: i.hostname, target, adoptable: any, reason };
 }
 
-/** Rows of the "Belum dikelola" section: adoptable first, the panel's own host last. */
+/** Rows of the "Not managed yet" section: adoptable first, the panel's own host last. */
 export function discoveredRows(data: Discovered): DiscoveredRow[] {
   const rank = (r: DiscoveredRow) => (r.adoptable ? 0 : r.target === d.self ? 2 : 1);
   return data.ingress.map((i) => discoveredRow(i, data.apps)).sort((x, y) => rank(x) - rank(y));
@@ -74,7 +74,7 @@ export function adoptBody(
   return { hostname, app: app.name, name };
 }
 
-/** Folder / runtime / port lines of the chosen app, e.g. "glibc · dijalankan lewat grun", "3005 · dari `.env`". */
+/** Folder / runtime / port lines of the chosen app, e.g. "glibc · runs through grun", "3005 · from `.env`". */
 export function appFacts(app: AdoptCandidateApp): { folder: string; runtime: string; port: string } {
   const runtime = app.runtime ? a.runtimes[app.runtime] : a.unknown;
   const port =
@@ -94,7 +94,7 @@ export const integrationReady = (i: Integration): boolean => i.ready ?? i.issues
 
 const checksOf = (i: Integration): IntegrationCheck[] => i.checks ?? [];
 
-/** The Persiapan card shows while not ready or while pm2 has a warning (auto-exit, guard). */
+/** The Setup card shows while not ready or while pm2 has a warning (auto-exit, guard). */
 export const setupNeeded = (i: Integration): boolean =>
   !integrationReady(i) || checksOf(i).some((c) => c.key.startsWith("pm2_") && c.state !== "ok");
 
@@ -103,14 +103,14 @@ export const failingChecks = (i: Integration): IntegrationCheck[] => checksOf(i)
 
 /** Text of one check for its state (ok text when a state has no own copy). */
 export function checkText(c: IntegrationCheck): string {
-  const copy: Partial<Record<IntegrationCheck["state"], CheckCopyEntry>> = idSite.setup.checks[c.key];
+  const copy: Partial<Record<IntegrationCheck["state"], CheckCopyEntry>> = tSite.setup.checks[c.key];
   const forState = copy[c.state] ?? copy.ok ?? c.key;
   return renderCopy(forState, c.params);
 }
 
 const stateOf = (i: Integration, key: IntegrationCheck["key"]) => checksOf(i).find((c) => c.key === key)?.state;
 
-/** "Cara manual" shows the block steps: the ecosystem does not load panel sites through the current block yet. */
+/** "Manual steps" shows the block steps: the ecosystem does not load panel sites through the current block yet. */
 export const snippetNeeded = (i: Integration): boolean =>
   stateOf(i, "ecosystem_spreads_apps_json") !== "ok" || stateOf(i, "snippet_current") !== "ok";
 
@@ -175,17 +175,17 @@ export function rowBlocked(i: Integration, c: IntegrationCheck): FixBlockReason 
   return c.state === "error" ? (NO_FIX_REASON[c.key] ?? null) : null;
 }
 
-/** Fixes behind "Perbaiki semua (n)": one per failing row, in checklist order. */
+/** Fixes behind "Fix all (n)": one per failing row, in checklist order. */
 export const applicableFixes = (i: Integration): FixKey[] => visibleChecks(i).flatMap((c) => rowFix(i, c) ?? []);
 
 /**
- * Rows the "Periksa lagi" line counts as still to fix: every failing error plus every warning with a fix, so the number
- * never trails "Perbaiki semua (n)" (QA fix-07 MAJOR-N1). Optional warnings without a fix (token) are not counted.
+ * Rows the "Check again" line counts as still to fix: every failing error plus every warning with a fix, so the number
+ * never trails "Fix all (n)" (QA fix-07 MAJOR-N1). Optional warnings without a fix (token) are not counted.
  */
 export const remainingProblems = (i: Integration): number =>
   visibleChecks(i).filter((c) => c.state === "error" || (c.state === "warning" && rowFix(i, c) !== null)).length;
 
-/** "Cara manual" opens by itself when a failing row has a fix the panel cannot apply. */
+/** "Manual steps" opens by itself when a failing row has a fix the panel cannot apply. */
 export const manualOpen = (i: Integration): boolean => visibleChecks(i).some((c) => rowBlocked(i, c) !== null);
 
 /** `--no-auto-exit` is in the run script but pm2 has not restarted since (ok + info, no button). */
@@ -194,7 +194,7 @@ export const pm2Pending = (i: Integration): boolean =>
 
 /** Dialog title of one fix once its preview is known: replacing the old line is an update, not a first connection. */
 export function previewTitle(p: FixPreview): string {
-  const dl = idSite.setup.dialog;
+  const dl = tSite.setup.dialog;
   if (p.key === "ecosystem_block" && p.effects.oldSpread) return dl.ecosystem_block.titleUpdate;
   // folder already there: only the ecosystem file is made
   if (p.key === "sites_dir_create" && !p.effects.dir && p.effects.newEcosystem)
@@ -204,7 +204,7 @@ export function previewTitle(p: FixPreview): string {
 
 /** Plain-language lines of one fix preview, for the dialog (readers who never open the diff). */
 export function fixSummary(p: FixPreview): string[] {
-  const dl = idSite.setup.dialog;
+  const dl = tSite.setup.dialog;
   const e = p.effects;
   // pm2_auto_exit's own body already says when it takes effect
   const restart = e.appliesOnRestart ? [dl.restartNote] : [];
@@ -228,7 +228,7 @@ export function fixSummary(p: FixPreview): string[] {
 
 /**
  * The first `done` previews were applied and one of them only takes effect when pm2 starts again (new ecosystem file,
- * rebuilt apps.json): the card then offers "Mulai ulang pm2 sekarang". pm2_auto_exit has its own server-side pending.
+ * rebuilt apps.json): the card then offers "Restart pm2 now". pm2_auto_exit has its own server-side pending.
  */
 export const restartNeeded = (previews: readonly FixPreview[], done: number): boolean =>
   previews.slice(0, done).some((p) => p.effects.appliesOnRestart && p.key !== "pm2_auto_exit");

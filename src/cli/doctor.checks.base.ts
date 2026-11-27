@@ -2,14 +2,19 @@
 // hint → action rule.
 import type { DoctorAction, DoctorBootstrapKey, DoctorCheck, DoctorGroup, DoctorState } from "../shared/doctor.types";
 import type { JobParams } from "../shared/job.types";
+import { tr } from "./cli.locale";
 
 /** Next step when a piece of the install is missing: `init` repairs it (0.5.1, PLAN/07 §2.1). */
-export const REINSTALL = "jalankan: panel init (bila perintah panel belum ada: ulangi baris pasang di README)";
+export const reinstall = (): string =>
+  tr(
+    "run: panel init (if the panel command does not exist yet: run the install line from the README again)",
+    "jalankan: panel init (bila perintah panel belum ada: ulangi baris pasang di README)",
+  );
 
 /** A failing outcome: state, label, next step (→ line), params. */
 export type Bad = [state: DoctorState, label: string, hint?: string | null, params?: JobParams];
 
-/** `action` follows from the hint, so every → line and its JSON action agree. */
+/** `action` follows from the hint, so every → line and its JSON action agree (`open …` = a page of the panel). */
 const actionOf = (hint: string | null): DoctorAction =>
   !hint
     ? null
@@ -17,7 +22,7 @@ const actionOf = (hint: string | null): DoctorAction =>
       ? "init"
       : hint.includes("panel docs")
         ? "docs"
-        : hint.startsWith("buka ")
+        : hint.startsWith(tr("open ", "buka "))
           ? "ui"
           : "manual";
 

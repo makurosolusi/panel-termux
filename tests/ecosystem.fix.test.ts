@@ -109,6 +109,26 @@ describe.skipIf(!node)("ecosystem fix edge cases", () => {
     copyFileSync(fixture("poco"), eco);
   });
 
+  test("v1 block (0.3.x, Indonesian comments) is outdated: preview, apply → v2 block, backup of the v1 file", async () => {
+    copyFileSync(fixture("marked-v1"), eco);
+    const before = readFileSync(eco);
+    const old = await json<Integration>(await call("POST", "/integration/verify"));
+    expect(old.checks?.find((c) => c.key === "snippet_current")?.state).toBe("warning");
+    expect(old.fixes?.find((f) => f.key === "ecosystem_block")?.available).toBe(true);
+    const p = await json<FixPreview>(await preview());
+    expect(p.files).toHaveLength(1);
+    const r = await json<{ outcome: string; integration: Integration }>(await apply());
+    expect(r.outcome).toBe("applied");
+    const now = readFileSync(eco, "utf8");
+    expect(now).toContain("// >>> panel-termux:apps v2 (managed by Panel Termux;");
+    expect(now).not.toContain("dikelola");
+    expect(now.startsWith(before.toString("utf8").slice(0, before.indexOf("// >>>")))).toBe(true);
+    const backup = listFixBackups(h.dir, "ecosystem")[0];
+    expect(readFileSync(backup?.path as string).equals(before)).toBe(true);
+    expect(r.integration.checks?.find((c) => c.key === "snippet_current")?.state).toBe("ok");
+    copyFileSync(fixture("poco"), eco);
+  });
+
   test("boot removes an orphan candidate (it may hold env secrets)", () => {
     writeFileSync(join(sites, ECOSYSTEM_CANDIDATE), "module.exports = { apps: [] }; // env: s3cret\n");
     h.api.decorator.sites.removeFixCandidate();

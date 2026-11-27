@@ -57,14 +57,18 @@ describe("ENV_VARS", () => {
     for (const v of vars) expect(v.required ? v.default === undefined : v.default !== undefined).toBe(true);
   });
 
-  test("secrets have no example; every var has a one-line description", () => {
+  test("secrets have no example; every var has a one-line description in both locales", () => {
     for (const v of vars) {
       if (v.secret) expect(v.example).toBeUndefined();
-      expect(v.description).not.toContain("\n");
-      expect(v.description.length).toBeGreaterThan(0);
+      for (const d of [v.description.en, v.description.id]) {
+        expect(d).not.toContain("\n");
+        expect(d.length).toBeGreaterThan(0);
+      }
+      expect(v.description.en).not.toBe(v.description.id);
     }
     expect(byName("GOOGLE_CLIENT_SECRET").secret).toBe(true);
-    expect(byName("GOOGLE_CLIENT_SECRET").description).toContain("Rahasia");
+    expect(byName("GOOGLE_CLIENT_SECRET").description.en).toContain("Secret: never share");
+    expect(byName("GOOGLE_CLIENT_SECRET").description.id).toContain("Rahasia");
   });
 
   test("placeholders are the 0.4.0 .env.example sample values", () => {
@@ -89,21 +93,54 @@ describe("isEnvValueMissing", () => {
   });
 });
 
+test("PANEL_LANG: optional, default en; parseEnv never fails on it (the server does not use it, E12)", () => {
+  expect(byName("PANEL_LANG")).toMatchObject({ required: false, default: "en", secret: false });
+  expect(parseEnv({ ...valid, PANEL_LANG: "id" }).PANEL_LANG).toBe("id");
+  expect(parseEnv({ ...valid, PANEL_LANG: "klingon" }).PANEL_LANG).toBeUndefined();
+});
+
 describe("renderEnvTemplate", () => {
   const minimal = [
-    "# Panel Termux — .env minimal. Isi nilai yang kosong, simpan sebagai ~/panel/.env (chmod 600).",
-    "# Pengaturan lain (Cloudflare, backup, Telegram, situs, monitor) ada di /dev → Pengaturan. Panduan: panel docs google",
+    "# Panel Termux — minimal .env. Fill in the empty values, save as ~/panel/.env (chmod 600).",
+    "# Other settings (Cloudflare, backup, Telegram, sites, monitor) are in Administration → Settings. Guide: panel docs google",
     "",
-    "# Alamat publik panel (https://domain, atau http://localhost:<port> saat lokal). Contoh: https://panel.contoh.com",
+    "# Public address of the panel (https://domain, or http://localhost:<port> when local). Example: https://panel.example.org",
+    "APP_BASE_URL=",
+    "# Google OAuth Client ID (type Web application). Example: 1234-abcd.apps.googleusercontent.com",
+    "GOOGLE_CLIENT_ID=",
+    "# Google OAuth Client secret. Secret: never share or commit it.",
+    "GOOGLE_CLIENT_SECRET=",
+    "# Google emails that become Super Admin, separated by commas. Example: you@example.org",
+    "SUPER_ADMIN_EMAILS=",
+  ];
+  const optional = [
+    "",
+    "# --- Optional: remove the # to change the default ---",
+    "# Panel port (always listens on 127.0.0.1 only).",
+    "# PORT=3200",
+    "# Folder of panel.db and the secret (back it up). Relative to the working directory.",
+    "# PANEL_DATA_DIR=./data",
+    '# URL the monitor checks to tell "no internet" from "site down".',
+    "# PANEL_CONNECTIVITY_URL=https://www.gstatic.com/generate_204",
+    "# 1 = run migrations even if the panel.db snapshot fails (e.g. disk full). For one start only, then remove it.",
+    "# PANEL_SKIP_SNAPSHOT=0",
+    "# Language of the panel CLI: en (English) or id (Bahasa Indonesia). panel init asks once.",
+    "# PANEL_LANG=en",
+  ];
+  const minimalId = [
+    "# Panel Termux — .env minimal. Isi nilai yang kosong, simpan sebagai ~/panel/.env (chmod 600).",
+    "# Pengaturan lain (Cloudflare, backup, Telegram, situs, monitor) ada di Administrasi → Pengaturan. Panduan: panel docs google",
+    "",
+    "# Alamat publik panel (https://domain, atau http://localhost:<port> saat lokal). Contoh: https://panel.example.org",
     "APP_BASE_URL=",
     "# Client ID OAuth Google (tipe Web application). Contoh: 1234-abcd.apps.googleusercontent.com",
     "GOOGLE_CLIENT_ID=",
     "# Client secret OAuth Google. Rahasia: jangan dibagikan atau di-commit.",
     "GOOGLE_CLIENT_SECRET=",
-    "# Email Google yang menjadi super admin, pisahkan dengan koma. Contoh: kamu@contoh.com",
+    "# Email Google yang menjadi Super Admin, pisahkan dengan koma. Contoh: you@example.org",
     "SUPER_ADMIN_EMAILS=",
   ];
-  const optional = [
+  const optionalId = [
     "",
     "# --- Opsional: hapus tanda # untuk mengubah nilai bawaan ---",
     "# Port panel (selalu listen di 127.0.0.1 saja).",
@@ -114,6 +151,8 @@ describe("renderEnvTemplate", () => {
     "# PANEL_CONNECTIVITY_URL=https://www.gstatic.com/generate_204",
     "# 1 = migrasi tetap jalan walau snapshot panel.db gagal (mis. disk penuh). Hanya untuk satu kali start, lalu hapus.",
     "# PANEL_SKIP_SNAPSHOT=0",
+    "# Bahasa CLI panel: en (English) atau id (Bahasa Indonesia). panel init menanyakannya sekali.",
+    "# PANEL_LANG=en",
   ];
 
   test("minimal = PLAN §6.2 text: 4 required keys, empty values", () => {
@@ -122,11 +161,18 @@ describe("renderEnvTemplate", () => {
 
   test("full = minimal + optional vars commented out at their defaults", () => {
     expect(renderEnvTemplate({ full: true })).toBe(`${[...minimal, ...optional].join("\n")}\n`);
+    expect(renderEnvTemplate({ full: true, locale: "en" })).toBe(renderEnvTemplate({ full: true }));
+  });
+
+  test("locale id: the same lines with the Indonesian comments", () => {
+    expect(renderEnvTemplate({ full: false, locale: "id" })).toBe(`${minimalId.join("\n")}\n`);
+    expect(renderEnvTemplate({ full: true, locale: "id" })).toBe(`${[...minimalId, ...optionalId].join("\n")}\n`);
   });
 
   test("never prints placeholders, has no version header, every schema key appears once", () => {
     const full = renderEnvTemplate({ full: true });
-    for (const p of vars.flatMap((v) => v.placeholders ?? [])) expect(full).not.toContain(p);
+    const both = full + renderEnvTemplate({ full: true, locale: "id" });
+    for (const p of vars.flatMap((v) => v.placeholders ?? [])) expect(both).not.toContain(p);
     expect(full.split("\n", 2).join("\n")).not.toMatch(/\d+\.\d+/);
     for (const v of vars) expect(full.match(new RegExp(`^(# )?${v.name}=`, "gm"))?.length).toBe(1);
   });

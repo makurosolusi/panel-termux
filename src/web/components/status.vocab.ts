@@ -18,7 +18,7 @@ import {
 } from "lucide-react";
 import type { LogLevel } from "@/shared/dev.types";
 import type { ProblemSeverity } from "@/shared/monitor.types";
-import { idStatus, idStatusHelp } from "@/web/i18n/id.status";
+import { tStatus, tStatusHelp } from "@/web/i18n/en.status";
 import type { StatusTone } from "./status.tone";
 
 /** Canonical display state; every badge/dot/icon in the panel is one of these. */
@@ -110,8 +110,8 @@ export function statusView(key: StatusKey): StatusView {
   const meta = STATUS_META[key];
   return {
     key,
-    label: idStatus[key],
-    help: idStatusHelp[key] ?? null,
+    label: tStatus[key],
+    help: tStatusHelp[key] ?? null,
     tone: meta.tone,
     pulse: meta.pulse ?? false,
     icon: meta.icon,

@@ -1,10 +1,15 @@
 // CLI dispatcher (PLAN/07 K2, K3, §2.1, §2.2). Static imports stay in src/cli + src/shared + package.json so
 // `-v`/`--help` evaluate nothing of the server; commands and CliHost load on demand (lab L5).
+import { homedir } from "node:os";
+import { join } from "node:path";
 import { type ParseArgsConfig, parseArgs } from "node:util";
 import pkg from "../../package.json" with { type: "json" };
+import { LOCALES, type Locale } from "../shared/locale";
 import { COMMAND_HELP, COMMAND_NAMES, type CommandName, GENERAL_HELP, SERVE_HINT, UPGRADE_HINT } from "./cli.help";
 import type { CliHost } from "./cli.host";
+import { activeCliLocale, cliLocale, setCliLocale, tr } from "./cli.locale";
 import { CliExit, type CliOut, createCliOut } from "./cli.output";
+import { type EnvFileValues, readEnvFile } from "./env.file";
 
 /** Parsed flags and positionals of one command (node:util parseArgs, strict). */
 export type ParsedArgs = {
@@ -18,7 +23,8 @@ export type Command = (args: ParsedArgs, io: CliIo) => Promise<number>;
 
 type Spec = { options: NonNullable<ParseArgsConfig["options"]>; maxPositionals: number; load: () => Promise<Command> };
 
-const HELP = { help: { type: "boolean", short: "h" } } as const;
+/** Options every command accepts: help and the output language (E12). */
+const HELP = { help: { type: "boolean", short: "h" }, lang: { type: "string" } } as const;
 const GLOBAL = { options: { ...HELP, version: { type: "boolean", short: "v" } }, maxPositionals: 0 } as const;
 const USAGE = 2;
 const FAILED = 1;
@@ -79,11 +85,12 @@ export function normalizeArgv(argv: readonly string[]): string[] {
   return out;
 }
 
-const PARSE_ERRORS: Record<string, string> = {
-  ERR_PARSE_ARGS_UNKNOWN_OPTION: "Opsi tidak dikenal",
-  ERR_PARSE_ARGS_INVALID_OPTION_VALUE: "Nilai opsi tidak valid",
-  ERR_PARSE_ARGS_UNEXPECTED_POSITIONAL: "Argumen tidak dikenal",
+const PARSE_ERRORS: Record<string, () => string> = {
+  ERR_PARSE_ARGS_UNKNOWN_OPTION: () => tr("Unknown option", "Opsi tidak dikenal"),
+  ERR_PARSE_ARGS_INVALID_OPTION_VALUE: () => tr("Invalid option value", "Nilai opsi tidak valid"),
+  ERR_PARSE_ARGS_UNEXPECTED_POSITIONAL: () => tr("Unknown argument", "Argumen tidak dikenal"),
 };
+const seeHelp = (helpRef: string) => `${tr("see", "lihat")}: ${helpRef} --help`;
 
 /** parseArgs, with its errors turned into an exit-2 CliExit naming the offending argument. */
 function parse(args: string[], spec: Pick<Spec, "options" | "maxPositionals">, helpRef: string): ParsedArgs {
@@ -94,10 +101,18 @@ function parse(args: string[], spec: Pick<Spec, "options" | "maxPositionals">, h
     const what = PARSE_ERRORS[(e as { code?: string }).code ?? ""];
     if (!what) throw e;
     const arg = /'([^']+)'/.exec((e as Error).message)?.[1] ?? args.join(" ");
-    throw new CliExit(USAGE, `${what}: ${arg}`, `lihat: ${helpRef} --help`);
+    throw new CliExit(USAGE, `${what()}: ${arg}`, seeHelp(helpRef));
   }
+  const lang = parsed.values.lang;
+  if (lang !== undefined && !LOCALES.includes(lang as Locale))
+    throw new CliExit(
+      USAGE,
+      `${PARSE_ERRORS.ERR_PARSE_ARGS_INVALID_OPTION_VALUE?.()}: --lang ${lang} (en, id)`,
+      seeHelp(helpRef),
+    );
   const extra = parsed.positionals[spec.maxPositionals];
-  if (extra !== undefined) throw new CliExit(USAGE, `Argumen tidak dikenal: ${extra}`, `lihat: ${helpRef} --help`);
+  if (extra !== undefined)
+    throw new CliExit(USAGE, `${PARSE_ERRORS.ERR_PARSE_ARGS_UNEXPECTED_POSITIONAL?.()}: ${extra}`, seeHelp(helpRef));
   return parsed;
 }
 
@@ -107,33 +122,41 @@ async function detectHost(): Promise<CliHost> {
     return await detectCliHost();
   } catch (e) {
     if (e instanceof NotTermuxError)
-      throw new CliExit(FAILED, e.message, "untuk mencoba tanpa Termux: PANEL_CLI_FAKE=ready panel doctor");
+      throw new CliExit(
+        FAILED,
+        e.message,
+        tr(
+          "to try without Termux: PANEL_CLI_FAKE=ready panel doctor",
+          "untuk mencoba tanpa Termux: PANEL_CLI_FAKE=ready panel doctor",
+        ),
+      );
     if (e instanceof FakeScenarioError) throw new CliExit(USAGE, e.message);
     throw e;
   }
 }
 
 async function dispatch(argv: string[], out: CliOut, host: () => Promise<CliHost>): Promise<number> {
+  const { locale } = activeCliLocale();
   if (argv.length === 0) {
-    out.note(GENERAL_HELP);
-    out.note(SERVE_HINT);
+    out.note(GENERAL_HELP[locale]);
+    out.note(SERVE_HINT[locale]);
     return USAGE;
   }
   const [first = "", ...rest] = argv;
   if (first.startsWith("-")) {
-    out.line(parse(argv, GLOBAL, "panel").values.help ? GENERAL_HELP : versionLine());
+    out.line(parse(argv, GLOBAL, "panel").values.help ? GENERAL_HELP[locale] : versionLine());
     return 0;
   }
   if (!(COMMAND_NAMES as readonly string[]).includes(first)) {
-    out.fail(`Perintah tidak dikenal: ${first}`, "lihat: panel --help");
-    if (LATER.has(first)) out.note(UPGRADE_HINT);
+    out.fail(`${tr("Unknown command", "Perintah tidak dikenal")}: ${first}`, seeHelp("panel"));
+    if (LATER.has(first)) out.note(UPGRADE_HINT[locale]);
     return USAGE;
   }
   const name = first as CommandName;
   const spec = COMMANDS[name];
   const args = parse(rest, { ...spec, options: { ...spec.options, ...HELP } }, `panel ${name}`);
   if (args.values.help) {
-    out.line(COMMAND_HELP[name]);
+    out.line(COMMAND_HELP[locale][name]);
     return 0;
   }
   const command = await spec.load();
@@ -141,12 +164,29 @@ async function dispatch(argv: string[], out: CliOut, host: () => Promise<CliHost
     return await command(args, { out, host });
   } catch (e) {
     if (e instanceof CliExit) throw e;
-    throw new CliExit(FAILED, `Gagal menjalankan panel ${name}: ${(e as Error).message}`);
+    throw new CliExit(FAILED, tr(`panel ${name} failed: `, `Gagal menjalankan panel ${name}: `) + (e as Error).message);
   }
 }
 
-/** Runs the CLI for `argv` (without the binary name) and returns the exit code; never serves (main.ts does). */
-export async function runCli(argv: readonly string[], io: Partial<CliIo> = {}): Promise<number> {
+/** ~/panel/.env values for the language lookup; an unreadable file only means "no PANEL_LANG there" (doctor reports it). */
+function panelEnvFile(env: Record<string, string | undefined>): EnvFileValues | null {
+  try {
+    return readEnvFile(join(env.HOME || homedir(), "panel", ".env"));
+  } catch {
+    return null; // readEnvFile already threw with the path; the language falls back to the shell locale
+  }
+}
+
+/**
+ * Runs the CLI for `argv` (without the binary name) and returns the exit code; never serves (main.ts does). `env`
+ * (default process.env) picks the language once per run (cli.locale.ts).
+ */
+export async function runCli(
+  argv: readonly string[],
+  io: Partial<CliIo> & { env?: Record<string, string | undefined> } = {},
+): Promise<number> {
+  const env = io.env ?? process.env;
+  setCliLocale(cliLocale(env, argv, () => panelEnvFile(env)));
   const out = io.out ?? createCliOut();
   let cached: Promise<CliHost> | undefined;
   const host = io.host ?? (() => (cached ??= detectHost()));

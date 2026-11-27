@@ -10,13 +10,13 @@ import { Button } from "@/web/components/ui/button";
 import { Input } from "@/web/components/ui/input";
 import { Label } from "@/web/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/web/components/ui/select";
-import { idSiteDetail } from "@/web/i18n/id.site-detail";
+import { tSiteDetail } from "@/web/i18n/en.site-detail";
 import { runApiAction } from "@/web/shared/api.action";
 import { apiFetch, type ErrorCodes } from "@/web/shared/api.client";
 import { siteUrl } from "./site.api";
 import { type HealthForm, healthForm, healthFormErrors, healthOf, healthPatch } from "./site-detail.state";
 
-const t = idSiteDetail.settings;
+const t = tSiteDetail.settings;
 
 /** Health check settings of a site (path, expected status, timeout 10–300 s) → PATCH /sites/:name/settings. */
 export function SiteSettings({

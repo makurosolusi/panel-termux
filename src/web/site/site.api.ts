@@ -2,8 +2,8 @@ import { createElement, useEffect, useState } from "react";
 import type { FixBlockReason, FixKey, FixPreview, FixResult, Pm2RestartResult } from "@/shared/fix.types";
 import type { Integration, JobAccepted, SiteCheckRequest, SiteCheckResult } from "@/shared/site.types";
 import { CodeText } from "@/web/components/code-text";
-import { idServiceStart } from "@/web/i18n/id.service-start";
-import { idSite } from "@/web/i18n/id.site";
+import { tServiceStart } from "@/web/i18n/en.service-start";
+import { tSite } from "@/web/i18n/en.site";
 import { panelUrl } from "@/web/panel/panel.api";
 import { ERROR_TOAST_MS } from "@/web/shared/api.action";
 import { ApiError, apiErrorMessage, apiFetch } from "@/web/shared/api.client";
@@ -11,7 +11,7 @@ import { startService } from "@/web/shared/service-start";
 import { toast } from "@/web/shared/toast.lazy";
 
 /** Error copy of the site API by code (409 `busy` = another change is running). */
-export const SITE_ERROR_CODES: Readonly<Record<string, string>> = idSite.errorCodes;
+export const SITE_ERROR_CODES: Readonly<Record<string, string>> = tSite.errorCodes;
 
 /** `/api/panel/sites/<name>` (+ `rest`), name URL-encoded. */
 export const siteUrl = (name: string, rest = ""): string => panelUrl(`/sites/${encodeURIComponent(name)}${rest}`);
@@ -26,15 +26,15 @@ export const hostnameRemoveUrl = (name: string, hostname: string, confirm?: stri
 /** SPA path of a job's progress view. */
 export const jobPath = (jobId: string): string => `/panel/jobs/${encodeURIComponent(jobId)}`;
 
-/** Error codes meaning "pm2 is down": their toast carries a "Jalankan pm2" action (PLAN/06 §6.1). */
+/** Error codes meaning "pm2 is down": their toast carries a "Start pm2" action (PLAN/06 §6.1). */
 const PM2_DOWN: ReadonlySet<string> = new Set(["pm2_not_running", "pm2_unavailable"]);
 
-/** Error toast of a site action (code spans as <code>); pm2 down adds a "Jalankan pm2" button. */
+/** Error toast of a site action (code spans as <code>); pm2 down adds a "Start pm2" button. */
 export function toastSiteError(err: unknown, codes: Readonly<Record<string, string>> = SITE_ERROR_CODES): void {
   const pm2Down = err instanceof ApiError && err.code !== null && PM2_DOWN.has(err.code);
   toast.error(createElement(CodeText, null, apiErrorMessage(err, codes)), {
     duration: ERROR_TOAST_MS,
-    action: pm2Down ? { label: idServiceStart.label("pm2"), onClick: () => void startService("pm2") } : undefined,
+    action: pm2Down ? { label: tServiceStart.label("pm2"), onClick: () => void startService("pm2") } : undefined,
   });
 }
 
@@ -110,11 +110,11 @@ export function useSiteCheck(req: SiteCheckRequest | null) {
 // ---- integration fixes (PLAN/06 §5.2) ----
 
 /** Error copy of the fix endpoints: the fix-specific text wins over the site one (e.g. `busy`). */
-export const FIX_ERROR_CODES: Readonly<Record<string, string>> = { ...SITE_ERROR_CODES, ...idSite.setup.errors };
+export const FIX_ERROR_CODES: Readonly<Record<string, string>> = { ...SITE_ERROR_CODES, ...tSite.setup.errors };
 
 /** Message of a fix-endpoint error; 422 `not_fixable` names why (the `reason` the server sent). */
 export function fixErrorMessage(err: unknown): string {
-  const t = idSite.setup;
+  const t = tSite.setup;
   const why =
     err instanceof ApiError && err.code === "not_fixable" && err.reason
       ? t.unfixable[err.reason as FixBlockReason]
@@ -157,9 +157,9 @@ export async function applyFixes(previews: readonly FixPreview[]): Promise<FixRu
   return { done: previews.length, integration, error: null };
 }
 
-/** Toast of a fix run: done (past tense), "Tidak diterapkan" as a warning, other errors by code. */
+/** Toast of a fix run: done (past tense), "Not applied" as a warning, other errors by code. */
 export function toastFixRun(run: FixRun): void {
-  const t = idSite.setup;
+  const t = tSite.setup;
   if (run.error === null) {
     toast.success(run.done > 1 ? t.doneAll(run.done) : t.done);
     return;

@@ -6,11 +6,11 @@ import { CodeText } from "@/web/components/code-text";
 import { CopyButton } from "@/web/components/copy-button";
 import { StatusIcon } from "@/web/components/status-icon";
 import { Button } from "@/web/components/ui/button";
-import { idJob } from "@/web/i18n/id.job";
+import { tJob } from "@/web/i18n/en.job";
 import { durationText, outcomeText, shownStepStatus, stepDurationMs, stepEndMs, stepLabel } from "./job.state";
 import { JOB_STEP_STATUS_KEY } from "./job.status-key";
 
-const t = idJob;
+const t = tJob;
 
 /** Copy text of a step's technical detail and log lines. */
 const detailText = (s: JobStep) => [s.detail, ...(s.log ?? [])].filter(Boolean).join("\n");

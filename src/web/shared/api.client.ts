@@ -1,38 +1,16 @@
 import type { ApiErrorBody } from "@/shared/dev.types";
-import { idCommon } from "@/web/i18n/id.common";
+import { tCommon } from "@/web/i18n/en.common";
 import { LOGIN_PATH } from "@/web/session/session.redirect";
+import { AJAX_HEADERS, ApiError, type ApiErrorKind } from "./api.error";
 import { reloadOnce } from "./chunk.error";
 
-/** How an API call failed: no response, expired session, Cloudflare Access challenge, wrong role, other 4xx, or 5xx. */
-export type ApiErrorKind = "network" | "unauthorized" | "access" | "forbidden" | "client" | "server";
+export { AJAX_HEADERS, ApiError, type ApiErrorKind };
 
-/** Indonesian messages per server error code (`{ error: code }`), owned by each section. */
+/** Messages per server error code (`{ error: code }`), owned by each section. */
 export type ErrorCodes = Readonly<Record<string, string>>;
-
-/** Failure of an `/api/*` call; `code`/`serverMessage`/`reason` come from the `{ error, message, reason }` body. */
-export class ApiError extends Error {
-  constructor(
-    readonly kind: ApiErrorKind,
-    readonly status: number | null,
-    readonly code: string | null,
-    readonly serverMessage: string | null,
-    options?: ErrorOptions,
-    /** Machine-readable sub-code, e.g. why a 422 `not_fixable` cannot be fixed. */
-    readonly reason: string | null = null,
-  ) {
-    super(`api ${kind}${status ? ` HTTP ${status}` : ""}${code ? ` (${code})` : ""}`, options);
-  }
-}
 
 const isErrorBody = (v: unknown): v is ApiErrorBody =>
   typeof v === "object" && v !== null && typeof (v as ApiErrorBody).error === "string";
-
-/**
- * Sent on every `/api` call so Cloudflare Access answers an expired session with 401 instead of redirecting
- * the fetch to its login page on another domain (which surfaces as a network error).
- * Source: cloudflare-docs session-management.mdx, section "AJAX".
- */
-export const AJAX_HEADERS = { accept: "application/json", "x-requested-with": "XMLHttpRequest" } as const;
 
 /**
  * True when a 401 came from Cloudflare Access rather than the panel. The panel's own 401 is always JSON
@@ -59,7 +37,7 @@ export function errorFromResponse(status: number, body: unknown): ApiError {
 
 /**
  * Server code of a 403 on sensitive actions when the session is older than 15 minutes: the user still has the role
- * and must sign in again, so the page shows "Masuk ulang" instead of being sent to `/login`.
+ * and must sign in again, so the page shows "Sign in again" instead of being sent to `/login`.
  */
 export const REAUTH_REQUIRED = "reauth_required";
 
@@ -86,20 +64,24 @@ export function failedResponse(status: number, body: unknown): ApiError {
   return err;
 }
 
-/** User-facing Indonesian message: known error code first, then server message for 4xx, then per kind. */
+/** Full sentence per kind for toasts: what happened + what to do (built from the title and the step). */
+const kindMessage = (kind: Exclude<ApiErrorKind, "client">): string =>
+  `${tCommon.errorTitles[kind]}. ${tCommon.errorSteps[kind]}`;
+
+/** User-facing message: known error code first, then server message for 4xx, then per kind. */
 export function apiErrorMessage(err: unknown, codes: ErrorCodes = {}): string {
-  if (!(err instanceof ApiError)) return idCommon.errors.generic;
+  if (!(err instanceof ApiError)) return tCommon.genericError;
   const known = err.code ? codes[err.code] : undefined;
   if (known) return known;
-  if (err.kind === "client") return err.serverMessage ?? idCommon.errors.generic;
-  return idCommon.errors[err.kind];
+  if (err.kind === "client") return err.serverMessage ?? tCommon.genericError;
+  return kindMessage(err.kind);
 }
 
 /** Like apiErrorMessage, but for under an `errorTitles` heading: the per-kind text is only the next step, not a repeat. */
 export function apiErrorDetail(err: unknown, codes: ErrorCodes = {}): string {
   const msg = apiErrorMessage(err, codes);
   const kind = err instanceof ApiError ? err.kind : null;
-  return kind && kind !== "client" && msg === idCommon.errors[kind] ? idCommon.errorSteps[kind] : msg;
+  return kind && kind !== "client" && msg === kindMessage(kind) ? tCommon.errorSteps[kind] : msg;
 }
 
 /** Query value; empty strings, null and undefined are dropped. */

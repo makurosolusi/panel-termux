@@ -1,5 +1,7 @@
+import type { Messages } from "@/shared/i18n";
+import type { tServiceStart } from "./en.service-start";
 /** Indonesian strings of the "Jalankan pm2/postgres" button (PLAN/06 §6.1), imported directly (DECISIONS B30). */
-export const idServiceStart = {
+export const idServiceStart: Messages<typeof tServiceStart> = {
   label: (service: string) => `Jalankan ${service}`,
   starting: "Menjalankan…",
   started: (service: string) => `${service} berjalan lagi dan menyala otomatis saat HP dinyalakan ulang.`,

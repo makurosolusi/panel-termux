@@ -5,6 +5,7 @@ import { existsSync, mkdirSync, readFileSync, renameSync, rmSync, symlinkSync } 
 import { join } from "node:path";
 import { TermuxExecError } from "../server/exec/termux.exec";
 import { writeAtomic } from "../server/sites/site.files";
+import { tr } from "./cli.locale";
 import { CliExit } from "./cli.output";
 import { INIT_EXIT, type InitContext, type PlanLine } from "./init.types";
 
@@ -70,14 +71,29 @@ export async function detectService(ctx: InitContext): Promise<ServiceState> {
 export function planService(ctx: InitContext, s: ServiceState): PlanLine[] {
   const lines: PlanLine[] = [];
   if (s.run === null || isTemplate(s.run) || s.down || !s.running)
-    lines.push({ kind: "action", text: "Menyalakan layanan cloudflared (juga otomatis setelah HP menyala)" });
+    lines.push({
+      kind: "action",
+      text: tr(
+        "Starting the cloudflared service (also automatically when the phone boots)",
+        "Menyalakan layanan cloudflared (juga otomatis setelah HP menyala)",
+      ),
+    });
   if (s.installed && !s.held)
-    lines.push({ kind: "action", text: "Menahan cloudflared dari upgrade otomatis (apt-mark hold; panel docs paket)" });
+    lines.push({
+      kind: "action",
+      text: tr(
+        "Holding cloudflared back from automatic upgrades (apt-mark hold; panel docs packages)",
+        "Menahan cloudflared dari upgrade otomatis (apt-mark hold; panel docs packages)",
+      ),
+    });
   if (isTemplate(s.run) && ctx.mode !== "fresh" && !ctx.tty)
     lines.push({
       kind: "warning",
-      text: "Run script cloudflared masih template paket; diganti hanya setelah ditanya di terminal",
-      hint: `jalankan lagi ${ctx.resumeCommand()} di terminal`,
+      text: tr(
+        "The cloudflared run script is still the package template; replaced only after a question in a terminal",
+        "Run script cloudflared masih template paket; diganti hanya setelah ditanya di terminal",
+      ),
+      hint: tr(`run ${ctx.resumeCommand()} again in a terminal`, `jalankan lagi ${ctx.resumeCommand()} di terminal`),
     });
   return lines;
 }
@@ -92,7 +108,11 @@ export function restartNeedsTerminal(ctx: InitContext, s: ServiceState, ingressC
 }
 
 const fail = (what: string, code: number) =>
-  new CliExit(INIT_EXIT.failed, `${what} gagal (kode ${code}).`, "lihat: sv status cloudflared; panel docs cloudflare");
+  new CliExit(
+    INIT_EXIT.failed,
+    tr(`${what} failed (code ${code}).`, `${what} gagal (kode ${code}).`),
+    tr("see: sv status cloudflared; panel docs cloudflare", "lihat: sv status cloudflared; panel docs cloudflare"),
+  );
 
 /** New service folder built under a dot name, then renamed (runsvdir never sees half a folder). */
 function createServiceDir(ctx: InitContext, script: string): void {
@@ -123,14 +143,23 @@ export async function applyService(ctx: InitContext, s: ServiceState, ref: strin
       ctx.mode === "fresh" ||
       (ctx.tty &&
         (await ctx.prompt.confirm(
-          "Run script cloudflared masih template paket (--token-file, tanpa --no-autoupdate). Ganti dengan run script panel?",
+          tr(
+            "The cloudflared run script is still the package template (--token-file, no --no-autoupdate). Replace it with the panel's run script?",
+            "Run script cloudflared masih template paket (--token-file, tanpa --no-autoupdate). Ganti dengan run script panel?",
+          ),
           true,
         )));
     if (replace) {
       writeAtomic(join(dir, "run"), script, { mode: 0o700 });
       ctx.state.changed.push(join(dir, "run"));
       scriptChanged = true;
-    } else ctx.state.manual.push("Run script cloudflared masih template paket: lihat panel docs paket");
+    } else
+      ctx.state.manual.push(
+        tr(
+          "The cloudflared run script is still the package template: see panel docs packages",
+          "Run script cloudflared masih template paket: lihat panel docs packages",
+        ),
+      );
   }
   if (s.down) {
     rmSync(join(dir, "down"), { force: true });
@@ -149,11 +178,19 @@ export async function applyService(ctx: InitContext, s: ServiceState, ref: strin
   if (!ingressChanged && !scriptChanged) return;
   const restart = await ctx.confirmRisky(
     "restart-cloudflared",
-    "Mulai ulang cloudflared supaya perubahan tunnel dipakai? Semua situs putus beberapa detik.",
+    tr(
+      "Restart cloudflared so the tunnel changes apply? Every site drops for a few seconds.",
+      "Mulai ulang cloudflared supaya perubahan tunnel dipakai? Semua situs putus beberapa detik.",
+    ),
     "sv restart cloudflared",
   );
   if (!restart) {
-    ctx.state.manual.push("Perubahan tunnel dipakai setelah: sv restart cloudflared");
+    ctx.state.manual.push(
+      tr(
+        "The tunnel changes apply after: sv restart cloudflared",
+        "Perubahan tunnel dipakai setelah: sv restart cloudflared",
+      ),
+    );
     return;
   }
   const r = await ctx.host.exec("sv", ["restart", CF_SERVICE]);

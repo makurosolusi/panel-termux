@@ -1,8 +1,10 @@
 import type { HealthStatus } from "@/shared/dev.types";
+import type { Messages } from "@/shared/i18n";
 import type { PanelMode } from "@/shared/panel.types";
+import type { tDevHealth } from "./en.dev.health";
 
 /** Indonesian strings of /dev Kesehatan sistem (`id.dev.health`, PLAN/05 §5.1). */
-export const idDevHealth = {
+export const idDevHealth: Messages<typeof tDevHealth> = {
   title: "Kesehatan sistem",
   description: "Kondisi Panel Termux di HP ini: pemeriksaan, sumber daya, dan proses latar.",
   verdict: { ok: "Sehat", warn: "Perlu perhatian", fail: "Bermasalah" } satisfies Record<HealthStatus, string>,

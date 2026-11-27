@@ -14,10 +14,10 @@ import { LogLines } from "@/web/components/log-lines";
 import { SearchField } from "@/web/components/search-field";
 import { Button } from "@/web/components/ui/button";
 import { Skeleton } from "@/web/components/ui/skeleton";
-import { idShell } from "@/web/i18n/id.shell";
+import { tLayout } from "@/web/i18n/en.layout";
 import { formatNumber } from "@/web/shared/format";
 
-const t = idShell.log;
+const t = tLayout.log;
 /** Scrolling further than this from the bottom unpins the view. */
 const UNPIN_PX = 32;
 const WRAP_KEY = "panel-termux:log-wrap";

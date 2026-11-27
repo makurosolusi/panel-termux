@@ -1,9 +1,9 @@
-// "Jalankan pm2/postgres" button (PLAN/06 §6.1): endpoint, toasts, onStarted.
+// "Start pm2/postgres" button (PLAN/06 §6.1): endpoint, toasts, onStarted.
 import { afterAll, afterEach, describe, expect, mock, spyOn, test } from "bun:test";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
-import { idPanel } from "@/web/i18n/id.panel";
-import { idServiceStart } from "@/web/i18n/id.service-start";
+import { tPanel } from "@/web/i18n/en.panel";
+import { tServiceStart } from "@/web/i18n/en.service-start";
 import { ServiceStartButton, startService } from "@/web/shared/service-start";
 import { toast } from "@/web/shared/toast.lazy";
 
@@ -40,8 +40,8 @@ describe("startService", () => {
     expect(await startService("pm2", onStarted)).toBe(true);
     expect(onStarted).toHaveBeenCalledTimes(1);
     expect(calls).toEqual(["POST /api/panel/services/pm2/start"]);
-    expect(success).toHaveBeenCalledWith(idServiceStart.started("pm2"));
-    expect(idServiceStart.started("pm2")).toBe("pm2 berjalan lagi dan menyala otomatis saat HP dinyalakan ulang.");
+    expect(success).toHaveBeenCalledWith(tServiceStart.started("pm2"));
+    expect(tServiceStart.started("pm2")).toBe("pm2 is running again and starts automatically when the phone restarts.");
   });
 
   test("started but still down → error toast, not success", async () => {
@@ -50,20 +50,20 @@ describe("startService", () => {
     expect(await startService("postgres", onStarted)).toBe(false);
     expect(onStarted).not.toHaveBeenCalled();
     expect(success).not.toHaveBeenCalled();
-    expect(errorText()).toBe(idServiceStart.notRunning("postgres"));
+    expect(errorText()).toBe(tServiceStart.notRunning("postgres"));
   });
 
   test("server error code → its panel message", async () => {
     stub(409, { error: "job_running", message: "busy" });
     expect(await startService("pm2")).toBe(false);
-    expect(errorText()).toBe(idPanel.errorCodes.job_running);
+    expect(errorText()).toBe(tPanel.errorCodes.job_running);
   });
 });
 
 describe("ServiceStartButton", () => {
   test("renders the service-specific label", () => {
     const html = (service: "pm2" | "postgres") => renderToStaticMarkup(createElement(ServiceStartButton, { service }));
-    expect(html("pm2")).toContain("Jalankan pm2");
-    expect(html("postgres")).toContain("Jalankan postgres");
+    expect(html("pm2")).toContain("Start pm2");
+    expect(html("postgres")).toContain("Start postgres");
   });
 });

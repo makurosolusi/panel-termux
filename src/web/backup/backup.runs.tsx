@@ -4,13 +4,13 @@ import type { BackupItem, BackupRun } from "@/shared/backup.types";
 import { CopyButton } from "@/web/components/copy-button";
 import { InlineCode } from "@/web/components/inline-code";
 import { StatusBadge } from "@/web/components/status-badge";
-import { idBackup } from "@/web/i18n/id.backup";
+import { tBackup } from "@/web/i18n/en.backup";
 import { formatBytes, formatDateTime } from "@/web/shared/format";
 import { ItemDownload } from "./backup.download";
 import { canDownload, type DownloadAccess, SHA_PREVIEW_CHARS } from "./backup.state";
 import { runStatusKey } from "./backup.status-key";
 
-const t = idBackup;
+const t = tBackup;
 
 /** "Diperiksa" (with the honest title) or muted "Belum diperiksa"; nothing for failed items. */
 export function CheckedBadge({ checked }: { checked: boolean | null | undefined }) {

@@ -58,7 +58,7 @@ describe("runMigrations", () => {
     const v1 = runMigrations(db);
     const v2 = runMigrations(db); // second run must be a no-op
     expect(v2).toBe(v1);
-    expect(v1).toBe("0008_monitor");
+    expect(v1).toBe("0009_user_locale");
     const row = db.$client.query("SELECT value FROM app_meta WHERE key = 'schema_version'").get() as { value: string };
     expect(row.value).toBe(v1);
     const applied = db.$client.query("SELECT COUNT(*) AS n FROM __drizzle_migrations").get() as { n: number };
@@ -69,7 +69,7 @@ describe("runMigrations", () => {
     db.$client.close();
   });
 
-  test("upgrades a v0.2.2 database with data (0005 → 0008) and backfills the audit actor", () => {
+  test("upgrades a v0.2.2 database with data (0005 → 0009) and backfills the audit actor", () => {
     const db = freshDb();
     migrateTo(db, 6);
     expect(exists(db, "backup_restore")).toBe(false);
@@ -111,6 +111,10 @@ describe("runMigrations", () => {
     const ddl = db.$client.query("SELECT sql FROM sqlite_master WHERE name = 'check_result'").get() as { sql: string };
     expect(ddl.sql).toContain("WITHOUT ROWID");
 
+    // 0009: locale column, null for old accounts; no alerts configured → no language row (default en).
+    expect(db.$client.query("SELECT locale FROM user").get()).toEqual({ locale: null });
+    expect(db.$client.query("SELECT 1 FROM setting WHERE key = 'alerts.language'").get()).toBeNull();
+
     // Old rows still read through drizzle with the new schema.
     expect(db.query.site.findFirst().sync()?.healthExpect).toBe("lt500");
     expect(db.query.backupRun.findFirst().sync()?.includesSecrets).toBe(false);
@@ -136,10 +140,48 @@ describe("runMigrations", () => {
   test("0008 statements are safe to execute twice (IF NOT EXISTS)", () => {
     const db = freshDb();
     runMigrations(db);
-    const m0008 = embeddedMigrations().at(-1);
+    const m0008 = embeddedMigrations()[8];
     expect(() => {
       for (const stmt of m0008?.sql ?? []) db.$client.run(stmt);
     }).not.toThrow();
+    db.$client.close();
+  });
+
+  const languageRow = (db: Db) => db.$client.query("SELECT value FROM setting WHERE key = 'alerts.language'").get();
+
+  test("0009 keeps Telegram in Indonesian for panels with alerts set up before 0.6.0 (E11)", () => {
+    for (const key of ["alerts.telegram_bot_token", "alerts.telegram_chat_id"]) {
+      const db = freshDb();
+      migrateTo(db, 9);
+      db.$client.query("INSERT INTO setting (key, value) VALUES (?, 'x')").run(key); // test-only value
+      runMigrations(db);
+      expect(languageRow(db)).toEqual({ value: "id" });
+      db.$client.close();
+    }
+  });
+
+  test("0009 backfill is idempotent and never overrides a chosen language", () => {
+    const db = freshDb();
+    migrateTo(db, 9);
+    db.$client.run("INSERT INTO setting (key, value) VALUES ('alerts.telegram_chat_id', '-100123')");
+    db.$client.run("INSERT INTO setting (key, value) VALUES ('alerts.language', 'en')");
+    runMigrations(db);
+    expect(languageRow(db)).toEqual({ value: "en" });
+    const backfill = embeddedMigrations()[9]?.sql.at(-1) ?? "";
+    expect(backfill).toContain("INSERT OR IGNORE");
+    db.$client.run("DELETE FROM setting WHERE key = 'alerts.language'");
+    db.$client.run(backfill);
+    db.$client.run(backfill);
+    expect(db.$client.query("SELECT COUNT(*) AS n FROM setting WHERE key = 'alerts.language'").get()).toEqual({ n: 1 });
+    expect(languageRow(db)).toEqual({ value: "id" });
+    db.$client.close();
+  });
+
+  test("0009 on a fresh panel: no language row, so the default (en) applies", () => {
+    const db = freshDb();
+    runMigrations(db);
+    expect(languageRow(db)).toBeNull();
+    expect(columns(db, "user")).toContain("locale");
     db.$client.close();
   });
 });

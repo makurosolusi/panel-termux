@@ -96,7 +96,7 @@ describe("panel init end to end on the fake phone", () => {
     writeFileSync(key, pubKey());
     const r = await init(h, { "ssh-key": key });
     expect(r.code).toBe(0);
-    expect(r.text).toContain("panel init selesai");
+    expect(r.text).toContain("panel init finished");
     expect(r.text).not.toContain(SECRET);
     expect(r.text).not.toContain("fake-tunnel-secret");
     const p = probePaths(h.paths);
@@ -131,7 +131,7 @@ describe("panel init end to end on the fake phone", () => {
     const again = setup("fresh", { root: h.paths.home });
     const r2 = await init(again, {});
     expect(r2.code).toBe(0);
-    expect(r2.text).toContain("Tidak ada yang perlu diubah.");
+    expect(r2.text).toContain("Nothing needs to change.");
     expect([argv(again, "run"), changing(again)]).toEqual([[], []]);
   });
 
@@ -148,7 +148,7 @@ describe("panel init end to end on the fake phone", () => {
     );
     expect(argv(h, "run")).toEqual([]);
     expect(changing(h)).toEqual(["sv -w 130 restart panel"]);
-    expect(r.text).toContain(`Panel v${SELF_VERSION} berjalan dan sehat`);
+    expect(r.text).toContain(`Panel v${SELF_VERSION} is running and healthy`);
   });
 
   test("fresh-pg (PostgreSQL data, so not a new phone): packages go through apt-get -s, never pkg upgrade", async () => {

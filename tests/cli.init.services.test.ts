@@ -27,7 +27,6 @@ import { createStartStep } from "@/cli/init.start";
 import {
   defineStep,
   INIT_STEP_IDS,
-  INIT_STEP_TITLES,
   type InitContext,
   type InitMode,
   type InitStep,
@@ -167,14 +166,14 @@ describe("runit (step 3)", () => {
     expect((await planOf(runit, ctxOf(host("ready"), "repair"))).lines).toEqual([]);
     const ctx = ctxOf(withDaemon(host("fresh"), 1), "fresh");
     await run(runit, ctx);
-    expect(ctx.lines.join("")).toContain("runit berjalan");
+    expect(ctx.lines.join("")).toContain("runit is running");
   });
 
   test("runsvdir never comes up → exit 3 with reopen-Termux hint", async () => {
     const err = await run(runit, ctxOf({ ...host("fresh"), run: async () => 0 }, "fresh")).catch((e) => e);
     expect(err).toBeInstanceOf(CliExit);
     expect(err.code).toBe(3);
-    expect(err.hint).toBe("tutup dan buka lagi Termux, lalu jalankan: panel init");
+    expect(err.hint).toBe("close and reopen Termux, then run: panel init");
   });
 });
 
@@ -282,15 +281,15 @@ describe("pm2 (step 7)", () => {
     const { lines } = await planOf(pm2, ctxOf(host("poco"), "repair"));
     expect(actions(lines)).toEqual([]);
     expect(lines.map((l) => l.text)).toEqual([
-      "ecosystem.config.js belum memuat situs buatan panel (apps.json)",
-      "Layanan pm2 bisa berhenti sendiri saat tidak ada situs berjalan",
+      "ecosystem.config.js does not load the sites made by the panel yet (apps.json)",
+      "The pm2 service can stop on its own when no site is running",
     ]);
     const h = host("fresh"); // own ecosystem without a pm2 service → reported, nothing written
     mkdirSync(join(h.paths.home, "sites"), { recursive: true });
     writeFileSync(join(h.paths.home, "sites", "ecosystem.config.js"), "module.exports = { apps: [] };\n");
     const own = (await planOf(pm2, ctxOf(h, "repair"))).lines;
     expect(actions(own)).toEqual([]);
-    expect(own.map((l) => l.text)).toContain("Layanan pm2 belum dipasang di runit");
+    expect(own.map((l) => l.text)).toContain("The pm2 service is not installed in runit yet");
   });
 });
 
@@ -328,17 +327,17 @@ describe("start (step 10, K9, K21, C22)", () => {
     writeFileSync(probePaths(h.paths).prev, "old");
     const err = await run(start, ctxOf({ ...h, health: async () => null }, "fresh")).catch((e) => e);
     expect(err.code).toBe(1);
-    expect(err.message).toContain("belum menjawab");
+    expect(err.message).toContain("does not answer");
     expect(err.hint).toContain("panel rollback");
     // healthy but runit still runs another inode → exit 1 (K21)
     const stale = await run(start, ctxOf(healthy(host("upgrade-partial")), "upgrade")).catch((e) => e);
-    expect([stale.code, stale.message.includes("file lama")]).toEqual([1, true]);
+    expect([stale.code, stale.message.includes("old file")]).toEqual([1, true]);
   });
 });
 
 describe("runInit with the service steps (§4.5 acceptance, C23)", () => {
   const noop = (id: (typeof INIT_STEP_IDS)[number]): InitStep =>
-    defineStep({ id, title: INIT_STEP_TITLES[id], detect: async () => null, plan: () => [], apply: async () => {} });
+    defineStep({ id, detect: async () => null, plan: () => [], apply: async () => {} });
   const steps = INIT_STEP_IDS.map((id) => MINE[id] ?? noop(id));
   async function init(h: FakeHost, values: Record<string, unknown>) {
     const sink: string[] = [];
@@ -366,8 +365,8 @@ describe("runInit with the service steps (§4.5 acceptance, C23)", () => {
     const calls = argvs(h);
     expect(calls.filter((a) => a.startsWith("sv "))).toEqual(["sv -w 130 restart panel"]);
     expect(calls.some((a) => /initdb|termux-wake-lock|service-daemon|pm2|cloudflared/.test(a))).toBe(false);
-    expect(r.text).toContain("Memulai ulang layanan panel");
-    expect(r.text).toContain("Memperbarui run script layanan panel");
+    expect(r.text).toContain("Restarting the panel service");
+    expect(r.text).toContain("Updating the panel service run script");
   });
 
   test("poco upgrade with a custom panel run script: run script untouched", async () => {

@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { eq } from "drizzle-orm";
 import { Elysia } from "elysia";
-import { TEST_TEXT } from "@/server/alerts/alert.messages";
+import { ALERT_COPY } from "@/server/alerts/alert.messages";
 import { createAuth } from "@/server/auth/auth.service";
 import { type Db, openDb } from "@/server/db/client";
 import { runMigrations } from "@/server/db/migrate";
@@ -132,11 +132,24 @@ describe("POST /dev/alerts/test", () => {
     const r = await json<AlertTestResult>(await post("/test"));
     expect(r).toEqual({ ok: true, sentAt: expect.any(String) });
     expect(calls).toHaveLength(1);
-    expect(calls[0]).toMatchObject({ method: "sendMessage", body: { chat_id: "-100123", text: TEST_TEXT } });
+    expect(calls[0]).toMatchObject({ method: "sendMessage", body: { chat_id: "-100123", text: ALERT_COPY.en.test } });
     expect(resets).toBe(1);
     const again = await json<{ error: string; retryAfterSec: number }>(await post("/test"), 429);
     expect(again).toMatchObject({ error: "too_soon", retryAfterSec: expect.any(Number) });
     expect(calls).toHaveLength(1);
+  });
+
+  test("alerts.language=id sends the Indonesian test text", async () => {
+    configure(TOKEN, "-100123");
+    setSetting({ db, secret: SECRET }, "alerts.language", "id", rootId);
+    try {
+      await json<AlertTestResult>(await post("/test"));
+    } finally {
+      setSetting({ db, secret: SECRET }, "alerts.language", null, rootId);
+    }
+    expect(calls[0]?.body.text).toBe(
+      "Notifikasi uji dari Panel Termux. Kalau pesan ini sampai, notifikasi sudah siap.",
+    );
   });
 
   test("Bot API 401 → 502 telegram_token_invalid without the token; failures not reset", async () => {

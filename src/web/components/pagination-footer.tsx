@@ -1,14 +1,14 @@
 import { ChevronLeftIcon, ChevronRightIcon } from "lucide-react";
 import { Button } from "@/web/components/ui/button";
-import { idShell } from "@/web/i18n/id.shell";
+import { tLayout } from "@/web/i18n/en.layout";
 import { formatNumber } from "@/web/shared/format";
 
-const t = idShell.table;
+const t = tLayout.table;
 
 /** 1-based page state for the footer; `total` = number of entries across all pages. */
 export type DataPagination = { page: number; pageCount: number; total?: number; onPageChange: (page: number) => void };
 
-/** Prev/next footer with "Halaman x dari y"; hidden when everything fits on one page. Also used by non-table lists. */
+/** Prev/next footer with "Page x of y"; hidden when everything fits on one page. Also used by non-table lists. */
 export function PaginationFooter({ p }: { p: DataPagination }) {
   if (p.pageCount <= 1) return null;
   const text =

@@ -1,17 +1,8 @@
-/**
- * Message per Better Auth 1.7.28 OAuth callback `?error=` code (PLAN/05 F10). Codes not listed fall back to
- * `signIn.errors.generic`; `error_description` is never rendered because a third party controls it.
- */
-const SIGN_IN_ERROR_BY_CODE = {
-  access_denied: "cancelled",
-  state_mismatch: "state",
-  state_not_found: "state",
-  email_not_found: "email",
-  email_not_verified: "email",
-} as const;
+import type { Messages } from "@/shared/i18n";
+import type { tAccount } from "./en.account";
 
 /** Indonesian strings of /login, /profile and the public 404 (`id.account`, PLAN/05 §5.6–5.7, F8, F10). */
-export const idAccount = {
+export const idAccount: Messages<typeof tAccount> = {
   signIn: {
     title: "Masuk ke Panel Termux",
     subtitle: "Gunakan akun Google kamu. Akun baru masuk sebagai Pengguna sampai Super Admin mengubah perannya.",
@@ -72,7 +63,7 @@ export const idAccount = {
     ],
     emailLabel: "Email akunmu",
     reload: "Muat ulang",
-    ownServerHref: "/#pasang",
+    ownServerHref: "/#install",
     ownServer: "Ingin server sendiri? Pasang Panel Termux di HP-mu",
   },
   theme: {
@@ -81,6 +72,11 @@ export const idAccount = {
     light: "Terang",
     dark: "Gelap",
     system: "Sistem",
+  },
+  language: {
+    title: "Bahasa",
+    description: "Disimpan di akunmu, jadi perangkat lain ikut memakainya. Halaman dimuat ulang untuk menerapkannya.",
+    device: "Ikuti bahasa perangkat",
   },
   deleteAccount: {
     title: "Hapus akun saya",
@@ -100,10 +96,3 @@ export const idAccount = {
     documentTitle: "Halaman tidak ditemukan · Panel Termux",
   },
 } as const;
-
-/** Sign-in error message for an OAuth `?error=` code; null when there is none. */
-export function signInErrorMessage(code: string | null): string | null {
-  if (!code) return null;
-  const known = Object.hasOwn(SIGN_IN_ERROR_BY_CODE, code);
-  return idAccount.signIn.errors[known ? SIGN_IN_ERROR_BY_CODE[code as keyof typeof SIGN_IN_ERROR_BY_CODE] : "generic"];
-}
