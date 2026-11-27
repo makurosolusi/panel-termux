@@ -4,18 +4,13 @@
 import { chmodSync, statSync } from "node:fs";
 import { EnvError, parseEnv } from "../server/env";
 import { readTextOrNull, writeAtomic } from "../server/sites/site.files";
+import { EMAIL_RE, HOSTNAME_RE } from "../shared/address.rules";
 import { decodeEnvValue, encodeEnvLine, envValueProblem, findEnvLine } from "../shared/env.codec";
 import { ENV_VARS, type EnvVar, type EnvVarName, isEnvValueMissing, renderEnvTemplate } from "../shared/env.schema";
 import { probePaths } from "./cli.host";
 import { CliExit } from "./cli.output";
 import { defineStep, INIT_EXIT, INIT_STEP_TITLES, type InitContext, type PlanLine } from "./init.types";
 
-// Same patterns as HOSTNAME_RE (src/server/sites/site.checks.ts) and EMAIL_RE (src/server/env.ts), copied so the CLI
-// does not load the site layer; equality is tested in tests/cli.init.env.test.ts.
-/** Panel hostname accepted by the prompt and --hostname. */
-export const INIT_HOSTNAME_RE = /^(?=.{4,253}$)(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,63}$/;
-/** One SUPER_ADMIN_EMAILS entry accepted by the prompt and --admin-email. */
-export const INIT_EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const ENV_MODE = 0o600;
 // §4.3 question order (address and email first, then Google with the redirect URI built from the address); the
 // schema order puts the Google pair before the email
@@ -45,7 +40,7 @@ export function normalizeHostname(input: string): string | null {
     .toLowerCase()
     .replace(/^https?:\/\//, "")
     .replace(/\/+$/, "");
-  return INIT_HOSTNAME_RE.test(host) ? host : null;
+  return HOSTNAME_RE.test(host) ? host : null;
 }
 
 /** Comma-separated emails trimmed and lowercased; null when empty or one is not an email. */
@@ -54,7 +49,7 @@ export function normalizeEmails(input: string): string | null {
     .split(",")
     .map((s) => s.trim().toLowerCase())
     .filter(Boolean);
-  return list.length > 0 && list.every((e) => INIT_EMAIL_RE.test(e)) ? list.join(",") : null;
+  return list.length > 0 && list.every((e) => EMAIL_RE.test(e)) ? list.join(",") : null;
 }
 
 /** `text` with the last `key=` line (the one Bun reads) replaced by `key=value`, or the line appended. */

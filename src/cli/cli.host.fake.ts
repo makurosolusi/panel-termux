@@ -10,6 +10,7 @@ import {
   linkSync,
   mkdirSync,
   mkdtempSync,
+  readFileSync,
   rmSync,
   statSync,
   symlinkSync,
@@ -20,10 +21,11 @@ import { basename, dirname, join } from "node:path";
 import pkg from "../../package.json" with { type: "json" };
 import { type ExecResult, TermuxExecError } from "../server/exec/termux.exec";
 import { createFakeSystem, FAKE_TUNNEL_ID } from "../server/system/system.fake";
-import type { SystemAdapters } from "../server/system/system.types";
+import type { SuperviseState, SystemAdapters } from "../server/system/system.types";
 import { ENV_VARS } from "../shared/env.schema";
 import {
   type CliHost,
+  type CliPaths,
   childEnv,
   confirmAnswer,
   confirmOnTty,
@@ -32,6 +34,7 @@ import {
   pathsFrom,
   probePaths,
 } from "./cli.host";
+import { execEffect, FAKE_DAEMON_PID, FAKE_PG_MAJOR, readDpkg, runEffect, seedDpkg } from "./cli.host.fake.install";
 
 /** One recorded call: argv as asked (tool first; fetch = [url]), env key names, and the non-secret LC_ALL/SVDIR/LOGDIR. */
 export type ExecRecord = {
@@ -65,7 +68,7 @@ export type FakeHostOptions = {
 };
 
 /** Pid of the fake runsvdir (service-daemon pidfile) and of the supervised panel (= createFakeSystem `panelPid`). */
-export const FAKE_DAEMON_PID = 900;
+export { FAKE_DAEMON_PID };
 export const FAKE_PANEL_PID = 1002;
 /** Free space every scenario reports (above the 1 GB warning). */
 export const FAKE_FREE_BYTES = 3_100_000_000;
@@ -75,8 +78,6 @@ export const FAKE_NEW_VERSION = "99.0.0";
 /** `dpkg --audit` of `fresh-resume`: an interrupted `pkg upgrade` (non-empty = dpkg needs --configure -a). */
 export const FAKE_DPKG_AUDIT =
   "The following packages are only half configured:\n libandroid-support  Android support\n";
-/** PostgreSQL major in PG_VERSION and `postgres --version` (they match: `postgres_major` ok). */
-const PG_MAJOR = "17";
 const PANEL_HOST = "panel.contoh.com";
 const PANEL_PORT = Number(ENV_VARS.find((v) => v.name === "PORT")?.default);
 
@@ -140,6 +141,14 @@ ingress:
   - service: http_status:404
 `;
 const SH = "#!/data/data/com.termux/files/usr/bin/sh\n";
+// test-only: deploy/sv/panel/run as shipped by 0.3.0–0.5.0 (install-phone.sh), the run script POCO has (E18, C23)
+const PANEL_RUN_050 = `${SH}# runit (termux-services) run script of the panel. Installed by scripts/install-phone.sh into
+# $PREFIX/var/service/panel/run; stdout+stderr go to the svlogger in log/run.
+# Bun auto-loads .env from the working directory; PANEL_DATA_DIR defaults to ./data.
+exec 2>&1
+cd "\${HOME:-/data/data/com.termux/files/home}/panel" || exit 1
+exec ./panel
+`;
 
 /** Sandbox files of a scenario: path → content (mode 755 for bin/ and run scripts). */
 function scenarioFiles(scenario: FakeScenarioName, root: string): Record<string, string> {
@@ -151,8 +160,8 @@ function scenarioFiles(scenario: FakeScenarioName, root: string): Record<string,
   if (has("termux-services")) files[p.sv] = SH;
   if (has("nodejs-lts")) files[p.node] = SH;
   if (has("nodejs-lts")) files[p.pm2Runtime] = "#!/usr/bin/env node\n";
-  if (has("postgresql")) files[p.pgVersion] = `${PG_MAJOR}\n`;
-  const panelRun = `${SH}cd "$HOME/panel" || exit 1\nexec ./panel\n`;
+  if (has("postgresql")) files[p.pgVersion] = `${FAKE_PG_MAJOR}\n`;
+  const panelRun = scenario === "poco" ? PANEL_RUN_050 : `${SH}cd "$HOME/panel" || exit 1\nexec ./panel\n`;
   if (f.services) {
     files[p.daemonPid] = `${FAKE_DAEMON_PID}\n`;
     files[join(paths.svdir, "panel", "run")] = panelRun;
@@ -198,6 +207,7 @@ function materialize(scenario: FakeScenarioName, root: string, selfPath: string)
   const f = FACTS[scenario];
   const paths = pathsFrom(root, join(root, "usr"));
   const p = probePaths(paths);
+  seedDpkg(paths, f.packages, f.held);
   if (f.self) installSelf(selfPath, p.binary);
   const link = join(paths.prefix, "bin", "panel");
   if (f.link && !existsSync(link)) symlinkSync(p.binary, link);
@@ -220,18 +230,29 @@ function tempDir(prefix: string): string {
 
 const ok = (stdout = "") => ({ code: 0, stdout, stderr: "" });
 
-/** Canned answer of one probe command; tools the scenario lacks fail like runTermux (TermuxExecError). */
-function answer(scenario: FakeScenarioName, tool: string, args: readonly string[]): ExecResult {
+/**
+ * Canned answer of one read-only probe; packages and holds come from the sandbox dpkg status (seeded from the
+ * scenario, changed by the fake pkg/apt-mark). Tools the phone lacks fail like runTermux (TermuxExecError).
+ */
+function answer(scenario: FakeScenarioName, paths: CliPaths, tool: string, args: readonly string[]): ExecResult {
   const f = FACTS[scenario];
   const name = basename(tool);
+  const db = readDpkg(paths);
   if (name === "dpkg" && args[0] === "-s") {
     const pkg = args[1] ?? "";
-    return f.packages.includes(pkg)
-      ? ok(`Package: ${pkg}\nStatus: ${f.held.includes(pkg) ? "hold" : "install"} ok installed\n`)
+    const want = db.get(pkg);
+    return want
+      ? ok(`Package: ${pkg}\nStatus: ${want} ok installed\n`)
       : { code: 1, stdout: "", stderr: `dpkg-query: package '${pkg}' is not installed\n` };
   }
   if (name === "dpkg" && args[0] === "--audit") return ok(f.audit ?? "");
-  if (name === "apt-mark" && args[0] === "showhold") return ok(f.held.map((p) => `${p}\n`).join(""));
+  if (name === "apt-mark" && args[0] === "showhold")
+    return ok(
+      [...db]
+        .filter(([, w]) => w === "hold")
+        .map(([n]) => `${n}\n`)
+        .join(""),
+    );
   if (name === "cmd" && args.slice(0, 3).join(" ") === "package list packages") {
     const want = args[3] ?? "";
     return ok(
@@ -241,18 +262,31 @@ function answer(scenario: FakeScenarioName, tool: string, args: readonly string[
         .join(""),
     );
   }
-  if (name === "postgres" && args[0] === "--version" && f.packages.includes("postgresql"))
-    return ok(`postgres (PostgreSQL) ${PG_MAJOR}.5\n`);
-  if (name === "sv" && f.packages.includes("termux-services")) return ok();
+  if (name === "postgres" && args[0] === "--version" && db.has("postgresql"))
+    return ok(`postgres (PostgreSQL) ${FAKE_PG_MAJOR}.5\n`);
   throw new TermuxExecError(`exec ${tool} failed: fake ${scenario}: no such command`);
 }
 
 /**
- * Fake system: createFakeSystem; without termux-services runit and the panel do not answer. createFakeSystem seeds
+ * runit as the fake runsvdir leaves it on disk (phones without a ready service set): a folder is supervised once
+ * runsvdir runs; `supervise/stat` (written by the fake `sv up`) wins, else a `down` file means down.
+ */
+function diskSupervise(paths: CliPaths, name: string): SuperviseState | null {
+  const dir = join(paths.svdir, name);
+  if (!existsSync(dir) || !existsSync(probePaths(paths).daemonPid)) return null;
+  const stat = join(dir, "supervise", "stat");
+  const up = existsSync(stat) ? readFileSync(stat, "utf8").trim() === "run" : !existsSync(join(dir, "down"));
+  return up
+    ? { state: "run", pid: name === "panel" ? FAKE_PANEL_PID : FAKE_DAEMON_PID + 1 }
+    : { state: "down", pid: null };
+}
+
+/**
+ * Fake system: createFakeSystem; without a ready service set runit answers from disk (diskSupervise). createFakeSystem seeds
  * its home (~/.cloudflared/config.yml, pm2 run, tools): phones without user data get a separate home, so asking for
  * the adapters never turns a fresh sandbox into one with user data (C20).
  */
-function fakeSystem(scenario: FakeScenarioName, root: string): SystemAdapters {
+function fakeSystem(scenario: FakeScenarioName, root: string, paths: CliPaths): SystemAdapters {
   const f = FACTS[scenario];
   const system = createFakeSystem({
     home: f.panel ? root : tempDir("panel-cli-fake-system-"),
@@ -264,7 +298,12 @@ function fakeSystem(scenario: FakeScenarioName, root: string): SystemAdapters {
   if (f.services) return system;
   return {
     ...system,
-    runit: { ...system.runit, list: async () => [], supervise: async () => null, control: async () => null },
+    runit: {
+      ...system.runit,
+      list: async () => [],
+      supervise: async (name) => diskSupervise(paths, name),
+      control: async () => null,
+    },
   };
 }
 
@@ -293,9 +332,20 @@ export function createFakeHost(scenario: FakeScenarioName, opts: FakeHostOptions
   const text = (a: FakeAnswer) => (typeof a === "boolean" ? (a ? "y" : "n") : a);
   const uid = process.getuid?.() ?? -1;
   const panelProc = (pid: number, cmdline: string[]): ProcInfo => ({ pid, uid, exe: binary, cmdline });
-  const alive = new Set(f.services ? [FAKE_DAEMON_PID, FAKE_PANEL_PID, process.pid] : [process.pid]);
-  if (f.resume) alive.add(FAKE_DAEMON_PID);
+  const alive = new Set(f.services ? [FAKE_PANEL_PID, process.pid] : [process.pid]);
+  const daemonPid = probePaths(paths).daemonPid;
+  // a ready service set keeps createFakeSystem's runit; `sv up/restart panel` there only makes it run this version
+  let restarted = false;
+  const svUp = (name: string) => {
+    if (f.services) restarted ||= name === "panel";
+    else {
+      mkdirSync(join(paths.svdir, name, "supervise"), { recursive: true });
+      writeFileSync(join(paths.svdir, name, "supervise", "stat"), "run\n");
+    }
+  };
   let system: SystemAdapters | undefined;
+  const sys = (): SystemAdapters => (system ??= fakeSystem(scenario, root, paths));
+  const supervise = (name: string) => sys().runit.supervise(name);
   return {
     scenario,
     records,
@@ -304,24 +354,37 @@ export function createFakeHost(scenario: FakeScenarioName, opts: FakeHostOptions
     arch: "arm64",
     termuxEnv: { TERMUX_VERSION: "0.118.3", TERMUX_APK_RELEASE: "F_DROID" },
     freeBytes: () => FAKE_FREE_BYTES,
-    system: () => (system ??= fakeSystem(scenario, root)),
+    system: sys,
     resetSystem: () => {
       system = undefined;
     },
     async exec(tool, args = [], { lcAllC, ...execOpts } = {}) {
       record("exec", [tool, ...args], childEnv(paths, execOpts.env, lcAllC));
-      return opts.execAnswers?.(tool, args) ?? answer(scenario, tool, args);
+      const canned = opts.execAnswers?.(tool, args);
+      if (canned) return canned;
+      if (basename(tool) === "sv" && args[0] === "status" && readDpkg(paths).has("termux-services")) {
+        const svc = args[1] ?? "";
+        const s = await supervise(svc);
+        return ok(s?.state === "run" ? `run: ${svc}: (pid ${s.pid}) 5s\n` : `down: ${svc}: 5s\n`);
+      }
+      if (basename(tool) === "sv" && !readDpkg(paths).has("termux-services"))
+        return answer(scenario, paths, tool, args);
+      return execEffect(paths, tool, args, svUp) ?? answer(scenario, paths, tool, args);
     },
     async run(tool, args = [], { lcAllC, ...runOpts } = {}) {
       record("run", [tool, ...args], childEnv(paths, runOpts.env, lcAllC));
-      return 0;
+      return runEffect(paths, tool, args);
     },
     async fetch(url, init) {
       record("fetch", [url]);
       return (opts.fetch ?? offline)(url, init);
     },
-    health: async (port) =>
-      f.services && f.version && port === PANEL_PORT ? { version: f.version, bootId: crypto.randomUUID() } : null,
+    async health(port) {
+      if (port !== PANEL_PORT) return null;
+      const version = f.services ? f.version && (restarted ? pkg.version : f.version) : pkg.version;
+      const up = f.services || (await supervise("panel"))?.state === "run";
+      return up && version ? { version, bootId: crypto.randomUUID() } : null;
+    },
     selfPath,
     tty: {
       isTty: opts.tty ?? process.stdin.isTTY === true,
@@ -340,11 +403,11 @@ export function createFakeHost(scenario: FakeScenarioName, opts: FakeHostOptions
         ...(f.services ? [panelProc(FAKE_PANEL_PID, ["./panel"])] : []),
         panelProc(process.pid, ["./panel", "doctor"]),
       ],
-      alive: (pid) => alive.has(pid),
+      alive: (pid) => alive.has(pid) || (pid === FAKE_DAEMON_PID && existsSync(daemonPid)),
       exeId: (pid) => {
         if (pid !== FAKE_PANEL_PID || !f.services || !existsSync(binary)) return null;
         const s = statSync(binary);
-        return f.stale ? { dev: s.dev, ino: s.ino + 1 } : { dev: s.dev, ino: s.ino };
+        return f.stale && !restarted ? { dev: s.dev, ino: s.ino + 1 } : { dev: s.dev, ino: s.ino };
       },
     },
   };

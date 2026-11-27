@@ -5,29 +5,34 @@ import { closeSync, existsSync, mkdirSync, openSync, readFileSync, realpathSync,
 import { dirname, join } from "node:path";
 import { type CliHost, probePaths } from "./cli.host";
 import type { CliIo, Command, ParsedArgs } from "./cli.main";
-import { CliExit, type CliOut } from "./cli.output";
+import { CliExit } from "./cli.output";
+import { binaryStep } from "./init.binary";
+import { bootStep } from "./init.boot";
+import { envStep } from "./init.env";
 import { detectMode, SELF_VERSION } from "./init.mode";
+import { packagesStep } from "./init.packages";
+import { panelSvStep } from "./init.panel-sv";
+import { allowed, hasAction, type Planned, type Policy, printPlan, summary, tilde } from "./init.plan";
+import { pm2Step } from "./init.pm2";
+import { postgresStep } from "./init.postgres";
+import { runitStep } from "./init.runit";
+import { sshStep } from "./init.ssh";
+import { startStep } from "./init.start";
+import { tunnelStep } from "./init.tunnel";
 import {
-  defineStep,
   INIT_EXIT,
   INIT_SKIPPABLE,
-  INIT_STEP_IDS,
-  INIT_STEP_TITLES,
   type InitArgs,
   type InitContext,
   type InitMode,
   type InitSkippable,
   type InitStep,
   type InitStepId,
-  type ModeDecision,
-  type PlanLine,
 } from "./init.types";
 
 /** Test knobs: the step list (default INIT_STEPS). */
 export type InitOpts = { steps?: readonly InitStep[] };
 
-/** run = may change the phone; tty = only with a terminal (else reported); report = never, only reported (§4). */
-type Policy = "run" | "tty" | "report";
 const POLICY: Record<InitStepId, Record<InitMode, Policy>> = {
   binary: { fresh: "run", repair: "run", upgrade: "run" },
   packages: { fresh: "run", repair: "tty", upgrade: "report" },
@@ -49,20 +54,20 @@ const LEFT_OUT: Partial<Record<InitStepId, (a: InitArgs) => boolean>> = {
   boot: (a) => a.skip.has("boot"),
 };
 
-/** Placeholder until the W1 step files land (G1a replaces each entry): plans one line, refuses to run. */
-const placeholder = (id: InitStepId): InitStep =>
-  defineStep({
-    id,
-    title: INIT_STEP_TITLES[id],
-    detect: async () => null,
-    plan: () => [{ kind: "action", text: `${INIT_STEP_TITLES[id]}: belum diimplementasikan` }],
-    apply: async () => {
-      throw new Error(`langkah init "${id}" belum diimplementasikan (PLAN/07 §16 W1, disambung di G1a)`);
-    },
-  });
-
 /** The steps in run order (§4.1). */
-export const INIT_STEPS: readonly InitStep[] = INIT_STEP_IDS.map(placeholder);
+export const INIT_STEPS: readonly InitStep[] = [
+  binaryStep,
+  packagesStep,
+  runitStep,
+  sshStep,
+  postgresStep,
+  envStep,
+  panelSvStep,
+  pm2Step,
+  tunnelStep,
+  bootStep,
+  startStep,
+];
 
 const usage = (message: string) => new CliExit(INIT_EXIT.usage, message, "lihat: panel init --help");
 const list = (v: unknown): string[] => (Array.isArray(v) ? v.map(String) : typeof v === "string" ? [v] : []);
@@ -128,66 +133,12 @@ export function acquireLock(host: CliHost): () => void {
   throw new CliExit(INIT_EXIT.failed, `Gagal membuat lock ${file}: dibuat ulang proses lain.`, "ulangi panel init");
 }
 
-const tilde = (host: CliHost, path: string) =>
-  path.startsWith(`${host.paths.home}/`) ? `~${path.slice(host.paths.home.length)}` : path;
-
 /** m8: `panel init` when $PREFIX/bin/panel resolves to ~/panel/panel, else the installed binary, else this file. */
 function resumeCommand(host: CliHost): string {
   const binary = probePaths(host.paths).binary;
   const link = join(host.paths.prefix, "bin", "panel");
   if (existsSync(link) && existsSync(binary) && realpathSync(link) === realpathSync(binary)) return "panel init";
   return `${tilde(host, existsSync(binary) ? binary : host.selfPath)} init`;
-}
-
-function modeLine(d: ModeDecision, mode: InitMode): string {
-  const installed = d.installed.version ? `v${d.installed.version}` : null;
-  if (mode === "fresh")
-    return d.binaryInstalled
-      ? "Instalasi baru yang belum selesai, dilanjutkan. Yang akan dilakukan:"
-      : "HP ini belum punya instalasi panel. Yang akan dilakukan:";
-  if (mode === "repair")
-    return d.binaryInstalled
-      ? `Panel v${SELF_VERSION} sudah terpasang. Yang kurang akan dilengkapi:`
-      : "Termux ini sudah berisi data (PostgreSQL, tunnel, pm2, atau situs) tetapi panel belum terpasang. Yang akan dilakukan:";
-  if (d.staleProcess)
-    return `Binary v${SELF_VERSION} sudah dipasang, tetapi layanan panel masih menjalankan file lama. Yang akan dilakukan:`;
-  return installed
-    ? `Panel ${installed}${installed === `v${SELF_VERSION}` ? " (build lain)" : ""} sudah terpasang. Yang akan dilakukan:`
-    : "Panel sudah terpasang (versi terpasang tidak diketahui). Yang akan dilakukan:";
-}
-
-type Planned = { step: InitStep; policy: Policy; lines: PlanLine[] };
-const hasAction = (lines: PlanLine[]) => lines.some((l) => l.kind === "action");
-const allowed = (policy: Policy, tty: boolean) => policy === "run" || (policy === "tty" && tty);
-
-function printPlan(ctx: InitContext, planned: Planned[]): void {
-  const { out } = ctx;
-  out.line(modeLine(ctx.decision, ctx.mode));
-  let n = 0;
-  const why = ctx.mode === "upgrade" ? "tidak dipasang saat upgrade" : "butuh terminal";
-  const blocked: string[] = [];
-  const complete: string[] = [];
-  for (const { step, policy, lines } of planned) {
-    const run = allowed(policy, ctx.tty);
-    for (const l of lines) {
-      if (l.kind !== "action") continue;
-      if (run) out.line(`  ${++n}. ${l.text}`);
-      else blocked.push(`${l.text} (${why})`);
-    }
-    if (!hasAction(lines)) complete.push(step.title);
-  }
-  if (n === 0) out.line("  (tidak ada)");
-  for (const { lines } of planned)
-    for (const l of lines) if (l.kind !== "action") out.check(l.kind, l.text, l.hint ?? null);
-  for (const b of blocked) out.check("warning", b, `jalankan lagi ${ctx.resumeCommand()} di terminal`);
-  if (complete.length > 0) out.line(`Sudah lengkap: ${complete.join(", ")}.`);
-}
-
-function summary(out: CliOut, ctx: InitContext): void {
-  out.line();
-  out.check("ok", "panel init selesai.");
-  if (ctx.state.changed.length > 0) out.line(`Yang diubah:\n${ctx.state.changed.map((f) => `  ${f}`).join("\n")}`);
-  if (ctx.state.manual.length > 0) out.line(`Langkah manual:\n${ctx.state.manual.map((m) => `  → ${m}`).join("\n")}`);
 }
 
 /** `panel init` with test knobs; see the file header. */

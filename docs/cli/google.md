@@ -20,6 +20,7 @@ Buat client-nya dulu (boleh dari browser HP), lalu tempel saat ditanya.
 Contoh: `https://panel.example.com/api/auth/callback/google`
 Untuk mencoba di HP tanpa domain: `http://localhost:3200/api/auth/callback/google`
 (ganti 3200 bila `PORT` kamu berbeda).
+
 6. Tekan Create. Salin Client ID dan Client secret, lalu tempel saat `panel init` bertanya.
    Secret tidak tampil saat diketik; init hanya mencetak panjangnya.
 7. Tanpa init (atau untuk mengganti nilai): isi sendiri `~/panel/.env`:

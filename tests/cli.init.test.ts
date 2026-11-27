@@ -159,7 +159,6 @@ describe("--dry-run writes nothing (§4.1)", () => {
       const r = await init(h, { "dry-run": true }, INIT_STEPS);
       expect(r.code).toBe(0);
       expect(r.stdout).toContain("--dry-run: tidak ada yang diubah");
-      expect(r.stdout).toContain("belum diimplementasikan");
       expect(snapshot(h.paths.home)).toEqual(before);
       expect(h.records.filter((x) => x.kind === "run")).toEqual([]);
     });
@@ -252,13 +251,16 @@ describe("plan and run rules per mode (§4 mode table, C23)", () => {
     expect(s.detected.filter((id) => id === "runit")).toHaveLength(2);
   });
 
-  test("the default step list is placeholders: plan says so, running fails with exit 1 (dispatcher)", async () => {
+  test("the default step list is the real steps in PLAN order; fresh --yes without TTY stops at .env (exit 3)", async () => {
     const stderr: string[] = [];
     const out = createCliOut({ stdout: () => {}, stderr: (t) => stderr.push(t) });
-    const h = host("fresh");
-    expect(await runCli(["init", "--yes"], { out, host: async () => h })).toBe(1);
-    expect(stderr.join("")).toContain("belum diimplementasikan");
+    const self = join(fresh(), "panel-self");
+    writeFileSync(self, "\x7fELF small self\n");
+    const h = host("fresh", { selfPath: self });
+    expect(await runCli(["init", "--yes"], { out, host: async () => h })).toBe(3);
+    expect(stderr.join("")).toContain(".env belum lengkap");
     expect(INIT_STEPS.map((x) => x.id)).toEqual([...INIT_STEP_IDS]);
+    expect(INIT_STEPS.map((x) => x.title)).toEqual(INIT_STEP_IDS.map((id) => INIT_STEP_TITLES[id]));
     expect(existsSync(join(h.paths.prefix, "tmp", "panel-init.lock"))).toBe(false); // released on failure too
   });
 });

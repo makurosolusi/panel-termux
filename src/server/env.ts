@@ -1,3 +1,4 @@
+import { EMAIL_RE } from "../shared/address.rules";
 import { ENV_VARS, type EnvVarName } from "../shared/env.schema";
 import { log } from "./log.service";
 
@@ -24,8 +25,6 @@ const schemaDefault = (name: EnvVarName): string => {
 /** Port used when PORT is unset. */
 export const DEFAULT_PORT = Number(schemaDefault("PORT"));
 const DEFAULT_DATA_DIR = schemaDefault("PANEL_DATA_DIR");
-/** Loose email shape check for SUPER_ADMIN_EMAILS entries. */
-const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 /** Thrown when an env var is missing or invalid; message names the variable, never its value. */
 export class EnvError extends Error {}

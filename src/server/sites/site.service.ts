@@ -2,6 +2,7 @@
 import { existsSync } from "node:fs";
 import { join } from "node:path";
 import { eq } from "drizzle-orm";
+import { HOSTNAME_RE } from "../../shared/address.rules";
 import type { HealthProbe, Site, SiteCheckResult, SiteDetail } from "../../shared/site.types";
 import { recordAudit } from "../audit.service";
 import { site, siteHostname } from "../db/schema";
@@ -21,15 +22,7 @@ import { createIntegration } from "./integration.service";
 import { recoverJob } from "./job.recovery";
 import { createJobRunner, type JobRunnerDeps } from "./job.runner";
 import { adoptSite } from "./site.adopt";
-import {
-  checkSite,
-  HOSTNAME_RE,
-  type PanelSelf,
-  parseHealthSettings,
-  SITE_NAME_RE,
-  type SiteCtx,
-  suggestPort,
-} from "./site.checks";
+import { checkSite, type PanelSelf, parseHealthSettings, SITE_NAME_RE, type SiteCtx, suggestPort } from "./site.checks";
 import { deleteSiteJob } from "./site.delete.job";
 import { envInput, lockedEnvKeys, restartPending, saveEnv } from "./site.env.service";
 import { readTextOrNull } from "./site.files";

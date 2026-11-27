@@ -2,6 +2,7 @@
 import { existsSync } from "node:fs";
 import { join } from "node:path";
 import { and, eq, inArray, isNull } from "drizzle-orm";
+import { HOSTNAME_RE } from "../../shared/address.rules";
 import {
   HEALTH_TIMEOUT_MAX_SEC,
   HEALTH_TIMEOUT_MIN_SEC,
@@ -29,8 +30,6 @@ export type SiteCtx = { db: Db; secret: string; system: SystemAdapters; panel?: 
 
 /** Site name: also its folder, pm2 app name and (with `-` → `_`) its postgres role/database. */
 export const SITE_NAME_RE = /^[a-z][a-z0-9-]{1,30}$/;
-/** Lowercase FQDN with at least one dot; restricted charset so it can be written to YAML unquoted. */
-export const HOSTNAME_RE = /^(?=.{4,253}$)(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,63}$/;
 const PORT_RANGE_RE = /^(\d+)-(\d+)$/;
 
 /** Postgres role/database name for a site. */

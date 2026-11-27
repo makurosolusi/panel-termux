@@ -5,18 +5,9 @@ import { join } from "node:path";
 import { probePaths } from "@/cli/cli.host";
 import { createFakeHost } from "@/cli/cli.host.fake";
 import { createCliOut } from "@/cli/cli.output";
-import {
-  type EnvStepState,
-  envStep,
-  INIT_EMAIL_RE,
-  INIT_HOSTNAME_RE,
-  normalizeEmails,
-  normalizeHostname,
-  setEnvLine,
-} from "@/cli/init.env";
+import { type EnvStepState, envStep, normalizeEmails, normalizeHostname, setEnvLine } from "@/cli/init.env";
 import type { InitArgs, InitContext, InitSkippable } from "@/cli/init.types";
 import { EnvError, parseEnv } from "@/server/env";
-import { HOSTNAME_RE } from "@/server/sites/site.checks";
 import { ENV_VARS, renderEnvTemplate } from "@/shared/env.schema";
 
 const tmp = mkdtempSync(join(tmpdir(), "panel-cli-init-env-"));
@@ -290,8 +281,7 @@ describe("init.env helpers", () => {
     );
   });
 
-  test("hostname and email patterns equal the server's", () => {
-    expect(INIT_HOSTNAME_RE.source).toBe(HOSTNAME_RE.source);
+  test("the email prompt accepts exactly what the server's parseEnv accepts", () => {
     for (const e of ["a@b.co", "x y@b.co", "a@b", "@b.co"]) {
       let server = true;
       try {
@@ -305,7 +295,7 @@ describe("init.env helpers", () => {
         if (!(err instanceof EnvError)) throw err;
         server = false;
       }
-      expect(INIT_EMAIL_RE.test(e)).toBe(server);
+      expect(normalizeEmails(e) !== null).toBe(server);
     }
   });
 

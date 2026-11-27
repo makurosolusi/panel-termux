@@ -7,7 +7,7 @@ import { join } from "node:path";
 import { TermuxExecError } from "../server/exec/termux.exec";
 import { probePaths } from "./cli.host";
 import { CliExit } from "./cli.output";
-import { HELD_PACKAGES } from "./doctor.probe";
+import { dpkgState, HELD_PACKAGES } from "./doctor.probe";
 import { defineStep, INIT_EXIT, INIT_STEP_TITLES, type InitContext, type PlanLine } from "./init.types";
 
 /** pm2 version init installs (K8). */
@@ -50,16 +50,8 @@ export type PackagesState = {
 
 const pkgList = (names: readonly string[]) => names.join(", ");
 
-/** dpkg -s says `install ok installed` (also `hold ok installed`). A missing dpkg = not installed. */
-async function installed(ctx: InitContext, pkg: string): Promise<boolean> {
-  try {
-    const r = await ctx.host.exec("dpkg", ["-s", pkg], { lcAllC: true });
-    return r.code === 0 && /^Status: \S+ ok installed$/m.test(r.stdout);
-  } catch (e) {
-    if (e instanceof TermuxExecError) return false;
-    throw e;
-  }
-}
+/** doctor's dpkg state (`hold ok installed` counts; half-installed = not installed, pkg install finishes it). */
+const installed = async (ctx: InitContext, pkg: string) => (await dpkgState(ctx.host, pkg)) === "installed";
 
 /** stdout of a read-only probe; a failed or missing tool throws with the command (it is needed to decide). */
 async function probe(ctx: InitContext, tool: string, args: string[]): Promise<string> {

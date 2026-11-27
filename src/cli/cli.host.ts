@@ -107,7 +107,7 @@ export interface CliHost {
 
 /** Thrown when the CLI runs outside Termux without PANEL_CLI_FAKE (exit 1). */
 export class NotTermuxError extends Error {}
-/** Thrown for an unknown PANEL_CLI_FAKE value (exit 2). */
+/** Thrown for an unknown PANEL_CLI_FAKE value or a malformed PANEL_CLI_FAKE_ANSWERS (exit 2). */
 export class FakeScenarioError extends Error {}
 
 /** Files the probes and the fake agree on (one place, so the fake answers exactly what doctor reads). */
@@ -305,6 +305,21 @@ export function createTermuxHost(): CliHost {
   };
 }
 
+/** PANEL_CLI_FAKE_ANSWERS: a JSON array of strings/booleans/null (FakeAnswer); unset = none, anything else exit 2. */
+function fakeAnswers(json: string | undefined): (string | boolean | null)[] | undefined {
+  if (!json) return undefined;
+  let v: unknown;
+  try {
+    v = JSON.parse(json);
+  } catch (e) {
+    throw new FakeScenarioError(`PANEL_CLI_FAKE_ANSWERS bukan JSON: ${(e as Error).message}`);
+  }
+  const answer = (a: unknown) => a === null || typeof a === "string" || typeof a === "boolean";
+  if (!Array.isArray(v) || !v.every(answer))
+    throw new FakeScenarioError("PANEL_CLI_FAKE_ANSWERS harus array JSON berisi teks, true/false atau null");
+  return v;
+}
+
 /**
  * Mode detection (K13, D1): PANEL_CLI_FAKE → fake host; else Termux when `$PREFIX/bin/pkg` or `apt` exists or
  * TERMUX_VERSION is set (no `sv` needed: a bare Termux has none); else NotTermuxError. Reads process.env.
@@ -315,7 +330,12 @@ export async function detectCliHost(): Promise<CliHost> {
     if (!(FAKE_SCENARIOS as readonly string[]).includes(fake))
       throw new FakeScenarioError(`PANEL_CLI_FAKE="${fake}" tidak dikenal (pilihan: ${FAKE_SCENARIOS.join(", ")})`);
     const { createFakeHost } = await import("./cli.host.fake");
-    return createFakeHost(fake as FakeScenarioName, { recordFile: process.env.PANEL_CLI_FAKE_RECORD });
+    const answers = fakeAnswers(process.env.PANEL_CLI_FAKE_ANSWERS);
+    // scripted answers stand in for a terminal (shell tests run with stdin </dev/null)
+    return createFakeHost(fake as FakeScenarioName, {
+      recordFile: process.env.PANEL_CLI_FAKE_RECORD,
+      ...(answers ? { answers, tty: true } : {}),
+    });
   }
   const p = probePaths(pathsFrom("", termuxPrefix()));
   if (existsSync(p.pkg) || existsSync(p.apt) || process.env.TERMUX_VERSION) return createTermuxHost();

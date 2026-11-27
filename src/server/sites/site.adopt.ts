@@ -1,6 +1,7 @@
 // POST /sites/adopt: record a running hand-written pm2 app as an adopted site, data taken from pm2 (PLAN/03 §4.2).
 import { realpathSync } from "node:fs";
 import { and, eq, isNull, or } from "drizzle-orm";
+import { HOSTNAME_RE } from "../../shared/address.rules";
 import { PM2_GUARD_NAME } from "../../shared/site.types";
 import { recordAudit } from "../audit.service";
 import { site, siteHostname } from "../db/schema";
@@ -8,7 +9,7 @@ import { log } from "../log.service";
 import { ApiError } from "../routes/http.error";
 import { type Pm2Proc, Pm2UnavailableError } from "../system/system.types";
 import { candidateOf, ingressOf } from "./adopt.candidates";
-import { HOSTNAME_RE, SITE_NAME_RE, type SiteCtx, sitePaths } from "./site.checks";
+import { SITE_NAME_RE, type SiteCtx, sitePaths } from "./site.checks";
 
 const bad = (code: string, message: string) => new ApiError(400, code, message);
 const conflict = (code: string, message: string, extra?: Record<string, unknown>) =>

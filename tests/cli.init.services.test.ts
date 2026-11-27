@@ -67,6 +67,8 @@ function host(scenario: FakeScenarioName, opts: FakeHostOptions = {}): FakeHost 
   h.system();
   return h;
 }
+// test-only: a hand-written panel run script (no shipped template)
+const CUSTOM_RUN = "#!/data/data/com.termux/files/usr/bin/sh\ncd $HOME/panel && exec ./panel\n";
 const healthy = (h: FakeHost): FakeHost => ({ ...h, health: async () => ({ version: SELF_VERSION }) });
 
 function ctxOf(h: FakeHost, mode: InitMode, confirm = true): InitContext & { lines: string[]; risky: RiskyAction[] } {
@@ -169,7 +171,7 @@ describe("runit (step 3)", () => {
   });
 
   test("runsvdir never comes up → exit 3 with reopen-Termux hint", async () => {
-    const err = await run(runit, ctxOf(host("fresh"), "fresh")).catch((e) => e);
+    const err = await run(runit, ctxOf({ ...host("fresh"), run: async () => 0 }, "fresh")).catch((e) => e);
     expect(err).toBeInstanceOf(CliExit);
     expect(err.code).toBe(3);
     expect(err.hint).toBe("tutup dan buka lagi Termux, lalu jalankan: panel init");
@@ -237,7 +239,8 @@ describe("panel-sv (step 6, E18)", () => {
     });
 
   test("custom run script → warning, nothing planned; current → nothing", async () => {
-    const h = host("poco"); // the fake's run script is not a shipped template
+    const h = host("poco");
+    writeFileSync(runPath(h), CUSTOM_RUN);
     expect((await planOf(panelSvStep, ctxOf(h, "upgrade"))).lines.map((l) => l.kind)).toEqual(["warning"]);
     writeFileSync(runPath(h), PANEL_RUN_TEMPLATE);
     expect((await planOf(panelSvStep, ctxOf(h, "repair"))).lines).toEqual([]);
@@ -345,7 +348,7 @@ describe("start (step 10, K9, K21, C22)", () => {
   test("not healthy in time → exit 1 with the rollback hint when panel.prev exists", async () => {
     const h = host("fresh-resume");
     writeFileSync(probePaths(h.paths).prev, "old");
-    const err = await run(start, ctxOf(h, "fresh")).catch((e) => e);
+    const err = await run(start, ctxOf({ ...h, health: async () => null }, "fresh")).catch((e) => e);
     expect(err.code).toBe(1);
     expect(err.message).toContain("belum menjawab");
     expect(err.hint).toContain("panel rollback");
@@ -392,6 +395,7 @@ describe("runInit with the service steps (§4.5 acceptance, C23)", () => {
   test("poco upgrade with a custom panel run script: run script untouched", async () => {
     const h = host("poco");
     const runPath = join(h.paths.svdir, "panel", "run");
+    writeFileSync(runPath, CUSTOM_RUN);
     const bytes = readFileSync(runPath);
     expect((await init(healthy(h), { yes: true })).code).toBe(0);
     expect(readFileSync(runPath).equals(bytes)).toBe(true);

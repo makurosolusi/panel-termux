@@ -6,13 +6,11 @@ import { join } from "node:path";
 import { TermuxExecError } from "../server/exec/termux.exec";
 import { writeAtomic } from "../server/sites/site.files";
 import { type CliHost, type CliPaths, probePaths } from "./cli.host";
-import { ANDROID_APPS } from "./doctor.probe";
+import { ANDROID_APPS, BOOT_STARTS_SERVICES } from "./doctor.probe";
 import { defineStep, INIT_STEP_TITLES, type PlanLine } from "./init.types";
 
 /** File name init writes under ~/.termux/boot. */
 export const BOOT_SCRIPT = "panel-termux";
-// Same rule as doctor's termux_boot_script check (doctor.probe.ts BOOT_STARTS_SERVICES, not exported there).
-const STARTS_SERVICES = /service-daemon|ensure-services|start-services/;
 const CMD = "/system/bin/cmd";
 const CMD_TIMEOUT_MS = 5000;
 const INSTALL_BOOT = "Pasang aplikasi Termux:Boot dari sumber yang sama dengan Termux (F-Droid), lalu buka sekali";
@@ -43,7 +41,7 @@ function starters(dir: string): string[] {
   if (!existsSync(dir)) return [];
   return readdirSync(dir)
     .sort()
-    .filter((n) => statSync(join(dir, n)).isFile() && STARTS_SERVICES.test(readFileSync(join(dir, n), "utf8")));
+    .filter((n) => statSync(join(dir, n)).isFile() && BOOT_STARTS_SERVICES.test(readFileSync(join(dir, n), "utf8")));
 }
 
 /** Step 9 (§4.1). */

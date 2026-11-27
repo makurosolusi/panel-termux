@@ -28,6 +28,7 @@ import { type CliHost, probePaths } from "./cli.host";
 import { CliExit } from "./cli.output";
 import { readEnvFile } from "./env.file";
 import { SELF_VERSION } from "./init.mode";
+import { tilde } from "./init.plan";
 import { defineStep, INIT_EXIT, INIT_STEP_TITLES, type InitContext, type PlanLine } from "./init.types";
 import { previewVerify, verifyInstall } from "./init.verify";
 
@@ -60,8 +61,6 @@ export type BinaryState = {
 
 const envDefault = (name: EnvVarName) => (ENV_VARS as readonly EnvVar[]).find((v) => v.name === name)?.default ?? "";
 const errCode = (e: unknown) => (e as NodeJS.ErrnoException).code ?? (e as Error).message;
-const tilde = (host: CliHost, path: string) =>
-  path.startsWith(`${host.paths.home}/`) ? `~${path.slice(host.paths.home.length)}` : path;
 const mb = (n: number) => `${Math.ceil(n / 1024 / 1024)} MB`;
 const binLink = (host: CliHost) => join(host.paths.prefix, "bin", "panel");
 const srcDir = (host: CliHost) => join(host.paths.home, "panel-src");

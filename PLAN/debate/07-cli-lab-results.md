@@ -377,3 +377,12 @@ exec cloudflared tunnel --no-autoupdate run <nama> 2>&1
 
 Doctor menandai ketiga gejalanya: `cloudflared tidak ditahan`, `Run script cloudflared masih template paket`, dan file
 `down` (D5: error bila `config.yml` ada).
+
+## Catatan G1a — `sshd_config` POCO (langkah 3a, K22, E12)
+
+Dibaca koordinator di POCO (2026-11-27, read-only): `$PREFIX/etc/ssh/sshd_config` di POCO adalah bawaan paket
+yang tidak diubah. md5-nya sama dengan conffile openssh 10.6p2, file memuat
+`Include /data/data/com.termux/files/usr/etc/ssh/sshd_config.d/*.conf`, dan tidak ada baris `PasswordAuthentication`.
+Artinya aturan drop-in langkah ssh (`sshd_config.d/10-key-only.conf` ditulis hanya bila `Include` ada dan tidak ada yang
+mengatur `PasswordAuthentication`) berlaku di Termux bersih. Host fake (`cli.host.fake.install.ts`) memasang
+`sshd_config` dengan bentuk yang sama saat `pkg install openssh`.
