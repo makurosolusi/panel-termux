@@ -114,10 +114,13 @@ describe("CLI import rules", () => {
       expect([...packages].filter((p) => !p.startsWith("node:"))).toEqual([]);
     });
 
-  test("docs.command.ts imports only the embedded docs/cli/*.md and cli.output", () => {
+  test("docs.command.ts imports only the embedded docs/cli/(id/)*.md, cli.output and cli.locale", () => {
     const f = join(CLI, "docs.command.ts");
     const bad = imports(f).filter(
-      (i) => !i.typeOnly && !/^\.\.\/\.\.\/docs\/cli\/[a-z]+\.md$/.test(i.spec) && i.spec !== "./cli.output",
+      (i) =>
+        !i.typeOnly &&
+        !/^\.\.\/\.\.\/docs\/cli\/(id\/)?[a-z]+\.md$/.test(i.spec) &&
+        !["./cli.output", "./cli.locale"].includes(i.spec),
     );
     expect(bad).toEqual([]);
   });
@@ -145,8 +148,12 @@ describe("CLI import rules", () => {
   });
 
   const ENV_COMMAND = join(CLI, "env.command.ts");
-  test("env.command.ts imports only env.schema, env.codec, node:fs, node:os", () => {
-    const allowed = new Set([join(SRC, "shared", "env.schema.ts"), join(SRC, "shared", "env.codec.ts")]);
+  test("env.command.ts imports only env.schema, env.codec, cli.locale, node:fs, node:os", () => {
+    const allowed = new Set([
+      join(SRC, "shared", "env.schema.ts"),
+      join(SRC, "shared", "env.codec.ts"),
+      join(CLI, "cli.locale.ts"),
+    ]);
     const bad = imports(ENV_COMMAND).filter((i) => {
       if (i.typeOnly) return false;
       const t = resolveSpec(ENV_COMMAND, i.spec);

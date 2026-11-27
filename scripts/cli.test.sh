@@ -30,19 +30,21 @@ BOX="$T/box"
 O="$T/o"
 mkdir -p "$BOX/home" "$BOX/usr" "$BOX/cwd" "$O/tmp"
 export HOME="$BOX/home" PREFIX="$BOX/usr" TMPDIR="$O/tmp"
-unset TERMUX_VERSION PANEL_CLI_FAKE PANEL_CLI_FAKE_RECORD BUN_OPTIONS BUN_BE_BUN 2>/dev/null || true
+# English by default (PLAN/08 §3.5): no locale variable reaches the binary unless a check sets one.
+unset TERMUX_VERSION PANEL_CLI_FAKE PANEL_CLI_FAKE_RECORD PANEL_LANG LC_ALL LC_MESSAGES LANG BUN_OPTIONS BUN_BE_BUN 2>/dev/null || true
 cd "$BOX/cwd"
 
 fail() { echo "FAIL: $*" >&2; exit 1; }
-# run <expected exit code> <args...>: stdout → $O/out, stderr → $O/err. $FAKE/$REC (set only by fake) become
-# PANEL_CLI_FAKE/PANEL_CLI_FAKE_RECORD; a `VAR=x run` prefix would leak past the call in some shells.
+# run <expected exit code> <args...>: stdout → $O/out, stderr → $O/err. $FAKE/$REC/$LNG (set only by fake/lang)
+# become PANEL_CLI_FAKE/PANEL_CLI_FAKE_RECORD/PANEL_LANG; a `VAR=x run` prefix would leak past the call in some shells.
 FAKE=
 REC=
+LNG=
 run() {
   want=$1
   shift
   rc=0
-  env ${FAKE:+PANEL_CLI_FAKE=$FAKE} ${REC:+PANEL_CLI_FAKE_RECORD=$REC} "$BIN" "$@" </dev/null >"$O/out" 2>"$O/err" || rc=$?
+  env ${FAKE:+PANEL_CLI_FAKE=$FAKE} ${REC:+PANEL_CLI_FAKE_RECORD=$REC} ${LNG:+PANEL_LANG=$LNG} "$BIN" "$@" </dev/null >"$O/out" 2>"$O/err" || rc=$?
   [ "$rc" -eq "$want" ] || { cat "$O/out" "$O/err"; fail "panel $* exited $rc, want $want"; }
 }
 # fake <scenario> <expected exit code> <args...>
@@ -52,6 +54,13 @@ fake() {
   run "$@"
   FAKE=
 }
+# lang <PANEL_LANG> <expected exit code> <args...>
+lang() {
+  LNG=$1
+  shift
+  run "$@"
+  LNG=
+}
 has() { grep -qF -- "$2" "$O/$1" || { cat "$O/$1"; fail "$1 lacks: $2"; }; }
 lacks() { if grep -qF -- "$2" "$O/$1"; then fail "$1 contains: $2"; fi; }
 listing() { find "$BOX" | sort; }
@@ -60,9 +69,15 @@ listing() { find "$BOX" | sort; }
 listing >"$O/before"
 for f in -h --help --h help; do
   run 0 "$f"
-  has out "Pemakaian"
+  has out "Usage: panel <command>"
   has out "panel serve"
 done
+run 0 --lang id -h
+has out "Pemakaian: panel <perintah>"
+lang id 0 doctor --help
+has out "Pemakaian: panel doctor"
+run 2 -h --lang de
+has err "Invalid option value: --lang de"
 for f in -v --version --v; do
   run 0 "$f"
   grep -qE "^panel-termux $VERSION \([a-z0-9]+-[a-z0-9]+, bun [0-9]+\.[0-9]+\.[0-9]+\)\$" "$O/out" ||
@@ -78,10 +93,10 @@ run 2 bogus
 run 2 docs google extra
 [ $(($(date +%s) - start)) -le 2 ] || fail "unknown arguments took more than 2 s"
 run 2 upgrade
-has err "baris pasang"
+has err "run the install line again"
 # init (0.5.1, W0 stub steps): fake dry run prints the plan and exits 0; W2 extends this per scenario
 fake fresh 0 init --dry-run
-has out "HP ini belum punya instalasi panel"
+has out "This phone has no panel installed yet"
 
 # --- env: the 4 required keys, empty values, nothing on stderr without .env ---
 run 0 env
@@ -101,18 +116,28 @@ cmp -s "$O/out" "$REPO/.env.example" || fail "env --full differs from .env.examp
 
 # --- docs: topic list, each topic, unknown topic ---
 run 0 docs
-for topic in google cloudflare android paket; do has out "$topic"; done
-for topic in google cloudflare android paket; do
+has out "Guide topics:"
+for topic in google cloudflare android packages; do has out "$topic"; done
+for topic in google cloudflare android packages paket; do
   run 0 docs "$topic"
   [ -s "$O/out" ] || fail "docs $topic is empty"
 done
+has out "Held packages"
 run 2 docs instal
+has err "Unknown topic: instal"
+lang id 0 docs
+has out "Topik panduan:"
+lang id 0 docs packages
+has out "Paket yang ditahan"
 
 # --- doctor (fake host) ---
 run 1 doctor
-has err "bukan Termux"
+has err "This is not Termux"
+run 1 doctor --lang id
+has err "Ini bukan Termux"
 fake fresh 1 doctor
 fake ready 0 doctor
+has out "phone check (nothing is changed)"
 fake ready 0 doctor --json
 BUNX -e 'const j = JSON.parse(await Bun.stdin.text()); process.exit(j.schema === 1 && j.ok === true ? 0 : 1)' <"$O/out" ||
   fail "doctor --json stdout is not a schema-1 report: $(head -c 200 "$O/out")"
@@ -145,7 +170,7 @@ lacks out "https://panel.contoh.test"
 
 # --- env next to an existing .env ---
 run 0 env
-has err "sudah ada"
+has err "already exists"
 lacks out "$SENTINEL"
 cmp -s .env "$O/env.orig" || fail "env changed .env"
 rc=0
@@ -155,7 +180,7 @@ cmp -s .env "$O/env.orig" || fail "env >> .env changed .env"
 rc=0
 "$BIN" env </dev/null >.env 2>"$O/err" || rc=$?
 [ "$rc" -eq 0 ] || fail "env > .env exited $rc, want 0"
-has err "dikosongkan"
+has err "The shell emptied this .env"
 cmp -s .env "$O/env" || fail "env > .env did not write the template"
 
 # --- D2: serve and no-arg (not a TTY) refuse when PORT already answers /api/health ---
@@ -177,7 +202,7 @@ for args in serve ""; do
   # shellcheck disable=SC2086 # "" must expand to no argument at all
   run 1 $args
   [ $(($(date +%s) - start)) -le 3 ] || fail "panel $args took more than 3 s to refuse"
-  has err "sudah dipakai"
+  has err "is already in use"
   [ ! -e data ] || fail "panel $args created the data dir"
 done
 

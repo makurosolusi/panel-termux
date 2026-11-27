@@ -1,33 +1,33 @@
-# Cloudflare Tunnel: membuka panel dari internet
+# Cloudflare Tunnel: opening the panel from the internet
 
-Panel hanya mendengar di `127.0.0.1`. Dari luar, panel dibuka lewat Cloudflare Tunnel: HP
-menyambung keluar ke Cloudflare, jadi tidak perlu IP publik atau buka port router.
-Kamu butuh domain yang sudah memakai Cloudflare.
+The panel only listens on `127.0.0.1`. From outside, it is reached through Cloudflare Tunnel: the
+phone connects out to Cloudflare, so you need no public IP and no open router port.
+You need a domain that already uses Cloudflare.
 
-## Yang dikerjakan panel sendiri
+## What the panel does by itself
 
-Setelah tunnel ada dan panel terbuka, kamu tidak perlu lagi menyentuh tunnel untuk situs.
-Buat situs di panel: panel menambah rute ke `~/.cloudflared/config.yml` (dicek dulu dengan
-`cloudflared tunnel ingress validate`), membuat DNS, lalu memulai ulang cloudflared.
-DNS memakai Token API Cloudflare di Administrasi → Pengaturan bila diisi (izin Zone:Read
-dan DNS:Edit), atau login cloudflared di HP.
+Once the tunnel exists and the panel is open, you never touch the tunnel for sites again.
+Create a site in the panel: it adds a route to `~/.cloudflared/config.yml` (checked first with
+`cloudflared tunnel ingress validate`), creates the DNS record, then restarts cloudflared.
+DNS uses the Cloudflare API token in Administration → Settings when set (Zone:Read and
+DNS:Edit permissions), or the cloudflared login on the phone.
 
-## Sekali di awal: `panel init` mengerjakannya
+## Once at the start: `panel init` does it
 
-`panel init` menjalankan `cloudflared tunnel login` dan membuka tautannya di browser HP.
-Pilih domain kamu di halaman Cloudflare; hasilnya `~/.cloudflared/cert.pem`. Lalu init membuat
-(atau memakai ulang) tunnel, menulis `~/.cloudflared/config.yml`, membuat DNS alamat panel,
-dan memasang cloudflared sebagai layanan runit. Bila alamat itu sudah diarahkan ke tunnel
-lain, init bertanya dulu sebelum memindahkannya.
+`panel init` runs `cloudflared tunnel login` and opens its link in the phone's browser.
+Pick your domain on the Cloudflare page; the result is `~/.cloudflared/cert.pem`. Then init creates
+(or reuses) a tunnel, writes `~/.cloudflared/config.yml`, creates the DNS record of the panel
+domain and installs cloudflared as a runit service. If that domain already points at another
+tunnel, init asks before moving it.
 
-## Bila memasang sendiri (tanpa init, atau `panel init --skip tunnel`)
+## Setting it up yourself (without init, or `panel init --skip tunnel`)
 
-1. `cloudflared tunnel login`, buka tautannya, pilih domain.
-2. `cloudflared tunnel create <nama>`. Id tunnel: `cloudflared tunnel list`.
-3. Tulis `~/.cloudflared/config.yml`:
+1. `cloudflared tunnel login`, open the link, pick the domain.
+2. `cloudflared tunnel create <name>`. Tunnel id: `cloudflared tunnel list`.
+3. Write `~/.cloudflared/config.yml`:
 
 ```
-tunnel: <nama>
+tunnel: <name>
 credentials-file: /data/data/com.termux/files/home/.cloudflared/<id>.json
 ingress:
   - hostname: panel.<domain>
@@ -35,29 +35,29 @@ ingress:
   - service: http_status:404
 ```
 
-4. Periksa: `cloudflared tunnel ingress validate`
-5. Buat DNS panel: `cloudflared tunnel route dns <nama> panel.<domain>`
-6. Tulis `$PREFIX/var/service/cloudflared/run` berisi tiga baris ini, lalu `sv-enable cloudflared`:
+4. Check it: `cloudflared tunnel ingress validate`
+5. Create the panel DNS record: `cloudflared tunnel route dns <name> panel.<domain>`
+6. Write `$PREFIX/var/service/cloudflared/run` with these three lines, then `sv-enable cloudflared`:
 
 ```
 #!/data/data/com.termux/files/usr/bin/sh
 export HOME=/data/data/com.termux/files/home
-exec cloudflared tunnel --no-autoupdate run <nama> 2>&1
+exec cloudflared tunnel --no-autoupdate run <name> 2>&1
 ```
 
-7. Isi `APP_BASE_URL=https://panel.<domain>` di `~/panel/.env`, lalu `sv restart panel`.
+7. Set `APP_BASE_URL=https://panel.<domain>` in `~/panel/.env`, then `sv restart panel`.
 
-## Lindungi halaman privat dengan Cloudflare Access
+## Protect the private pages with Cloudflare Access
 
-Di dashboard Cloudflare: Zero Trust → Access controls → Applications → Self-hosted.
-Satu aplikasi, satu public hostname per path: `panel`, `dev`, `api/panel`, `api/dev`
-(tanpa `/*`). Policy Allow → Emails berisi email pemilik. Jangan kosongkan Path:
-landing page dan login Google harus tetap publik. Rincian: README bagian Instal di HP.
+In the Cloudflare dashboard: Zero Trust → Access controls → Applications → Self-hosted.
+One application, one public hostname per path: `panel`, `dev`, `api/panel`, `api/dev`
+(no `/*`). Policy Allow → Emails with the owner's email. Never leave Path empty:
+the landing page and Google sign-in must stay public. Details: README, section Install on the phone.
 
-## Rahasia
+## Secrets
 
-- `cert.pem`, `<id>.json`, dan token tunnel sama dengan kunci rumah. Jangan dibagikan.
-- Jangan jalankan perintah yang mencetak token (`cloudflared tunnel token`) di depan orang
-  lain atau di chat. Panel tidak pernah menampilkannya.
+- `cert.pem`, `<id>.json` and the tunnel token are like your house keys. Do not share them.
+- Do not run commands that print the token (`cloudflared tunnel token`) in front of others
+  or in a chat. The panel never shows it.
 
-Pemeriksaan tunnel dan layanan: `panel doctor`. Upgrade cloudflared: `panel docs paket`.
+Check the tunnel and services: `panel doctor`. Upgrading cloudflared: `panel docs packages`.

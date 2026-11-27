@@ -1,4 +1,4 @@
-// CLI output (PLAN/07 §2.3): plain Indonesian lines, one per item. stdout = data/results, stderr = notes and errors,
+// CLI output (PLAN/07 §2.3): plain lines in the CLI locale, one per item. stdout = data/results, stderr = notes and errors,
 // so `panel env > .env.new` and `panel doctor --json | jq` stay clean (D15).
 import type { DoctorState } from "../shared/doctor.types";
 

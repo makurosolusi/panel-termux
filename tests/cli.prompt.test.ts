@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test";
 import { mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { setCliLocale } from "@/cli/cli.locale";
 import { askTerminal, type ByteSource, openTty, readAnswer, readLine } from "@/cli/cli.prompt";
 
 /** ByteSource over `text` (string = UTF-8, numbers = raw bytes); records how many bytes were consumed. */
@@ -25,8 +26,17 @@ describe("readAnswer (raw mode)", () => {
     expect(shown.join("")).toBe("ab\b \b");
   });
 
-  test("Ctrl-C throws exit 130", () => {
-    expect(() => readAnswer(bytes("ab", 3).next, null)).toThrow(expect.objectContaining({ code: 130 }));
+  test("Ctrl-C throws exit 130 with a message in the CLI locale", () => {
+    setCliLocale({ locale: "en", source: "default" });
+    expect(() => readAnswer(bytes("ab", 3).next, null)).toThrow(
+      expect.objectContaining({ code: 130, message: "Cancelled (Ctrl-C)." }),
+    );
+    setCliLocale({ locale: "id", source: "flag" });
+    try {
+      expect(() => readAnswer(bytes(3).next, null)).toThrow("Dibatalkan (Ctrl-C).");
+    } finally {
+      setCliLocale({ locale: "en", source: "default" });
+    }
   });
 
   test("Ctrl-D on an empty line and end of input = null; control bytes are ignored", () => {

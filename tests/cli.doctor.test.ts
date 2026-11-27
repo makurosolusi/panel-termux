@@ -1,11 +1,13 @@
-import { afterAll, describe, expect, test } from "bun:test";
+import { afterAll, beforeEach, describe, expect, test } from "bun:test";
 import { existsSync, mkdirSync, mkdtempSync, readdirSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { type CliHost, type FakeScenarioName, type ProcInfo, probePaths } from "@/cli/cli.host";
 import { createFakeHost, FAKE_PANEL_PID, type FakeHost } from "@/cli/cli.host.fake";
+import { setCliLocale } from "@/cli/cli.locale";
+import { runCli } from "@/cli/cli.main";
 import { createCliOut } from "@/cli/cli.output";
-import { REINSTALL } from "@/cli/doctor.checks.base";
+import { reinstall } from "@/cli/doctor.checks.base";
 import { doctorCommand, openDoctorDb, runDoctor } from "@/cli/doctor.command";
 import { openDb } from "@/server/db/client";
 import { runMigrations } from "@/server/db/migrate";
@@ -15,7 +17,13 @@ import type { DoctorKey, DoctorReport } from "@/shared/doctor.types";
 import { tSiteSetup } from "@/web/i18n/en.site.setup";
 
 const tmp = mkdtempSync(join(tmpdir(), "panel-cli-doctor-"));
-afterAll(() => rmSync(tmp, { recursive: true, force: true }));
+// The CLI locale is a module singleton: runDoctor/doctorCommand run in English unless a test says otherwise.
+const english = () => setCliLocale({ locale: "en", source: "default" });
+beforeEach(english);
+afterAll(() => {
+  english();
+  rmSync(tmp, { recursive: true, force: true });
+});
 let n = 0;
 
 /** Fake host in its own sandbox; `arrange` may place files first (the scenario keeps them). */
@@ -73,13 +81,13 @@ describe("scenarios (PLAN/07 §3.1, §9)", () => {
       "env_complete",
     ] as const)
       expect(get(report, k)?.state).toBe("error");
-    expect(get(report, "pkg_cloudflared")?.hint).toBe("jalankan: pkg install cloudflared");
+    expect(get(report, "pkg_cloudflared")?.hint).toBe("run: pkg install cloudflared");
     expect(get(report, "pkg_cloudflared")?.action).toBe("manual");
-    expect(r.stdout).toContain("❌ cloudflared belum terpasang\n     → jalankan: pkg install cloudflared");
+    expect(r.stdout).toContain("❌ cloudflared is not installed\n     → run: pkg install cloudflared");
     // 0.5.1: missing install pieces point at `panel init`, never at the removed install.sh
-    expect(get(report, "binary_installed")?.hint).toBe(REINSTALL);
+    expect(get(report, "binary_installed")?.hint).toBe(reinstall());
     expect(get(report, "binary_installed")?.action).toBe("init");
-    expect(REINSTALL).toContain("panel init");
+    expect(reinstall()).toStartWith("run: panel init");
     expect(r.stdout).not.toContain("install.sh");
   });
 
@@ -88,8 +96,9 @@ describe("scenarios (PLAN/07 §3.1, §9)", () => {
     expect(r.stdout).not.toContain("❌");
     expect(r.code).toBe(0);
     expect(r.stdout).toContain("Panel Termux");
-    expect(r.stdout).toContain("Checklist penyiapan ada di Administrasi → Penyiapan");
-    expect(r.stdout).toMatch(/Hasil: 0 error, \d+ peringatan\./);
+    expect(r.stdout).toContain("— phone check (nothing is changed)");
+    expect(r.stdout).toContain("The setup checklist is in Administration → Set up Panel Termux");
+    expect(r.stdout).toMatch(/Result: 0 errors, \d+ warnings?\./);
   });
 
   test("nosv: termux-services missing is an error and no service reads as running (D1)", async () => {
@@ -101,13 +110,13 @@ describe("scenarios (PLAN/07 §3.1, §9)", () => {
     expect(report.ok).toBe(false);
   });
 
-  test("poco: spreads check fails with the Persiapan card's own label; holds are ok", async () => {
+  test("poco: spreads check fails with the Setup card's own label; holds are ok", async () => {
     const report = await doctor(host("poco"));
     const c = get(report, "ecosystem_spreads_apps_json");
     expect(c?.state).toBe("error");
     expect(c?.group).toBe("situs");
     expect(c?.label).toBe(tSiteSetup.checks.ecosystem_spreads_apps_json.error(c?.params ?? {}));
-    expect(c?.hint).toStartWith("buka Situs → Persiapan");
+    expect(c?.hint).toStartWith("open Sites → Setup");
     expect(c?.action).toBe("ui");
     expect(get(report, "pkg_held")?.state).toBe("ok");
   });
@@ -125,7 +134,7 @@ describe("bootstrap checks", () => {
     const c = get(await doctor(h), "env_complete");
     expect(c?.state).toBe("error");
     expect(c?.label).toBe(
-      ".env belum lengkap: APP_BASE_URL, GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET, SUPER_ADMIN_EMAILS",
+      ".env is incomplete: APP_BASE_URL, GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET, SUPER_ADMIN_EMAILS",
     );
   });
 
@@ -149,7 +158,7 @@ describe("bootstrap checks", () => {
     const c = get(await doctor(h), "pkg_held");
     expect(c?.state).toBe("warning");
     expect(c?.params).toEqual({ packages: "cloudflared" });
-    expect(c?.hint).toContain("panel docs paket");
+    expect(c?.hint).toContain("panel docs packages");
   });
 
   test("held packages (dpkg `hold ok installed`) count as installed, pkg_held ok", async () => {
@@ -168,8 +177,8 @@ describe("bootstrap checks", () => {
     );
     const c = get(await doctor(h), "pkg_cloudflared");
     expect(c?.state).toBe("error");
-    expect(c?.label).toBe("cloudflared terpasang tidak lengkap");
-    expect(c?.hint).toContain("panel docs paket");
+    expect(c?.label).toBe("cloudflared is installed incompletely");
+    expect(c?.hint).toContain("panel docs packages");
     expect(c?.hint).not.toContain("pkg install");
     expect(c?.action).toBe("docs");
   });
@@ -236,7 +245,7 @@ describe("bootstrap checks", () => {
     const h = host("ready");
     const p = probePaths(h.paths);
     rmSync(p.apt);
-    expect(get(await doctor(h), "pkg_manager_apt")?.label).toBe("apt tidak ditemukan di Termux");
+    expect(get(await doctor(h), "pkg_manager_apt")?.label).toBe("apt was not found in Termux");
     writeFileSync(p.pacman, "");
     const pac = { ...h, termuxEnv: { ...h.termuxEnv, TERMUX_APP_PACKAGE_MANAGER: "pacman" } };
     expect(get(await doctor(pac), "pkg_manager_apt")?.label).toContain("pacman");
@@ -306,7 +315,7 @@ describe("read-only (K12, lab L6)", () => {
     const before = snapshot(root(h));
     const r = await run(h, true);
     expect(snapshot(root(h))).toEqual(before);
-    expect(r.stderr).toContain("panel.db tidak dibuka");
+    expect(r.stderr).toContain("panel.db not opened");
     expect(get(JSON.parse(r.stdout), "sites_dir")?.params.path).toBe(join(root(h), "sites"));
   });
 
@@ -349,5 +358,35 @@ describe("--json (§3.2, D15)", () => {
       expect(all).not.toContain("fake-client-secret");
       expect(all).not.toMatch(/\bnano\b|\bssh\b/);
     }
+  });
+});
+
+describe("Indonesian (--lang id, PANEL_LANG=id)", () => {
+  async function cli(argv: string[], h: CliHost, env: Record<string, string> = {}) {
+    let stdout = "";
+    const out = createCliOut({ stdout: (t) => (stdout += t), stderr: () => {} });
+    const code = await runCli(argv, { out, host: async () => h, env });
+    return { code, stdout };
+  }
+
+  test("labels, hints, groups and the summary follow the locale; ids and actions stay the same", async () => {
+    const r = await cli(["doctor", "--lang", "id"], host("fresh"));
+    expect(r.code).toBe(1);
+    expect(r.stdout).toContain("pemeriksaan HP (tidak ada yang diubah)");
+    expect(r.stdout).toContain("❌ cloudflared belum terpasang\n     → jalankan: pkg install cloudflared");
+    expect(r.stdout).toMatch(/^Paket$/m);
+    expect(r.stdout).toMatch(/Hasil: \d+ error, \d+ peringatan\./);
+    const json = await cli(["doctor", "--json"], host("fresh"), { PANEL_LANG: "id" });
+    const c = get(JSON.parse(json.stdout) as DoctorReport, "binary_installed");
+    expect(c).toMatchObject({ group: "panel", key: "binary_installed", action: "init" });
+    expect(c?.hint).toStartWith("jalankan: panel init");
+  });
+
+  test("Setup card checks use the Indonesian card copy (idSiteSetup)", async () => {
+    const r = await cli(["doctor", "--json", "--lang", "id"], host("poco"));
+    const c = get(JSON.parse(r.stdout) as DoctorReport, "ecosystem_spreads_apps_json");
+    expect(c?.label).toBe("Sebelum situs pertama dibuat, panel perlu menghubungkannya ke pm2.");
+    expect(c?.hint).toStartWith("buka Situs → Persiapan");
+    expect(c?.action).toBe("ui");
   });
 });

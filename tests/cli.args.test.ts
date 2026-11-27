@@ -2,6 +2,7 @@ import { afterAll, describe, expect, test } from "bun:test";
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { setCliLocale } from "@/cli/cli.locale";
 import { normalizeArgv, runCli, versionLine } from "@/cli/cli.main";
 import { createCliOut } from "@/cli/cli.output";
 import { entryRoute } from "@/server/main";
@@ -9,15 +10,20 @@ import pkg from "../package.json" with { type: "json" };
 
 const ROOT = join(import.meta.dir, "..");
 const tmp = mkdtempSync(join(tmpdir(), "panel-cli-args-"));
-afterAll(() => rmSync(tmp, { recursive: true, force: true }));
+afterAll(() => {
+  setCliLocale({ locale: "en", source: "default" }); // runCli sets the module-wide locale; later files expect English
+  rmSync(tmp, { recursive: true, force: true });
+});
 
-async function cli(argv: string[]) {
+/** runCli in a clean env (English unless argv/env say otherwise, PLAN/08 §8). */
+async function cli(argv: string[], env: Record<string, string> = {}) {
   const stdout: string[] = [];
   const stderr: string[] = [];
   const host = () => Promise.reject(new Error("host must not be asked")); // test-only
   const code = await runCli(argv, {
     out: createCliOut({ stdout: (t) => stdout.push(t), stderr: (t) => stderr.push(t) }),
     host,
+    env: { HOME: tmp, ...env },
   });
   return { code, stdout: stdout.join(""), stderr: stderr.join("") };
 }
@@ -62,13 +68,13 @@ describe("runCli", () => {
   test("bare panel on a terminal: help naming `panel serve` on stderr, exit 2", async () => {
     const r = await cli([]);
     expect(r.code).toBe(2);
-    expect(r.stderr).toContain("Pemakaian");
-    expect(r.stderr).toContain("panel serve");
+    expect(r.stderr).toContain("Usage: panel <command> [options]");
+    expect(r.stderr).toContain("→ to run the server: panel serve");
     expect(r.stdout).toBe("");
   });
 
   test("-h, --help, --h and help print the same help on stdout, exit 0", async () => {
-    const outs = await Promise.all([["-h"], ["--help"], ["--h"], ["help"]].map(cli));
+    const outs = await Promise.all([["-h"], ["--help"], ["--h"], ["help"]].map((a) => cli(a)));
     for (const r of outs) {
       expect(r.code).toBe(0);
       expect(r.stdout).toBe(outs[0]?.stdout as string);
@@ -89,7 +95,8 @@ describe("runCli", () => {
   test("-v --json is a usage error (m16)", async () => {
     const r = await cli(["-v", "--json"]);
     expect(r.code).toBe(2);
-    expect(r.stderr).toContain("Opsi tidak dikenal: --json");
+    expect(r.stderr).toContain("Unknown option: --json");
+    expect(r.stderr).toContain("→ see: panel --help");
   });
 
   test("unknown flags and commands exit 2", async () => {
@@ -100,14 +107,14 @@ describe("runCli", () => {
     expect((await cli(["docs", "a", "b"])).code).toBe(2);
     const r = await cli(["frobnicate"]);
     expect(r.code).toBe(2);
-    expect(r.stderr).toContain("Perintah tidak dikenal: frobnicate");
+    expect(r.stderr).toContain("Unknown command: frobnicate");
     expect(r.stderr).not.toContain("install.sh");
   });
 
   test("upgrade is not a command and points at the install line or <new binary> init (C14, C18)", async () => {
     const r = await cli(["upgrade"]);
     expect(r.code).toBe(2);
-    expect(r.stderr).toContain("baris pasang");
+    expect(r.stderr).toContain("run the install line again (README)");
     expect(r.stderr).toContain("init");
     expect(r.stderr).not.toContain("install.sh");
     expect((await cli(["--help"])).stdout).not.toContain("install.sh");
@@ -145,6 +152,27 @@ describe("runCli", () => {
       expect(r.stdout).toContain(`panel ${name}`);
     }
     expect((await cli(["help", "rollback"])).stdout).toContain("--yes");
+  });
+
+  test("--lang id and PANEL_LANG=id: Indonesian help and errors; --lang wins over PANEL_LANG", async () => {
+    const help = await cli(["--lang", "id", "-h"]);
+    expect(help.code).toBe(0);
+    expect(help.stdout).toContain("Pemakaian: panel <perintah> [opsi]");
+    expect((await cli(["doctor", "--help"], { PANEL_LANG: "id" })).stdout).toContain("Pemakaian: panel doctor");
+    expect((await cli(["frobnicate", "--lang=id"])).stderr).toContain("Perintah tidak dikenal: frobnicate");
+    expect((await cli(["-v", "--json", "--lang", "id"])).stderr).toContain("Opsi tidak dikenal: --json");
+    expect((await cli(["-h", "--lang", "en"], { PANEL_LANG: "id" })).stdout).toContain("Usage: panel <command>");
+    const bad = await cli(["-h", "--lang", "de"]);
+    expect(bad.code).toBe(2);
+    expect(bad.stderr).toContain("Invalid option value: --lang de (en, id)");
+  });
+
+  test("help in both locales names the same commands and flags", async () => {
+    for (const argv of [["-h"], ["init", "--help"], ["rollback", "--help"], ["env", "--help"]]) {
+      const flags = (t: string) => [...t.matchAll(/(?<![\w-])(--?[a-z][a-z-]*)/g)].map((m) => m[1]).sort();
+      const [en, id] = [await cli(argv), await cli([...argv, "--lang", "id"])];
+      expect(flags(id.stdout)).toEqual(flags(en.stdout));
+    }
   });
 
   test("aliases normalize before parsing (K3)", () => {

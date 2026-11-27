@@ -1,16 +1,21 @@
 import { Database } from "bun:sqlite";
-import { afterEach, describe, expect, test } from "bun:test";
+import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { existsSync, linkSync, mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createFakeHost, type FakeHost } from "@/cli/cli.host.fake";
+import { setCliLocale } from "@/cli/cli.locale";
 import type { ParsedArgs } from "@/cli/cli.main";
 import { CliExit, createCliOut } from "@/cli/cli.output";
 import { type RollbackOpts, runRollback } from "@/cli/rollback.command";
 import { fakeElf, GLIBC_LINKER } from "./deploy.fixture";
 
 const roots: string[] = [];
+// The CLI locale is a module singleton: English unless a test sets Indonesian.
+const english = () => setCliLocale({ locale: "en", source: "default" });
+beforeEach(english);
 afterEach(() => {
+  english();
   for (const r of roots.splice(0)) rmSync(r, { recursive: true, force: true });
 });
 
@@ -75,7 +80,7 @@ describe("panel rollback: refusals change nothing", () => {
     rmSync(join(dir, "panel"));
     const r = await run(host, { yes: true });
     expect(r.code).toBe(1);
-    expect(r.stderr).toContain("Tidak ada binary panel");
+    expect(r.stderr).toContain("There is no panel binary");
     expect(r.stderr).toContain("panel init");
     expect(r.stderr).not.toContain("install.sh");
     expect(existsSync(join(dir, "panel.prev"))).toBe(true);
@@ -86,8 +91,8 @@ describe("panel rollback: refusals change nothing", () => {
     const { host, dir } = setup({ prev: null });
     const r = await run(host, { yes: true });
     expect(r.code).toBe(1);
-    expect(r.stderr).toContain("Tidak ada versi sebelumnya");
-    expect(r.stderr).toContain("panel init menyimpannya saat upgrade");
+    expect(r.stderr).toContain("There is no previous version");
+    expect(r.stderr).toContain("panel init keeps it during an upgrade");
     expect(r.stderr).not.toContain("install.sh");
     expect(readFileSync(join(dir, "panel"), "utf8")).toBe(NEW);
     expect(svCalls(host)).toEqual([]);
@@ -102,7 +107,7 @@ describe("panel rollback: refusals change nothing", () => {
       const { host, dir } = setup({ prev });
       const r = await run(host, { yes: true });
       expect(r.code).toBe(1);
-      expect(r.stderr).toContain("Tidak ada yang diubah");
+      expect(r.stderr).toContain("Nothing was changed");
       expect(readFileSync(join(dir, "panel"), "utf8")).toBe(NEW);
       expect(read(join(dir, "panel.prev")).equals(Buffer.from(prev))).toBe(true);
       expect(host.records).toEqual([]);
@@ -129,7 +134,7 @@ describe("panel rollback: refusals change nothing", () => {
     const { host } = setup();
     const r = await run(host, { yes: true, db: true });
     expect(r.code).toBe(1);
-    expect(r.stderr).toContain("Tidak ada snapshot database");
+    expect(r.stderr).toContain("There is no database snapshot");
   });
 });
 
@@ -149,7 +154,7 @@ describe("panel rollback: swap", () => {
     expect(readFileSync(join(dir, "panel.prev"), "utf8")).toBe(NEW);
     expect(statSync(join(dir, "panel")).mode & 0o777).toBe(0o755);
     expect(existsSync(join(dir, "panel.new")) || existsSync(join(dir, "panel.old"))).toBe(false);
-    expect(r.stdout).toContain("Panel berjalan lagi");
+    expect(r.stdout).toContain("The panel is running again");
     const sv = svCalls(host);
     expect(sv.map((c) => c.argv)).toEqual([["sv", "-w", "130", "restart", "panel"]]);
     expect(sv[0]?.envKeys).toContain("SVDIR");
@@ -210,7 +215,7 @@ describe("panel rollback: swap", () => {
     writeFileSync(join(dir, "panel.old"), "previous running binary");
     const r = await run(host, { yes: true });
     expect(r.code).toBe(1);
-    expect(r.stderr).toContain("terputus");
+    expect(r.stderr).toContain("was interrupted");
     expect(readFileSync(join(dir, "panel.prev"), "utf8")).toBe("previous running binary");
     expect(existsSync(join(dir, "panel.old"))).toBe(false);
     expect(svCalls(host)).toEqual([]);
@@ -222,7 +227,7 @@ describe("panel rollback: swap", () => {
     const down: FakeHost = { ...host, system: () => ({ ...sys, net: { ...sys.net, httpStatus: async () => null } }) };
     const r = await run(down, { yes: true });
     expect(r.code).toBe(1);
-    expect(r.stderr).toContain("belum menjawab /api/health");
+    expect(r.stderr).toContain("does not answer /api/health");
     expect(r.stderr).toContain("sv/panel/current");
   });
 });
@@ -233,7 +238,7 @@ describe("panel rollback: database", () => {
     withSnapshot(data, "0.5.0", "0.4.0");
     const r = await run(host, { yes: true });
     expect(r.code).toBe(0);
-    expect(r.stdout).toContain("Database sudah dimigrasi oleh v0.5.0");
+    expect(r.stdout).toContain("The database was already migrated by v0.5.0");
     expect(r.stdout).toContain("panel rollback --db");
     expect(markerOf(join(data, "panel.db"))).toBe("current");
   });
@@ -242,7 +247,7 @@ describe("panel rollback: database", () => {
     const { host, data } = setup();
     withSnapshot(data, "0.4.0", "0.4.0");
     const r = await run(host, { yes: true });
-    expect(r.stdout).not.toContain("sudah dimigrasi");
+    expect(r.stdout).not.toContain("already migrated");
   });
 
   test("--db: sv down, before-rollback copy (600) first, newest snapshot in place, -wal/-shm gone", async () => {
@@ -253,7 +258,7 @@ describe("panel rollback: database", () => {
     const now = new Date(2026, 10, 27, 12, 0, 0);
     const r = await run(host, { yes: true, db: true }, { now });
     expect(r.code).toBe(0);
-    expect(r.stdout).toContain("perubahan data setelah waktu itu hilang");
+    expect(r.stdout).toContain("data changed after that time is lost");
     expect(r.stdout).toContain("2026-11-26 10:00:00");
     const backup = join(data, "snapshots", "panel.db.before-rollback.20261127120000");
     expect(markerOf(backup)).toBe("current");
@@ -263,4 +268,17 @@ describe("panel rollback: database", () => {
     expect(existsSync(join(data, "panel.db-shm"))).toBe(false);
     expect(svCalls(host).map((c) => c.argv[3])).toEqual(["down", "restart"]);
   });
+});
+
+test("Indonesian (CLI locale id): plan and errors in Indonesian", async () => {
+  setCliLocale({ locale: "id", source: "flag" });
+  const { host } = setup({ prev: null });
+  const r = await run(host, { yes: true });
+  expect(r.code).toBe(1);
+  expect(r.stderr).toContain("Tidak ada versi sebelumnya");
+  expect(r.stderr).toContain("panel init menyimpannya saat upgrade");
+  const ok = setup();
+  const done = await run(ok.host, { yes: true });
+  expect(done.stdout).toContain("Rencana rollback:");
+  expect(done.stdout).toContain("Panel berjalan lagi");
 });

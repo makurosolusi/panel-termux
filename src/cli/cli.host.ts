@@ -9,6 +9,7 @@ import type { SystemAdapters } from "../server/system/system.types";
 import { ENV_VARS } from "../shared/env.schema";
 import type { LinkFn } from "../shared/file.link";
 import { listProcs, localHealth, pidAlive, procExeId } from "./cli.host.proc";
+import { tr } from "./cli.locale";
 import { ttyAsk, ttySecret } from "./cli.prompt";
 
 /** Base folders; every other probe path derives from these (probePaths). */
@@ -259,11 +260,19 @@ function fakeAnswers(json: string | undefined): (string | boolean | null)[] | un
   try {
     v = JSON.parse(json);
   } catch (e) {
-    throw new FakeScenarioError(`PANEL_CLI_FAKE_ANSWERS bukan JSON: ${(e as Error).message}`);
+    const why = (e as Error).message;
+    throw new FakeScenarioError(
+      tr(`PANEL_CLI_FAKE_ANSWERS is not JSON: ${why}`, `PANEL_CLI_FAKE_ANSWERS bukan JSON: ${why}`),
+    );
   }
   const answer = (a: unknown) => a === null || typeof a === "string" || typeof a === "boolean";
   if (!Array.isArray(v) || !v.every(answer))
-    throw new FakeScenarioError("PANEL_CLI_FAKE_ANSWERS harus array JSON berisi teks, true/false atau null");
+    throw new FakeScenarioError(
+      tr(
+        "PANEL_CLI_FAKE_ANSWERS must be a JSON array of text, true/false or null",
+        "PANEL_CLI_FAKE_ANSWERS harus array JSON berisi teks, true/false atau null",
+      ),
+    );
   return v;
 }
 
@@ -275,7 +284,12 @@ export async function detectCliHost(): Promise<CliHost> {
   const fake = process.env.PANEL_CLI_FAKE;
   if (fake) {
     if (!(FAKE_SCENARIOS as readonly string[]).includes(fake))
-      throw new FakeScenarioError(`PANEL_CLI_FAKE="${fake}" tidak dikenal (pilihan: ${FAKE_SCENARIOS.join(", ")})`);
+      throw new FakeScenarioError(
+        tr(
+          `PANEL_CLI_FAKE="${fake}" is unknown (choices: ${FAKE_SCENARIOS.join(", ")})`,
+          `PANEL_CLI_FAKE="${fake}" tidak dikenal (pilihan: ${FAKE_SCENARIOS.join(", ")})`,
+        ),
+      );
     const { createFakeHost } = await import("./cli.host.fake");
     const answers = fakeAnswers(process.env.PANEL_CLI_FAKE_ANSWERS);
     // scripted answers stand in for a terminal (shell tests run with stdin </dev/null)
@@ -286,5 +300,10 @@ export async function detectCliHost(): Promise<CliHost> {
   }
   const p = probePaths(pathsFrom("", termuxPrefix()));
   if (existsSync(p.pkg) || existsSync(p.apt) || process.env.TERMUX_VERSION) return createTermuxHost();
-  throw new NotTermuxError(`Ini bukan Termux: ${p.pkg} dan ${p.apt} tidak ada, TERMUX_VERSION tidak diset`);
+  throw new NotTermuxError(
+    tr(
+      `This is not Termux: ${p.pkg} and ${p.apt} are missing, TERMUX_VERSION is not set`,
+      `Ini bukan Termux: ${p.pkg} dan ${p.apt} tidak ada, TERMUX_VERSION tidak diset`,
+    ),
+  );
 }

@@ -1,5 +1,6 @@
-// `panel doctor [--json]` (PLAN/07 §3, K5, K12): probe + bootstrap checks + the server's Persiapan checks with the
-// card's own copy, printed plainly or as one DoctorReport. Read-only: no file is created or written (lab L6).
+// `panel doctor [--json]` (PLAN/07 §3, K5, K12; PLAN/08 §6): probe + bootstrap checks + the server's Setup card checks
+// with the card's own copy in the CLI locale, printed plainly or as one DoctorReport (ids stay English). Read-only: no
+// file is created or written (lab L6).
 import { Database } from "bun:sqlite";
 import { existsSync } from "node:fs";
 import { join } from "node:path";
@@ -16,27 +17,46 @@ import {
   type DoctorReport,
   type DoctorState,
 } from "../shared/doctor.types";
+import type { Messages } from "../shared/i18n";
+import type { Locale } from "../shared/locale";
 import type { IntegrationCheck } from "../shared/site.types";
 import { tSiteSetup } from "../web/i18n/en.site.setup";
+import { idSiteSetup } from "../web/i18n/id.site.setup";
 import type { CliHost } from "./cli.host";
+import { activeCliLocale, tr } from "./cli.locale";
 import type { Command } from "./cli.main";
 import type { CliOut } from "./cli.output";
 import { bootstrapChecks } from "./doctor.checks";
 import { collectDoctorProbe } from "./doctor.probe";
 
-const GROUPS: Record<DoctorGroup, string> = {
-  termux: "Termux",
-  paket: "Paket",
-  layanan: "Layanan",
-  panel: "Panel",
-  situs: "Situs (sama dengan kartu Persiapan)",
-  tunnel: "Tunnel",
-  boot: "Boot",
-  manual: "Tidak bisa dicek dari Termux",
+/** Group headings per locale; the group ids themselves are a JSON contract and stay as they are. */
+const GROUPS: Record<Locale, Record<DoctorGroup, string>> = {
+  en: {
+    termux: "Termux",
+    paket: "Packages",
+    layanan: "Services",
+    panel: "Panel",
+    situs: "Sites (same as the Setup card)",
+    tunnel: "Tunnel",
+    boot: "Boot",
+    manual: "Cannot be checked from Termux",
+  },
+  id: {
+    termux: "Termux",
+    paket: "Paket",
+    layanan: "Layanan",
+    panel: "Panel",
+    situs: "Situs (sama dengan kartu Persiapan)",
+    tunnel: "Tunnel",
+    boot: "Boot",
+    manual: "Tidak bisa dicek dari Termux",
+  },
 };
-const ORDER = Object.keys(GROUPS) as DoctorGroup[];
+const ORDER = Object.keys(GROUPS.en) as DoctorGroup[];
 const DB_FILE = "panel.db";
-const PERSIAPAN = "buka Situs → Persiapan di panel";
+/** The Setup card copy of the web UI in the CLI locale (the CLI imports both dictionaries; no overlay). */
+const setupCopy = (): Messages<typeof tSiteSetup> => (activeCliLocale().locale === "id" ? idSiteSetup : tSiteSetup);
+const openSetup = () => tr("open Sites → Setup in the panel", "buka Situs → Persiapan di panel");
 
 type DoctorDb = { db: Db; note: string | null };
 
@@ -53,35 +73,49 @@ const memoryDb = (note: string | null): DoctorDb => {
 export function openDoctorDb(dataDir: string): DoctorDb {
   const file = join(dataDir, DB_FILE);
   if (!existsSync(file)) return memoryDb(null);
-  const defaults = "pengaturan situs memakai nilai bawaan";
+  const defaults = tr("site settings use their defaults", "pengaturan situs memakai nilai bawaan");
   if (existsSync(`${file}-wal`) && !existsSync(`${file}-shm`))
-    return memoryDb(`panel.db tidak dibuka (panel mati dengan WAL tersisa); ${defaults}.`);
+    return memoryDb(
+      tr(
+        `panel.db not opened (the panel stopped with a WAL left over); ${defaults}.`,
+        `panel.db tidak dibuka (panel mati dengan WAL tersisa); ${defaults}.`,
+      ),
+    );
   let client: Database | undefined;
   try {
     client = new Database(file, { readonly: true, strict: true });
     const row = client.query<{ value: string }, []>("select value from app_meta where key = 'schema_version'").get();
     if (row?.value === latestSchemaVersion()) return { db: drizzle({ client, schema }) as Db, note: null };
     client.close();
-    return memoryDb(`panel.db versi lama (panel belum dimulai ulang setelah update); ${defaults}.`);
+    return memoryDb(
+      tr(
+        `panel.db has an old version (the panel was not restarted after the update); ${defaults}.`,
+        `panel.db versi lama (panel belum dimulai ulang setelah update); ${defaults}.`,
+      ),
+    );
   } catch (e) {
     client?.close();
-    return memoryDb(`panel.db tidak bisa dibaca (${(e as Error).message}); ${defaults}.`);
+    const why = (e as Error).message;
+    return memoryDb(
+      tr(`panel.db cannot be read (${why}); ${defaults}.`, `panel.db tidak bisa dibaca (${why}); ${defaults}.`),
+    );
   }
 }
 
-/** One Persiapan card row as a doctor check: same key, state, params and label as the UI (K5). */
+/** One Setup card row as a doctor check: same key, state, params and label as the UI in the CLI locale (K5). */
 export function siteCheck(c: IntegrationCheck, fixable: ReadonlySet<string>): DoctorCheck {
-  const copy = tSiteSetup.checks[c.key];
+  const card = setupCopy();
+  const copy = card.checks[c.key];
   const text = (c.state === "ok" ? copy.ok : (copy as Record<string, typeof copy.ok>)[c.state]) ?? copy.ok;
   const label = typeof text === "function" ? text(c.params) : text;
   const hint =
     c.state === "ok"
       ? null
       : c.key === "cloudflare_token"
-        ? tSiteSetup.tokenLink
+        ? card.tokenLink
         : fixable.has(c.key)
-          ? `${PERSIAPAN}, tekan ${tSiteSetup.fix}`
-          : PERSIAPAN;
+          ? tr(`${openSetup()}, press ${card.fix}`, `${openSetup()}, tekan ${card.fix}`)
+          : openSetup();
   return {
     group: "situs",
     key: c.key,
@@ -125,17 +159,34 @@ export async function runDoctor(host: CliHost, out: CliOut): Promise<DoctorRepor
 }
 
 function print(report: DoctorReport, out: CliOut): void {
-  out.line(`Panel Termux ${report.panelVersion} — pemeriksaan HP (tidak ada yang diubah)`);
+  const groups = GROUPS[activeCliLocale().locale];
+  out.line(
+    tr(
+      `Panel Termux ${report.panelVersion} — phone check (nothing is changed)`,
+      `Panel Termux ${report.panelVersion} — pemeriksaan HP (tidak ada yang diubah)`,
+    ),
+  );
   for (const group of ORDER) {
     const rows = report.checks.filter((c) => c.group === group);
     if (!rows.length) continue;
     out.line();
-    out.line(GROUPS[group]);
+    out.line(groups[group]);
     for (const c of rows) out.check(c.state, c.label, c.hint);
   }
   if (report.checks.some((c) => c.key === "panel_health" && c.state === "ok"))
-    out.line("\nℹ️ Checklist penyiapan ada di Administrasi → Penyiapan");
-  out.line(`\nHasil: ${report.summary.error} error, ${report.summary.warning} peringatan.`);
+    out.line(
+      tr(
+        "\nℹ️ The setup checklist is in Administration → Set up Panel Termux",
+        "\nℹ️ Checklist penyiapan ada di Administrasi → Penyiapan",
+      ),
+    );
+  const { error, warning } = report.summary;
+  out.line(
+    tr(
+      `\nResult: ${error} ${error === 1 ? "error" : "errors"}, ${warning} ${warning === 1 ? "warning" : "warnings"}.`,
+      `\nHasil: ${error} error, ${warning} peringatan.`,
+    ),
+  );
 }
 
 /** `panel doctor [--json]`: exit 0 without errors (warnings allowed), 1 with at least one (§2.2). */
