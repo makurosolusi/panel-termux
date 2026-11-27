@@ -8,6 +8,8 @@
 - Di `ecosystem.config.js` panel hanya menambahkan blok bertanda `panel-termux:apps v1` di akhir file. Aplikasi tulisan tangan tidak diubah dan tidak di-restart; penjaga `pm2-guard` hanya ditambahkan bila tidak ada aplikasi tulisan tangan.
 - **Batalkan perubahan** per file setelah perbaikan. Salinan file sebelum perbaikan disimpan di `<PANEL_DATA_DIR>/fix-backups/` (10 terakhir per file, hanya di HP, tidak ikut cadangan R2/S3).
 - **Mulai ulang pm2 sekarang** (opsional) yang memeriksa semua aplikasi kembali berjalan, dan menawarkan **Kembalikan file ecosystem dan mulai ulang pm2** bila ada yang tidak kembali.
+- Bila restart pm2 akan menghentikan aplikasi yang tidak tercantum di `ecosystem.config.js`, panel memperingatkan dengan menyebut nama aplikasinya dan meminta kamu mengetik `pm2` untuk melanjutkan.
+- Tombol **Jalankan pm2** juga tersedia di dalam dialog restart pm2.
 - Tombol **Jalankan pm2** dan **Jalankan postgres** di semua tempat yang melaporkan layanan itu mati: Persiapan, daftar dan detail situs, Riwayat perubahan, Ringkasan, halaman Aplikasi dan Database. Layanan juga menyala lagi setelah HP dinyalakan ulang.
 - **Jalankan lagi** untuk situs yang tidak ada di pm2, termasuk situs adopsi (dimuat dari `ecosystem.config.js`).
 - Folder situs yang belum ada bisa dibuat dari kartu Persiapan.
@@ -37,6 +39,11 @@
 - Menekan **Mulai ulang pm2 sekarang** berulang kali (atau permintaan yang dikirim ulang browser) kini ikut menunggu restart yang sedang berjalan, bukan galat "sedang berjalan". Batas diam koneksi HTTP dinaikkan ke 120 detik.
 - Pemeriksaan setelah restart pm2 mencakup semua aplikasi yang seharusnya berjalan, bukan hanya yang berjalan sebelum restart.
 - **Batalkan perubahan** pada file yang sudah diubah di luar panel langsung menawarkan **Tetap kembalikan**.
+- **Kembalikan file ecosystem dan mulai ulang pm2** tetap ditawarkan setelah restart pm2 gagal berulang kali.
+- Me-restart situs yang foldernya hilang langsung gagal dengan pesan yang jelas, bukan menunggu.
+- Jumlah masalah tersisa di kartu Persiapan tetap akurat setelah **Perbaiki semua**.
+- Tombol salin dan tautan di HP kini punya area sentuh 44 px.
+- Kartu record DNS terbaca di semua lebar layar.
 
 ## [0.3.0] - 2026-11-27
 
