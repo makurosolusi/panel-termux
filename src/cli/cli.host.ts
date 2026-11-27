@@ -7,6 +7,7 @@ import { type ExecOptions, type ExecResult, resolveArgv, runTermux, termuxPrefix
 import { createTermuxSystem } from "../server/system/system.select";
 import type { SystemAdapters } from "../server/system/system.types";
 import { ENV_VARS } from "../shared/env.schema";
+import { ttyAsk, ttySecret } from "./cli.prompt";
 
 /** Base folders; every other probe path derives from these (probePaths). */
 export type CliPaths = { home: string; prefix: string; svdir: string; logdir: string; panelDir: string };
@@ -189,7 +190,7 @@ export function confirmAnswer(answer: string | null, defaultYes = false): boolea
 
 /** Asks on the terminal with `[Y/n]` or `[y/N]` (the capital letter = what Enter means). */
 export async function confirmOnTty(question: string, defaultYes = false): Promise<boolean> {
-  return confirmAnswer(prompt(`${question} ${defaultYes ? "[Y/n]" : "[y/N]"}`), defaultYes);
+  return confirmAnswer(await ttyAsk(`${question} ${defaultYes ? "[Y/n]" : "[y/N]"}`), defaultYes);
 }
 
 /**
@@ -291,11 +292,8 @@ export function createTermuxHost(): CliHost {
     tty: {
       isTty: process.stdin.isTTY === true,
       confirm: confirmOnTty,
-      ask: async (question) => prompt(question),
-      // ponytail: placeholder until W1 wkr-init-env-01 ships src/cli/cli.prompt.ts (raw mode, no echo); G1a wires it
-      secret: async () => {
-        throw new Error("prompt rahasia belum tersedia (src/cli/cli.prompt.ts, PLAN/07 §16 W1)");
-      },
+      ask: ttyAsk,
+      secret: ttySecret,
     },
     proc: {
       selfPid: process.pid,
