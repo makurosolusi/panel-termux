@@ -16,6 +16,9 @@ dibantah debat diperbaiki langsung di tempatnya dan ditandai **(dikoreksi, debat
 dependensi (§3.1), mode fake `selectSystem` di Termux kosong (§5.1), pewarisan env (temuan 3). Temuan baru: temuan
 10–12. Keputusan lingkup (0.5.0 = P0, `init` 0.5.1, `upgrade` ditunda) ada di `PLAN/DECISIONS.md` C12–C16.
 
+**Tambahan 2026-11-27 (`wkr-cli-plan-04`)**: fakta untuk arahan pemilik C18 (binary mentah + `panel init` sebagai
+jalur pasang tunggal, lab di POCO) ada di §8. Baris tabel §2 tidak diubah; tabel itu menggambarkan alur ≤ 0.5.0.
+
 ## 0. Masukan pemilik
 
 > "project ini harusnya cerdas dapat mendeteksi dan membuatkan / mengisi celah yang belum ada ... aplikasi ini sudah
@@ -314,3 +317,79 @@ adalah daftar awal riset.
 - Upgrade dari UI panel (tombol "Perbarui") — memakai `panel upgrade` di belakang; butuh PLAN sendiri. `panel upgrade`
   sendiri ditunda sampai rilis bertanda tangan Ed25519 (C14).
 - Pacman Termux — hanya pesan manual.
+
+## 8. Fakta tambahan untuk C18 (2026-11-27)
+
+Sumber: kode repo di `main` (`c48061b`), memori proyek tentang POCO, dan perilaku standar alat. Tidak ada web search;
+yang belum dibuktikan ditandai **(perlu verifikasi)** atau dirujuk ke lab PLAN/07 §14.
+
+### 8.1 Masukan pemilik
+
+> "harusnya panel itu sudah cukup untuk mengakomodir kebutuhan menambahkan aksi terpisah seperti curl... install.sh
+> ini menambah kompleksitas dan rawan lalai harusnya panel init sudah bisa dengan cerdas mengakomodirnya"
+
+Pemilik juga menyatakan POCO adalah **HP eksperimen**, bukan produksi: lab L1–L8 dan uji Termux bersih final boleh di
+POCO setelah backup ke Mac, dan pemilik sendiri yang akan menghapus data Termux untuk uji final.
+
+### 8.2 Rilis dan jalur pasang hari ini
+
+- `scripts/package-release.sh` membuat tiga aset: `panel-termux-android-arm64.tar.gz` (binary + `install-phone.sh` +
+  `deploy/sv/panel/run` + `deploy/pm2/*` + `.env.example` + `LICENSE` + `VERSION`), `install.sh` (=
+  `install-release.sh` dengan `PANEL_VERSION_DEFAULT` ditanam), dan `SHA256SUMS` (dua baris). Binary mentah belum
+  menjadi aset.
+- `release.yml` menjalankan `actions/attest` v4.2.2 dengan `subject-checksums: dist/release/SHA256SUMS`, jadi setiap
+  aset yang tercantum di `SHA256SUMS` ikut ter-attest. `gh release create "$TAG" dist/release/*` mengunggah semua isi
+  folder itu. Tag harus sama dengan `v` + versi `package.json`.
+- `install.sh` ≤ 0.5.0 memanggil `sh scripts/install-phone.sh ./panel-android-arm64` dari `~/panel-src/<versi>`:
+  path binary masuk sebagai `$1`.
+- File yang menyebut `install.sh`/`install-phone.sh`/`install-release.sh` (di luar PLAN dan R&D): `README.md`,
+  `CHANGELOG.md`, `deploy/pm2/run`, `deploy/sv/panel/run`, `scripts/{install-phone,install-release,package-release,cli}*.sh`
+  dan test-nya, `.github/workflows/{ci,release}.yml`, `src/web/i18n/id.landing.ts`, `tests/web.landing.test.ts`,
+  `tests/env.schema.test.ts` (membaca `REQUIRED_VARS` dari `install-phone.sh`), `tests/cli.args.test.ts`,
+  `src/cli/{cli.help,cli.main,rollback.command,doctor.checks.base}.ts`.
+- `scripts/build.ts` hanya men-`define` `process.env.NODE_ENV`; belum ada penanda tag rilis di binary, sehingga binary
+  belum tahu `SHA256SUMS` mana yang harus dicocokkan.
+- `CliHost` (`src/cli/cli.host.ts`) punya `exec`, `run`, `tty`, `proc`, `freeBytes`, `system`; belum ada `fetch` atau
+  tulis file atomik sebagai bagian host.
+
+### 8.3 Nama file unduhan
+
+- Di HP yang sudah terpasang, `~/panel` adalah **folder** (`install-phone.sh`: `INSTALL_DIR="$HOME/panel"`). `curl -o
+  panel` dari HOME tidak bisa menulis ke path folder, jadi gagal. Di HP baru, file `~/panel` akan menduduki path yang
+  dibutuhkan `init` untuk folder instalasi.
+- `https://github.com/<owner>/<repo>/releases/latest/download/<aset>` mengalihkan (302) ke aset rilis terbaru yang
+  **bukan** draft/prarilis, jadi `curl` butuh `-L`. Prarilis hanya terjangkau lewat `releases/download/<tag>/<aset>`.
+- Apakah Termux men-set `TMPDIR` di shell login **(perlu verifikasi, L3)**. `install-release.sh` sudah memakai
+  `${TMPDIR:-$PREFIX/tmp}`.
+
+### 8.4 HTTPS dari binary
+
+- Binary panel sudah memakai `fetch` HTTPS di HP: probe konektivitas (`monitor.sampler.ts`, bawaan
+  `https://www.gstatic.com/generate_204`), cek hostname publik (`cloudflared.termux.ts`), API Cloudflare
+  (`cloudflare.client.ts`), Telegram (`telegram.client.ts`). Jadi cek diri `SHA256SUMS` lewat `fetch` tidak menambah
+  syarat sertifikat baru di Termux.
+- `curl` dibutuhkan hanya untuk unduhan pertama (binary). Di bootstrap Termux baru masih **(belum dicek di HP baru,
+  L3)**; `pkg` memakai `curl` untuk memilih mirror (§3.1), yang menunjukkan `curl` ada di bootstrap **(perlu
+  verifikasi)**.
+
+### 8.5 POCO, ssh, dan wipe
+
+- POCO (memori proyek): `ssh poco` → `100.64.0.23:8022` lewat VPN Tailscale (aplikasi Android terpisah, always-on);
+  sshd di bawah runit dengan `$SVDIR/sshd/down` dari paket yang dihapus `~/bin/ensure-services`; key-only lewat
+  `$PREFIX/etc/ssh/sshd_config.d/10-key-only.conf`.
+- Menghapus data aplikasi Termux menghapus `/data/data/com.termux/files` (HOME dan `$PREFIX`): paket, runit, sshd,
+  host key ssh, `~/.ssh/authorized_keys`, `~/.cloudflared`, `~/panel`, `~/sites`, data PostgreSQL. Aplikasi lain
+  (Termux:Boot, Termux:API, Tailscale) tidak terhapus. Akses ssh hilang sampai sshd + kunci dipasang lagi dari HP.
+- Host key sshd dibuat ulang saat `openssh` dipasang lagi, jadi `ssh` di Mac menolak dengan "REMOTE HOST
+  IDENTIFICATION HAS CHANGED" sampai entri lama dihapus (`ssh-keygen -R '[100.64.0.23]:8022'`).
+- Yang hidup di POCO dan ikut hilang saat wipe (memori proyek): makuro-solusi (pm2, port 3005, publik
+  `solusi.<domain>` lewat tunnel `poco`), adminneo, PostgreSQL 18.7 (role/db makuro), `~/bin/ensure-services` +
+  Termux:Boot `start-services` + job `termux-job-scheduler` 15 menit, hold `cloudflared`/`postgresql` (C15).
+- Uninstall paket `cloudflared` menghapus folder layanannya dan paket baru memasang `down` + run script token (§5.3);
+  di HP bersih ini tidak relevan, tetapi relevan untuk L2 (`apt reinstall`) di POCO sebelum wipe.
+
+### 8.6 termux-packages
+
+- Paket resmi Termux dibangun dari sumber oleh resep `build.sh` di `termux/termux-packages`; unduhan binary pihak
+  ketiga sebagai paket umumnya tidak diterima **(perlu verifikasi kebijakan terbaru)**. Panel adalah binary
+  `bun build --compile`, sehingga paket berarti Bun harus bisa dibangun di toolchain Termux **(perlu verifikasi)**.
