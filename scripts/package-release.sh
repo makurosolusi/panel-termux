@@ -3,7 +3,7 @@
 # Usage: sh scripts/package-release.sh <binary> <outdir> <tag>
 # Writes into <outdir> (PLAN/07 §8.2): panel (the raw android-arm64 binary), install.sh (install-release.sh with the
 # tag baked in), panel-termux-android-arm64.tar.gz and SHA256SUMS covering all three.
-# install.sh and the tarball exist for one release only (0.5.x) and go away in 0.6.0.
+# install.sh and the tarball stay through 0.6.x and go away in 0.7.0.
 set -eu
 
 die() { echo "package-release: $*" >&2; exit 1; }

@@ -1,5 +1,5 @@
 #!/bin/sh
-# Compatibility shim for 0.5.x (removed in 0.6.0, PLAN/07 §8.2), published as the release asset install.sh.
+# Compatibility shim for 0.5.x upgrades (kept through 0.6.x, removed in 0.7.0, PLAN/07 §8.2), published as the release asset install.sh.
 # Downloads the raw `panel` binary of one release, checks it against that release's SHA256SUMS, then runs
 # `panel init` (which does all the installing). Version: $PANEL_VERSION, else PANEL_VERSION_DEFAULT (set by
 # scripts/package-release.sh). Arguments are passed to `panel init`. Exit code = exit code of `panel init`.
@@ -27,7 +27,7 @@ done
 (cd "$TMP" && sha256sum -c --ignore-missing SHA256SUMS) || die "Checksum mismatch: the download is corrupt. Try again."
 chmod 755 "$TMP/panel"
 # exec replaces the shell, so the trap never removes $TMP: `panel init` deletes its own download (K24).
-# ponytail: one empty folder per shim run stays in $TMPDIR; the shim goes away in 0.6.0.
+# ponytail: one empty folder per shim run stays in $TMPDIR; the shim goes away in 0.7.0.
 BIN="$TMP/panel"
 # D6: under `curl … | sh` stdin is the pipe; give init the terminal when there is one.
 if [ ! -t 0 ] && (: </dev/tty) 2>/dev/null; then exec "$BIN" init "$@" </dev/tty; else exec "$BIN" init "$@"; fi
