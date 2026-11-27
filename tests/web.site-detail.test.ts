@@ -1,6 +1,10 @@
 import { describe, expect, test } from "bun:test";
 import type { BackupLastGood } from "@/shared/backup.types";
+import type { JobStep } from "@/shared/job.types";
+import type { Domain } from "@/shared/panel.types";
 import type { Job, SiteCheckResult, SiteDetail } from "@/shared/site.types";
+import { idSiteDetail } from "@/web/i18n/id.site-detail";
+import { CLOUDFLARE_TOKENS_URL, dnsRecords, hostsNeedingRecord, manualDnsHosts } from "@/web/site/dns.manual";
 import { applyPaste, parseEnvPaste, pasteApplicable } from "@/web/site/env.paste";
 import {
   type EnvDraft,
@@ -231,5 +235,51 @@ describe("site detail decisions", () => {
       "?keepData=true&keepDatabase=false&confirm=blog",
     );
     expect(deleteQuery(false, "", { data: true, database: true })).toBe("");
+  });
+});
+
+describe("DNS record card without a token (PLAN/06 §6.4 A)", () => {
+  const TUNNEL = "00000000-0000-4000-8000-000000000000"; // test-only
+  const step = (code: string, params: JobStep["params"]) =>
+    ({ key: "dns", status: "skipped", code, params }) as JobStep;
+
+  test("copy-ready CNAME per hostname to <tunnel>.cfargotunnel.com, proxied", () => {
+    expect(dnsRecords(["blog.contoh.com"], TUNNEL)).toEqual([
+      { type: "CNAME", name: "blog.contoh.com", content: `${TUNNEL}.cfargotunnel.com`, proxied: true },
+    ]);
+    expect(CLOUDFLARE_TOKENS_URL).toStartWith("https://dash.cloudflare.com/");
+  });
+
+  test("job page: hostnames of a dns step still needing a hand-made record", () => {
+    const hosts = { hostnames: "a.contoh.com, b.contoh.com" };
+    expect(manualDnsHosts([step("dns_no_token", hosts)])).toEqual(["a.contoh.com", "b.contoh.com"]);
+    expect(manualDnsHosts([step("dns_route_failed", hosts)])).toHaveLength(2);
+    expect(manualDnsHosts([step("dns_wrong_zone", { ...hosts, fqdn: "a.contoh.com.x.com" })])).toHaveLength(2);
+    expect(manualDnsHosts([step("dns_routed", hosts)])).toEqual([]);
+    expect(manualDnsHosts([step("dns_no_token", {})])).toEqual([]); // 0.3.0 job rows carry no hostnames
+  });
+
+  test("site detail: unmanaged domains that do not answer yet", () => {
+    const dns = [
+      { hostname: "own.contoh.com", managed: true },
+      { hostname: "ok.contoh.com", managed: false },
+      { hostname: "down.contoh.com", managed: false },
+      { hostname: "new.contoh.com", managed: false },
+    ];
+    const d = (hostname: string, status: number | null) => ({ hostname, health: { status } }) as Domain;
+    expect(hostsNeedingRecord(dns, [d("ok.contoh.com", 200), d("down.contoh.com", 530)])).toEqual([
+      "down.contoh.com",
+      "new.contoh.com",
+    ]);
+    expect(hostsNeedingRecord(dns)).toEqual(["ok.contoh.com", "down.contoh.com", "new.contoh.com"]);
+  });
+
+  test("missing-from-pm2 copy offers Jalankan lagi, not ssh", () => {
+    const h = idSiteDetail.header;
+    expect(h.runAgain).toBe("Jalankan lagi");
+    for (const text of [h.missingFromPm2Help, h.missingFromPm2Adopted]) {
+      expect(text).toContain("Jalankan lagi");
+      expect(text).not.toContain("ssh");
+    }
   });
 });

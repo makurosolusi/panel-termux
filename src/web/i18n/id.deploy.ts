@@ -13,7 +13,7 @@ export const idDeploy = {
     title: "Versi berjalan",
     none: "Belum ada binary. Unggah binary pertama untuk menjalankan situs ini.",
     untracked: "Versi tanpa catatan",
-    untrackedHelp: "Binary ini diganti di luar panel (mis. lewat ssh), jadi tidak ada catatan deploy-nya.",
+    untrackedHelp: "Binary ini diganti di luar panel (mis. disalin langsung ke HP), jadi tidak ada catatan deploy-nya.",
     sha: "Versi",
     file: "Nama file",
     size: "Ukuran",
@@ -75,9 +75,15 @@ export const idDeploy = {
     truncated: "Binary ini terpotong. Build ulang, lalu unggah lagi.",
   } satisfies Record<InvalidReason, string>,
   runtimeMismatch: (got: string, expected: string) =>
-    `Binary ini untuk ${got}, tetapi pm2 menjalankan situs ini sebagai ${expected}. Build ulang dengan target yang sesuai, atau ubah entri pm2-nya lewat ssh.`,
+    `Binary ini untuk ${got}, tetapi pm2 menjalankan situs ini sebagai ${expected}. Build ulang dengan target yang sesuai, lalu unggah lagi.`,
   noSpace: (need: string, free: string) =>
     `Penyimpanan HP tidak cukup: butuh ${need}, tersisa ${free}. Kosongkan ruang, lalu coba lagi.`,
+  /** 409 no_folder / deploy blocker: a database site's folder held its only DATABASE_URL; an adopted one is the owner's. */
+  noFolder: {
+    database: "Folder situs ini hilang. Hapus situs lalu buat ulang, atau pulihkan dari cadangan.",
+    adopted:
+      "Folder aplikasi situs ini hilang dari HP. Situs adopsi bukan buatan panel, jadi panel tidak membuat foldernya. Pulihkan dari cadangan, atau hapus situs ini dari panel.",
+  },
   errorCodes: {
     too_large: "File melebihi batas ukuran di server. Pilih binary yang lebih kecil.",
     invalid_size: "Ukuran file tidak valid. Pilih ulang file-nya.",
@@ -86,9 +92,11 @@ export const idDeploy = {
     upload_expired:
       "Unggahan ini sudah tidak ada di server (lebih dari 1 jam tanpa potongan baru, atau admin lain memulai unggahan baru). Unggah ulang file-nya.",
     chunk_sha_mismatch: "Potongan rusak di jalan. Lanjutkan unggahan untuk mengirim ulang.",
-    no_folder: "Folder situs tidak ada. Buat ulang foldernya lewat ssh atau hapus situs ini.",
+    no_folder:
+      "Folder situs ini tidak ada lagi di HP, jadi binary tidak bisa dipasang. Hapus situs ini lalu buat ulang dengan nama yang sama.",
     integration_required: "pm2 belum siap menjalankan situs buatan panel. Selesaikan persiapan di halaman Situs.",
-    pm2_not_running: "Layanan pm2 tidak berjalan. Jalankan sv up pm2 di HP, lalu coba lagi.",
+    pm2_not_running:
+      "Layanan pm2 tidak berjalan, jadi semua situs ikut berhenti. Tekan Jalankan pm2 di atas, lalu coba lagi.",
     no_previous: "Belum ada versi sebelumnya. Rollback bisa dipakai setelah deploy kedua.",
     no_current: "Tidak ada binary yang berjalan, jadi tidak ada yang bisa dikembalikan.",
     invalid_binary: "Binary versi sebelumnya tidak bisa dijalankan di HP ini.",

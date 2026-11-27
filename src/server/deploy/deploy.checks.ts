@@ -1,7 +1,10 @@
 // Preflight checks of the deploy API (PLAN/03 §3.4 error table), thrown as ApiError before any job starts.
-import { existsSync, statSync } from "node:fs";
+import { existsSync, mkdirSync, statSync } from "node:fs";
+import { join } from "node:path";
 import type { ScriptRuntime, SiteRuntime } from "../../shared/site.types";
 import { ApiError } from "../routes/http.error";
+import { envText } from "../sites/env.file";
+import { writeAtomic } from "../sites/site.files";
 import { Pm2UnavailableError, type SystemAdapters } from "../system/system.types";
 import { appName, type SiteRow } from "./deploy.steps";
 import { scriptRuntimeOf } from "./run.script";
@@ -53,4 +56,24 @@ export function assertSiteSpace(s: SiteRow, upload: string, sizeBytes: number, f
       freeBytes: freeNow,
     });
   }
+}
+
+const SITE_DIR_MODE = 0o700;
+const ENV_MODE = 0o600;
+
+/** A missing folder the panel can make again: a managed site without a database (its `.env` is only `PORT`). */
+export const folderRecreatable = (s: Pick<SiteRow, "managed" | "database">): boolean => s.managed && !s.database;
+
+/**
+ * Site folder before an upload (R&D/07 #13). Missing + recreatable → made again (700) with `.env` `PORT`, the deploy
+ * then brings the binary back; otherwise 409 `no_folder` `{ database }` (an adopted site's folder is the owner's; a
+ * database site's DATABASE_URL password lived only in the lost `.env`). Returns true when it made the folder.
+ */
+export function ensureSiteFolder(s: SiteRow): boolean {
+  if (existsSync(s.dir)) return false;
+  if (!folderRecreatable(s))
+    throw new ApiError(409, "no_folder", `site folder ${s.dir} does not exist`, { database: s.database !== null });
+  mkdirSync(s.dir, { recursive: true, mode: SITE_DIR_MODE });
+  writeAtomic(join(s.dir, ".env"), envText([["PORT", String(s.port)]]), { mode: ENV_MODE });
+  return true;
 }

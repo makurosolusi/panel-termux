@@ -52,7 +52,7 @@ export type BootOpts = { system?: SystemAdapters; exit?: (code: number) => void 
 
 /**
  * Boots the panel from a parsed env (PLAN/04 F6/F7 order): secret → DB → pre-migration snapshot → migrations →
- * panel_version → data-key check → clean-shutdown marker → services → apps.json → monitor → backup scheduler →
+ * panel_version → data-key check → clean-shutdown marker → services → apps.json + orphan fix candidate → monitor → backup scheduler →
  * HTTP server. Returns the server and the graceful shutdown handler (not yet bound to signals).
  */
 export async function bootPanel(env: Env, opts: BootOpts = {}) {
@@ -96,6 +96,7 @@ export async function bootPanel(env: Env, opts: BootOpts = {}) {
   );
   const { siteJobs, monitor, backup } = routes.decorator;
   routes.decorator.sites.ensureAppsJson();
+  routes.decorator.sites.removeFixCandidate();
   const api = new Elysia().use(app).use(routes);
   const stopMonitor = monitor.start();
   const stopBackup = backup.startScheduler();

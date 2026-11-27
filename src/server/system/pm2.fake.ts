@@ -10,9 +10,14 @@ import { type Pm2Adapter, type Pm2Proc, Pm2UnavailableError, SystemError } from 
  * pm2 behaviours seen in the POCO lab that tests need to reproduce (PLAN/03 C18):
  * `onlineWithoutPid` — (re)started apps report `online` with no pid (E3);
  * `runtimeExitsOnMissingNativeScript` — `startFromEcosystem` loads the real ecosystem file and, when any entry's
- * script is missing, the pm2 runtime dies: every app stops and the supervisor goes down (E1).
+ * script is missing, the pm2 runtime dies: every app stops and the supervisor goes down (E1);
+ * `pm2LostOnRestart` — apps the runtime does not bring back when runit `pm2` (re)starts (checked restart, PLAN/06 F10).
  */
-export type FakePm2Behaviour = { onlineWithoutPid?: boolean; runtimeExitsOnMissingNativeScript?: boolean };
+export type FakePm2Behaviour = {
+  onlineWithoutPid?: boolean;
+  runtimeExitsOnMissingNativeScript?: boolean;
+  pm2LostOnRestart?: string[];
+};
 
 /** The runit `pm2` service as the fake pm2 sees it. */
 export type FakeSupervisor = { isUp(): boolean; crash(): void };
@@ -79,18 +84,23 @@ function entryApp(e: EcosystemEntry, baseDir: string): FakeApp {
   });
 }
 
-/** Demo apps shaped like the phone's: glibc via grun, php, a native site without its binary, modules, one errored. */
-function seedApps(home: string): FakeApp[] {
+/**
+ * Demo apps shaped like the phone's: glibc via grun, php, a native site without its binary, modules, one errored.
+ * `seedSiteDirs` false = their folders under `<home>/sites` are not created (scenario `no_sites_dir`).
+ */
+function seedApps(home: string, seedSiteDirs: boolean): FakeApp[] {
   const bin = join(termuxPrefix(), "bin");
   const site = (name: string) => join(home, "sites", name);
-  for (const [dir, file] of [
-    ["makuro-solusi", "app"],
-    ["adminneo", "index.php"],
-  ] as const) {
-    mkdirSync(site(dir), { recursive: true });
-    if (!existsSync(join(site(dir), file))) writeFileSync(join(site(dir), file), "fake site file\n");
+  if (seedSiteDirs) {
+    for (const [dir, file] of [
+      ["makuro-solusi", "app"],
+      ["adminneo", "index.php"],
+    ] as const) {
+      mkdirSync(site(dir), { recursive: true });
+      if (!existsSync(join(site(dir), file))) writeFileSync(join(site(dir), file), "fake site file\n");
+    }
+    mkdirSync(site("demo-api"), { recursive: true });
   }
-  mkdirSync(site("demo-api"), { recursive: true });
   const t0 = Date.now();
   const on = (a: FakeApp, pid: number, memoryMb: number, extra: Partial<FakeApp> = {}): FakeApp => {
     Object.assign(a, { status: "online", pid, memoryMb, startedAtMs: t0, since: t0 }, extra);
@@ -140,7 +150,7 @@ function loadEcosystem(file: string): EcosystemEntry[] {
 
 /**
  * In-memory pm2 whose availability follows the fake runit `pm2` service; `appCount` = apps that are not modules,
- * `listens(port)` = an online app accepts TCP on that port.
+ * `listens(port)` = an online app accepts TCP on that port, `runtimeStarted()` = runit `pm2` just (re)started.
  */
 export function createFakePm2(opts: {
   home: string;
@@ -148,9 +158,10 @@ export function createFakePm2(opts: {
   supervisor: FakeSupervisor;
   nextPid: () => number;
   behaviour: FakePm2Behaviour;
-}): { pm2: Pm2Adapter; appCount: () => number; listens: (port: number) => boolean } {
+  seedSiteDirs?: boolean;
+}): { pm2: Pm2Adapter; appCount: () => number; listens: (port: number) => boolean; runtimeStarted: () => void } {
   const { home, delayMs, supervisor, nextPid, behaviour } = opts;
-  const apps = seedApps(home);
+  const apps = seedApps(home, opts.seedSiteDirs ?? true);
   const proc = ({ since, listen, ...a }: FakeApp): Pm2Proc => ({
     ...a,
     uptimeSec: a.status === "online" ? Math.floor((Date.now() - since) / MS_PER_SEC) : null,
@@ -229,8 +240,19 @@ export function createFakePm2(opts: {
       return view(a);
     },
   };
+  /** A new pm2-runtime: online apps get new processes; `pm2LostOnRestart` apps are gone from pm2. */
+  function runtimeStarted() {
+    const lost = new Set(behaviour.pm2LostOnRestart ?? []);
+    for (let i = apps.length - 1; i >= 0; i--) if (lost.has((apps[i] as FakeApp).name)) apps.splice(i, 1);
+    for (const a of apps.filter((x) => x.status === "online")) {
+      run(a);
+      a.restarts = 0;
+    }
+  }
+
   return {
     pm2,
+    runtimeStarted,
     appCount: () => apps.filter((a) => !a.module).length,
     listens: (port) => apps.some((a) => a.status === "online" && a.listen === port),
   };

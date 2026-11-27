@@ -25,7 +25,7 @@ import { runSiteAction } from "./site.api";
 
 const t = idSite.adopt;
 /** Centered dialog from `sm` up; below it a bottom sheet with the safe-area inset (PLAN/03 §6). */
-const PHONE_SHEET =
+export const PHONE_SHEET =
   "max-h-[90dvh] overflow-y-auto max-sm:top-auto max-sm:bottom-0 max-sm:max-w-full max-sm:translate-y-0 max-sm:rounded-b-none max-sm:rounded-t-xl max-sm:border-x-0 max-sm:border-b-0 max-sm:pb-[calc(1.5rem+env(safe-area-inset-bottom))] max-sm:data-[state=closed]:slide-out-to-bottom max-sm:data-[state=open]:slide-in-from-bottom";
 
 /** Adopt dialog for `entry` (closed when null). `onDone(name)` after 201; `onFailed` so the caller reloads its list. */

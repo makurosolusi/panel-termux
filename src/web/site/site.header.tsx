@@ -2,17 +2,14 @@ import {
   ActivityIcon,
   EllipsisIcon,
   HistoryIcon,
-  InfoIcon,
+  PlayIcon,
   RotateCwIcon,
   ScrollTextIcon,
   Trash2Icon,
-  TriangleAlertIcon,
   UploadIcon,
 } from "lucide-react";
-import type { ReactNode } from "react";
 import { Link, useNavigate } from "react-router";
-import { toast } from "sonner";
-import { type Job, type JobAccepted, missingFromPm2, type SiteDetail } from "@/shared/site.types";
+import { type JobAccepted, missingFromPm2, type SiteDetail } from "@/shared/site.types";
 import { CodeText } from "@/web/components/code-text";
 import { ConfirmAction } from "@/web/components/confirm-action";
 import { PageHeader, type PageMeta } from "@/web/components/page-header";
@@ -28,41 +25,60 @@ import {
 import { idSiteDetail } from "@/web/i18n/id.site-detail";
 import { ERROR_TOAST_MS } from "@/web/shared/api.action";
 import { apiErrorMessage, apiFetch, type ErrorCodes } from "@/web/shared/api.client";
+import { ServiceStartButton } from "@/web/shared/service-start";
+import { toast } from "@/web/shared/toast.lazy";
 import { deployOutcomeSuffix } from "./job.status-key";
 import { jobPath, siteUrl } from "./site.api";
 import { canRestart, HostLink, SiteAppBadge } from "./site.card";
-import { healthToast, type SiteBanner, siteBanners, siteBusy } from "./site-detail.state";
+import { healthToast, siteBusy } from "./site-detail.state";
 
 const t = idSiteDetail.header;
-const b = idSiteDetail.banner;
 
-/** "Mulai ulang" with its confirmation (job `site.restart` → progress page); disabled while busy or not deployed. */
-export function RestartAction({ site, codes, variant = "outline" }: RestartProps) {
+/**
+ * "Mulai ulang" with its confirmation (job `site.restart` → progress page); disabled while busy or not deployed.
+ * While pm2 does not run the app it is the primary "Jalankan lagi" (the same job loads it again, PLAN/06 §6.3),
+ * unless the folder is gone: then nothing can run and the no_folder banner leads (QA fix-07 N9). pm2 down: the
+ * dialog carries "Jalankan pm2" itself (QA fix-04 MINOR-8).
+ */
+export function RestartAction({ site, codes, variant = "outline", onChanged }: RestartProps) {
   const navigate = useNavigate();
+  const missing = missingFromPm2(site);
+  const noFolder = site.deployBlocker === "no_folder";
+  const label = missing ? t.runAgain : t.restart;
   return (
     <ConfirmAction
-      title={t.restartTitle(site.name)}
+      title={missing ? t.runAgainTitle(site.name) : t.restartTitle(site.name)}
       description={
         <>
-          <span>{t.restartBody}</span>
+          <span>{missing ? t.runAgainBody : t.restartBody}</span>
           <span>{t.restartAfter}</span>
+          {site.deployBlocker === "pm2_not_running" && (
+            <span className="flex flex-col items-start gap-2 text-foreground">
+              {t.pm2Down}
+              <ServiceStartButton service="pm2" onStarted={onChanged} />
+            </span>
+          )}
         </>
       }
-      confirmLabel={t.restart}
+      confirmLabel={label}
       codes={codes}
       onConfirm={async () =>
         navigate(jobPath((await apiFetch<JobAccepted>("POST", siteUrl(site.name, "/restart"))).jobId))
       }
       trigger={
-        <Button variant={variant} size="sm" disabled={siteBusy(site) || !canRestart(site)}>
-          <RotateCwIcon aria-hidden />
-          {t.restart}
+        <Button
+          variant={missing && !noFolder ? "default" : variant}
+          size="sm"
+          disabled={siteBusy(site) || !canRestart(site) || noFolder}
+        >
+          {missing ? <PlayIcon aria-hidden /> : <RotateCwIcon aria-hidden />}
+          {label}
         </Button>
       }
     />
   );
 }
-type RestartProps = { site: SiteDetail; codes: ErrorCodes; variant?: "outline" | "default" };
+type RestartProps = { site: SiteDetail; codes: ErrorCodes; variant?: "outline" | "default"; onChanged?: () => void };
 
 async function checkHealth(name: string) {
   try {
@@ -100,7 +116,7 @@ export function SiteHeader(props: { site: SiteDetail; meta: PageMeta; codes: Err
           </span>
           {!site.managed && <span>{t.adopted}</span>}
           {site.appStatus === "unknown" && <span>{t.pm2Unknown}</span>}
-          {missingFromPm2(site) && (
+          {missingFromPm2(site) && site.deployBlocker !== "no_folder" && (
             <span className="text-danger">
               <CodeText>{site.managed ? t.missingFromPm2Help : t.missingFromPm2Adopted}</CodeText>
             </span>
@@ -109,13 +125,13 @@ export function SiteHeader(props: { site: SiteDetail; meta: PageMeta; codes: Err
       }
       actions={
         <>
-          <Button size="sm" asChild>
+          <Button size="sm" variant={missingFromPm2(site) ? "outline" : "default"} asChild>
             <a href="#deploy">
               <UploadIcon aria-hidden />
               {t.deploy}
             </a>
           </Button>
-          <RestartAction site={site} codes={props.codes} />
+          <RestartAction site={site} codes={props.codes} onChanged={props.meta.onRefresh} />
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <Button variant="ghost" size="icon-sm" aria-label={t.more(site.name)}>
@@ -150,50 +166,4 @@ export function SiteHeader(props: { site: SiteDetail; meta: PageMeta; codes: Err
       }
     />
   );
-}
-
-const BANNER = {
-  info: { Icon: InfoIcon, box: "border-info/25 bg-info-subtle", icon: "text-info" },
-  warning: { Icon: TriangleAlertIcon, box: "border-warning/25 bg-warning-subtle", icon: "text-warning" },
-};
-const linkCls = "font-medium underline underline-offset-4";
-type BannersProps = { site: SiteDetail; interrupted: Job | null; codes: ErrorCodes };
-
-/** Running / interrupted change, restart pending and deploy blocker notices of one site. */
-export function SiteBanners({ site, interrupted, codes }: BannersProps) {
-  const job = site.activeJob;
-  const link = (to: string, label: string) => (
-    <Link className={linkCls} to={to}>
-      {label}
-    </Link>
-  );
-  const view = (kind: SiteBanner): [tone: "info" | "warning", text: ReactNode, action: ReactNode] => {
-    if (kind === "running" || kind === "busy_other")
-      return [
-        "info",
-        kind === "running" ? b.running : b.busyOther(job?.target ?? ""),
-        job && link(jobPath(job.id), b.viewJob),
-      ];
-    if (kind === "interrupted")
-      return ["warning", b.interrupted, interrupted && link(jobPath(interrupted.id), b.openJob)];
-    if (kind === "restart_pending")
-      return ["warning", b.restartPending, <RestartAction key="restart" site={site} codes={codes} />];
-    const blocker = site.deployBlocker;
-    return ["warning", blocker && b.blockers[blocker], blocker === "integration" && link("/panel/sites", b.toSites)];
-  };
-  return siteBanners(site, interrupted).map((kind) => {
-    const [tone, text, action] = view(kind);
-    const { Icon, box, icon } = BANNER[tone];
-    return (
-      <div
-        key={kind}
-        role="status"
-        className={`flex flex-wrap items-center gap-x-3 gap-y-2 rounded-md border px-3 py-2 text-sm ${box}`}
-      >
-        <Icon className={`size-4 shrink-0 ${icon}`} aria-hidden />
-        <span className="min-w-0 flex-1">{text}</span>
-        {action}
-      </div>
-    );
-  });
 }

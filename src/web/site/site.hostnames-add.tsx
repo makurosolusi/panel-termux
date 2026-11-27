@@ -1,6 +1,5 @@
 import { PlusIcon, XIcon } from "lucide-react";
 import { useState } from "react";
-import { toast } from "sonner";
 import { Button } from "@/web/components/ui/button";
 import {
   Dialog,
@@ -15,6 +14,7 @@ import { Input } from "@/web/components/ui/input";
 import { idSiteDetail } from "@/web/i18n/id.site-detail";
 import { ERROR_TOAST_MS } from "@/web/shared/api.action";
 import { apiErrorMessage, type ErrorCodes } from "@/web/shared/api.client";
+import { toast } from "@/web/shared/toast.lazy";
 import { useSiteCheck } from "./site.api";
 import { cleanHost } from "./site.check";
 import { hostnameFeedback, hostnamesCheck, MAX_NEW_HOSTNAMES, normalizeHostnames } from "./site-detail.state";

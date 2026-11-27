@@ -11,6 +11,14 @@ export const LISTEN_HOST = "127.0.0.1";
 /** Hard cap on any request body (one deploy chunk + headroom); JSON routes are capped lower in api.handler. */
 const MAX_BODY_BYTES = DEPLOY_CHUNK_SIZE + 1024 * 1024;
 const HTTP_NOT_FOUND = 404;
+/**
+ * Seconds a connection may sit without traffic, i.e. while a handler is still working. Bun's default is 10 s, below
+ * the panel's longest synchronous requests: the checked pm2 restart polls up to 30 s, and restore + restart adds a
+ * node load test (≤ 15 s), `sv restart` (≤ 15 s) and a re-check probe (≤ 15 s) ≈ 75 s; Cloudflare token verify
+ * (10 s per call + one retry) and backup verify (15 s) also pass 10 s. A connection cut mid-request
+ * makes the browser resend the POST, which then meets its own lock (QA fix-04 BLOCKER-1). Bun allows up to 255.
+ */
+export const REQUEST_IDLE_TIMEOUT_SEC = 120;
 
 /** Development only: path the bundle is mounted on in this server (HMR needs it here). */
 const DEV_SPA_PATH = "/__spa";
@@ -82,13 +90,14 @@ function seoRoutes(appBaseUrl: string) {
  * seo.pageHead (OG for `/`, `noindex` elsewhere, status 404 for unknown paths incl. the bundle's old
  * `/__spa`), never ETag/304 since the body differs from the bundle's. SEO files: seoRoutes. `development` = Bun dev bundling/HMR:
  * the bundle stays on this server (HMR websocket) so its assets bypass the proxy (note: Bun's dev server
- * answers 403 to non-loopback Host headers, so the tunnel needs production).
+ * answers 403 to non-loopback Host headers, so the tunnel needs production). `idleTimeout`: REQUEST_IDLE_TIMEOUT_SEC.
  */
 export function servePanel(
   api: { handle(req: Request): Response | Promise<Response> },
   appBaseUrl: string,
   port: number,
   development = process.env.NODE_ENV !== "production",
+  idleTimeout = REQUEST_IDLE_TIMEOUT_SEC,
 ) {
   const https = new URL(appBaseUrl).protocol === "https:";
   const handleApi = createApiHandler(api, { appBaseUrl });
@@ -141,6 +150,7 @@ export function servePanel(
     hostname: LISTEN_HOST,
     port,
     development,
+    idleTimeout,
     maxRequestBodySize: MAX_BODY_BYTES,
     routes: {
       "/api/*": (req, srv) => handleApi(req, srv),

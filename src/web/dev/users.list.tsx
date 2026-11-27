@@ -1,6 +1,5 @@
 import { EllipsisIcon, LockIcon, LogOutIcon, ShieldIcon, Trash2Icon, UserIcon } from "lucide-react";
 import { useState } from "react";
-import { toast } from "sonner";
 import type { AssignableRole, DevUser } from "@/shared/dev.types";
 import type { RevokedSessions } from "@/shared/security.types";
 import { ConfirmAction } from "@/web/components/confirm-action";
@@ -17,6 +16,7 @@ import {
 } from "@/web/components/ui/dropdown-menu";
 import { idDevUsers } from "@/web/i18n/id.dev.users";
 import { apiFetch } from "@/web/shared/api.client";
+import { toast } from "@/web/shared/toast.lazy";
 import { UserRoleDialog } from "./user.role.dialog";
 
 const t = idDevUsers;

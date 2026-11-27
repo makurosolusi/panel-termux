@@ -263,6 +263,9 @@ describe("describeAudit", () => {
     "log.download": { target: "web" },
     "job.recover": { target: "blog" },
     "setup.update": { target: "access", meta: { key: "access", done: true } },
+    "integration.fix": { target: "ecosystem_block", meta: { key: "ecosystem_block", file: "ecosystem" } },
+    "integration.restore": { target: "pm2_run", meta: { file: "pm2_run", forced: false } },
+    "integration.pm2_restart": { target: "pm2", meta: { missing: 0 } },
   };
   test.each(Object.entries(META))("%s has its own sentence (no fallback, no raw action)", (action, over) => {
     const { text } = describeAudit(entry({ action, ...over }));
@@ -305,6 +308,7 @@ describe("describeAudit", () => {
       "Citra menambah domain a.x.co ke situs blog",
     ],
     [{ action: "auth.sign_in", actor: null, actorDeleted: true }, "Citra (terhapus) masuk"],
+    [{ action: "integration.restore", meta: { file: "pm2_run" } }, "Citra membatalkan perbaikan run script pm2"],
   ] as const)("%o → %s", (over, text) => expect(describeAudit(entry(over as Partial<DevAuditEntry>)).text).toBe(text));
 
   test("unknown/retired action → fallback with the raw action", () =>
@@ -327,6 +331,13 @@ describe("describeAudit", () => {
       },
     );
     expect(describeAudit(entry({ action: "cloudflare.verify", meta: { ok: true } })).tone).toBe("neutral");
+    expect(describeAudit(entry({ action: "integration.pm2_restart", meta: { missing: 2 } }))).toEqual({
+      text: "Citra memulai ulang pm2 dari kartu Persiapan, 2 aplikasi tidak berjalan lagi",
+      tone: "warning",
+    });
+    const fix = (m: Record<string, unknown>) => describeAudit(entry({ action: "integration.fix", meta: m })).text;
+    expect(fix({ file: "ecosystem" })).toBe("Citra memperbaiki integrasi pm2 (ecosystem.config.js)");
+    expect(fix({ key: "sites_dir_create" })).toBe("Citra memperbaiki integrasi pm2 (folder situs)");
   });
 });
 

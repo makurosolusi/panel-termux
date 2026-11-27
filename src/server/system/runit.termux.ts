@@ -1,10 +1,10 @@
-import { existsSync, readdirSync } from "node:fs";
+import { existsSync, readdirSync, rmSync } from "node:fs";
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 import type { ControlAction, ServiceState } from "../../shared/panel.types";
 import { runTermux, termuxPrefix } from "../exec/termux.exec";
 import { tailFile } from "./file.tail";
-import { type RunitAdapter, type RunitService, SystemError } from "./system.types";
+import { type RunitAdapter, type RunitService, type SuperviseState, SystemError } from "./system.types";
 
 const STATUS_LINE = /^(run|down|finish|fail|warning): ([^:]+): (.*)$/;
 const PID_UPTIME = /^\(pid (\d+)\) (\d+)s/;
@@ -52,9 +52,24 @@ export function parseSuperviseStat(text: string): ServiceState {
   return word === "run" || word === "down" || word === "finish" ? word : "unknown";
 }
 
-async function readOptional(path: string): Promise<string | null> {
+/** runsv `supervise/status` is 20 bytes; bytes 0-7 = TAI64 seconds of the last start (runit runsv.c update_status). */
+const STATUS_BYTES = 20;
+/** TAI64 label of unix time 0: 2^62 + 10 (libtai tai_unix, the 10 s TAI-UTC offset runit assumes). */
+const TAI64_UNIX_EPOCH = 2n ** 62n + 10n;
+
+/** Seconds since the start recorded in `supervise/status` bytes, or null when the file is short/implausible. */
+export function uptimeFromStatus(status: Buffer, nowMs = Date.now()): number | null {
+  if (status.length < STATUS_BYTES) return null;
+  const startSec = Number(status.readBigUInt64BE(0) - TAI64_UNIX_EPOCH);
+  const up = Math.floor(nowMs / 1000) - startSec;
+  return Number.isSafeInteger(up) && up >= 0 ? up : null;
+}
+
+async function readOptional(path: string): Promise<string | null>;
+async function readOptional(path: string, binary: true): Promise<Buffer | null>;
+async function readOptional(path: string, binary?: true): Promise<string | Buffer | null> {
   try {
-    return await readFile(path, "utf8");
+    return binary ? await readFile(path) : await readFile(path, "utf8");
   } catch (e) {
     if ((e as NodeJS.ErrnoException).code === "ENOENT") return null;
     throw new SystemError(`read ${path}: ${(e as Error).message}`, { cause: e });
@@ -97,14 +112,29 @@ export function createTermuxRunit(prefix = termuxPrefix()): RunitAdapter {
     async supervise(name: string) {
       if (!SERVICE_NAME_RE.test(name) || !exists(name)) return null;
       const dir = join(svdir, name, "supervise");
-      const [stat, pid] = await Promise.all([readOptional(join(dir, "stat")), readOptional(join(dir, "pid"))]);
+      const [stat, pid, bin] = await Promise.all([
+        readOptional(join(dir, "stat")),
+        readOptional(join(dir, "pid")),
+        readOptional(join(dir, "status"), true),
+      ]);
       // No stat file = runsv is not supervising this directory, so nothing runs it.
       const state = stat === null ? "unknown" : parseSuperviseStat(stat);
       const n = Number(pid?.trim());
-      return { state, pid: state === "run" && Number.isInteger(n) && n > 0 ? n : null };
+      const out: SuperviseState = { state, pid: state === "run" && Number.isInteger(n) && n > 0 ? n : null };
+      const up = state === "run" && bin ? uptimeFromStatus(bin) : null;
+      if (up !== null) out.uptimeSec = up;
+      return out;
     },
-    async control(name: string, action: ControlAction) {
+    async control(name: string, action: ControlAction, opts = {}) {
       if (!exists(name)) return null;
+      // A `down` file keeps the service down at boot; removing it alone does not start it (POCO), so sv runs after.
+      if (action === "start" && opts.removeDown) {
+        try {
+          rmSync(join(svdir, name, "down"), { force: true });
+        } catch (e) {
+          throw new SystemError(`remove ${join(svdir, name, "down")}: ${(e as Error).message}`, { cause: e });
+        }
+      }
       await sv([action, name]);
       return (await status([name]))[0] ?? null;
     },

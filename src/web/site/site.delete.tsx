@@ -10,6 +10,7 @@ import { Checkbox } from "@/web/components/ui/checkbox";
 import { Label } from "@/web/components/ui/label";
 import { idSiteDetail } from "@/web/i18n/id.site-detail";
 import { panelUrl } from "@/web/panel/panel.api";
+import { TOUCH_BOX } from "@/web/panel/panel.touch";
 import { apiFetch, type ErrorCodes } from "@/web/shared/api.client";
 import { useApiQuery } from "@/web/shared/use-api-query";
 import { jobPath, siteUrl } from "./site.api";
@@ -40,7 +41,9 @@ function DeleteDetails({ site, keep, onKeep }: { site: SiteDetail; keep: Keep; o
   return (
     <>
       <span>{t.stops(site.hostnames.join(", "))}</span>
-      <span>{t.removes(site.dir, site.app ?? site.name)}</span>
+      <span>
+        {(site.deployBlocker === "no_folder" ? t.removesNoFolder : t.removes)(site.dir, site.app ?? site.name)}
+      </span>
       {site.database && <span>{t.removesDb(site.database)}</span>}
       {site.database && (
         <span className="rounded-md border px-3 py-2 text-foreground">
@@ -53,7 +56,7 @@ function DeleteDetails({ site, keep, onKeep }: { site: SiteDetail; keep: Keep; o
           ) : (
             t.noBackup(site.database)
           )}{" "}
-          <Link to="/panel/backups" className="underline underline-offset-4">
+          <Link to="/panel/backups" className={`underline underline-offset-4 ${TOUCH_BOX}`}>
             {t.backupNow}
           </Link>
         </span>

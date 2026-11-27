@@ -43,9 +43,8 @@ const ROW_TONE: Partial<Record<SiteAppStatus, StatusTone>> = {
 
 type StatusFacts = Pick<Site, "appStatus" | "managed" | "lastDeploy"> & Partial<Pick<SiteDetail, "binary">>;
 
-/** Restart has an app to act on: pm2 knows it, or a managed site's entry can be (re)loaded from apps.json. */
-export const canRestart = (s: StatusFacts): boolean =>
-  s.appStatus !== "not_deployed" || (s.managed && missingFromPm2(s));
+/** Restart has an app to act on: pm2 knows it, or its entry can be loaded again (apps.json or ecosystem.config.js). */
+export const canRestart = (s: StatusFacts): boolean => s.appStatus !== "not_deployed" || missingFromPm2(s);
 
 /** Row edge tone: only sites whose app needs a look get one. */
 export const siteRowTone = (s: StatusFacts): StatusTone | undefined =>

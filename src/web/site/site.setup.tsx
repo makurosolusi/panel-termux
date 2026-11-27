@@ -1,116 +1,64 @@
-import { CircleCheckIcon, RefreshCwIcon, TriangleAlertIcon } from "lucide-react";
-import { useState } from "react";
-import { Link } from "react-router";
-import { toast } from "sonner";
-import { hasRole } from "@/shared/roles";
-import type { Integration, IntegrationCheck } from "@/shared/site.types";
-import { CodeText } from "@/web/components/code-text";
-import { CopyButton } from "@/web/components/copy-button";
-import { InlineCode } from "@/web/components/inline-code";
+import { cn } from "cn";
+import { CircleCheckIcon, InfoIcon, RefreshCwIcon, WrenchIcon } from "lucide-react";
+import { lazy, type ReactNode, Suspense, useRef, useState } from "react";
+import type { FixKey } from "@/shared/fix.types";
+import type { Integration } from "@/shared/site.types";
 import { RelativeTime } from "@/web/components/relative-time";
-import type { StatusKey } from "@/web/components/status.vocab";
-import { StatusBadge } from "@/web/components/status-badge";
-import { StatusIcon } from "@/web/components/status-icon";
 import { Button } from "@/web/components/ui/button";
 import { idSite } from "@/web/i18n/id.site";
 import { panelUrl } from "@/web/panel/panel.api";
-import { useMe } from "@/web/session/use-me";
 import { ERROR_TOAST_MS } from "@/web/shared/api.action";
 import { apiErrorMessage, apiFetch } from "@/web/shared/api.client";
-import { checkText, editCommand, failingChecks, oldSnippet, setupNeeded, snippetNeeded } from "./site.adopt";
+import { toast } from "@/web/shared/toast.lazy";
+import { SetupActions } from "./setup.actions";
+import { SetupChecklist } from "./setup.checklist";
+import { SetupManual } from "./setup.manual";
+import { applicableFixes, checkText, pm2Pending, remainingProblems, setupNeeded } from "./site.adopt";
 import { SITE_ERROR_CODES } from "./site.api";
 
+// preview dialog + diff only load when Perbaiki is pressed (bundle budget, PLAN/06 §4.1)
+const FixDialog = lazy(() => import("./fix.dialog").then((m) => ({ default: m.FixDialog })));
+
 const t = idSite.setup;
-const CHECK_STATE: Record<IntegrationCheck["state"], StatusKey> = { ok: "done", warning: "attention", error: "failed" };
+/** Anchor of the card (onboarding "Perbaiki di Situs" links to /panel/sites#persiapan). */
+const SETUP_ANCHOR = "persiapan";
 
-/** Code block with a copy button in its corner, above the first line (scrolled lines never slide under it). */
-function CodeBlock({ code, copyLabel }: { code: string; copyLabel?: string }) {
+/** One line once pm2 is ready, plus "Periksa lagi", the pending pm2 note and the undo/restart details. */
+function ReadyLine({
+  integration,
+  verify,
+  actions,
+}: {
+  integration: Integration;
+  verify: ReactNode;
+  actions: ReactNode;
+}) {
+  const pending = integration.checks?.find((c) => c.key === "pm2_auto_exit");
   return (
-    <div className="relative">
-      <pre
-        className={`overflow-x-auto rounded-md border bg-muted p-3 font-mono text-xs leading-relaxed ${copyLabel ? "pt-11" : ""}`}
-      >
-        {code}
-      </pre>
-      {copyLabel && (
-        <div className="absolute top-2 right-2">
-          <CopyButton value={code} label={copyLabel} />
-        </div>
+    <div className="flex flex-col gap-1.5 text-sm text-muted-foreground">
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+        <p className="flex items-center gap-2">
+          <CircleCheckIcon className="size-4 text-success" aria-hidden />
+          {t.readyLine(integration.appNames?.length ?? 0)}
+        </p>
+        {verify}
+      </div>
+      {pending && pm2Pending(integration) && (
+        <p className="flex items-center gap-2">
+          <InfoIcon className="size-4 text-info" aria-hidden />
+          {checkText(pending)}
+        </p>
       )}
-    </div>
-  );
-}
-
-function Checklist({ checks }: { checks: IntegrationCheck[] }) {
-  const me = useMe();
-  return (
-    <ul aria-label={t.checklist} className="flex flex-col gap-2 text-sm">
-      {checks.map((c) => (
-        <li key={c.key} className="flex items-start gap-2">
-          <StatusIcon state={CHECK_STATE[c.state]} className="mt-0.5" />
-          <span className={c.state === "ok" ? "text-muted-foreground" : undefined}>
-            <CodeText>{checkText(c)}</CodeText>
-            {c.key === "cloudflare_token" && c.state !== "ok" && hasRole(me.role, "super_admin") && (
-              <>
-                {" "}
-                <Link to="/dev/settings" className="font-medium underline underline-offset-2">
-                  {t.tokenLink}
-                </Link>
-              </>
-            )}
-          </span>
-        </li>
-      ))}
-    </ul>
-  );
-}
-
-function SnippetSteps({ integration }: { integration: Integration }) {
-  return (
-    <div className="flex flex-col gap-3">
-      <h3 className="text-sm font-semibold">{t.stepsTitle}</h3>
-      <ol className="list-decimal space-y-3 pl-5 text-sm marker:text-muted-foreground">
-        <li className="space-y-1.5">
-          <p>{t.step1}</p>
-          <InlineCode copy>{editCommand(integration)}</InlineCode>
-        </li>
-        <li className="space-y-1.5">
-          <p>
-            <CodeText>{t.step2}</CodeText>
-          </p>
-          {integration.snippet && <CodeBlock code={integration.snippet} copyLabel={t.copySnippet} />}
-          {oldSnippet(integration) && (
-            <div className="flex flex-col items-start gap-1 text-xs text-muted-foreground">
-              <StatusBadge tone="warning" label={t.oldSnippet} />
-              <span>
-                <CodeText>{t.oldSnippetBody}</CodeText>
-              </span>
-            </div>
-          )}
-        </li>
-        <li className="space-y-1.5">
-          <p>
-            <CodeText>{t.step3}</CodeText>
-          </p>
-          <CodeBlock code={t.exampleExports} />
-        </li>
-        <li>
-          <p>{t.step4}</p>
-        </li>
-      </ol>
-      <p className="flex items-start gap-2 rounded-md border border-warning/25 bg-warning-subtle p-3 text-sm">
-        <TriangleAlertIcon className="mt-0.5 size-4 shrink-0 text-warning" aria-hidden />
-        <span className="min-w-0 flex-1">
-          <CodeText>{t.warning}</CodeText>
-        </span>
-      </p>
+      {actions}
     </div>
   );
 }
 
 /**
- * Persiapan card (PLAN/03 §5.1): checklist, the safe apps.json snippet with steps, "Periksa lagi". Collapses to one
- * success line once pm2 is ready without warnings. `adoptable` = unmanaged domains that can be adopted now.
+ * Persiapan card (PLAN/03 §5.1, PLAN/06 §4): checklist with Perbaiki per problem and "Perbaiki semua (n)", the preview
+ * dialog, "Cara manual" folded, undo + checked pm2 restart. Collapses to one line once pm2 is ready without warnings.
+ * `adoptable` = unmanaged domains that can be adopted now; `onVerified` reloads the integration after any action.
+ * The <section> stays mounted in both shapes, so it is where focus lands once an action removed its own button.
  */
 export function SiteSetup({
   integration,
@@ -122,15 +70,21 @@ export function SiteSetup({
   onVerified: () => void;
 }) {
   const [verifying, setVerifying] = useState(false);
-  const [result, setResult] = useState("");
+  const [checked, setChecked] = useState<Integration | null>(null); // answer of the last "Periksa lagi"
+  const [fixing, setFixing] = useState<FixKey[] | null>(null);
+  const [restartWanted, setRestartWanted] = useState(false); // a fix applied here waits for a pm2 restart
+  const card = useRef<HTMLElement>(null);
+  const focusCard = () => card.current;
+  const all = applicableFixes(integration);
+  // the line follows the newest status, so a later fix or restart updates its count (QA fix-07 MAJOR-N1)
+  const newest = checked && (checked.checkedAt ?? "") > (integration.checkedAt ?? "") ? checked : integration;
+  const ready = !setupNeeded(integration); // folded: lists nothing, so never "Masih ada n"
 
   const verify = async () => {
     setVerifying(true);
-    setResult("");
+    setChecked(null);
     try {
-      const fresh = await apiFetch<Integration>("POST", panelUrl("/integration/verify"));
-      const errors = failingChecks(fresh).filter((c) => c.state === "error").length;
-      setResult(errors ? t.stillFailing(errors) : t.allOk);
+      setChecked(await apiFetch<Integration>("POST", panelUrl("/integration/verify")));
     } catch (err) {
       toast.error(apiErrorMessage(err, SITE_ERROR_CODES), { duration: ERROR_TOAST_MS });
     } finally {
@@ -138,50 +92,108 @@ export function SiteSetup({
       onVerified();
     }
   };
-
-  if (!setupNeeded(integration)) {
-    return (
-      <p className="flex items-center gap-2 text-sm text-muted-foreground">
-        <CircleCheckIcon className="size-4 text-success" aria-hidden />
-        {t.readyLine(integration.appNames?.length ?? 0)}
-      </p>
-    );
-  }
+  const verifyButton = (
+    <Button
+      size="sm"
+      variant={ready ? "ghost" : "outline"}
+      onClick={() => void verify()}
+      disabled={verifying}
+      className={ready ? "h-auto px-1 py-0.5 pointer-coarse:py-3" : undefined}
+    >
+      <RefreshCwIcon className={verifying ? "motion-safe:animate-spin" : undefined} aria-hidden />
+      {verifying ? t.checking : t.recheck}
+    </Button>
+  );
+  const actions = (
+    <SetupActions
+      integration={integration}
+      onChange={onVerified}
+      focusCard={focusCard}
+      restartWanted={restartWanted}
+      onRestarted={() => setRestartWanted(false)}
+    />
+  );
+  const resultLine = (
+    <p aria-live="polite" className="text-sm font-medium empty:hidden">
+      {checked ? (remainingProblems(newest) && !ready ? t.stillFailing(remainingProblems(newest)) : t.allOk) : ""}
+    </p>
+  );
 
   return (
-    <section aria-labelledby="setup-title" className="flex flex-col gap-4 rounded-lg border bg-card p-4">
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        <div className="min-w-0">
-          <h2 id="setup-title" className="text-base font-semibold">
-            {t.title}
-          </h2>
-          <p className="mt-0.5 max-w-prose text-sm text-muted-foreground">{t.description}</p>
-        </div>
-        <div className="flex items-center gap-2">
-          {integration.checkedAt && (
-            <span className="text-xs text-muted-foreground">
-              <RelativeTime at={integration.checkedAt} format={t.checkedAt} />
-            </span>
+    <section
+      ref={card}
+      id={SETUP_ANCHOR}
+      tabIndex={-1}
+      aria-labelledby={ready ? undefined : "setup-title"}
+      aria-label={ready ? t.title : undefined}
+      className={cn(
+        "flex scroll-mt-20 flex-col outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50",
+        ready ? "gap-1.5 rounded-md" : "gap-4 rounded-lg border bg-card p-4",
+      )}
+    >
+      {ready ? (
+        <>
+          <ReadyLine integration={integration} verify={verifyButton} actions={actions} />
+          {resultLine}
+        </>
+      ) : (
+        <>
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div className="min-w-0">
+              <h2 id="setup-title" className="text-base font-semibold">
+                {t.title}
+              </h2>
+              <p className="mt-0.5 max-w-prose text-sm text-muted-foreground">{t.description}</p>
+            </div>
+            <div className="flex flex-wrap items-center gap-2">
+              {integration.checkedAt && (
+                <span className="text-xs text-muted-foreground">
+                  <RelativeTime at={integration.checkedAt} format={t.checkedAt} />
+                </span>
+              )}
+              {verifyButton}
+              {all.length > 1 && (
+                <Button size="sm" onClick={() => setFixing(all)}>
+                  <WrenchIcon aria-hidden />
+                  {t.fixAll(all.length)}
+                </Button>
+              )}
+            </div>
+          </div>
+          {resultLine}
+          <SetupChecklist
+            integration={integration}
+            onFix={setFixing}
+            onVerified={() => {
+              onVerified();
+              card.current?.focus();
+            }}
+          />
+          <SetupManual integration={integration} />
+          {actions}
+          {adoptable > 0 && (
+            <div className="flex flex-col gap-1 border-t pt-3 text-sm">
+              <h3 className="font-semibold">{t.adoptTitle}</h3>
+              <p className="text-muted-foreground">{t.adoptBody(adoptable)}</p>
+              <a href="#belum-dikelola" className="w-fit font-medium underline underline-offset-2 pointer-coarse:py-3">
+                {t.adoptLink}
+              </a>
+            </div>
           )}
-          <Button size="sm" variant="outline" onClick={() => void verify()} disabled={verifying}>
-            <RefreshCwIcon className={verifying ? "motion-safe:animate-spin" : undefined} aria-hidden />
-            {verifying ? t.checking : t.recheck}
-          </Button>
-        </div>
-      </div>
-      <p aria-live="polite" className="text-sm font-medium empty:hidden">
-        {result}
-      </p>
-      <Checklist checks={integration.checks ?? []} />
-      {snippetNeeded(integration) && <SnippetSteps integration={integration} />}
-      {adoptable > 0 && (
-        <div className="flex flex-col gap-1 border-t pt-3 text-sm">
-          <h3 className="font-semibold">{t.adoptTitle}</h3>
-          <p className="text-muted-foreground">{t.adoptBody(adoptable)}</p>
-          <a href="#belum-dikelola" className="w-fit font-medium underline underline-offset-2">
-            {t.adoptLink}
-          </a>
-        </div>
+        </>
+      )}
+      {fixing && (
+        <Suspense fallback={null}>
+          <FixDialog
+            keys={fixing}
+            onClose={() => setFixing(null)}
+            onDone={(r) => {
+              if (r) setRestartWanted(true);
+              onVerified();
+            }}
+            focusAfter={focusCard}
+          />
+        </Suspense>
       )}
     </section>
   );

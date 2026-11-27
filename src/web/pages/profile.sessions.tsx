@@ -1,5 +1,4 @@
 import { LogOutIcon, MonitorSmartphoneIcon } from "lucide-react";
-import { toast } from "sonner";
 import type { MeRevokeOthers, MeSession } from "@/shared/me.types";
 import { ConfirmAction } from "@/web/components/confirm-action";
 import { type DataColumn, DataTable } from "@/web/components/data-table";
@@ -11,6 +10,7 @@ import { StatusBadge } from "@/web/components/status-badge";
 import { Button } from "@/web/components/ui/button";
 import { idAccount } from "@/web/i18n/id.account";
 import { ApiError, apiFetch } from "@/web/shared/api.client";
+import { toast } from "@/web/shared/toast.lazy";
 import { useApiQuery } from "@/web/shared/use-api-query";
 
 const t = idAccount.sessions;

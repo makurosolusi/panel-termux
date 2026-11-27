@@ -1,6 +1,5 @@
 import { DownloadIcon, Trash2Icon } from "lucide-react";
 import { useState } from "react";
-import { toast } from "sonner";
 import type { SecurityStatus } from "@/shared/security.types";
 import { ConfirmAction } from "@/web/components/confirm-action";
 import { InlineCode } from "@/web/components/inline-code";
@@ -11,6 +10,7 @@ import { StatusBadge } from "@/web/components/status-badge";
 import { Button } from "@/web/components/ui/button";
 import { idSecurity } from "@/web/i18n/id.security";
 import { idSettings } from "@/web/i18n/id.settings";
+import { toast } from "@/web/shared/toast.lazy";
 import { exportDataKey, isReauthRequired, resetDataKey, SECURITY_ERROR_CODES } from "./security.api";
 import { Notice, ReauthNotice } from "./security.notice";
 import { dataKeyStatusKey } from "./security.state";
@@ -95,13 +95,16 @@ export function DataKeyCard({ status, onChanged }: { status: SecurityStatus; onC
             <p>{t.noTelegram}</p>
             {key.createdThisBoot && <p className="text-muted-foreground">{t.createdThisBoot}</p>}
             <p className="font-medium">{t.restoreFile}</p>
-            <ol aria-label={t.restoreStepsLabel} className="flex flex-col gap-1">
-              {t.restoreSteps.map((cmd) => (
-                <li key={cmd}>
-                  <InlineCode copy>{cmd}</InlineCode>
-                </li>
-              ))}
-            </ol>
+            <details className="text-sm">
+              <summary className="cursor-pointer font-medium pointer-coarse:py-3">{t.restoreStepsLabel}</summary>
+              <ol className="mt-2 flex flex-col gap-1">
+                {t.restoreSteps.map((cmd) => (
+                  <li key={cmd}>
+                    <InlineCode copy>{cmd}</InlineCode>
+                  </li>
+                ))}
+              </ol>
+            </details>
             <p className="text-muted-foreground">{t.orReset}</p>
             <ConfirmAction
               tier="typed"

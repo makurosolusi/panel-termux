@@ -72,7 +72,8 @@ export const idJob = {
     folder_failed: () => "Folder situs tidak bisa dibuat atau dihapus. Lihat detail teknis.",
     database_created: (p) => `Database ${s(p.name)} dibuat.`,
     database_skipped: () => "Situs ini tanpa database.",
-    database_failed: () => "Perintah database gagal. Pastikan layanan postgres berjalan, lalu coba lagi.",
+    database_failed: () =>
+      "Perintah database gagal, biasanya karena layanan postgres tidak berjalan. Jalankan postgres, lalu coba lagi.",
     env_written: (p) => `${s(p.count)} variabel lingkungan ditulis.`,
     env_updated: (p) => `${s(p.set)} diatur, ${s(p.unset)} dihapus.`,
     env_restored: () => "Nilai variabel lingkungan sebelumnya dipulihkan.",
@@ -89,7 +90,14 @@ export const idJob = {
     dns_deleted: (p) => `Record DNS ${s(p.hostnames)} dihapus.`,
     dns_left: (p) =>
       `Record DNS ${s(p.hostnames)} tidak bisa dihapus dan dibiarkan. Hapus di dasbor Cloudflare bila tidak dipakai.`,
-    dns_no_token: () => "Token API Cloudflare belum diatur, jadi DNS perlu diatur manual.",
+    dns_no_token: () =>
+      "Token API Cloudflare belum diisi dan HP ini belum login ke Cloudflare, jadi record DNS dibuat di dasbor Cloudflare. Recordnya ada di bawah.",
+    dns_routed: (p) =>
+      `Record DNS ${s(p.hostnames)} dibuat lewat cloudflared. Panel hanya bisa menghapusnya bila token API diisi.`,
+    dns_route_failed: (p) =>
+      `cloudflared tidak bisa membuat record DNS ${s(p.hostname)}, mungkin karena sudah ada record lain dengan nama itu. Buat atau ubah record di bawah di dasbor Cloudflare.`,
+    dns_wrong_zone: (p) =>
+      `cloudflared membuat record di zona lain (${s(p.fqdn)}). Hapus record itu di dasbor Cloudflare, lalu tambahkan record di bawah secara manual.`,
     dns_none_owned: () => "Tidak ada record DNS milik panel.",
     dns_conflict: (p) =>
       `Sudah ada record DNS untuk ${s(p.hostname)} yang tidak dibuat panel. Hapus atau ubah di dasbor Cloudflare, lalu coba lagi.`,
@@ -106,12 +114,13 @@ export const idJob = {
     apps_removed: (p) => `Entri ${s(p.name)} dihapus dari apps.json.`,
     apps_absent: () => "Tidak ada entri di apps.json.",
     apps_adopted_skip: () => "Situs adopsi: entri pm2 ditulis manual, tidak diubah.",
-    apps_json_invalid: () => "File apps.json rusak. Perbaiki lewat ssh, lalu coba lagi.",
+    apps_json_invalid: () =>
+      "File apps.json rusak. Tekan Perbaiki di kartu Persiapan (halaman Situs) agar panel membangunnya ulang, lalu coba lagi.",
     app_removed: (p) => `Aplikasi ${s(p.name)} dihapus dari pm2.`,
     app_not_deployed: () => "Aplikasi belum pernah di-deploy.",
     app_adopted_skip: () => "Situs adopsi: aplikasi pm2 dibiarkan.",
     pm2_failed: () => "Perintah pm2 gagal. Lihat detail teknis.",
-    pm2_not_running: () => "Layanan pm2 tidak berjalan. Jalankan sv up pm2 di HP, lalu coba lagi.",
+    pm2_not_running: () => "Layanan pm2 tidak berjalan, jadi semua situs ikut berhenti. Jalankan pm2, lalu coba lagi.",
     database_dropped: (p) => `Database ${s(p.name)} dihapus.`,
     database_kept: () => "Database disimpan.",
     database_none: () => "Situs ini tanpa database.",
@@ -126,6 +135,8 @@ export const idJob = {
     size_mismatch: (p) => `Ukuran file ${b(p.got)}, padahal seharusnya ${b(p.expected)}. Unggah ulang.`,
     sha_mismatch: () => "Checksum file tidak cocok. Unggah ulang binary-nya.",
     folder_missing: (p) => `Folder situs ${s(p.path)} tidak ada.`,
+    restart_no_folder: (p) =>
+      `Folder situs ${s(p.path)} tidak ada lagi, jadi aplikasinya tidak bisa dijalankan. Buka detail situs: hapus situs lalu buat ulang, atau pulihkan dari cadangan.`,
     disk_full: () => "Penyimpanan HP penuh. Kosongkan ruang, lalu coba lagi.",
     runtime_native: () => "Binary Android native.",
     runtime_grun: () => "Binary glibc, dijalankan lewat grun.",
@@ -152,6 +163,8 @@ export const idJob = {
     app_started: (p) => `Aplikasi ${s(p.name)} dijalankan.`,
     app_missing: (p) => `Aplikasi ${s(p.name)} tidak ada di pm2.`,
     app_not_loaded: (p) => `pm2 tidak memuat aplikasi ${s(p.name)} dari ecosystem.config.js.`,
+    app_not_in_ecosystem: (p) =>
+      `Entri aplikasi ${s(p.name)} tidak ada lagi di ecosystem.config.js, jadi panel tidak bisa menjalankannya. Tambahkan lagi entrinya di file itu, atau hapus situs ini dari panel.`,
     healthy: (p) => `HTTP ${s(p.status)} dari \`${s(p.path)}\` dalam ${s(p.ms)} ms, stabil.`,
     health_timeout: (p) =>
       `Aplikasi tidak sehat setelah ${s(p.seconds)} dtk (${lastAnswer(p.last)}). Lihat log aplikasi di bawah.`,

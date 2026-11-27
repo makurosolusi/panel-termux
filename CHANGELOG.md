@@ -1,5 +1,50 @@
 # Changelog
 
+## [0.4.0] - 2026-11-27
+
+### Added
+
+- Tombol **Perbaiki** dan **Perbaiki semua** di kartu Persiapan (Situs): panel menyesuaikan `ecosystem.config.js` dan run script pm2 sendiri, tanpa membuka Termux. Sebelum menerapkan, panel menjelaskan artinya dalam bahasa awam (aplikasi tulisan tangan tetap, situs panel ditambahkan) dengan diff yang bisa dibuka, lalu memvalidasi hasilnya dengan `node`. Bila validasi gagal, file lama tetap dipakai.
+- Di `ecosystem.config.js` panel hanya menambahkan blok bertanda `panel-termux:apps v1` di akhir file. Aplikasi tulisan tangan tidak diubah dan tidak di-restart; penjaga `pm2-guard` hanya ditambahkan bila tidak ada aplikasi tulisan tangan.
+- **Batalkan perubahan** per file setelah perbaikan. Salinan file sebelum perbaikan disimpan di `<PANEL_DATA_DIR>/fix-backups/` (10 terakhir per file, hanya di HP, tidak ikut cadangan R2/S3).
+- **Mulai ulang pm2 sekarang** (opsional) yang memeriksa semua aplikasi kembali berjalan, dan menawarkan **Kembalikan file ecosystem dan mulai ulang pm2** bila ada yang tidak kembali.
+- Bila restart pm2 akan menghentikan aplikasi yang tidak tercantum di `ecosystem.config.js`, panel memperingatkan dengan menyebut nama aplikasinya dan meminta kamu mengetik `pm2` untuk melanjutkan.
+- Tombol **Jalankan pm2** juga tersedia di dalam dialog restart pm2.
+- Tombol **Jalankan pm2** dan **Jalankan postgres** di semua tempat yang melaporkan layanan itu mati: Persiapan, daftar dan detail situs, Riwayat perubahan, Ringkasan, halaman Aplikasi dan Database. Layanan juga menyala lagi setelah HP dinyalakan ulang.
+- **Jalankan lagi** untuk situs yang tidak ada di pm2, termasuk situs adopsi (dimuat dari `ecosystem.config.js`).
+- Folder situs yang belum ada bisa dibuat dari kartu Persiapan.
+- **Perbaiki** juga bisa menyusun ulang `apps.json` yang rusak dari daftar situs panel, dan membuat `ecosystem.config.js` yang belum ada dari template. Keduanya bisa dibatalkan dengan **Batalkan perubahan**.
+- Setelah perbaikan yang baru berlaku saat pm2 dimulai berikutnya, kartu Persiapan langsung menawarkan **Mulai ulang pm2 sekarang**.
+- Rute domain yang ditulis manual di config cloudflared kini bisa dihapus dari detail situs dengan mengetik nama domainnya, tanpa ssh.
+- Deploy ke situs buatan panel tanpa database yang foldernya hilang membuat ulang folder itu. Situs dengan database atau situs adopsi mendapat panduan yang jelas dengan tombol **Hapus situs** dan **Buka Cadangan**.
+- DNS situs baru dibuat lewat login cloudflared HP (`cert.pem`) bila token API Cloudflare belum diisi. Menghapus record itu nanti tetap butuh token.
+- Kartu record DNS siap salin (tipe, nama, isi, proxy) dengan **Periksa lagi** saat panel tidak bisa membuat DNS sendiri.
+- Langkah manual untuk pengguna teknis kini ada di bagian **Cara manual (untuk pengguna teknis)** yang bisa dibuka, bukan di pesan utama.
+- Data demo: `scripts/demo-seed.ts --integration <skenario>` (`ready`, `poco`, `old_spread`, `exotic`, `broken`) untuk mencoba kartu Persiapan.
+
+### Changed
+
+- Kartu Persiapan menampilkan satu baris per masalah, dengan alasan yang jelas bila panel tidak bisa memperbaikinya sendiri.
+- Bila cloudflared membuat record DNS di zona lain, langkah DNS dilewati dan situs tetap dibuat; panel menyebut record yang perlu dihapus di dasbor Cloudflare.
+- `--no-auto-exit` yang ditambahkan panel berlaku saat pm2 start berikutnya; pm2 tidak di-restart tanpa persetujuanmu.
+- Ringkasan wizard Buat situs menyebut cara DNS yang benar-benar dipakai: token API, login cloudflared di HP, atau kartu record siap salin.
+- Fokus pindah ke kartu Persiapan setelah perbaikan, undo, atau restart, sehingga hasilnya langsung terbaca.
+- Pemberitahuan (toast) dimuat belakangan, sehingga halaman panel sekitar 9 KB lebih ringan saat pertama dibuka.
+
+### Fixed
+
+- `apps.json`, `.env` situs, dan `config.yml` ditulis dengan fsync (file dan folder) sebelum rename, agar tidak kosong bila HP mati tepat setelah menyimpan.
+- Persiapan di HP dengan `ecosystem.config.js` tulisan tangan yang tidak menyebut `apps.json` kini menampilkan masalah yang sebenarnya, bukan baris yang tidak relevan.
+- Persiapan mendeteksi ecosystem yang lupa menyebar `...panelApps`, juga saat `apps.json` masih kosong.
+- Menekan **Mulai ulang pm2 sekarang** berulang kali (atau permintaan yang dikirim ulang browser) kini ikut menunggu restart yang sedang berjalan, bukan galat "sedang berjalan". Batas diam koneksi HTTP dinaikkan ke 120 detik.
+- Pemeriksaan setelah restart pm2 mencakup semua aplikasi yang seharusnya berjalan, bukan hanya yang berjalan sebelum restart.
+- **Batalkan perubahan** pada file yang sudah diubah di luar panel langsung menawarkan **Tetap kembalikan**.
+- **Kembalikan file ecosystem dan mulai ulang pm2** tetap ditawarkan setelah restart pm2 gagal berulang kali.
+- Me-restart situs yang foldernya hilang langsung gagal dengan pesan yang jelas, bukan menunggu.
+- Jumlah masalah tersisa di kartu Persiapan tetap akurat setelah **Perbaiki semua**.
+- Tombol salin dan tautan di HP kini punya area sentuh 44 px.
+- Kartu record DNS terbaca di semua lebar layar.
+
 ## [0.3.0] - 2026-11-27
 
 ### Added

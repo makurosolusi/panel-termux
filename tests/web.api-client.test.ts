@@ -43,6 +43,12 @@ describe("Cloudflare Access 401 vs panel 401", () => {
     expect(redirectFor(errorFromResponse(409, { error: "conflict" }))).toBeNull();
   });
 
+  test("a string `reason` in the body is kept; anything else is null", () => {
+    expect(errorFromResponse(422, { error: "not_fixable", reason: "too_large" }).reason).toBe("too_large");
+    expect(errorFromResponse(422, { error: "not_fixable", reason: 3 }).reason).toBeNull();
+    expect(errorFromResponse(502, null).reason).toBeNull();
+  });
+
   test("detail under an error title is the next step only, never a repeat of the title", () => {
     const network = new ApiError("network", null, null, null);
     expect(apiErrorDetail(network)).toBe(idCommon.errorSteps.network);

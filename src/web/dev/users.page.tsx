@@ -1,7 +1,6 @@
 import { LogOutIcon, UsersIcon, XIcon } from "lucide-react";
 import { useEffect, useState } from "react";
 import { useSearchParams } from "react-router";
-import { toast } from "sonner";
 import type { DevUser, Page } from "@/shared/dev.types";
 import { isRole, ROLES } from "@/shared/roles";
 import { ConfirmAction } from "@/web/components/confirm-action";
@@ -19,6 +18,7 @@ import { idDevUsers } from "@/web/i18n/id.dev.users";
 import { revokeAllSessions } from "@/web/security/security.api";
 import { useMe } from "@/web/session/use-me";
 import { apiUrl } from "@/web/shared/api.client";
+import { toast } from "@/web/shared/toast.lazy";
 import { useApiQuery } from "@/web/shared/use-api-query";
 import { UserRowActions, userColumns } from "./users.list";
 

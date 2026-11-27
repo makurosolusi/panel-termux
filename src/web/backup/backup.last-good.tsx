@@ -1,5 +1,4 @@
 import { DatabaseBackupIcon, TerminalIcon } from "lucide-react";
-import { toast } from "sonner";
 import type { BackupRun, BackupStatus } from "@/shared/backup.types";
 import { ConfirmAction } from "@/web/components/confirm-action";
 import { type DataColumn, DataTable } from "@/web/components/data-table";
@@ -19,6 +18,7 @@ import {
 } from "@/web/components/ui/sheet";
 import { idBackup } from "@/web/i18n/id.backup";
 import { formatBytes, formatDateTime } from "@/web/shared/format";
+import { toast } from "@/web/shared/toast.lazy";
 import { BACKUP_ERROR_CODES, startRestore } from "./backup.api";
 import { ItemDownload } from "./backup.download";
 import { CheckedBadge } from "./backup.runs";

@@ -1,6 +1,7 @@
 // Coded job steps on shared state: config.yml ingress, cloudflared restart, DNS records, HTTPS probe (PLAN/03 §3.4).
 
-import { chmodSync, copyFileSync, renameSync, rmSync, statSync, writeFileSync } from "node:fs";
+import { copyFileSync, existsSync, renameSync, rmSync, statSync } from "node:fs";
+import { dirname, join } from "node:path";
 import type { HealthProbe } from "../../shared/site.types";
 import { DnsZoneNotFoundError, type SiteDnsProvider } from "../cloudflare/dns.provider";
 import { DnsConflictError, DnsNotConfiguredError } from "../cloudflare/dns.types";
@@ -9,12 +10,12 @@ import { appRestartStep, healthStep } from "../deploy/deploy.restart";
 import { newState } from "../deploy/deploy.steps";
 import { passes } from "../deploy/health.check";
 import { log } from "../log.service";
-import type { RunitAdapter } from "../system/system.types";
+import { type CloudflaredAdapter, DnsWrongZoneError, type RunitAdapter } from "../system/system.types";
 import { parseApps, removeApp } from "./apps.file";
 import { IngressEditError } from "./ingress.editor";
-import { type StepDef, StepError } from "./job.runner";
+import { type StepDef, StepError, type StepOutcome } from "./job.runner";
 import { type SiteCtx, sitePaths } from "./site.checks";
-import { readTextOrNull, restoreText, tempPathFor, writeAtomic } from "./site.files";
+import { fsyncPath, readTextOrNull, restoreText, tempPathFor, writeAtomic, writeFileSynced } from "./site.files";
 
 /** runit service name of the tunnel. */
 export const CLOUDFLARED_SERVICE = "cloudflared";
@@ -62,13 +63,14 @@ export function ingressStep(
       }
       if (next === prev) return { code: "ingress_unchanged", skipped: true };
       const tmp = tempPathFor(path);
-      writeFileSync(tmp, next, { mode });
-      chmodSync(tmp, mode);
+      writeFileSynced(tmp, next, mode);
       try {
         const v = await ctx.system.cloudflared.validate(tmp);
         if (!v.ok) throw new StepError("ingress_rejected", {}, `cloudflared rejected the new ingress: ${v.message}`);
         copyFileSync(path, `${path}.bak`);
+        fsyncPath(`${path}.bak`);
         renameSync(tmp, path); // atomic: same directory
+        fsyncPath(dirname(path)); // the rename survives a power cut (A9)
       } finally {
         rmSync(tmp, { force: true });
       }
@@ -121,8 +123,37 @@ function dnsError(e: unknown, hostname: string): never {
 }
 
 /**
- * Points every hostname at the tunnel. Token not set → skipped. `owned` gets the hostnames whose record the panel
- * owns (a hand-made CNAME to the same tunnel is used but not owned). Undo deletes the records this step created.
+ * No API token: `cloudflared tunnel route dns` with the login cert (`cert.pem` next to config.yml; only its existence
+ * is checked) creates the CNAMEs (PLAN/06 §6.4 B). The panel cannot delete those records later (`dnsManaged` stays
+ * false). No cert → `dns_no_token`; cloudflared refuses (e.g. a record exists) → `dns_route_failed`; the name
+ * landed under the cert's other zone → `dns_wrong_zone` (stops routing). All three skip, so the site is still
+ * created and the web shows the copy-ready record: failing would roll back and fail the same way on every retry.
+ */
+async function routeWithCert(cf: CloudflaredAdapter | undefined, hostnames: string[], tunnel: string) {
+  const hosts = list(hostnames);
+  if (!cf || !existsSync(join(dirname(cf.configPath), "cert.pem")))
+    return { code: "dns_no_token", params: { hostnames: hosts }, skipped: true } satisfies StepOutcome;
+  for (const h of hostnames) {
+    try {
+      await cf.routeDns(tunnel, h);
+    } catch (e) {
+      const wrong = e instanceof DnsWrongZoneError;
+      log.warn(`[sites] cloudflared route dns ${h} failed: ${(e as Error).message}`);
+      return {
+        code: wrong ? "dns_wrong_zone" : "dns_route_failed",
+        params: { hostname: h, hostnames: hosts, ...(wrong ? { fqdn: e.fqdn } : {}) },
+        detail: (e as Error).message,
+        skipped: true,
+      } satisfies StepOutcome;
+    }
+  }
+  return { code: "dns_routed", params: { hostnames: hosts } };
+}
+
+/**
+ * Points every hostname at the tunnel. Token not set → `routeWithCert` when `cloudflared` is given, else skipped.
+ * `owned` gets the hostnames whose record the panel owns (a hand-made CNAME to the same tunnel is used but not
+ * owned). Undo deletes the records this step created through the API (cert-routed ones cannot be deleted).
  */
 export function dnsEnsureStep(
   dns: SiteDnsProvider,
@@ -130,6 +161,7 @@ export function dnsEnsureStep(
   tunnelId: () => string | null,
   owned: Set<string>,
   actorId: string | null,
+  cloudflared?: CloudflaredAdapter,
 ): StepDef {
   const created: string[] = [];
   return {
@@ -145,7 +177,7 @@ export function dnsEnsureStep(
           if (r.owned === false) same.push(h);
           else owned.add(h);
         } catch (e) {
-          if (e instanceof DnsNotConfiguredError) return { code: "dns_no_token", skipped: true };
+          if (e instanceof DnsNotConfiguredError) return routeWithCert(cloudflared, hostnames, id);
           dnsError(e, h);
         }
       }
@@ -227,7 +259,14 @@ type SiteRow = typeof site.$inferSelect;
 /** app_restart → health (deploy's D16 check), shared by site.restart, site.env and their cleanups. */
 export function restartSteps(ctx: SiteCtx, s: SiteRow): StepDef[] {
   const st = newState(s.runtime);
-  return [appRestartStep(ctx, s, st), healthStep(ctx, s, st)];
+  const restart = appRestartStep(ctx, s, st);
+  // A missing folder fails here, by name, not 60 s later as "port refused" in health (QA fix-07 N9).
+  const run: StepDef["run"] = async (c) => {
+    if (!existsSync(s.dir))
+      throw new StepError("restart_no_folder", { path: s.dir }, `site folder ${s.dir} is missing`);
+    return restart.run(c);
+  };
+  return [{ ...restart, run }, healthStep(ctx, s, st)];
 }
 
 const HEALTH_PROBE_TIMEOUT_MS = 5000;

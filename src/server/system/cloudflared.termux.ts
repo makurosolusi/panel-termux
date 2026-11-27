@@ -3,7 +3,14 @@ import { homedir } from "node:os";
 import { join } from "node:path";
 import { runTermux } from "../exec/termux.exec";
 import { log } from "../log.service";
-import { type CloudflaredAdapter, type IngressRule, type ProbeResult, SystemError } from "./system.types";
+import {
+  type CloudflaredAdapter,
+  DnsWrongZoneError,
+  type IngressRule,
+  type ProbeResult,
+  type RouteDnsResult,
+  SystemError,
+} from "./system.types";
 
 /** Per-hostname HTTPS check timeout (round trip through Cloudflare takes 0.5-2 s from the phone). */
 const PROBE_TIMEOUT_MS = 8_000;
@@ -56,6 +63,26 @@ export async function probeHttps(hostname: string, timeoutMs = PROBE_TIMEOUT_MS)
 const VALIDATE_TIMEOUT_MS = 20_000;
 const VALIDATE_MSG_MAX = 300;
 
+/** `route dns` calls the Cloudflare API from the phone; allow for a slow mobile network. */
+const ROUTE_DNS_TIMEOUT_MS = 30_000;
+// Success lines of `cloudflared tunnel route dns` (cloudflared cfapi/hostname.go, verified on POCO 2026.11.2, gate G0).
+const ROUTE_ADDED = /Added CNAME (\S+) which will route to this tunnel/;
+const ROUTE_EXISTS = /(\S+) is already configured to route to your tunnel/;
+const normalHost = (h: string) => h.toLowerCase().replace(/\.$/, "");
+
+/**
+ * Reads the output of `cloudflared tunnel route dns`: the name must equal `hostname` (DNS case-insensitive), else
+ * DnsWrongZoneError (cert.pem of another zone appends its zone). Output without a success line = SystemError.
+ */
+export function parseRouteDns(output: string, hostname: string): RouteDnsResult {
+  const added = ROUTE_ADDED.exec(output);
+  const fqdn = added?.[1] ?? ROUTE_EXISTS.exec(output)?.[1];
+  if (fqdn === undefined)
+    throw new SystemError(`cloudflared route dns ${hostname}: ${output.trim().slice(0, VALIDATE_MSG_MAX)}`);
+  if (normalHost(fqdn) !== normalHost(hostname)) throw new DnsWrongZoneError(fqdn);
+  return { created: added !== null };
+}
+
 /** Real cloudflared adapter reading `~/.cloudflared/config.yml` (missing file = no domains). */
 export function createTermuxCloudflared(
   configPath = join(process.env.HOME || homedir(), ".cloudflared", "config.yml"),
@@ -78,6 +105,18 @@ export function createTermuxCloudflared(
         timeoutMs: VALIDATE_TIMEOUT_MS,
       });
       return { ok: r.code === 0, message: (r.stdout + r.stderr).trim().slice(0, VALIDATE_MSG_MAX) };
+    },
+    async routeDns(tunnel, hostname) {
+      // No --overwrite-dns: an existing record of someone else must fail, not be replaced.
+      const r = await runTermux("cloudflared", ["tunnel", "route", "dns", tunnel, hostname], {
+        timeoutMs: ROUTE_DNS_TIMEOUT_MS,
+      });
+      const out = r.stdout + r.stderr; // cloudflared logs to stderr
+      if (r.code !== 0)
+        throw new SystemError(
+          `cloudflared route dns ${hostname} exited ${r.code}: ${out.trim().slice(0, VALIDATE_MSG_MAX)}`,
+        );
+      return parseRouteDns(out, hostname);
     },
   };
 }

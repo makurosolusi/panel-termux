@@ -50,7 +50,7 @@ const COPY: Record<ProblemCode, Copy> = {
   },
   pm2_unavailable: {
     title: () => "pm2 tidak berjalan",
-    detail: () => "Semua aplikasi ikut tidak berjalan. Mulai layanan pm2.",
+    detail: () => "Layanan pm2 tidak berjalan, jadi semua situs ikut berhenti.",
   },
   app_errored: {
     title: (p) => `Aplikasi ${p.target} bermasalah`,

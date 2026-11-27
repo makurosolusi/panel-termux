@@ -16,9 +16,10 @@ import type { ErrorCodes } from "@/web/shared/api.client";
 import { useApiQuery } from "@/web/shared/use-api-query";
 import { AnchorSection, SiteAnchors } from "./site.anchors";
 import { SITE_ERROR_CODES, siteUrl } from "./site.api";
+import { SiteBanners } from "./site.banners";
 import { SiteDelete } from "./site.delete";
 import { SiteEnvEditor } from "./site.env-editor";
-import { SiteBanners, SiteHeader } from "./site.header";
+import { SiteHeader } from "./site.header";
 import { SiteHostnames } from "./site.hostnames";
 import { SiteSettings } from "./site.settings";
 import { siteBusy } from "./site-detail.state";
@@ -62,7 +63,13 @@ function SiteSections({ site, reload, deleting, setDeleting, uploader }: Section
   const interrupted = jobs.data?.items[0] ?? null;
   return (
     <div className="flex flex-col gap-8">
-      <SiteBanners site={site} interrupted={interrupted} codes={CODES} />
+      <SiteBanners
+        site={site}
+        interrupted={interrupted}
+        codes={CODES}
+        onChanged={reload}
+        onDelete={() => setDeleting(true)}
+      />
       <AnchorSection id="ringkasan" title={t.anchors.summary}>
         <Summary site={site} />
       </AnchorSection>

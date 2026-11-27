@@ -7,9 +7,9 @@ import { ErrorState } from "@/web/components/error-state";
 import { PageHeader } from "@/web/components/page-header";
 import { QueryView } from "@/web/components/query-view";
 import { RelativeTime } from "@/web/components/relative-time";
-import { Button } from "@/web/components/ui/button";
 import { idPanel } from "@/web/i18n/id.panel";
 import { formatBytes } from "@/web/shared/format";
+import { ServiceStartButton } from "@/web/shared/service-start";
 import { useApiQuery } from "@/web/shared/use-api-query";
 import { panelUrl } from "./panel.api";
 import { TOUCH_HIT } from "./panel.touch";
@@ -80,11 +80,7 @@ export function DatabasesPage() {
           description={t.postgresDownBody}
           onRetry={query.reload}
           retrying={query.loading}
-          action={
-            <Button size="sm" asChild>
-              <Link to="/panel/services">{t.openServices}</Link>
-            </Button>
-          }
+          action={<ServiceStartButton service="postgres" onStarted={query.reload} />}
         />
       </>
     );

@@ -1,6 +1,6 @@
 import { createElement } from "react";
-import { toast } from "sonner";
 import { CodeText } from "@/web/components/code-text";
+import { toast } from "@/web/shared/toast.lazy";
 import { apiErrorMessage, type ErrorCodes } from "./api.client";
 
 /** Error toasts stay long enough to read (PLAN/01 D10); success toasts keep sonner's default. */

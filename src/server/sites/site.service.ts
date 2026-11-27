@@ -6,6 +6,7 @@ import type { HealthProbe, Site, SiteCheckResult, SiteDetail } from "../../share
 import { recordAudit } from "../audit.service";
 import { site, siteHostname } from "../db/schema";
 import { siteBinaries } from "../deploy/binary.identity";
+import { folderRecreatable } from "../deploy/deploy.checks";
 import { appName } from "../deploy/deploy.steps";
 import { scriptRuntimeOf } from "../deploy/run.script";
 import { log } from "../log.service";
@@ -14,6 +15,8 @@ import { type Pm2Proc, Pm2UnavailableError } from "../system/system.types";
 import { discover } from "./adopt.candidates";
 import { ensureAppsJson } from "./apps.file";
 import { envKeys } from "./env.file";
+import { removeFixCandidate } from "./fix.plan";
+import { createIntegrationFixes, type Pm2RestartPoll } from "./integration.fix";
 import { createIntegration } from "./integration.service";
 import { recoverJob } from "./job.recovery";
 import { createJobRunner, type JobRunnerDeps } from "./job.runner";
@@ -39,7 +42,13 @@ import { toSites, troubled } from "./site.view";
  * Deps of the site service. `panel` defaults to APP_BASE_URL/PORT of the process env; `backupBusy`/`onSiteDeleted`
  * are the backup lock and the after-delete hook (see JobCtx).
  */
-export type SiteDeps = Omit<SiteCtx, "panel"> & { panel?: PanelSelf } & Omit<JobCtx, keyof SiteCtx> & JobRunnerDeps;
+export type SiteDeps = Omit<SiteCtx, "panel"> & { panel?: PanelSelf } & Omit<JobCtx, keyof SiteCtx> &
+  JobRunnerDeps & {
+    /** Panel data dir: integration fix backups (PLAN/06 F6). */
+    dataDir: string;
+    /** Checked pm2 restart timing (tests shorten it). */
+    pm2RestartPoll?: Pm2RestartPoll;
+  };
 
 const MAX_HOSTNAMES = 5;
 
@@ -70,6 +79,14 @@ export function createSiteService(deps: SiteDeps) {
   const { db, system } = ctx;
   const jobs = createJobRunner(db, { monitor: deps.monitor });
   const integ = createIntegration(ctx);
+  const fixes = createIntegrationFixes({
+    ctx,
+    jobs,
+    backupBusy: deps.backupBusy,
+    monitor: deps.monitor,
+    integration: integ,
+    poll: deps.pm2RestartPoll,
+  });
 
   const siteRow = (name: string) => {
     if (!SITE_NAME_RE.test(name)) throw bad("invalid_name", `invalid site name ${JSON.stringify(name)}`);
@@ -101,11 +118,15 @@ export function createSiteService(deps: SiteDeps) {
       lockedEnvKeys: lockedEnvKeys(s),
       pm2EnvKeys: s.managed ? [] : await integ.envKeysOf(appName(s)),
       restartPending: restartPending(s, proc),
-      dns: hostsOf(name).map((h) => ({ hostname: h.hostname, managed: h.dnsManaged })),
+      dns: hostsOf(name).map((h) => ({
+        hostname: h.hostname,
+        managed: h.dnsManaged,
+        handWritten: !s.managed && !h.ingressManaged,
+      })),
       health: { path: s.healthPath, expect: s.healthExpect, timeoutSec: s.healthTimeoutSec },
       binary: siteBinaries(db, s),
       scriptRuntime: proc ? scriptRuntimeOf(proc) : null,
-      deployBlocker: !existsSync(s.dir)
+      deployBlocker: !(existsSync(s.dir) || folderRecreatable(s))
         ? "no_folder"
         : procs === null
           ? "pm2_not_running"
@@ -216,15 +237,16 @@ export function createSiteService(deps: SiteDeps) {
       return { jobId };
     },
 
-    removeHostname(actorId: string, name: string, hostname: string): { jobId: string } {
+    /** DELETE …/hostnames/:hostname; a hand-written rule (R&D/07 #19) needs `confirm=<hostname>`, else 409 hand_written. */
+    removeHostname(actorId: string, name: string, hostname: string, confirm?: string): { jobId: string } {
       jobs.assertIdle();
       const s = siteRow(name);
       const hosts = hostsOf(name);
       const h = hosts.find((x) => x.hostname === hostname.toLowerCase());
       if (!h) throw new ApiError(404, "not_found", `${hostname} is not a hostname of ${name}`);
       if (hosts.length === 1) throw bad("last_hostname", "a site needs at least one hostname; delete the site instead");
-      if (!s.managed && !h.ingressManaged)
-        throw new ApiError(409, "hand_written", `${hostname} is a hand-written ingress rule of an adopted site`);
+      if (!s.managed && !h.ingressManaged && confirm !== h.hostname)
+        throw new ApiError(409, "hand_written", `${hostname} is hand-written: confirm=<hostname>`, { hostname });
       const jobId = jobs.start(removeHostnameJob(ctx, actorId, s, h));
       recordAudit(db, { actorId, action: "hostname.remove", target: name, meta: { jobId, hostname: h.hostname } });
       return { jobId };
@@ -258,6 +280,10 @@ export function createSiteService(deps: SiteDeps) {
       jobs.assertIdle();
       return integ.verify();
     },
+    /** Integration fixes: preview, apply, restore, checked pm2 restart (PLAN/06 §5.2). */
+    fixes,
+    /** Boot: removes a fix candidate left by a crash (it can hold env secrets, debat C13). */
+    removeFixCandidate: () => removeFixCandidate(ctx),
     /** Sync status for /dev/setup (`ecosystemIncludesAppsJson`), from the last check. */
     integration: () => integ.snapshot(),
     /** Boot: writes apps.json `[]` when sites.dir exists and it does not (D3). */

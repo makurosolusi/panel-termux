@@ -38,53 +38,62 @@ function sitesOnError(c: ErrorCtx) {
   return panelOnError(c);
 }
 
-/** admin site management API under /panel: sites, jobs (+ recover), integration status. */
+/** admin site management API under /panel: sites, jobs (+ recover), integration status and fixes. */
 export function createSiteRoutes(auth: Auth, sites: SiteService) {
-  return roleGuard(auth, "/panel", "admin")
-    .onError(sitesOnError as never)
-    .get("/sites", () => sites.list())
-    .get("/sites/discovered", () => sites.discovered())
-    .get("/sites/suggest-port", () => sites.suggestPort())
-    .post("/sites/check", ({ body }) => sites.check(body))
-    .post("/sites", async ({ body, user, status }) => status(202, await sites.create(user.id, body)))
-    .post("/sites/adopt", async ({ body, user, status }) => status(201, await sites.adopt(user.id, body)))
-    .get("/sites/:name", ({ params }) => sites.detail(params.name))
-    .patch("/sites/:name/settings", ({ params, body, user }) => sites.updateSettings(user.id, params.name, body))
-    .get("/sites/:name/health", ({ params }) => sites.health(params.name))
-    .post("/sites/:name/restart", async ({ params, user, status }) =>
-      status(202, await sites.restart(user.id, params.name)),
-    )
-    .put("/sites/:name/env", async ({ params, body, user, status }) => {
-      const r = await sites.saveEnv(user.id, params.name, body);
-      return "jobId" in r ? status(202, r) : r;
-    })
-    .post("/sites/:name/hostnames", ({ params, body, user, status }) =>
-      status(202, sites.addHostnames(user.id, params.name, body)),
-    )
-    .delete("/sites/:name/hostnames/:hostname", ({ params, user, status }) =>
-      status(202, sites.removeHostname(user.id, params.name, decodeURIComponent(params.hostname))),
-    )
-    .delete("/sites/:name", ({ params, query, user, status }) =>
-      status(
-        202,
-        sites.remove(
-          user.id,
-          params.name,
-          { data: flag(query.keepData), database: flag(query.keepDatabase) },
-          query.confirm,
+  return (
+    roleGuard(auth, "/panel", "admin")
+      .onError(sitesOnError as never)
+      .get("/sites", () => sites.list())
+      .get("/sites/discovered", () => sites.discovered())
+      .get("/sites/suggest-port", () => sites.suggestPort())
+      .post("/sites/check", ({ body }) => sites.check(body))
+      .post("/sites", async ({ body, user, status }) => status(202, await sites.create(user.id, body)))
+      .post("/sites/adopt", async ({ body, user, status }) => status(201, await sites.adopt(user.id, body)))
+      .get("/sites/:name", ({ params }) => sites.detail(params.name))
+      .patch("/sites/:name/settings", ({ params, body, user }) => sites.updateSettings(user.id, params.name, body))
+      .get("/sites/:name/health", ({ params }) => sites.health(params.name))
+      .post("/sites/:name/restart", async ({ params, user, status }) =>
+        status(202, await sites.restart(user.id, params.name)),
+      )
+      .put("/sites/:name/env", async ({ params, body, user, status }) => {
+        const r = await sites.saveEnv(user.id, params.name, body);
+        return "jobId" in r ? status(202, r) : r;
+      })
+      .post("/sites/:name/hostnames", ({ params, body, user, status }) =>
+        status(202, sites.addHostnames(user.id, params.name, body)),
+      )
+      .delete("/sites/:name/hostnames/:hostname", ({ params, query, user, status }) =>
+        status(202, sites.removeHostname(user.id, params.name, decodeURIComponent(params.hostname), query.confirm)),
+      )
+      .delete("/sites/:name", ({ params, query, user, status }) =>
+        status(
+          202,
+          sites.remove(
+            user.id,
+            params.name,
+            { data: flag(query.keepData), database: flag(query.keepDatabase) },
+            query.confirm,
+          ),
         ),
-      ),
-    )
-    .get("/jobs", ({ query }) =>
-      sites.jobs.list(parsePaging(query), {
-        target: query.target || undefined,
-        kind: oneOf(query.kind, KINDS, "kind"),
-        status: oneOf(query.status, STATUSES, "status"),
-      }),
-    )
-    .get("/jobs/active", () => ({ job: sites.jobs.active() }))
-    .get("/jobs/:id", ({ params }) => sites.jobs.get(params.id))
-    .post("/jobs/:id/recover", ({ params, user, status }) => status(202, sites.recover(user.id, params.id)))
-    .get("/integration", () => sites.getIntegration())
-    .post("/integration/verify", () => sites.verifyIntegration());
+      )
+      .get("/jobs", ({ query }) =>
+        sites.jobs.list(parsePaging(query), {
+          target: query.target || undefined,
+          kind: oneOf(query.kind, KINDS, "kind"),
+          status: oneOf(query.status, STATUSES, "status"),
+        }),
+      )
+      .get("/jobs/active", () => ({ job: sites.jobs.active() }))
+      .get("/jobs/:id", ({ params }) => sites.jobs.get(params.id))
+      .post("/jobs/:id/recover", ({ params, user, status }) => status(202, sites.recover(user.id, params.id)))
+      .get("/integration", () => sites.getIntegration())
+      .post("/integration/verify", () => sites.verifyIntegration())
+      // PLAN/06 §5.2: fixes are admin-only like the whole group; the CSRF guard runs before every /api route.
+      .post("/integration/fixes/:key/preview", ({ params }) => sites.fixes.preview(params.key))
+      .post("/integration/fixes/:key", ({ params, body, user }) => sites.fixes.apply(user.id, params.key, body))
+      .post("/integration/backups/:id/restore", ({ params, body, user }) =>
+        sites.fixes.restore(user.id, params.id, body),
+      )
+      .post("/integration/pm2/restart", ({ user }) => sites.fixes.restartPm2(user.id))
+  );
 }

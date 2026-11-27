@@ -1,9 +1,9 @@
 import { useState } from "react";
-import { toast } from "sonner";
 import type { ControlAction, DeferredRestart } from "@/shared/panel.types";
 import { idPanel } from "@/web/i18n/id.panel";
 import { ERROR_TOAST_MS } from "@/web/shared/api.action";
 import { ApiError, apiErrorMessage } from "@/web/shared/api.client";
+import { toast } from "@/web/shared/toast.lazy";
 import { type ControlKind, isDeferred, postControl } from "./panel.api";
 
 const t = idPanel;

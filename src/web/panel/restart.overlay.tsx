@@ -1,6 +1,5 @@
 import { Loader2Icon, TriangleAlertIcon } from "lucide-react";
 import { useRef, useState } from "react";
-import { toast } from "sonner";
 import type { DeferredRestart } from "@/shared/panel.types";
 import {
   AlertDialog,
@@ -13,6 +12,7 @@ import {
 import { Button } from "@/web/components/ui/button";
 import { idPanel } from "@/web/i18n/id.panel";
 import { AJAX_HEADERS } from "@/web/shared/api.client";
+import { toast } from "@/web/shared/toast.lazy";
 import { usePoller } from "@/web/shared/use-poller";
 import { CodeText } from "./code.text";
 import { panelUrl } from "./panel.api";

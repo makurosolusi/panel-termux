@@ -24,7 +24,7 @@ export const idSecurity = {
       "cp <file-lama> ~/panel/data/secret && chmod 600 ~/panel/data/secret",
       "SVDIR=$PREFIX/var/service sv up panel",
     ],
-    restoreStepsLabel: "Perintah untuk mengembalikan file kunci data",
+    restoreStepsLabel: "Cara manual (untuk pengguna teknis)",
     orReset: "Bila file lama tidak ada lagi, hapus pengaturan rahasia lama lalu isi ulang di Pengaturan.",
     exportButton: "Unduh kunci data",
     exportTitle: "Unduh kunci data?",

@@ -21,7 +21,6 @@ import {
   discoveredRows,
   editCommand,
   integrationReady,
-  oldSnippet,
   setupNeeded,
   snippetNeeded,
 } from "@/web/site/site.adopt";
@@ -39,6 +38,7 @@ import {
   type SiteForm,
   targetIssues,
   targetReady,
+  wizardDns,
 } from "@/web/site/site.check";
 
 // test-only fixtures
@@ -188,15 +188,29 @@ describe("wizard create body and summary", () => {
       port: 3001,
       database: true,
     };
-    const plan = createPlan(body, false);
+    const plan = createPlan(body, "unknown");
     expect(plan).toHaveLength(8);
     expect(plan[1]).toBe("Membuat folder ~/sites/blog");
     expect(plan[2]).toBe("Membuat database blog beserta role-nya");
     expect(plan[3]).toBe("Menulis .env (PORT dan DATABASE_URL)");
     expect(plan[4]).toBe("Menambahkan rute a.contoh.com, b.contoh.com ke port 3001 di config cloudflared");
-    expect(plan[5]).toContain("dilewati");
-    expect(createPlan({ ...body, database: false }, true)[2]).toBe("Tanpa database");
-    expect(createPlan(body, true)[5]).not.toContain("dilewati");
+    expect(plan[5]).not.toContain("dilewati"); // without a token the cloudflared login may still create it
+    expect(plan[5]).toContain("lewat login cloudflared bila ada");
+    expect(createPlan({ ...body, database: false }, "token")[2]).toBe("Tanpa database");
+    expect(createPlan(body, "token")[5]).toBe("Membuat record DNS a.contoh.com, b.contoh.com di Cloudflare");
+    expect(createPlan(body, "cert")[5]).toContain("lewat login cloudflared di HP ini");
+    expect(createPlan(body, "manual")[5]).toContain("record siap salin");
+  });
+
+  test("wizard DNS route: token only when the token check is ok, else unknown until the server says", () => {
+    const withToken = (state: "ok" | "warning") =>
+      ({
+        issues: [],
+        checks: [{ key: "cloudflare_token", state, params: {}, detail: null }],
+      }) as unknown as Integration;
+    expect(wizardDns(withToken("ok"))).toBe("token");
+    expect(wizardDns(withToken("warning"))).toBe("unknown");
+    expect(wizardDns(undefined)).toBe("unknown");
   });
 
   test("blip names other domains (panel included), not the new ones, max 3", () => {
@@ -301,12 +315,9 @@ describe("persiapan", () => {
     expect(integrationReady({ ...old, issues: ["x"] })).toBe(false);
   });
 
-  test("old snippet = apps.json spread without the existsSync filter; then steps show with 'versi lama'", () => {
+  test("block steps (Cara manual) needed until panel sites load through the current block", () => {
     const old = integration([chk("ecosystem_spreads_apps_json"), chk("snippet_current", "error")], false);
-    expect(oldSnippet(old)).toBe(true);
     expect(snippetNeeded(old)).toBe(true);
-    const none = integration([chk("ecosystem_spreads_apps_json", "error"), chk("snippet_current", "error")], false);
-    expect(oldSnippet(none)).toBe(false);
     expect(snippetNeeded(integration(allOk))).toBe(false);
   });
 

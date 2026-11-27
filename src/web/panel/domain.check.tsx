@@ -1,11 +1,11 @@
 import { Loader2Icon, RefreshCwIcon } from "lucide-react";
 import { useEffect, useState } from "react";
-import { toast } from "sonner";
 import type { Domain } from "@/shared/panel.types";
 import { Button } from "@/web/components/ui/button";
 import { idPanel } from "@/web/i18n/id.panel";
 import { ERROR_TOAST_MS } from "@/web/shared/api.action";
 import { apiErrorMessage, apiFetch } from "@/web/shared/api.client";
+import { toast } from "@/web/shared/toast.lazy";
 import { panelUrl } from "./panel.api";
 
 const t = idPanel.domains;

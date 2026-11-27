@@ -1,6 +1,5 @@
 import { DownloadIcon } from "lucide-react";
 import { useState } from "react";
-import { toast } from "sonner";
 import type { BackupItem } from "@/shared/backup.types";
 import { Button } from "@/web/components/ui/button";
 import { idBackup } from "@/web/i18n/id.backup";
@@ -8,6 +7,7 @@ import { idSecurity } from "@/web/i18n/id.security";
 import { isReauthRequired, reauthenticate } from "@/web/security/security.api";
 import { ERROR_TOAST_MS } from "@/web/shared/api.action";
 import { apiErrorMessage } from "@/web/shared/api.client";
+import { toast } from "@/web/shared/toast.lazy";
 import { BACKUP_ERROR_CODES, backupItemDownloadUrl, downloadSecretsItem } from "./backup.api";
 
 const t = idBackup;

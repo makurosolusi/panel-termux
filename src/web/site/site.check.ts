@@ -1,4 +1,5 @@
 import type {
+  Integration,
   JobParams,
   SiteCheckRequest,
   SiteCheckResult,
@@ -123,8 +124,22 @@ export function createBody(f: SiteForm): SiteCreateRequest {
   };
 }
 
+/** How the create job will make the DNS record: API token, the cloudflared login (cert.pem), or by hand. */
+export type WizardDns = "token" | "cert" | "manual" | "unknown";
+
+/**
+ * DNS route of the wizard summary from `Integration.dnsMode` (0.4.0). Without it (older server) only a set token is
+ * known; "unknown" otherwise (QA fix-04 MAJOR-3).
+ */
+export function wizardDns(i: Integration | null | undefined): WizardDns {
+  if (!i) return "unknown";
+  if (i.dnsMode) return i.dnsMode === "cloudflared" ? "cert" : i.dnsMode;
+  if (i.checks?.find((c) => c.key === "cloudflare_token")?.state === "ok") return "token";
+  return "unknown";
+}
+
 /** What creating `body` will do, step by step (mirrors the server's site.create steps). */
-export function createPlan(body: SiteCreateRequest, tokenSet: boolean): string[] {
+export function createPlan(body: SiteCreateRequest, dns: WizardDns): string[] {
   const p = idSite.wizard.plan;
   const hosts = [body.hostname, ...(body.extraHostnames ?? [])].join(", ");
   const params: JobParams = {
@@ -133,7 +148,7 @@ export function createPlan(body: SiteCreateRequest, tokenSet: boolean): string[]
     env: Object.keys(body.env ?? {}).length,
     hosts,
     port: body.port ?? null,
-    token: tokenSet,
+    dns,
   };
   return [p.validate, p.folder, p.database, p.env_write, p.ingress, p.dns, p.tunnel_restart, p.domain_probe].map((c) =>
     renderCopy(c, params),

@@ -51,4 +51,8 @@ export type AuditAction =
   // PLAN/05
   | "setup.update"
   | "audit.export"
-  | "user.self_delete";
+  | "user.self_delete"
+  // PLAN/06
+  | "integration.fix"
+  | "integration.restore"
+  | "integration.pm2_restart";

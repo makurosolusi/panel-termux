@@ -59,16 +59,18 @@ const DOWN_CODES = new Set<Problem["code"]>(["service_down", "pm2_unavailable", 
 
 /**
  * Badge of a count card: "Semua berjalan", "1 mati" or "1 perlu dicek", from the problems of that kind plus `held`
- * items that are down but whose own problem the server holds back behind a root cause (K3; QA N1).
+ * items that are down but whose own problem the server holds back behind a root cause (K3; QA N1), plus `quietDown`
+ * items down on purpose (counted, warning tone at most).
  */
 export function countBadge(
   kinds: readonly ProblemKind[],
   problems: readonly Problem[],
   held = 0,
+  quietDown = 0,
 ): { tone: StatusTone; text: string } {
   const mine = problems.filter((p) => p.severity !== "info" && kinds.includes(p.kind));
-  if (mine.length === 0 && held === 0) return { tone: "success", text: t.counts.allRunning };
-  const down = mine.filter((p) => DOWN_CODES.has(p.code)).length + held;
+  if (mine.length === 0 && held === 0 && quietDown === 0) return { tone: "success", text: t.counts.allRunning };
+  const down = mine.filter((p) => DOWN_CODES.has(p.code)).length + held + quietDown;
   const tone: StatusTone = held > 0 || mine.some((p) => p.severity === "danger") ? "danger" : "warning";
   return { tone, text: down > 0 ? t.counts.down(down) : t.counts.attention(mine.length) };
 }
@@ -146,3 +148,27 @@ export function problemLogHref(p: Pick<Problem, "kind" | "target" | "href">): st
   if (p.kind === "service" && p.target) return `/panel/services/${encodeURIComponent(p.target)}/log`;
   return null;
 }
+
+/**
+ * Problems minus those whose service was just started from their row: hidden while the monitor's sample is still the
+ * one seen at the click (`seenAt`: id → sampledAt then; server time, so no clock skew), so the row does not invite a
+ * second click for ±30 s (QA fix-04 MINOR-6). A newer sample decides again.
+ */
+export function withoutStarted<P extends { id: string }>(
+  problems: readonly P[],
+  seenAt: Readonly<Record<string, string | null>>,
+  sampledAt: string | null,
+): P[] {
+  return problems.filter((p) => !(p.id in seenAt) || seenAt[p.id] !== sampledAt);
+}
+
+/**
+ * Services that are down without a problem of their own (stopped on purpose, so the monitor raises none): they still
+ * count as "mati" on the Layanan tile, quietly (no danger tone; QA fix-04 MINOR-7).
+ */
+export const quietDownServices = (
+  services: readonly { name: string; state: string }[],
+  problems: readonly Pick<Problem, "target" | "severity">[],
+): number =>
+  services.filter((s) => s.state === "down" && !problems.some((p) => p.severity !== "info" && p.target === s.name))
+    .length;

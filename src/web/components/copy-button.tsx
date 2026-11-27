@@ -8,7 +8,7 @@ const RESET_MS = 1_500;
 
 /**
  * Icon button that copies `value` (or what the function returns at click time) to the clipboard and confirms with
- * a check, announced to screen readers. 24 px visual, 44 px hit-area on touch screens (Button `icon-xs`).
+ * a check, announced to screen readers. 24 px, 44 px on touch screens (Button `icon-xs`).
  */
 export function CopyButton({ value, label = t.copy }: { value: string | (() => string); label?: string }) {
   const [state, setState] = useState<"idle" | "copied" | "failed">("idle");

@@ -5,8 +5,15 @@ import { join } from "node:path";
 import { createTelegramClient } from "@/server/alerts/telegram.client";
 import { snippetCurrent } from "@/server/sites/integration.service";
 import { FAKE_S3_DIR } from "@/server/system/external.fake";
-import { createFakeSystem, FAKE_SCENARIO_FILE, type FakeOptions, fakeEcosystem } from "@/server/system/system.fake";
-import { Pm2UnavailableError } from "@/server/system/system.types";
+import { FAKE_INTEGRATIONS } from "@/server/system/fake.integration";
+import {
+  createFakeSystem,
+  FAKE_DNS_ZONE,
+  FAKE_SCENARIO_FILE,
+  type FakeOptions,
+  fakeEcosystem,
+} from "@/server/system/system.fake";
+import { DnsWrongZoneError, Pm2UnavailableError } from "@/server/system/system.types";
 
 const root = mkdtempSync(join(tmpdir(), "panel-fake-test-"));
 afterAll(() => rmSync(root, { recursive: true, force: true }));
@@ -45,7 +52,9 @@ describe("default fake (Android-like data)", () => {
 
   test("supervise mirrors runit state; panelPid fakes supervise/pid", async () => {
     const sys = fake({ panelPid: process.pid });
-    expect(await sys.runit.supervise("panel")).toEqual({ state: "run", pid: process.pid });
+    const panel = await sys.runit.supervise("panel");
+    expect(panel).toMatchObject({ state: "run", pid: process.pid });
+    expect(panel?.uptimeSec).toBeGreaterThanOrEqual(3 * 3600);
     expect(await sys.runit.supervise("crond")).toEqual({ state: "down", pid: null });
     expect(await sys.runit.supervise("nope")).toBeNull();
     expect((await sys.runit.list()).find((s) => s.name === "crond")?.downSec).toEqual(expect.any(Number));
@@ -171,6 +180,127 @@ describe("demo-ready fake (W9)", () => {
     expect(await sys.postgres.listDatabases()).toEqual(databases);
     writeFileSync(join(home, FAKE_SCENARIO_FILE), "{");
     expect(() => createFakeSystem({ home })).toThrow(FAKE_SCENARIO_FILE);
+  });
+});
+
+describe("integration scenarios (PLAN/06 §8)", () => {
+  const files = (home: string) => {
+    const eco = join(home, "sites", "ecosystem.config.js");
+    return {
+      eco: existsSync(eco) ? readFileSync(eco) : null,
+      run: readFileSync(join(home, "usr", "var", "service", "pm2", "run"), "utf8"),
+    };
+  };
+  const autoExitOff = (run: string) => /^[^#]*pm2-runtime --no-auto-exit /m.test(run);
+  const load = (home: string) =>
+    Bun.spawnSync([
+      "node",
+      "-e",
+      `console.log(JSON.stringify(require(process.argv[1]).apps.map(a => a.name)))`,
+      join(home, "sites", "ecosystem.config.js"),
+    ]);
+
+  test("poco: 2 hand apps, no panel block or apps.json, loads in node; run script without --no-auto-exit", () => {
+    const sys = fake({ integration: "poco" });
+    const { eco, run } = files(sys.home);
+    const text = eco?.toString("utf8") ?? "";
+    expect(text).toContain("const site = (name) =>");
+    expect(text).not.toMatch(/apps\.json|panelApps|pm2-guard|panel-termux:apps/);
+    expect(JSON.parse(load(sys.home).stdout.toString())).toEqual(["makuro-solusi", "adminneo"]);
+    expect(autoExitOff(run)).toBe(false);
+    expect(run).toContain("pm2-runtime $HOME/sites/ecosystem.config.js");
+    for (const tool of ["grun", "php"]) expect(existsSync(join(sys.home, "usr", "bin", tool))).toBe(true);
+    expect(existsSync(join(sys.home, ".cloudflared", "cert.pem"))).toBe(true);
+    expect(readFileSync(join(sys.home, "sites", "apps.json"), "utf8")).toBe("[]\n");
+  });
+
+  test("old_spread, exotic, broken, no_sites_dir, ready write their fixture", () => {
+    const of = (integration: (typeof FAKE_INTEGRATIONS)[number]) => {
+      const sys = fake({ integration });
+      return { home: sys.home, ...files(sys.home) };
+    };
+    expect(of("old_spread").eco?.toString()).toContain("...require('./apps.json'),");
+    const exotic = of("exotic");
+    expect(exotic.eco?.includes(0xe9)).toBe(true);
+    expect(() => new TextDecoder("utf-8", { fatal: true }).decode(exotic.eco ?? Buffer.alloc(0))).toThrow();
+    const broken = of("broken");
+    expect(load(broken.home).exitCode).not.toBe(0);
+    const none = of("no_sites_dir");
+    expect(existsSync(join(none.home, "sites"))).toBe(false);
+    expect(none.eco).toBeNull();
+    const ready = of("ready");
+    expect(ready.eco?.toString()).toBe(fakeEcosystem(ready.home));
+    expect(autoExitOff(ready.run)).toBe(true);
+    expect(FAKE_INTEGRATIONS).toHaveLength(6);
+  });
+
+  test("the scenario file wins over the option; existing files are kept on the next start", () => {
+    const home = join(root, `h${n++}`);
+    mkdirSync(home);
+    writeFileSync(join(home, FAKE_SCENARIO_FILE), JSON.stringify({ integration: "poco" }));
+    createFakeSystem({ home, integration: "ready" });
+    const eco = join(home, "sites", "ecosystem.config.js");
+    expect(readFileSync(eco, "utf8")).not.toContain("panelApps");
+    writeFileSync(eco, "// edited by hand\n");
+    createFakeSystem({ home });
+    expect(readFileSync(eco, "utf8")).toBe("// edited by hand\n");
+    writeFileSync(join(home, FAKE_SCENARIO_FILE), JSON.stringify({ integration: "nope" }));
+    expect(() => createFakeSystem({ home })).toThrow(/unknown integration "nope"/);
+  });
+});
+
+describe("runit pm2 for the checked restart (PLAN/06 F4, F10)", () => {
+  test("pm2UptimeSec sets supervise uptime; a restart resets it", async () => {
+    const sys = fake({ pm2UptimeSec: 90 });
+    expect(await sys.runit.supervise("pm2")).toMatchObject({ state: "run", uptimeSec: 90 });
+    await sys.runit.control("pm2", "restart");
+    expect((await sys.runit.supervise("pm2"))?.uptimeSec).toBe(0);
+    await sys.runit.control("pm2", "stop");
+    expect(await sys.runit.supervise("pm2")).toEqual({ state: "down", pid: null });
+  });
+
+  test("restart of runit pm2 gives online apps new pids; pm2LostOnRestart apps do not come back", async () => {
+    const sys = fake({ pm2LostOnRestart: ["adminneo"] });
+    const before = await sys.pm2.list();
+    const pidOf = (list: typeof before, name: string) => list.find((a) => a.name === name)?.pid;
+    await sys.runit.control("pm2", "restart");
+    const after = await sys.pm2.list();
+    expect(after.map((a) => a.name)).not.toContain("adminneo");
+    expect(pidOf(after, "makuro-solusi")).toEqual(expect.any(Number));
+    expect(pidOf(after, "makuro-solusi")).not.toBe(pidOf(before, "makuro-solusi"));
+    expect(after.find((a) => a.name === "kasir-lama")?.status).toBe("errored"); // not online before: left as is
+  });
+
+  test("pm2LostOnRestart also comes from the scenario file", async () => {
+    const home = join(root, `h${n++}`);
+    mkdirSync(home);
+    writeFileSync(join(home, FAKE_SCENARIO_FILE), JSON.stringify({ pm2LostOnRestart: ["makuro-solusi"] }));
+    const sys = createFakeSystem({ home });
+    await sys.runit.control("pm2", "restart");
+    expect((await sys.pm2.list()).map((a) => a.name)).not.toContain("makuro-solusi");
+  });
+
+  test("control(start, removeDown) deletes the sandbox down file; plain start keeps it", async () => {
+    const sys = fake({ supervisorDown: true });
+    const down = join(sys.home, "usr", "var", "service", "pm2", "down");
+    writeFileSync(down, "");
+    await sys.runit.control("pm2", "start");
+    expect(existsSync(down)).toBe(true);
+    await sys.runit.control("pm2", "stop");
+    expect((await sys.runit.control("pm2", "start", { removeDown: true }))?.state).toBe("run");
+    expect(existsSync(down)).toBe(false);
+  });
+});
+
+describe("fake cloudflared route dns", () => {
+  test("hostname in the cert zone: created, then already configured; outside it → DnsWrongZoneError", async () => {
+    const sys = fake();
+    const host = `blog.${FAKE_DNS_ZONE}`;
+    expect(await sys.cloudflared.routeDns("t1", host)).toEqual({ created: true });
+    expect(await sys.cloudflared.routeDns("t1", host)).toEqual({ created: false });
+    const err = await sys.cloudflared.routeDns("t1", "blog.lain.test").catch((e: unknown) => e);
+    expect(err).toBeInstanceOf(DnsWrongZoneError);
+    expect((err as DnsWrongZoneError).fqdn).toBe(`blog.lain.test.${FAKE_DNS_ZONE}`);
   });
 });
 

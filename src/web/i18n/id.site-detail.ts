@@ -28,9 +28,14 @@ export const idSiteDetail = {
     healthFailed: "Cek kesehatan tidak bisa dijalankan. Coba lagi sebentar lagi.",
     pm2Unknown: "Status aplikasi tidak bisa dibaca dari pm2.",
     missingFromPm2Help:
-      "pm2 tidak menjalankan aplikasi ini. Tekan Mulai ulang untuk memuatnya lagi dari `~/sites/apps.json`, atau periksa file itu lewat ssh.",
+      "pm2 tidak menjalankan situs ini. Tekan Jalankan lagi; panel memuatnya ulang dari daftar situs panel.",
     missingFromPm2Adopted:
-      "pm2 tidak menjalankan aplikasi ini. Periksa entrinya di `ecosystem.config.js` lewat ssh, lalu jalankan lagi dengan pm2.",
+      "pm2 tidak menjalankan aplikasi ini. Tekan Jalankan lagi untuk memuatnya dari `ecosystem.config.js`.",
+    /** Label of the restart button while pm2 does not run the app (PLAN/06 §6.3). */
+    runAgain: "Jalankan lagi",
+    pm2Down: "Layanan pm2 sedang tidak berjalan. Jalankan pm2 dulu, lalu tekan tombol di bawah.",
+    runAgainTitle: (name: string) => `Jalankan lagi aplikasi ${name}?`,
+    runAgainBody: "Panel memuat aplikasi ini ke pm2 lagi. Situs bisa dibuka setelah aplikasinya berjalan.",
   },
   anchors: {
     label: "Bagian halaman",
@@ -52,9 +57,8 @@ export const idSiteDetail = {
       "Variabel lingkungan sudah disimpan, tetapi aplikasi belum dimulai ulang. Nilai baru berlaku setelah mulai ulang.",
     blockers: {
       integration: "pm2 belum siap menjalankan situs buatan panel. Selesaikan persiapan di halaman Situs, lalu deploy.",
-      pm2_not_running: "Layanan pm2 tidak berjalan. Jalankan sv up pm2 di HP, lalu coba lagi.",
-      no_folder: "Folder situs ini tidak ada di HP. Deploy dan variabel lingkungan butuh folder itu.",
-    } satisfies Record<DeployBlocker, string>,
+      pm2_not_running: "Layanan pm2 tidak berjalan, jadi semua situs ikut berhenti.",
+    } satisfies Record<Exclude<DeployBlocker, "no_folder">, string>, // no_folder: idDeploy.noFolder
     toSites: "Buka halaman Situs",
   },
   info: {
@@ -89,6 +93,8 @@ export const idSiteDetail = {
     removeTitle: (host: string) => `Hapus domain ${host}?`,
     removeBody:
       "Domain ini berhenti mengarah ke situs: rutenya di cloudflared dihapus, begitu juga record DNS otomatisnya.",
+    removeHandBody:
+      "Rute domain ini ditulis manual di config cloudflared. Panel menghapus baris rute itu, jadi domain berhenti mengarah ke situs. Bagian lain config tidak diubah.",
     removeDnsNote:
       "Bila record DNS tidak bisa dihapus, domain tetap dilepas dan record-nya dibiarkan. Hapus sendiri di dasbor Cloudflare.",
     last: "Situs harus punya minimal satu domain. Untuk melepas domain terakhir, hapus situsnya.",
@@ -190,6 +196,8 @@ export const idSiteDetail = {
     title: (name: string) => `Hapus situs ${name}?`,
     stops: (hosts: string) => `Domain berhenti bisa dibuka: ${hosts}.`,
     removes: (dir: string, app: string) => `Yang dihapus: aplikasi pm2 ${app}, folder ${dir} beserta data/.`,
+    removesNoFolder: (dir: string, app: string) =>
+      `Yang dihapus: aplikasi pm2 ${app}. Folder ${dir} sudah tidak ada di HP.`,
     removesDb: (db: string) => `Database ${db} beserta role-nya ikut dihapus, kecuali kamu memilih menyimpannya.`,
     adopted:
       "Situs ini diadopsi, jadi hanya catatannya di panel yang dihapus. Folder, aplikasi pm2, domain, dan database-nya tidak disentuh.",
@@ -206,7 +214,8 @@ export const idSiteDetail = {
   },
   errorCodes: {
     last_hostname: "Situs harus punya minimal satu domain. Untuk melepas domain terakhir, hapus situsnya.",
-    hand_written: "Rute ini ditulis manual di config.yml. Hapus lewat ssh bila perlu.",
+    hand_written:
+      "Rute domain ini ditulis manual di config cloudflared, jadi panel perlu konfirmasi tambahan. Ketik nama domainnya di bawah, lalu hapus lagi.",
     confirm_mismatch: "Nama yang diketik tidak sama dengan nama situs. Ketik ulang persis sama.",
     busy_backup: "Cadangan sedang berjalan. Tunggu sampai selesai, lalu hapus situs ini.",
     env_locked: "Variabel ini diatur panel dan tidak bisa diubah.",
@@ -214,6 +223,25 @@ export const idSiteDetail = {
     invalid_settings: "Pengaturan cek kesehatan tidak valid. Periksa path dan batas waktu.",
     invalid_hostname: "Ada domain yang tidak valid. Periksa penulisannya, lalu coba lagi.",
     no_folder: "Folder situs ini tidak ada di HP, jadi .env tidak bisa ditulis.",
-    pm2_not_running: "Layanan pm2 tidak berjalan. Jalankan sv up pm2 di HP, lalu coba lagi.",
+    pm2_not_running:
+      "Layanan pm2 tidak berjalan, jadi semua situs ikut berhenti. Tutup dialog ini, tekan Jalankan pm2 di atas halaman, lalu coba lagi.",
+  },
+  /** Copy-ready DNS record while no API token is set (PLAN/06 §6.4 A, dns.manual.tsx). */
+  dnsManual: {
+    title: (n: number) =>
+      n === 1 ? "Record DNS untuk dibuat di Cloudflare" : `${n} record DNS untuk dibuat di Cloudflare`,
+    body: "Panel belum punya token API Cloudflare, jadi record ini dibuat di dasbor Cloudflare: DNS → Records → Add record. Domain bisa dibuka setelah record ada, biasanya dalam beberapa menit.",
+    type: "Tipe",
+    name: "Nama",
+    content: "Isi (target)",
+    proxy: "Proxy",
+    proxyOn: "Aktif (awan oranye)",
+    copyName: (host: string) => `Salin nama record ${host}`,
+    copyContent: "Salin target tunnel",
+    noTunnel: "ID tunnel tidak terbaca dari konfigurasi cloudflared, jadi target record belum bisa ditampilkan.",
+    tokenHint:
+      "Dengan token API, panel membuat dan menghapus record seperti ini sendiri. Record yang dibuat tanpa token tidak ikut dihapus saat domainnya dihapus.",
+    createToken: "Buat token Cloudflare",
+    openSettings: "Isi token di Pengaturan",
   },
 };

@@ -1,6 +1,6 @@
 import { cn } from "cn";
 import { InfoIcon, OctagonXIcon, TriangleAlertIcon } from "lucide-react";
-import { useEffect, useRef, useState } from "react";
+import { lazy, Suspense, useEffect, useRef, useState } from "react";
 import { Link } from "react-router";
 import type { OverviewSection, Problem } from "@/shared/monitor.types";
 import { detail, title } from "@/shared/problem.copy";
@@ -21,18 +21,41 @@ import {
   problemSetKey,
   sinceText,
   splitProblems,
+  withoutStarted,
 } from "./overview.state";
 import { TOUCH_HIT } from "./panel.touch";
 
 const t = idOverview;
 const ICON = { danger: OctagonXIcon, warning: TriangleAlertIcon, info: InfoIcon } as const;
 const LINK = cn(TOUCH_HIT, "font-medium underline-offset-4 hover:underline");
+// Lazy: the Ringkasan is on the initial /panel chunk, the button (and its panel copy) only loads with a pm2/postgres problem.
+const ServiceStartButton = lazy(() =>
+  import("@/web/shared/service-start").then((m) => ({ default: m.ServiceStartButton })),
+);
 
-function ProblemRow({ p, frozenAt, hidden }: { p: Problem; frozenAt: string | null; hidden: string | false }) {
+/** Core service a problem row offers "Jalankan …" for (PLAN/06 §6.1), or null (pm2 daemon gone while runit runs it). */
+export function problemService(p: Pick<Problem, "code" | "target" | "params">): "pm2" | "postgres" | null {
+  if (p.code === "pm2_unavailable") return p.params.reason === "service_down" ? "pm2" : null;
+  if (p.code === "service_down" && (p.target === "pm2" || p.target === "postgres")) return p.target;
+  return null;
+}
+
+function ProblemRow({
+  p,
+  frozenAt,
+  hidden,
+  onStarted,
+}: {
+  p: Problem;
+  frozenAt: string | null;
+  hidden: string | false;
+  onStarted: (id: string) => void;
+}) {
   const now = useNow();
   const Icon = ICON[p.severity];
   const since = sinceText(p.since, now);
   const logHref = problemLogHref(p);
+  const service = problemService(p);
   return (
     <li className={cn("flex gap-3 px-4 py-3", hidden)}>
       <Icon className={cn("mt-0.5 size-4 shrink-0", TONE_TEXT[PROBLEM_TONE[p.severity]])} aria-hidden />
@@ -42,6 +65,13 @@ function ProblemRow({ p, frozenAt, hidden }: { p: Problem; frozenAt: string | nu
           {title(p)}
         </p>
         <p className="text-muted-foreground max-md:line-clamp-2">{detail(p)}</p>
+        {service && (
+          <div className="py-1">
+            <Suspense fallback={null}>
+              <ServiceStartButton service={service} onStarted={() => onStarted(p.id)} />
+            </Suspense>
+          </div>
+        )}
         <p className="flex flex-wrap items-center gap-x-3 text-xs text-muted-foreground">
           {since && <span>{since}</span>}
           {frozenAt && <span className="text-warning">{t.frozen(formatRelative(frozenAt, now))}</span>}
@@ -77,13 +107,23 @@ export function ProblemStrip({
   sampledAt,
   unavailable,
   dataAt,
+  onReload,
 }: {
   problems: readonly Problem[];
   sampledAt: string | null;
   unavailable: readonly OverviewSection[];
   dataAt: string | null;
+  /** Refetch of the Ringkasan after a service was started from a row. */
+  onReload: () => void;
 }) {
-  const { alerts, info } = splitProblems(problems);
+  const [seenAt, setSeenAt] = useState<Record<string, string | null>>({});
+  const strip = useRef<HTMLElement>(null);
+  const { alerts, info } = splitProblems(withoutStarted(problems, seenAt, sampledAt));
+  const onStarted = (id: string) => {
+    setSeenAt((m) => ({ ...m, [id]: sampledAt }));
+    onReload();
+    strip.current?.focus(); // the pressed button leaves with its row
+  };
   const [expanded, setExpanded] = useState(false);
   const announcement = useAnnouncement(alerts);
   const phoneMore = hiddenProblems(alerts.length, PHONE_PROBLEM_ROWS, expanded);
@@ -100,7 +140,7 @@ export function ProblemStrip({
   );
 
   return (
-    <section aria-label={t.problemsLabel} className="flex flex-col gap-2">
+    <section ref={strip} tabIndex={-1} aria-label={t.problemsLabel} className="flex flex-col gap-2 outline-none">
       <p className="sr-only" aria-live="polite">
         {announcement}
       </p>
@@ -115,7 +155,13 @@ export function ProblemStrip({
         <div className="overflow-hidden rounded-lg border bg-card">
           <ul className="divide-y">
             {alerts.map((p, i) => (
-              <ProblemRow key={p.id} p={p} frozenAt={isFrozen(p, unavailable) ? dataAt : null} hidden={rowHidden(i)} />
+              <ProblemRow
+                key={p.id}
+                p={p}
+                frozenAt={isFrozen(p, unavailable) ? dataAt : null}
+                hidden={rowHidden(i)}
+                onStarted={onStarted}
+              />
             ))}
           </ul>
           {alerts.length > PHONE_PROBLEM_ROWS && toggle(phoneMore, "md:hidden")}

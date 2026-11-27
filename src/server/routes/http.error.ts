@@ -1,5 +1,5 @@
 /** Canonical HTTP statuses an ApiError may carry (one list for every route group). */
-export type ApiErrorStatus = 400 | 401 | 403 | 404 | 409 | 410 | 421 | 429 | 502 | 503 | 507;
+export type ApiErrorStatus = 400 | 401 | 403 | 404 | 409 | 410 | 421 | 422 | 429 | 502 | 503 | 507;
 
 /**
  * Error a handler/service throws to send `{ error: code, message, ...extra }` with `status` (mapped in the route

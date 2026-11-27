@@ -1,7 +1,6 @@
 import { ChevronDownIcon, Loader2Icon, SaveIcon } from "lucide-react";
 import { useEffect, useId, useState } from "react";
 import { Link } from "react-router";
-import { toast } from "sonner";
 import type { DevSetting, SettingKey } from "@/shared/dev.types";
 import { ConfirmAction } from "@/web/components/confirm-action";
 import { StatusBadge } from "@/web/components/status-badge";
@@ -10,6 +9,7 @@ import { idSettings } from "@/web/i18n/id.settings";
 import { Notice, ReauthNotice } from "@/web/security/security.notice";
 import { ERROR_TOAST_MS } from "@/web/shared/api.action";
 import { ApiError, apiErrorMessage } from "@/web/shared/api.client";
+import { toast } from "@/web/shared/toast.lazy";
 import { DATA_KEY_ANCHOR } from "./onboarding.state";
 import { SettingField } from "./setting.field";
 import { fieldDef, GROUP_ANCHOR, type SettingGroup } from "./settings.registry";

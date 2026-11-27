@@ -13,7 +13,9 @@ import { idJob } from "@/web/i18n/id.job";
 import { panelUrl } from "@/web/panel/panel.api";
 import { runApiAction } from "@/web/shared/api.action";
 import { apiFetch } from "@/web/shared/api.client";
+import { ServiceStartButton, type StartableService } from "@/web/shared/service-start";
 import { useApiQuery } from "@/web/shared/use-api-query";
+import { DnsManualCard, manualDnsHosts } from "./dns.manual";
 import { finalReason, recoverAction } from "./job.state";
 import { jobPath, siteUrl } from "./site.api";
 
@@ -26,6 +28,15 @@ const FINAL_TONE: Record<Exclude<Job["status"], "running">, StatusTone> = {
   failed: "danger",
   interrupted: "warning",
 };
+
+/** Core service a failed job needs started first (PLAN/06 §6.1), by its error code. */
+const SERVICE_FOR_ERROR: Readonly<Record<string, StartableService>> = {
+  pm2_not_running: "pm2",
+  database_failed: "postgres",
+};
+/** The service to offer "Jalankan …" for after this job, or null. */
+export const serviceToStart = (job: Pick<Job, "error">): StartableService | null =>
+  (job.error && SERVICE_FOR_ERROR[job.error.code]) ?? null;
 
 /** Error codes of POST /jobs/:id/recover. */
 const RECOVER_CODES = t.errorCodes;
@@ -81,6 +92,8 @@ export function JobFinal({ job }: { job: Job }) {
   if (job.status === "running") return null;
   const tone = job.resolvedBy ? "info" : FINAL_TONE[job.status];
   const reason = finalReason(job);
+  const service = job.resolvedBy ? null : serviceToStart(job);
+  const dnsHosts = manualDnsHosts(job.steps);
   return (
     <div className="flex flex-col gap-3">
       <div role="status" className={cn("flex flex-col gap-1 rounded-lg border p-3 text-sm", TONE_CLASS[tone])}>
@@ -90,7 +103,13 @@ export function JobFinal({ job }: { job: Job }) {
             <CodeText>{reason}</CodeText>
           </p>
         )}
+        {service && (
+          <div className="mt-1">
+            <ServiceStartButton service={service} />
+          </div>
+        )}
       </div>
+      {dnsHosts.length > 0 && <DnsManualCard hostnames={dnsHosts} open />}
       {job.error?.detail && (
         <details className="rounded-lg border p-3 text-sm">
           <summary className="cursor-pointer font-medium">{t.technical}</summary>

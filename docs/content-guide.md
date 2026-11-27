@@ -111,6 +111,15 @@ Jangan memakai "OK", "Ya", atau "Submit" di dialog. Tombol konfirmasi mengulang 
 
 Jangan menampilkan pesan teknis mentah sebagai satu-satunya isi. Detail server boleh ditampilkan di bawahnya.
 
+### Pekerjaan teknis: panel yang mengerjakan
+
+Jangan pernah menyuruh pengguna mengerjakan hal teknis dengan tangan (menjalankan perintah di Termux, membuka ssh, mengedit file) bila panel bisa mengerjakannya sendiri. Beri tombol yang melakukannya: "Perbaiki", "Jalankan pm2", "Jalankan lagi".
+
+- Pesan utama menyebut apa yang terjadi dan tombolnya: "Layanan pm2 tidak berjalan, jadi semua situs ikut berhenti. Tekan Jalankan pm2, lalu coba lagi."
+- Langkah manual (perintah, path file, blok untuk ditempel) hanya di bagian lipat **"Cara manual (untuk pengguna teknis)"**, tertutup secara bawaan. Buka otomatis hanya bila panel tidak bisa memperbaikinya sendiri, dan sebut alasannya.
+- ✅ "Panel tidak bisa memperbaiki ini otomatis. Ikuti Cara manual di kartu Persiapan."
+- ❌ "Jalankan `sv up pm2` di HP." / "Perbaiki lewat ssh."
+
 ### Status kosong
 
 **Apa isi bagian ini + aksi pertama.**

@@ -28,7 +28,8 @@ export async function pm2Call<T>(fn: () => Promise<T>): Promise<T> {
 
 /**
  * Restarts the site's pm2 app. A managed app pm2 does not know, or whose entry was just migrated (pm2 keeps the
- * old script on `start --only`, E3), is (re)loaded from ecosystem.config.js; otherwise `pm2 restart`.
+ * old script on `start --only`, E3), is (re)loaded from ecosystem.config.js; so is an adopted app pm2 does not know
+ * (its hand-written entry; none → `app_not_in_ecosystem`, PLAN/06 §6.3). Otherwise `pm2 restart`.
  */
 export async function restartApp(ctx: SiteCtx, s: SiteRow, reload: boolean): Promise<StepOutcome> {
   const name = appName(s);
@@ -39,6 +40,11 @@ export async function restartApp(ctx: SiteCtx, s: SiteRow, reload: boolean): Pro
       if (known) await pm2.remove(name);
       const a = await pm2.startFromEcosystem(sitePaths(ctx).ecosystem, name);
       if (!a) throw new StepError("app_not_loaded", { name }, `ecosystem.config.js did not load ${name}`);
+      return { code: "app_started", params: { name } };
+    }
+    if (!known) {
+      if (!(await pm2.startFromEcosystem(sitePaths(ctx).ecosystem, name)))
+        throw new StepError("app_not_in_ecosystem", { name }, `ecosystem.config.js has no app ${name}`);
       return { code: "app_started", params: { name } };
     }
     if (!(await pm2.control(name, "restart"))) throw new StepError("app_missing", { name });

@@ -1,4 +1,4 @@
-import { DnsConflictError, type SiteDnsProvider } from "./dns.types";
+import { DnsConflictError, DnsNotConfiguredError, type SiteDnsProvider } from "./dns.types";
 
 type FakeRecord = { recordId: string; target: string; managed: boolean };
 
@@ -49,4 +49,33 @@ export function createFakeDnsProvider() {
     },
   };
   return provider;
+}
+
+/**
+ * `provider` that acts like the real one without a token: record calls throw DnsNotConfiguredError while `tokenSet()`
+ * is false. Fake mode wraps its offline DNS in it, so "no token → cloudflared cert → fake zone" runs there too.
+ */
+export function tokenGated<P extends SiteDnsProvider>(provider: P, tokenSet: () => boolean): P {
+  const gate = () => {
+    if (!tokenSet()) throw new DnsNotConfiguredError("Cloudflare API token is not set (/dev settings)");
+  };
+  return {
+    ...provider,
+    async ensureTunnelCname(hostname: string, tunnelId: string, actorId?: string | null) {
+      gate();
+      return provider.ensureTunnelCname(hostname, tunnelId, actorId);
+    },
+    async deleteManaged(hostname: string, actorId?: string | null) {
+      gate();
+      return provider.deleteManaged(hostname, actorId);
+    },
+    ...(provider.inspect
+      ? {
+          async inspect(hostname: string, tunnelId: string) {
+            gate();
+            return (provider.inspect as NonNullable<SiteDnsProvider["inspect"]>)(hostname, tunnelId);
+          },
+        }
+      : {}),
+  };
 }

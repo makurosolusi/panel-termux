@@ -1,7 +1,8 @@
 // Fictional demo data + signed sessions for QA/screenshots (PLAN/05 W3). Prints counts only, never cookies or keys.
-// Usage: bun scripts/demo-seed.ts --data-dir <dir> --base-url <url>; then run the panel on that dir in fake mode with
-// APP_BASE_URL=<url>. Give each parallel instance its own host, e.g. http://demo1.localhost:3421: browser cookies are
-// per host, not per port, so two instances on localhost would sign each other out.
+// Usage: bun scripts/demo-seed.ts --data-dir <dir> --base-url <url> [--integration poco]; then run the panel on that
+// dir in fake mode with APP_BASE_URL=<url>. `--integration` picks the Persiapan scenario (fake.integration.ts).
+// Give each parallel instance its own host, e.g. http://demo1.localhost:3421: browser cookies are per host, not per
+// port, so two instances on localhost would sign each other out.
 import { Database } from "bun:sqlite";
 import { chmodSync, existsSync, statSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
@@ -15,6 +16,7 @@ import { runMigrations } from "../src/server/db/migrate";
 import * as t from "../src/server/db/schema";
 import { loadOrCreateSecret } from "../src/server/secret";
 import { setSettings } from "../src/server/settings.service";
+import { FAKE_INTEGRATIONS, type FakeIntegration } from "../src/server/system/fake.integration";
 import type { Role } from "../src/shared/roles";
 import type { JobStep } from "../src/shared/site.types";
 import { seedBackups, seedMonitor, type Tx } from "./demo-seed.history";
@@ -275,18 +277,31 @@ function seedAudit(tx: Tx, ago: (h: number) => Date): void {
 /** Ports of the site folders in the fake HOME: the 3 sites + demo-api (adoption candidate). */
 const PORTS = { ...Object.fromEntries(Object.entries(SITES).map(([n, v]) => [n, v[0]])), "demo-api": 3007 };
 
-/** Seeds `dataDir` (migrations, demo rows, fake HOME, sessions), writes the cookie file; returns row counts. */
-export async function seedDemo(opts: { dataDir: string; baseUrl: string }): Promise<Record<string, number>> {
+/** `--integration` values the demo supports: every fake scenario except `no_sites_dir` (demo sites need folders). */
+export const DEMO_INTEGRATIONS: readonly FakeIntegration[] = FAKE_INTEGRATIONS.filter((i) => i !== "no_sites_dir");
+
+/**
+ * Seeds `dataDir` (migrations, demo rows, fake HOME, sessions), writes the cookie file; returns row counts.
+ * `integration` = Persiapan scenario of the fake HOME (default `ready`).
+ */
+export async function seedDemo(opts: {
+  dataDir: string;
+  baseUrl: string;
+  integration?: FakeIntegration;
+}): Promise<Record<string, number>> {
   const dataDir = resolve(opts.dataDir);
   assertDemoDir(dataDir);
   new URL(opts.baseUrl); // throws on an invalid --base-url before anything is written
+  const integration = opts.integration ?? "ready";
+  if (!DEMO_INTEGRATIONS.includes(integration))
+    throw new Error(`demo-seed: --integration must be one of ${DEMO_INTEGRATIONS.join(", ")} (got ${integration})`);
   const { secret } = loadOrCreateSecret(dataDir);
   const db = openDb(dataDir);
   try {
     runMigrations(db);
     // Whole minutes: no seed time lands on odd seconds (times are shown without seconds).
     const now = Math.floor(Date.now() / MINUTE) * MINUTE;
-    const { liveBinary } = writeDemoHome(dataDir, PORTS);
+    const { liveBinary } = writeDemoHome(dataDir, PORTS, integration);
     const ago = (h: number) => new Date(now - h * HOUR);
     db.transaction((tx) => {
       // Rerun = wipe and rewrite: fresh timestamps and sessions.
@@ -335,15 +350,18 @@ export async function seedDemo(opts: { dataDir: string; baseUrl: string }): Prom
 }
 
 if (import.meta.main) {
-  const { values } = parseArgs({ options: { "data-dir": { type: "string" }, "base-url": { type: "string" } } });
+  const { values } = parseArgs({
+    options: { "data-dir": { type: "string" }, "base-url": { type: "string" }, integration: { type: "string" } },
+  });
   const dataDir = values["data-dir"];
   const baseUrl = values["base-url"];
   if (!dataDir || !baseUrl) {
-    console.error("usage: bun scripts/demo-seed.ts --data-dir <dir> --base-url <url>");
+    console.error("usage: bun scripts/demo-seed.ts --data-dir <dir> --base-url <url> [--integration <scenario>]");
     process.exit(2);
   }
   try {
-    console.log(`demo-seed: ${JSON.stringify(await seedDemo({ dataDir, baseUrl }))}`);
+    const integration = values.integration as FakeIntegration | undefined; // validated by seedDemo
+    console.log(`demo-seed: ${JSON.stringify(await seedDemo({ dataDir, baseUrl, integration }))}`);
     console.log(`demo-seed: cookies (mode 600) in ${join(resolve(dataDir), COOKIE_FILE)}`);
     console.log(
       `demo-seed: start the panel (fake mode) with PANEL_DATA_DIR=${resolve(dataDir)} APP_BASE_URL=${baseUrl} ` +
