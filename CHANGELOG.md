@@ -1,5 +1,34 @@
 # Changelog
 
+## [0.4.0] - 2026-11-27
+
+### Added
+
+- Tombol **Perbaiki** dan **Perbaiki semua** di kartu Persiapan (Situs): panel menyesuaikan `ecosystem.config.js` dan run script pm2 sendiri, tanpa membuka Termux. Sebelum menerapkan, panel menjelaskan artinya dalam bahasa awam (aplikasi tulisan tangan tetap, situs panel ditambahkan) dengan diff yang bisa dibuka, lalu memvalidasi hasilnya dengan `node`. Bila validasi gagal, file lama tetap dipakai.
+- Di `ecosystem.config.js` panel hanya menambahkan blok bertanda `panel-termux:apps v1` di akhir file. Aplikasi tulisan tangan tidak diubah dan tidak di-restart; penjaga `pm2-guard` hanya ditambahkan bila tidak ada aplikasi tulisan tangan.
+- **Batalkan perubahan** per file setelah perbaikan. Salinan file sebelum perbaikan disimpan di `<PANEL_DATA_DIR>/fix-backups/` (10 terakhir per file, hanya di HP, tidak ikut cadangan R2/S3).
+- **Mulai ulang pm2 sekarang** (opsional) yang memeriksa semua aplikasi kembali berjalan, dan menawarkan **Kembalikan file ecosystem dan mulai ulang pm2** bila ada yang tidak kembali.
+- Tombol **Jalankan pm2** dan **Jalankan postgres** di semua tempat yang melaporkan layanan itu mati: Persiapan, daftar dan detail situs, Riwayat perubahan, Ringkasan, halaman Aplikasi dan Database. Layanan juga menyala lagi setelah HP dinyalakan ulang.
+- **Jalankan lagi** untuk situs yang tidak ada di pm2, termasuk situs adopsi (dimuat dari `ecosystem.config.js`).
+- Folder situs yang belum ada bisa dibuat dari kartu Persiapan.
+- DNS situs baru dibuat lewat login cloudflared HP (`cert.pem`) bila token API Cloudflare belum diisi. Menghapus record itu nanti tetap butuh token.
+- Kartu record DNS siap salin (tipe, nama, isi, proxy) dengan **Periksa lagi** saat panel tidak bisa membuat DNS sendiri.
+- Langkah manual untuk pengguna teknis kini ada di bagian **Cara manual (untuk pengguna teknis)** yang bisa dibuka, bukan di pesan utama.
+- Data demo: `scripts/demo-seed.ts --integration <skenario>` (`ready`, `poco`, `old_spread`, `exotic`, `broken`) untuk mencoba kartu Persiapan.
+
+### Changed
+
+- Kartu Persiapan menampilkan satu baris per masalah, dengan alasan yang jelas bila panel tidak bisa memperbaikinya sendiri.
+- Bila cloudflared membuat record DNS di zona lain, langkah DNS dilewati dan situs tetap dibuat; panel menyebut record yang perlu dihapus di dasbor Cloudflare.
+- `--no-auto-exit` yang ditambahkan panel berlaku saat pm2 start berikutnya; pm2 tidak di-restart tanpa persetujuanmu.
+- Pemberitahuan (toast) dimuat belakangan, sehingga halaman panel sekitar 9 KB lebih ringan saat pertama dibuka.
+
+### Fixed
+
+- `apps.json`, `.env` situs, dan `config.yml` ditulis dengan fsync (file dan folder) sebelum rename, agar tidak kosong bila HP mati tepat setelah menyimpan.
+- Persiapan di HP dengan `ecosystem.config.js` tulisan tangan yang tidak menyebut `apps.json` kini menampilkan masalah yang sebenarnya, bukan baris yang tidak relevan.
+- Persiapan mendeteksi ecosystem yang lupa menyebar `...panelApps`, juga saat `apps.json` masih kosong.
+
 ## [0.3.0] - 2026-11-27
 
 ### Added

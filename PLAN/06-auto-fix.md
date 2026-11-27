@@ -10,6 +10,11 @@ temuan di dokumen debat. Rujukan "DECISIONS Cn" = keputusan koordinator.
 
 **Lingkup rilis 0.4.0 (DECISIONS C2, C7): P0 + P1 di dokumen ini. Semua item lain ada di §13 Backlog beserta alasannya.**
 
+**Status implementasi (2026-11-27, `wkr-fix-docs-01`): semua item P0 dan P1 selesai di branch `feature/auto-fix`.** Kontrak
+§5 sudah disinkronkan ke kode yang dirilis: `lastFixes` (undo per file, DECISIONS C9) menggantikan `lastFix`, gerbang
+F12/`not_verified` dihapus setelah E11 lulus (DECISIONS C8), dan toast sonner dimuat lazy (DECISIONS C10). Bila teks
+di bawah berbeda dari §5, §5 yang berlaku.
+
 ---
 
 ## 1. Keputusan PLAN (diikat DECISIONS C1–C8)
@@ -27,15 +32,15 @@ temuan di dokumen debat. Rujukan "DECISIONS Cn" = keputusan koordinator.
 | F9  | Peran: semua perbaikan integrasi, restart pm2 yang dicek, dan tombol layanan = **admin** (A1), tiap aksi diaudit dengan aktor (DECISIONS C6). Tanpa re-auth: teks perubahan ditentukan panel, bukan pengguna.                                                                                                                                                                      | –                                                  | Setara aksi admin lain; guard CSRF yang ada (B17) cukup                                                                                     |
 | F10 | **Restart pm2 dari panel selalu `confirm`, selalu dicek, dan menawarkan "Kembalikan dan mulai ulang"** bila ada app yang tidak kembali setelah panel mengubah ecosystem (debat C5). Copy konsekuensi menyebut nama semua app yang berjalan (DECISIONS C3).                                                                                                                         | Tombol restart tanpa pemeriksaan sesudahnya        | Restart pm2 = pemuatan pertama blok hasil patch                                                                                             |
 | F11 | Penjaga `pm2-guard` ditambahkan blok **hanya bila tidak ada app tulisan tangan** (DECISIONS C4). POCO (2 app tangan) tidak mendapat penjaga.                                                                                                                                                                                                                                       | Saran "lihat README" (#3)                          | Lab E4/E10                                                                                                                                  |
-| F12 | **Fix ecosystem baru aktif di build termux setelah lab E11 lulus** (DECISIONS C8, debat C4). Sebelum itu `available: false, reason: "not_verified"` di mode termux; mode fake selalu aktif agar QA bisa menguji. Fix run script tidak ikut gerbang ini.                                                                                                                            | –                                                  | Blok v1 belum pernah dimuat pm2-runtime nyata                                                                                               |
+| F12 | **Selesai, gerbang dihapus:** E11 dan ulangan dengan teks final lulus, fix ecosystem aktif di build termux. Teks asli: **Fix ecosystem baru aktif di build termux setelah lab E11 lulus** (DECISIONS C8, debat C4). Sebelum itu `available: false, reason: "not_verified"` di mode termux; mode fake selalu aktif agar QA bisa menguji. Fix run script tidak ikut gerbang ini.     | –                                                  | Blok v1 belum pernah dimuat pm2-runtime nyata                                                                                               |
 
 ## 2. Lingkup
 
-| P   | Item                                                                                                                                                                                                                                                                                                                                                    | Hasil untuk pengguna                                                   |
-| --- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------- |
-| P0  | `writeAtomic` fsync + baca byte (debat C1, C2); probe sentinel (C3); fix `ecosystem_block` (#1, #2, #3, #5); fix `pm2_auto_exit` (#4); restart pm2 yang dicek (F10); restore backup terbaru; bug copy `snippet_current`; hapus aturan moot `pm2_guard` (C15); copy C16; onboarding `apps_json`; skenario fake `poco`/`old_spread`/`exotic`; gerbang E11 | Kartu Persiapan di POCO selesai dengan 1–2 klik, tanpa Termux          |
-| P1  | #10/#16/#26 tombol Jalankan pm2/postgres (semua lokasi); #14/#15 **Jalankan lagi**; #12A kartu record DNS siap salin; #12B `route dns` lewat `cert.pem` (bersyarat gerbang G0); #6 fix `sites_dir_create`                                                                                                                                               | Pesan "jalankan … di HP / lewat ssh" hilang dari alur harian yang umum |
-| –   | Semua item lain                                                                                                                                                                                                                                                                                                                                         | §13 Backlog                                                            |
+| P   | Item                                                                                                                                                                                                                                                                                                                                                                 | Hasil untuk pengguna                                                   |
+| --- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------- |
+| P0  | **Selesai.** `writeAtomic` fsync + baca byte (debat C1, C2); probe sentinel (C3); fix `ecosystem_block` (#1, #2, #3, #5); fix `pm2_auto_exit` (#4); restart pm2 yang dicek (F10); restore backup terbaru; bug copy `snippet_current`; hapus aturan moot `pm2_guard` (C15); copy C16; onboarding `apps_json`; skenario fake `poco`/`old_spread`/`exotic`; gerbang E11 | Kartu Persiapan di POCO selesai dengan 1–2 klik, tanpa Termux          |
+| P1  | **Selesai** (termasuk #12B: G0 lulus). #10/#16/#26 tombol Jalankan pm2/postgres (semua lokasi); #14/#15 **Jalankan lagi**; #12A kartu record DNS siap salin; #12B `route dns` lewat `cert.pem` (bersyarat gerbang G0); #6 fix `sites_dir_create`                                                                                                                     | Pesan "jalankan … di HP / lewat ssh" hilang dari alur harian yang umum |
+| –   | Semua item lain                                                                                                                                                                                                                                                                                                                                                      | §13 Backlog                                                            |
 
 Item "tidak" (#21–25, #29, #30, #34–36, #42, #44, #49, #50) tetap manual; teksnya tidak diubah di gelombang ini.
 
@@ -43,7 +48,7 @@ Item "tidak" (#21–25, #29, #30, #34–36, #42, #44, #49, #50) tetap manual; te
 
 ## 3. P0 — Patcher `ecosystem.config.js` dan run script
 
-### 3.1 Blok bertanda (teks persis, v1)
+### 3.1 Blok bertanda (teks persis, v1) — selesai
 
 `<GUARD_SCRIPT>` diisi server dengan `JSON.stringify(termuxPrefix() + "/bin/sleep")` (di fake `<home>/usr/bin/sleep`),
 bukan interpolasi mentah (debat C11). Teks blok tetap untuk satu HP. Baris akhir memakai EOL file: bila file memuat
@@ -100,7 +105,7 @@ Kenapa bentuk ini:
 `ecosystem.patch.ts`. "Cara manual" menampilkan blok ini dengan instruksi "Tempel di **akhir** file". Template
 `deploy/pm2/ecosystem.config.js` dan repo `server-termux` **tidak** diubah di 0.4.0 (§13).
 
-### 3.2 `snippetCurrent` baru
+### 3.2 `snippetCurrent` baru — selesai
 
 ```
 current(text) = hasMarkers(text, v = BLOCK_VERSION) || legacyCurrent(text)
@@ -110,7 +115,7 @@ legacyCurrent(text) = !hasAnyMarker(text) && /panelApps/.test(text) && /existsSy
 Bug copy R&D §1: `snippet_current` disembunyikan (moot) bila teks **tidak menyebut `apps.json` sama sekali**. Di POCO
 kartu menampilkan satu baris akar (`ecosystem_spreads_apps_json`) ditambah warning `pm2_auto_exit`.
 
-### 3.3 Algoritma `planEcosystemFix(input)` (fungsi murni)
+### 3.3 Algoritma `planEcosystemFix(input)` (fungsi murni) — selesai
 
 Input: `{ bytes: Buffer, path, realDir, sitesDirReal, nlink, probeBefore, prefix }`. Output:
 `{ kind: "patch", candidate: Buffer, changes[], effects } | { kind: "unchanged" } | { kind: "manual", reason }`.
@@ -134,8 +139,8 @@ balik. Untuk kasus "tambah di akhir", kandidat = byte asli + byte blok (bukan en
 | 12      | Tanpa penanda, teks tidak menyebut `apps.json` dan `probeBefore.loadedAppsJson === false`    | `patch`: tambah blok di akhir (satu baris kosong pemisah; newline akhir dijaga)            |
 | 13      | Selain itu (apps.json dimuat dengan cara lain, banyak spread, `require` dinamis)             | `manual: unknown_apps_json_use`                                                            |
 
-Gerbang F12 dicek sebelum fungsi ini (di `integration.fix.ts`): mode termux dan `ECOSYSTEM_FIX_ON_TERMUX === false` →
-`manual: not_verified`.
+~~Gerbang F12~~ dihapus setelah E11 lulus (DECISIONS C8): tidak ada `ECOSYSTEM_FIX_ON_TERMUX` dan tidak ada
+`not_verified`.
 
 `OLD_SPREAD = /\.\.\.\s*require\(\s*(["'])\.\/apps(?:\.json)?\1\s*\)\s*,?/g`. Komentar yang memuat teks itu ikut
 terhitung → ≥ 2 kecocokan → manual.
@@ -143,7 +148,7 @@ terhitung → ≥ 2 kecocokan → manual.
 `changes[]` = hunk yang dibuat patcher sendiri (tanpa library diff): `{ kind: "remove", line, text }` dan
 `{ kind: "add", afterLine, lines }`.
 
-### 3.4 Terapkan (`applyEcosystemFix`)
+### 3.4 Terapkan (`applyEcosystemFix`) — selesai
 
 1. `jobs.assertIdle()` dan `backup.busy()` → 409 `busy`; kunci aksi `integration` (`createActionLocks`) (F5).
 2. `path = realpath(ecosystem)`. Baca **byte** + `sha256(bytes)` + `stat.mode` + `stat.nlink`.
@@ -178,7 +183,7 @@ memuat rahasia dari `env`).
 **Idempoten:** menjalankan ulang setelah sukses → langkah 8 atau 10 tabel §3.3 → `unchanged`. **App berjalan:** tidak ada
 pemanggilan pm2. File baru dibaca pm2 saat runtime start berikutnya dan saat deploy pertama situs panel (`start --only`).
 
-### 3.5 Batalkan perubahan (restore)
+### 3.5 Batalkan perubahan (restore) — selesai
 
 `POST /integration/backups/:id/restore`, body `{ force?: boolean; restart?: boolean }`:
 
@@ -194,9 +199,9 @@ pemanggilan pm2. File baru dibaca pm2 saat runtime start berikutnya dan saat dep
 
 Dialog restore (debat C9) menyebut situs dikelola yang ada di `apps.json` saat ini: "{blog dan shop} tidak berjalan lagi
 setelah HP dinyalakan ulang." Daftar tidak kosong → tier `confirm`; kosong → dialog biasa. Data dari
-`Integration.lastFix.affectedSites`. Undo tetap tersedia: panel tetap hidup walaupun pm2 mati (runit terpisah).
+`affectedSites` backup ecosystem di `Integration.lastFixes`. Undo tetap tersedia: panel tetap hidup walaupun pm2 mati (runit terpisah).
 
-### 3.6 Run script pm2 (`--no-auto-exit`, #4)
+### 3.6 Run script pm2 (`--no-auto-exit`, #4) — selesai
 
 `planRunScriptFix(bytes)`:
 
@@ -227,7 +232,7 @@ ulang pm2 sekarang** ada di `<details>` kartu (debat C6).
 **Aturan moot dihapus** (debat C15): `pm2_guard` tidak lagi disembunyikan karena flag `--no-auto-exit` di file. Dengan blok
 v1, `pm2_guard` hanya gagal di file lama tanpa penjaga dan tanpa app tangan.
 
-### 3.7 Restart pm2 yang dicek (F10, debat C5)
+### 3.7 Restart pm2 yang dicek (F10, debat C5) — selesai
 
 `POST /integration/pm2/restart` (body kosong) → `Pm2RestartResult`:
 
@@ -236,8 +241,8 @@ v1, `pm2_guard` hanya gagal di file lama tanpa penjaga dan tanpa app tangan.
 3. Restart lewat jalur yang ada: `controlService(actorId, "pm2", "restart")` (audit `service.restart`,
    `noteIntentionalRestart`, kunci `service:pm2`).
 4. Polling `pm2.list()` tiap 2 dtk sampai 30 dtk, sampai setiap nama di `before` `online` dengan pid > 0 yang hidup.
-5. `missing` = nama yang tidak kembali. Bila `missing` tidak kosong **dan** `lastFix` ecosystem dibuat setelah start pm2
-   sebelumnya → `offerRestore = lastFix.id`.
+5. `missing` = nama yang tidak kembali. Bila `missing` tidak kosong **dan** backup ecosystem di `lastFixes` dibuat setelah start
+   pm2 sebelumnya → `offerRestore = <id backup itu>`.
 6. Audit `integration.pm2_restart` `{ missing: n }`. Respons memuat `integration` terbaru.
 
 UI: dialog `confirm` dengan `restartPm2Body(apps)` + `restartPm2FileNote` bila ecosystem diubah panel sejak pm2 start.
@@ -245,7 +250,7 @@ UI: dialog `confirm` dengan `restartPm2Body(apps)` + `restartPm2FileNote` bila e
 pm2** (tier `confirm`) → `POST /integration/backups/:id/restore { restart: true, force }`. Tidak ada rollback otomatis
 tanpa klik.
 
-### 3.8 Probe (`ecosystem.probe.ts`, diperluas)
+### 3.8 Probe (`ecosystem.probe.ts`, diperluas) — selesai
 
 - Sebelum `require(eco)`, probe mengisi `require.cache[<dir>/apps.json]` dengan
   `[{ name: "__panel_probe__", script: process.execPath, interpreter: "none" }]` (debat C3). Entri ini selalu lolos filter.
@@ -267,12 +272,12 @@ tanpa klik.
 
 | Komponen                                 | File                            | Perilaku                                                                                                                                                                                                                                           |
 | ---------------------------------------- | ------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Tombol kartu **Perbaiki semua (n)**      | (di `site.setup.tsx`)           | Header kartu Persiapan bila ≥ 1 fix `available`. Label "Perbaiki" bila n = 1. Satu-satunya tombol fix; tidak ada tombol per baris (debat C18)                                                                                                      |
+| Tombol kartu **Perbaiki semua (n)**      | (di `site.setup.tsx`)           | Header kartu Persiapan bila ≥ 1 fix `available`. Label "Perbaiki" bila n = 1. **Dirilis:** juga tombol **Perbaiki** per baris check (satu baris per masalah); endpoint tetap per fix, tanpa batch (debat C18)                                      |
 | Dialog pratinjau                         | `src/web/site/fix.dialog.tsx`   | Memanggil preview tiap fix, menampilkan ringkasan awam dari `effects` per fix, `<details>` **Lihat perubahan pada file** berisi diff, tombol **Terapkan** / **Batal**. Terapkan = klien memanggil fix satu per satu, berhenti di kegagalan pertama |
 | Diff                                     | `src/web/site/fix.diff.tsx`     | Render `FixChange[]`: baris `+`/`-`, nomor baris, monospace, scroll horizontal. Tanpa library                                                                                                                                                      |
 | Cara manual                              | `src/web/site/setup.manual.tsx` | `<details>` native: blok + "tempel di akhir file" + perintah `nano` + run script. Terbuka otomatis bila ada fix `available: false`                                                                                                                 |
-| Toast hasil                              | sonner yang ada                 | Sukses tanpa aksi undo; `validation_failed` = "Tidak diterapkan" tone warning; error lain = pesan kode                                                                                                                                             |
-| Baris "Perubahan terakhir" + restart pm2 | (di `site.setup.tsx`)           | Di dalam `<details>` kartu: "Diperbaiki panel {waktu}. **Batalkan perubahan**" (dari `Integration.lastFix`) dan tautan **Mulai ulang pm2 sekarang** (§3.7). Satu-satunya UI undo                                                                   |
+| Toast hasil                              | sonner, lazy (C10)              | Sukses tanpa aksi undo; `validation_failed` = "Tidak diterapkan" tone warning; error lain = pesan kode                                                                                                                                             |
+| Baris "Perubahan terakhir" + restart pm2 | (di `site.setup.tsx`)           | Di dalam `<details>` kartu: "Diperbaiki panel {waktu}. **Batalkan perubahan**" per file (dari `Integration.lastFixes`, DECISIONS C9) dan tautan **Mulai ulang pm2 sekarang** (§3.7). Satu-satunya UI undo                                          |
 
 Dialog dan diff dimuat lazy saat tombol ditekan (anggaran `/panel` 215 KB, B30). Setelah setiap aksi kartu memakai
 `integration` dari respons (cek ulang otomatis).
@@ -337,7 +342,6 @@ Mengikuti `docs/content-guide.md` ("kamu", sentence case, nama file dalam kode, 
 | `unfixable.not_utf8`                         | "File ecosystem memakai penyandian teks selain UTF-8, jadi panel tidak mengubahnya agar isinya tidak rusak."                                                                              |
 | `unfixable.markers_broken`                   | "Penanda blok panel di `ecosystem.config.js` rusak atau dobel, jadi panel tidak mengubahnya."                                                                                             |
 | `unfixable.unknown_apps_json_use`            | "`ecosystem.config.js` memuat `apps.json` dengan cara yang tidak dikenali panel, jadi panel tidak mengubahnya."                                                                           |
-| `unfixable.not_verified`                     | "Perbaikan otomatis file ini belum diaktifkan di versi panel ini."                                                                                                                        |
 | `unfixable.run_script_missing`               | "Run script layanan pm2 tidak ditemukan."                                                                                                                                                 |
 | `unfixable.run_script_unknown`               | "Run script layanan pm2 ditulis dengan cara yang tidak dikenali panel."                                                                                                                   |
 | `unfixable.sites_dir_outside_home`           | "Folder situs berada di luar folder home Termux, jadi panel tidak membuatnya."                                                                                                            |
@@ -349,7 +353,7 @@ Onboarding `id.dev.setup.ts` `apps_json.action`: "Perbaiki di Situs" (tautan `/p
 
 ## 5. Kontrak API dan tipe
 
-### 5.1 `src/shared/fix.types.ts` (baru)
+### 5.1 `src/shared/fix.types.ts` (baru) — selesai
 
 ```text
 import type { Integration, IntegrationCheckKey } from "./site.types";
@@ -359,7 +363,7 @@ export type FixKey = "ecosystem_block" | "pm2_auto_exit" | "sites_dir_create";
 /** Why the panel will not apply a fix (copy: setup.unfixable.*). */
 export type FixBlockReason =
   | "not_config_js" | "ecosystem_missing" | "ecosystem_linked" | "too_large" | "not_utf8" | "ecosystem_unloadable"
-  | "markers_broken" | "unknown_apps_json_use" | "not_verified" | "run_script_missing" | "run_script_unknown"
+  | "markers_broken" | "unknown_apps_json_use" | "run_script_missing" | "run_script_unknown"
   | "sites_dir_outside_home";
 /** Per fix: which checks it resolves and whether it can run now. */
 export type FixAvailability = { key: FixKey; checks: IntegrationCheckKey[] } & (
@@ -399,15 +403,16 @@ export type FixResult = {
 };
 ```
 
-`Integration` (`site.types.ts`) += `fixes: FixAvailability[]`, `lastFix: FixBackup | null` (backup terbaru dari file mana
-pun). `IntegrationCheck.params.pending` untuk `pm2_auto_exit`, `params.noSites` untuk `ecosystem_spreads_apps_json`.
+`Integration` (`site.types.ts`) += `fixes?: FixAvailability[]`, `lastFixes?: FixBackup[]` (backup terbaru **tiap** file
+yang diperbaiki, terbaru dulu; satu undo per file, DECISIONS C9). Id backup berurutan milidetik; id detik lama tetap
+terbaca. `not_verified` dihapus dari `FixBlockReason` (DECISIONS C8). `IntegrationCheck.params.pending` untuk `pm2_auto_exit`, `params.noSites` untuk `ecosystem_spreads_apps_json`.
 `Integration.snippet` = teks blok v1.
 
-### 5.2 Endpoint (`/api/panel`, peran admin, guard Origin + `X-Requested-With`)
+### 5.2 Endpoint (`/api/panel`, peran admin, guard Origin + `X-Requested-With`) — selesai
 
 | Metode | Path                               | Hasil                                                       | Error                                                                                                            |
 | ------ | ---------------------------------- | ----------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------- |
-| GET    | `/integration`                     | `Integration` + `fixes` + `lastFix`                         | –                                                                                                                |
+| GET    | `/integration`                     | `Integration` + `fixes` + `lastFixes`                       | –                                                                                                                |
 | POST   | `/integration/fixes/:key/preview`  | `FixPreview` (tidak menulis apa pun)                        | 422 `not_fixable {reason}`, 404 key                                                                              |
 | POST   | `/integration/fixes/:key`          | `FixResult` (body `FixApplyRequest`)                        | 409 `busy`/`changed`/`changed_during_fix`, 422 `validation_failed`/`not_fixable`/`not_writable`, 507 `disk_full` |
 | POST   | `/integration/backups/:id/restore` | `FixResult` (body `{ force?: boolean; restart?: boolean }`) | 409 `changed_since`/`busy`, 404 `not_found`, 422 `validation_failed`/`not_writable`, 507 `disk_full`             |
@@ -428,7 +433,7 @@ Tidak ada API runner baru. Fix memakai `jobs.assertIdle()` (`job.runner.ts`) + `
 
 ## 6. P1 — desain per item
 
-### 6.1 Tombol **Jalankan pm2 / postgres** (#10, #16, #26; F8)
+### 6.1 Tombol **Jalankan pm2 / postgres** (#10, #16, #26; F8) — selesai
 
 - Komponen `src/web/shared/service-start.tsx`: `ServiceStartButton({ service: "pm2" | "postgres", onStarted?: () => void })`
   → `POST /api/panel/services/:name/start` (endpoint yang ada; audit, kunci, `noteIntentionalRestart` sudah ditangani
@@ -442,13 +447,13 @@ Tidak ada API runner baru. Fix memakai `jobs.assertIdle()` (`job.runner.ts`) + `
 - Copy semua lokasi: "Layanan pm2 tidak berjalan, jadi semua situs ikut berhenti." + tombol; perintah `sv up pm2` pindah
   ke "Cara manual".
 
-### 6.2 Buat folder situs (#6) — fix `sites_dir_create`
+### 6.2 Buat folder situs (#6) — fix `sites_dir_create` — selesai
 
 `mkdir -p` mode 700 hanya bila `realpath` induk terdekat yang ada berada di HOME (`sites_dir_outside_home` bila tidak),
 lalu `ensureAppsJson`. Masuk mekanisme fix yang sama (preview `files: []`, `effects.dir`). Tanpa backup (tidak ada yang
 ditimpa); tidak ada undo. Audit `integration.fix` `{ key: "sites_dir_create" }`.
 
-### 6.3 Jalankan lagi app yang hilang dari pm2 (#14, #15)
+### 6.3 Jalankan lagi app yang hilang dari pm2 (#14, #15) — selesai
 
 - Situs **dikelola** sudah dimuat ulang oleh `restartApp` (`deploy.restart.ts`); yang kurang hanya tombol dan copy.
 - Situs **adopsi** yang tidak dikenal pm2: `restartApp` → `startFromEcosystem(eco, name)`; `null` →
@@ -459,7 +464,7 @@ ditimpa); tidak ada undo. Audit `integration.fix` `{ key: "sites_dir_create" }`.
   - `app_not_in_ecosystem`: "Entri aplikasi ini tidak ada lagi di `ecosystem.config.js`, jadi panel tidak bisa
     menjalankannya. Tambahkan lagi lewat Cara manual, atau hapus situs ini dari panel."
 
-### 6.4 DNS tanpa token (#12)
+### 6.4 DNS tanpa token (#12) — selesai
 
 **Bagian A (tanpa syarat):** kartu `src/web/site/dns.manual.tsx` saat token kosong: record siap salin (Tipe `CNAME`,
 Nama `<host>`, Isi `<tunnelId>.cfargotunnel.com`, Proxy aktif) + **Periksa lagi** (cek DNS wizard yang ada). Tautan
@@ -529,9 +534,9 @@ halaman token umum.
 | `tests/demo-seed.test.ts`                                                           | adapters | `--integration poco` menghasilkan sandbox skenario `poco`                                                                                                                                                                                                                                                                                                                                                                                                               |
 | `tests/panel.api.test.ts`                                                           | adapters | `start` pm2 menghapus `down` lalu up; audit `service.start`                                                                                                                                                                                                                                                                                                                                                                                                             |
 | `tests/web.service-start.test.ts` (baru)                                            | adapters | Tombol memanggil endpoint start; sukses → toast + `onStarted`; error → pesan kode                                                                                                                                                                                                                                                                                                                                                                                       |
-| `tests/ecosystem.fix.test.ts` (baru)                                                | service  | Temp dir + fake + node: apply POCO → file baru, mode dijaga, backup ada, digest app tangan sama; `exports-function` → `validation_failed`, file asli byte-identik; sha berubah → `changed`/`changed_during_fix`; ENOSPC disuntik → 507 `disk_full`, file utuh; symlink ke luar `sites.dir` dan hardlink → `ecosystem_linked`; kandidat yatim dihapus saat boot; restore + `changed_since` + `force`; gerbang termux → `not_verified`                                    |
+| `tests/ecosystem.fix.test.ts` (baru)                                                | service  | Temp dir + fake + node: apply POCO → file baru, mode dijaga, backup ada, digest app tangan sama; `exports-function` → `validation_failed`, file asli byte-identik; sha berubah → `changed`/`changed_during_fix`; ENOSPC disuntik → 507 `disk_full`, file utuh; symlink ke luar `sites.dir` dan hardlink → `ecosystem_linked`; kandidat yatim dihapus saat boot; restore + `changed_since` + `force`                                                                     |
 | `tests/integration.fix.api.test.ts` (baru)                                          | service  | Peran `user` 403; tanpa header CSRF 403; preview tidak menulis; apply → 200 + audit `integration.fix` tanpa isi file; job/cadangan berjalan → 409 `busy`; restore id traversal → 404; restart dicek: semua kembali → ok; satu app hilang setelah fix → `missing` + `offerRestore`; restore `{restart:true}` → `FixResult.restart`                                                                                                                                       |
-| `tests/site.integration.test.ts`                                                    | service  | `snippet_current` moot tanpa sebutan apps.json (bug POCO); `legacyCurrent` ok; `pm2_auto_exit` pending via mtime/uptime = ok + `params.pending`; `pm2_guard` tidak disembunyikan oleh flag (C15); `noSites` saat `apps.json` kosong; `fixes[]` dan `lastFix` per skenario; `appNames` memuat app panel runnable                                                                                                                                                         |
+| `tests/site.integration.test.ts`                                                    | service  | `snippet_current` moot tanpa sebutan apps.json (bug POCO); `legacyCurrent` ok; `pm2_auto_exit` pending via mtime/uptime = ok + `params.pending`; `pm2_guard` tidak disembunyikan oleh flag (C15); `noSites` saat `apps.json` kosong; `fixes[]` dan `lastFixes` per skenario; `appNames` memuat app panel runnable                                                                                                                                                       |
 | `tests/web.site.test.ts`                                                            | web      | Kartu `poco`: tombol "Perbaiki semua (2)", tanpa tombol per baris; dialog menyebut app yang dipertahankan; fix tidak tersedia → `<details>` manual terbuka + alasan; toast `validation_failed` "Tidak diterapkan" tone warning; dialog undo menyebut situs dan tier `confirm`; restart gagal → tombol restoreAndRestart; kamus `setup.*` lengkap (`satisfies`)                                                                                                          |
 | `tests/deploy.restart.test.ts` (baru)                                               | p1       | Adopsi tidak dikenal pm2 → `startFromEcosystem`; entri hilang → `app_not_in_ecosystem`                                                                                                                                                                                                                                                                                                                                                                                  |
 | `tests/dns.route.test.ts` (baru, bila #12B)                                         | p1       | Token kosong + `cert.pem` → `routeDns`; FQDN cocok → `dns_routed`, `dnsManaged` false; FQDN lain → `dns_wrong_zone`; tanpa cert → kartu manual                                                                                                                                                                                                                                                                                                                          |
@@ -558,7 +563,7 @@ halaman token umum.
    rute tulisan tangan (#19).
 9. Semua aksi tercatat di audit dengan aktor; tidak ada isi file, nilai env, atau kunci di log/audit (Rule 12).
 10. Test spy fsync lulus; `writeAtomic` dipakai juga untuk `config.yml` (`site.steps.ts`).
-11. **Lab E11 lulus sebelum `ECOSYSTEM_FIX_ON_TERMUX = true`** (hasil di `PLAN/debate/03-pm2-lab-results.md`). Bila
+11. **Selesai: E11 lulus, gerbang dihapus.** Teks asli: **Lab E11 lulus sebelum `ECOSYSTEM_FIX_ON_TERMUX = true`** (hasil di `PLAN/debate/03-pm2-lab-results.md`). Bila
     belum lulus saat rilis, 0.4.0 tetap dirilis dengan fix ecosystem `not_verified` di termux; fix run script tetap aktif.
 12. Uji manual di POCO **hanya atas izin pemilik**: fix ecosystem + run script, `pm2 list` tidak berubah (pid
     makuro-solusi & adminneo sama); reboot test terpisah atas izin.

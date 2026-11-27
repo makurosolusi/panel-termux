@@ -43,15 +43,15 @@ Google hanya menerima domain https publik atau `localhost`; IP Tailscale/LAN tid
 
 Hanya empat variabel wajib (lihat `.env.example`):
 
-| Variabel                                   | Keterangan                                                                                                                                                     |
-| ------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `APP_BASE_URL`                             | URL publik panel (dipakai untuk redirect OAuth)                                                                                                                |
-| `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET` | OAuth client di atas                                                                                                                                           |
-| `SUPER_ADMIN_EMAILS`                       | Email super admin, dipisah koma                                                                                                                                |
-| `PORT` (opsional)                          | Default `3200`                                                                                                                                                 |
-| `PANEL_DATA_DIR` (opsional)                | Default `./data` (relatif ke working dir): berisi `panel.db`, `secret` (kunci data), `snapshots/`, dan upload deploy yang belum selesai                        |
-| `PANEL_CONNECTIVITY_URL` (opsional)        | URL yang dicek sampler untuk tahu apakah HP punya internet. Default `https://www.gstatic.com/generate_204`. Ganti bila alamat itu diblokir di jaringanmu       |
-| `PANEL_SKIP_SNAPSHOT` (opsional)           | `1` = tetap migrasi walau snapshot pra-migrasi gagal (mis. penyimpanan penuh). Hanya untuk satu kali start; hapus lagi setelahnya. Lihat [Rollback](#rollback) |
+| Variabel                                   | Keterangan                                                                                                                                                                                         |
+| ------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `APP_BASE_URL`                             | URL publik panel (dipakai untuk redirect OAuth)                                                                                                                                                    |
+| `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET` | OAuth client di atas                                                                                                                                                                               |
+| `SUPER_ADMIN_EMAILS`                       | Email super admin, dipisah koma                                                                                                                                                                    |
+| `PORT` (opsional)                          | Default `3200`                                                                                                                                                                                     |
+| `PANEL_DATA_DIR` (opsional)                | Default `./data` (relatif ke working dir): berisi `panel.db`, `secret` (kunci data), `snapshots/`, `fix-backups/` (salinan file sebelum perbaikan Persiapan), dan upload deploy yang belum selesai |
+| `PANEL_CONNECTIVITY_URL` (opsional)        | URL yang dicek sampler untuk tahu apakah HP punya internet. Default `https://www.gstatic.com/generate_204`. Ganti bila alamat itu diblokir di jaringanmu                                           |
+| `PANEL_SKIP_SNAPSHOT` (opsional)           | `1` = tetap migrasi walau snapshot pra-migrasi gagal (mis. penyimpanan penuh). Hanya untuk satu kali start; hapus lagi setelahnya. Lihat [Rollback](#rollback)                                     |
 
 Bun memuat `.env` otomatis dari working directory. Panel menolak start dan menyebut nama variabel (bukan nilainya) bila ada yang kosong atau tidak valid.
 
@@ -100,7 +100,7 @@ bun scripts/demo-seed.ts --data-dir /tmp/panel-demo --base-url http://demo.local
 SUPER_ADMIN_EMAILS=demo@contoh.test PANEL_DATA_DIR=/tmp/panel-demo APP_BASE_URL=http://demo.localhost:3421 PORT=3421 bun run dev
 ```
 
-Seed mengisi data dir **baru** dengan data fiktif (situs, perubahan, deploy, cadangan, audit, 7 hari metrik, satu domain bermasalah, satu aplikasi yang bisa diadopsi, satu situs yang bisa dikembalikan) dan menulis cookie sesi untuk `user`, `admin`, dan `super_admin` ke `demo-cookies.json` (mode 600) di data dir itu. Seed menolak `./data` dan `~/panel`, dan hanya mau mengisi ulang data dir yang dulu dibuatnya. `SUPER_ADMIN_EMAILS` harus memuat `demo@contoh.test`, karena boot menurunkan super admin yang tidak ada di env. Jalankan tiap instance di host sendiri (`demo1.localhost`, `demo2.localhost`): cookie browser berlaku per host, bukan per port.
+Seed mengisi data dir **baru** dengan data fiktif (situs, perubahan, deploy, cadangan, audit, 7 hari metrik, satu domain bermasalah, satu aplikasi yang bisa diadopsi, satu situs yang bisa dikembalikan) dan menulis cookie sesi untuk `user`, `admin`, dan `super_admin` ke `demo-cookies.json` (mode 600) di data dir itu. Seed menolak `./data` dan `~/panel`, dan hanya mau mengisi ulang data dir yang dulu dibuatnya. `SUPER_ADMIN_EMAILS` harus memuat `demo@contoh.test`, karena boot menurunkan super admin yang tidak ada di env. `--integration <skenario>` memilih keadaan kartu Persiapan: `ready` (default), `poco` (ecosystem tulisan tangan tanpa blok panel dan run script tanpa `--no-auto-exit`), `old_spread` (snippet 0.2.x), `exotic` (file bukan UTF-8), atau `broken` (ecosystem tidak bisa dimuat). Jalankan tiap instance di host sendiri (`demo1.localhost`, `demo2.localhost`): cookie browser berlaku per host, bukan per port.
 
 ## Test, lint, typecheck
 
@@ -145,7 +145,7 @@ Sebelum membuat tag, jalankan workflow itu sekali lewat **Actions → release �
 
    Bila ada perubahan situs yang sedang berjalan (deploy, buat situs, dll.), `sv restart panel` menunggu perubahan itu selesai, **sampai 2 menit**. Selama itu panel tidak terjangkau. Perubahan yang belum selesai setelah 2 menit terputus dan tampil sebagai "Terputus" di Riwayat perubahan, dengan tombol **Pulihkan** untuk membereskannya.
 
-   Upgrade = jalankan perintah langkah 1 lagi. Rollback: lihat [Rollback](#rollback).
+   Upgrade = jalankan perintah langkah 1 lagi. Setelah upgrade, buka **Situs → Persiapan**: bila ada yang perlu disesuaikan (mis. snippet ecosystem lama), tekan **Perbaiki semua** di sana, tanpa membuka Termux. Rollback: lihat [Rollback](#rollback).
 
 3. Tambahkan hostname panel ke tunnel cloudflared HP, mis. di `~/.cloudflared/config.yml` sebelum aturan catch-all:
 
@@ -227,7 +227,18 @@ Panel membuat snapshot `panel.db.<versi lama>.<waktu>` di `<PANEL_DATA_DIR>/snap
 
 ## Integrasi pm2 (`apps.json`)
 
-Panel memiliki `~/sites/apps.json` (dibuat otomatis saat start bila belum ada). Agar pm2 menjalankan site buatan panel, `~/sites/ecosystem.config.js` harus memuat blok `panelApps` berikut dan menaruh `...panelApps` sebagai elemen terakhir `apps`. Template lengkapnya ada di [`deploy/pm2/ecosystem.config.js`](deploy/pm2/ecosystem.config.js) (salinan persis `files/sites/ecosystem.config.js` di [server-termux](https://github.com/makurosolusi/server-termux), sumbernya):
+Panel memiliki `~/sites/apps.json` (dibuat otomatis saat start bila belum ada). Agar pm2 menjalankan situs buatan panel, `~/sites/ecosystem.config.js` harus memuat entri dari `apps.json`. Halaman **Situs → Persiapan** memeriksa ini (memuat ecosystem dengan `node` seperti pm2) dan menampilkan satu baris per masalah.
+
+**Perbaiki dari panel.** Bila panel bisa memperbaikinya sendiri, baris itu punya tombol **Perbaiki**, dan kartu punya **Perbaiki semua (n)**. Panel menampilkan dulu apa artinya dalam bahasa awam (aplikasi tulisan tangan yang tetap, situs panel yang ditambahkan), dengan **Lihat perubahan pada file** untuk diff-nya, lalu **Terapkan**:
+
+- Di `ecosystem.config.js` panel hanya menambahkan blok bertanda `panel-termux:apps v1` di **akhir** file (dan menghapus `...require("./apps.json")` lama bila ada). Aplikasi tulisan tangan tidak diubah dan tidak di-restart. Penjaga `pm2-guard` hanya ditambahkan bila tidak ada aplikasi tulisan tangan.
+- Di run script layanan pm2 panel hanya menambahkan `--no-auto-exit` setelah `pm2-runtime`. Ini berlaku saat pm2 start berikutnya (HP atau pm2 dinyalakan ulang). **Mulai ulang pm2 sekarang** (opsional, meminta konfirmasi yang menyebut aplikasi yang berjalan) memeriksa semua aplikasi kembali berjalan; bila tidak, panel menawarkan **Kembalikan file ecosystem dan mulai ulang pm2**.
+- Folder situs yang belum ada bisa dibuat dari kartu yang sama.
+- Sebelum menulis, panel memvalidasi hasilnya dengan `node`; bila gagal, file lama tetap dipakai ("Tidak diterapkan"). pm2 tidak pernah di-restart oleh perbaikan itu sendiri.
+- **Batalkan perubahan** mengembalikan tiap file yang diubah ke versi sebelum perbaikan (satu undo per file). Salinan disimpan di `<PANEL_DATA_DIR>/fix-backups/`, 10 terakhir per file, hanya di HP (tidak ikut cadangan R2/S3 karena ecosystem bisa memuat `env` rahasia).
+- File yang tidak bisa diubah dengan aman (bukan UTF-8, symlink, penanda blok rusak, `apps.json` dipakai dengan cara lain) tidak disentuh. Baris itu menyebut alasannya dan membuka **Cara manual (untuk pengguna teknis)**.
+
+**Cara manual (untuk pengguna teknis).** HP baru memakai template [`deploy/pm2/ecosystem.config.js`](deploy/pm2/ecosystem.config.js) (salinan persis `files/sites/ecosystem.config.js` di [server-termux](https://github.com/makurosolusi/server-termux), sumbernya), yang memuat blok `panelApps` berikut dengan `...panelApps` sebagai elemen terakhir `apps`. Snippet ini tetap dianggap benar oleh Persiapan:
 
 ```js
 // Panel Termux: situs buatan panel tercatat di apps.json (dikelola panel, jangan diedit tangan).
@@ -257,14 +268,18 @@ module.exports = {
 };
 ```
 
-- **Ganti snippet lama** `...require("./apps.json")` dari versi 0.2.x. Snippet lama melempar error bila `apps.json` hilang atau rusak, dan satu entri yang binary-nya hilang membuat pm2-runtime menghentikan **semua** aplikasi. Halaman **Situs → Persiapan** memeriksa ini (memuat ecosystem dengan `node` seperti pm2) dan menandai snippet lama sebagai error.
+Untuk file tulisan tangan, bagian Cara manual di kartu Persiapan menampilkan blok `panel-termux:apps v1` siap salin untuk ditempel di akhir file.
+
+- Snippet lama `...require("./apps.json")` dari versi 0.2.x ditandai error di Persiapan. Snippet itu melempar error bila `apps.json` hilang atau rusak, dan satu entri yang binary-nya hilang membuat pm2-runtime menghentikan **semua** aplikasi. **Perbaiki** menggantinya dengan blok panel.
 - **Jangan hapus `pm2-guard`.** pm2-runtime keluar bila ecosystem tidak punya aplikasi saat start, juga dengan `--no-auto-exit`. Aplikasi penjaga `pm2-guard` (`sleep infinity`, ±1 MB) menahannya hidup di HP yang belum punya situs. Panel menyembunyikannya dari daftar Aplikasi.
-- Service runit `pm2` harus menjalankan `pm2-runtime --no-auto-exit` (lihat [`deploy/pm2/run`](deploy/pm2/run)). Panel tidak pernah memanggil CLI `pm2` saat service itu mati, agar tidak menyalakan daemon pm2 kedua; halaman yang butuh pm2 menampilkan "pm2 tidak berjalan".
-- Situs yang tercatat di panel tetapi tidak ada di pm2 ditandai "Tidak berjalan di pm2".
+- Service runit `pm2` sebaiknya menjalankan `pm2-runtime --no-auto-exit` (lihat [`deploy/pm2/run`](deploy/pm2/run)). Panel tidak pernah memanggil CLI `pm2` saat service itu mati, agar tidak menyalakan daemon pm2 kedua; halaman yang butuh pm2 menampilkan "pm2 tidak berjalan" dengan tombol **Jalankan pm2** (tombol **Jalankan postgres** untuk postgres). Tombol itu juga menghapus file `down` layanan sehingga layanan menyala lagi setelah HP dinyalakan ulang.
+- Situs yang tercatat di panel tetapi tidak ada di pm2 ditandai "Tidak berjalan di pm2" dengan tombol **Jalankan lagi**. Situs adopsi dimuat dari `ecosystem.config.js`.
 
 ## Membuat situs
 
-**Situs → Buat situs**: isi nama, satu atau beberapa hostname, port (disarankan otomatis dari `sites.port_range`), database opsional, dan variabel `.env` tambahan. Wizard memeriksa nama, port, dan hostname saat diketik. Panel menjalankan perubahan bertahap: folder `~/sites/<nama>` → database dan role Postgres (opsional, `DATABASE_URL` ditulis ke `.env`) → `.env` (`PORT` diisi panel) → entri `apps.json` → ingress `config.yml` (divalidasi cloudflared dulu, backup `config.yml.bak`) → CNAME DNS (bila token Cloudflare diisi) → satu kali restart cloudflared. Bila satu langkah gagal, langkah sebelumnya di-undo. Progres per langkah, durasinya, dan log-nya terlihat di **Riwayat perubahan** (`/panel/jobs`).
+**Situs → Buat situs**: isi nama, satu atau beberapa hostname, port (disarankan otomatis dari `sites.port_range`), database opsional, dan variabel `.env` tambahan. Wizard memeriksa nama, port, dan hostname saat diketik. Panel menjalankan perubahan bertahap: folder `~/sites/<nama>` → database dan role Postgres (opsional, `DATABASE_URL` ditulis ke `.env`) → `.env` (`PORT` diisi panel) → entri `apps.json` → ingress `config.yml` (divalidasi cloudflared dulu, backup `config.yml.bak`) → CNAME DNS → satu kali restart cloudflared. Bila satu langkah gagal, langkah sebelumnya di-undo. Progres per langkah, durasinya, dan log-nya terlihat di **Riwayat perubahan** (`/panel/jobs`).
+
+DNS dibuat lewat token API Cloudflare bila diisi. Tanpa token, panel memakai login cloudflared HP (`~/.cloudflared/cert.pem`, `cloudflared tunnel route dns`) dan hanya menerima hasilnya bila cloudflared membuat record dengan nama yang persis sama; menghapus record itu nanti tetap butuh token. Bila keduanya tidak tersedia, atau cloudflared membuat record di zona lain, langkah DNS dilewati (situs tetap dibuat) dan panel menampilkan kartu record siap salin (tipe, nama, isi, proxy) dengan **Periksa lagi**.
 
 Di halaman detail situs: tambah/hapus domain, ubah variabel lingkungan (tempel `.env` dengan pratinjau; "Simpan" atau "Simpan dan mulai ulang" yang mengembalikan nilai lama bila aplikasi gagal sehat), mulai ulang, dan pengaturan cek kesehatan (path, status yang diharapkan, batas waktu 10-300 detik, default 60).
 
@@ -464,6 +479,7 @@ Asumsi: HP baru bersih, kamu punya akun Cloudflare (dashboard + R2), akun Google
 - CPU% per proses tidak tersedia di Android (`/proc/stat` diblokir SELinux); beberapa info `/proc` lain juga terbatas.
 - Setiap perubahan ingress me-restart cloudflared, sehingga **semua** domain di tunnel putus beberapa detik.
 - Panel tidak bisa memberi tahu saat dirinya atau HP mati (lihat [Pemantauan dan notifikasi](#pemantauan-dan-notifikasi)).
+- Panel menulis `apps.json`, `.env`, `config.yml`, dan file yang diperbaiki dengan fsync (file dan folder) sebelum rename. Di POCO, `/data` memakai f2fs `fsync_mode=nobarrier`: urutan tulis terjaga, tetapi isi file tidak dijamin selamat bila HP mati mendadak tepat saat menulis. Salinan di `fix-backups/` dan validasi Persiapan membantu memulihkannya.
 - Upload multipart S3 belum diuji dengan dump besar.
 - Panggilan nyata ke R2 dan API Cloudflare belum diuji end-to-end (hanya dengan mock di test).
 
