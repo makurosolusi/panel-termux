@@ -18,12 +18,12 @@ import { redactLines } from "../system/log.redact";
 import { entryBinary, parseApps } from "./apps.file";
 import { BLOCK_VERSION, ECOSYSTEM_CANDIDATE, planEcosystemFix } from "./ecosystem.patch";
 import { type EcosystemProbe, probeEcosystem } from "./ecosystem.probe";
-import { type FixBackupEntry, latestFixBackup } from "./fix.backup";
+import { type FixBackupEntry, latestFixBackups } from "./fix.backup";
 import { planRunScriptFix, syntaxShell } from "./runscript.patch";
 import { type SiteCtx, sitePaths } from "./site.checks";
 import { readBytesOrNull, readTextOrNull, writeFileSynced } from "./site.files";
 
-/** Site context plus the panel data dir (fix backups); without it there is no `lastFix`. */
+/** Site context plus the panel data dir (fix backups); without it `lastFixes` is empty. */
 export type FixCtx = SiteCtx & { dataDir?: string };
 /** Every fix, in the order the card lists them. */
 export const FIX_KEYS: readonly FixKey[] = ["sites_dir_create", "ecosystem_block", "pm2_auto_exit"];
@@ -216,11 +216,9 @@ export function fixBackupView(ctx: SiteCtx, e: FixBackupEntry): FixBackup {
   };
 }
 
-/** `Integration.lastFix`: newest backup of any fixed file, or null. */
-export function lastFixOf(ctx: FixCtx): FixBackup | null {
-  const e = ctx.dataDir ? latestFixBackup(ctx.dataDir) : null;
-  return e ? fixBackupView(ctx, e) : null;
-}
+/** `Integration.lastFixes`: newest backup of each fixed file, newest first (undo is per file). */
+export const lastFixesOf = (ctx: FixCtx): FixBackup[] =>
+  ctx.dataDir ? latestFixBackups(ctx.dataDir).map((e) => fixBackupView(ctx, e)) : [];
 
 /**
  * Loads `bytes` as `<sites>/.ecosystem.panel-candidate.config.js` (deleted in `finally`). With `before` (a patch) it

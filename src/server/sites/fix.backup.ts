@@ -1,5 +1,5 @@
 // Local backups of files changed by integration fixes (PLAN/06 F6, DECISIONS C5): <dataDir>/fix-backups/<file>/
-// <yyyymmdd-HHMMSS>-<sha8 of the result>.bak, folder 700, file 600, 10 newest per file, never uploaded.
+// <yyyymmdd-HHMMSSmmm>-<sha8 of the result>.bak (0.4.0 betas wrote HHMMSS, still read), folder 700, file 600, 10 newest per file, never uploaded.
 import { chmodSync, existsSync, mkdirSync, readdirSync, rmSync } from "node:fs";
 import { join, resolve, sep } from "node:path";
 import type { FixFile } from "../../shared/fix.types";
@@ -11,23 +11,29 @@ const ROOT = "fix-backups";
 const DIR_MODE = 0o700;
 const FILE_MODE = 0o600;
 const FILES: readonly FixFile[] = ["ecosystem", "pm2_run"];
-const ID = /^(ecosystem|pm2_run)\.(\d{8}-\d{6})-([0-9a-f]{8})$/;
-const NAME = /^(\d{8})-(\d{6})-([0-9a-f]{8})\.bak$/;
+// Milliseconds so two fixes in one second (Perbaiki semua) still order; second-only names are older backups.
+const ID = /^(ecosystem|pm2_run)\.(\d{8}-(?:\d{9}|\d{6}))-([0-9a-f]{8})$/;
+const NAME = /^(\d{8})-(\d{9}|\d{6})-([0-9a-f]{8})\.bak$/;
 
 /** One backup on disk; `id` = `<file>.<stamp>-<sha8>`, `sha8` = first 8 hex of the sha256 the fix produced. */
 export type FixBackupEntry = { id: string; file: FixFile; path: string; at: string; sha8: string };
 
 const dirOf = (dataDir: string, file: FixFile) => join(dataDir, ROOT, file);
-const pad = (n: number) => String(n).padStart(2, "0");
+/** `2026-11-27T10:00:05.123Z` → `20261127-100005123`. */
 const stamp = (d: Date) =>
-  `${d.getUTCFullYear()}${pad(d.getUTCMonth() + 1)}${pad(d.getUTCDate())}-` +
-  `${pad(d.getUTCHours())}${pad(d.getUTCMinutes())}${pad(d.getUTCSeconds())}`;
+  d
+    .toISOString()
+    .replace(/[-:.Z]/g, "")
+    .replace("T", "-");
+
+const newestFirst = (a: FixBackupEntry, b: FixBackupEntry) =>
+  a.at < b.at ? 1 : a.at > b.at ? -1 : a.id < b.id ? 1 : a.id > b.id ? -1 : 0;
 
 function entry(dataDir: string, file: FixFile, name: string): FixBackupEntry | null {
   const m = NAME.exec(name);
   if (!m) return null;
   const [, day, time, sha8] = m as unknown as [string, string, string, string];
-  const at = `${day.slice(0, 4)}-${day.slice(4, 6)}-${day.slice(6)}T${time.slice(0, 2)}:${time.slice(2, 4)}:${time.slice(4)}.000Z`;
+  const at = `${day.slice(0, 4)}-${day.slice(4, 6)}-${day.slice(6)}T${time.slice(0, 2)}:${time.slice(2, 4)}:${time.slice(4, 6)}.${time.slice(6) || "000"}Z`;
   return { id: `${file}.${day}-${time}-${sha8}`, file, path: join(dirOf(dataDir, file), name), at, sha8 };
 }
 
@@ -46,13 +52,12 @@ export function listFixBackups(dataDir: string, file: FixFile): FixBackupEntry[]
   return readdirSync(dir)
     .map((n) => entry(dataDir, file, n))
     .filter((e): e is FixBackupEntry => e !== null)
-    .sort((a, b) => (a.id < b.id ? 1 : a.id > b.id ? -1 : 0));
+    .sort(newestFirst);
 }
 
-/** Newest backup across all fixed files, or null. */
-export function latestFixBackup(dataDir: string): FixBackupEntry | null {
-  const all = FILES.flatMap((f) => listFixBackups(dataDir, f).slice(0, 1));
-  return all.sort((a, b) => (a.at < b.at ? 1 : a.at > b.at ? -1 : 0))[0] ?? null;
+/** Newest backup of each fixed file that has one, newest first. */
+export function latestFixBackups(dataDir: string): FixBackupEntry[] {
+  return FILES.flatMap((f) => listFixBackups(dataDir, f).slice(0, 1)).sort(newestFirst);
 }
 
 /** Stores `bytes` (the file before the fix) durably, then keeps only the 10 newest of that file. */

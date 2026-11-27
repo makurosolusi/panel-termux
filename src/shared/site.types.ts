@@ -266,8 +266,8 @@ export type Integration = {
   checkedAt?: string;
   /** 0.4.0: fixes the panel can apply, per check (PLAN/06 §5.1). */
   fixes?: FixAvailability[];
-  /** 0.4.0: newest panel backup of any fixed file. */
-  lastFix?: FixBackup | null;
+  /** 0.4.0: newest panel backup of each fixed file, newest first (one undo per file). */
+  lastFixes?: FixBackup[];
   /** 0.2.x */
   ecosystemIncludesAppsJson: boolean;
   /** 0.2.x */

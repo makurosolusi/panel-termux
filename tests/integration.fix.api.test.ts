@@ -63,7 +63,7 @@ describe.skipIf(!node)("integration fixes API (fake poco)", () => {
       { key: "ecosystem_block", checks: ["ecosystem_spreads_apps_json"], available: true },
       { key: "pm2_auto_exit", checks: ["pm2_auto_exit"], available: true },
     ]);
-    expect(i.lastFix).toBeNull();
+    expect(i.lastFixes).toEqual([]);
     expect(i.appNames).toEqual(["makuro-solusi", "adminneo"]);
   });
 
@@ -140,7 +140,7 @@ describe.skipIf(!node)("integration fixes API (fake poco)", () => {
     expect(await pids()).toEqual(before);
     expect(state(r.integration, "ecosystem_spreads_apps_json")?.state).toBe("ok");
     expect(state(r.integration, "snippet_current")?.state).toBe("ok");
-    expect(r.integration.lastFix).toMatchObject({ id: backup?.id, file: "ecosystem", changedSince: false });
+    expect(r.integration.lastFixes).toMatchObject([{ id: backup?.id, file: "ecosystem", changedSince: false }]);
     const [row] = audit("integration.fix");
     expect(JSON.parse(row?.meta as string)).toMatchObject({
       key: "ecosystem_block",
@@ -181,18 +181,23 @@ describe.skipIf(!node)("integration fixes API (fake poco)", () => {
     writeFileSync(join(home, "sites", "apps.json"), JSON.stringify([{ name: "blog", script: "./run" }]));
     const fixed = readFileSync(eco);
     appendFileSync(eco, "// later edit\n");
-    expect((await integration()).lastFix).toBeDefined();
+    // One undo per file (Perbaiki semua wrote both): newest first, the edited ecosystem flagged.
+    expect((await integration()).lastFixes?.map((b) => [b.file, b.changedSince])).toEqual([
+      ["pm2_run", false],
+      ["ecosystem", true],
+    ]);
     const r409 = await call("POST", `/integration/backups/${backup}/restore`, {});
     expect(await json(r409, 409)).toMatchObject({ error: "changed_since" });
     writeFileSync(eco, fixed);
-    // Backup names have 1 s resolution: let the undo backup land in a later second than the fix's own.
-    await Bun.sleep(1000 - (Date.now() % 1000) + 5);
     const r = await json<FixResult>(await call("POST", `/integration/backups/${backup}/restore`, {}));
     expect(r).toMatchObject({ key: "restore", outcome: "restored", restart: null });
     expect(readFileSync(eco).equals(original)).toBe(true);
     expect(state(r.integration, "ecosystem_spreads_apps_json")?.state).toBe("error");
     // Undo of the undo: the fixed file was backed up too, and it names the sites a restore would drop.
-    expect(r.integration.lastFix).toMatchObject({ file: "ecosystem", changedSince: false, affectedSites: ["blog"] });
+    expect(r.integration.lastFixes).toMatchObject([
+      { file: "ecosystem", changedSince: false, affectedSites: ["blog"] },
+      { file: "pm2_run", changedSince: false, affectedSites: [] },
+    ]);
     expect(JSON.parse(audit("integration.restore")[0]?.meta as string)).toMatchObject({
       backupId: backup,
       forced: false,

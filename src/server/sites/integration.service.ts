@@ -6,7 +6,7 @@ import { Pm2UnavailableError } from "../system/system.types";
 import { ensureAppsJson, parseApps } from "./apps.file";
 import { ecosystemBlock, snippetCurrent } from "./ecosystem.patch";
 import { type EcosystemProbe, probeEcosystem } from "./ecosystem.probe";
-import { type FixCtx, fixAvailability, lastFixOf, prefixOf, runnablePanelApps, runScriptPath } from "./fix.plan";
+import { type FixCtx, fixAvailability, lastFixesOf, prefixOf, runnablePanelApps, runScriptPath } from "./fix.plan";
 import { readTunnelId } from "./ingress.editor";
 import { sitePaths } from "./site.checks";
 import { readTextOrNull } from "./site.files";
@@ -128,7 +128,7 @@ async function compute(ctx: FixCtx, probe: EcosystemProbe): Promise<Integration>
     appNames: probe.ok ? [...new Set([...probe.names, ...runnable])] : [],
     checkedAt: new Date().toISOString(),
     fixes: await fixAvailability(ctx, new Set(failing.map((c) => c.key)), probe),
-    lastFix: lastFixOf(ctx),
+    lastFixes: lastFixesOf(ctx),
     // 0.2.x fields, read by the web until its Persiapan card lands (W5).
     ecosystemIncludesAppsJson: spreads,
     appsJsonExists: appsText !== null,

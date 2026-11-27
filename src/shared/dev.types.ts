@@ -9,7 +9,7 @@ import type { Role } from "./roles";
 export type Page<T> = { items: T[]; total: number; page: number; pageSize: number };
 
 /** Error body for 4xx responses, e.g. `{ error: "invalid_email", message: "..." }`, plus ApiError `extra` fields. */
-export type ApiErrorBody = { error: string; message?: string };
+export type ApiErrorBody = { error: string; message?: string; reason?: string };
 
 /** Verdict of one health check, and of the whole health page. */
 export type HealthStatus = "ok" | "warn" | "fail";

@@ -13,7 +13,6 @@ export type FixBlockReason =
   | "ecosystem_unloadable"
   | "markers_broken"
   | "unknown_apps_json_use"
-  | "not_verified"
   | "run_script_missing"
   | "run_script_unknown"
   | "sites_dir_outside_home";
