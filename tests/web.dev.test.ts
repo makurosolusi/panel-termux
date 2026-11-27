@@ -279,7 +279,7 @@ describe("describeAudit", () => {
   test.each([
     [
       { action: "user.role_change", meta: { from: "user", to: "admin", targetEmail: "budi@x.co" } },
-      "Citra mengubah peran budi@x.co: Pengguna → Admin",
+      "Citra mengubah peran budi@x.co: User → Admin", // role labels come from en.app (real English since 0a)
     ],
     [{ action: "user.delete", meta: null }, "Citra menghapus akun pengguna lain"],
     [

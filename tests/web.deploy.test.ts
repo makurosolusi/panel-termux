@@ -243,7 +243,7 @@ describe("stepper state", () => {
   test("labels come from coded keys; legacy rows fall back to their label", () => {
     expect(stepLabel(step("swap", "done"))).toBe("Menukar binary");
     expect(stepLabel(step("restart", "done", { legacyLabel: "Restart app" }))).toBe("Restart app");
-    expect(outcomeText("staged", { sizeBytes: Math.round(89.2 * 1024 * 1024) })).toBe("Binary 89,2 MB siap.");
+    expect(outcomeText("staged", { sizeBytes: Math.round(89.2 * 1024 * 1024) })).toBe("Binary 89.2 MB siap."); // en.job formats sizes in English
     expect(outcomeText("healthy", { status: 200, path: "/api/health", ms: 85, seconds: 3 })).toBe(
       "HTTP 200 dari `/api/health` dalam 85 ms, stabil.",
     );
