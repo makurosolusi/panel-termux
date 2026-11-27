@@ -29,7 +29,7 @@ const RULES: Record<ProblemCode, Rule> = {
   backup_item_stale: rule("backup", "/panel/backups", 0),
   backup_status_error: rule("backup", "/dev/health", 0),
   backup_secrets_included: rule("security", "/panel/backups", 0),
-  key_mismatch: rule("security", "/dev/health#kunci-data", 0),
+  key_mismatch: rule("security", "/dev/health#data-key", 0),
   access_not_seen: rule("security", "/dev/health#access", null),
   disk_low: rule("disk", "/panel", 0),
   battery_low: rule("battery", "/panel", 2 * MIN),

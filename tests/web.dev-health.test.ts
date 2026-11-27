@@ -15,6 +15,7 @@ import {
   ACCESS_GUIDE_URL,
   bannerVisible,
   cardVisible,
+  devAnchorFromHash,
   isComplete,
   itemAction,
   manualToggle,
@@ -24,9 +25,6 @@ import {
 } from "../src/web/dev/onboarding.state";
 import { tDevHealth } from "../src/web/i18n/en.dev.health";
 import { tDevSetup } from "../src/web/i18n/en.dev.setup";
-import { formatLocaleForFile } from "./i18n.fixture";
-
-formatLocaleForFile("id"); // Indonesian literals below until wave 1 migrates this file
 
 // test-only fixtures
 const NOW = new Date("2026-11-27T10:00:00Z");
@@ -145,8 +143,8 @@ describe("check rows", () => {
   test("late sampler says how long ago", () => {
     const row = checkRow(check("sampler", "warn", 20), health({ sampledAt: minsAgo(20) }), NOW);
     expect(row.status).toBe("warn");
-    expect(row.text).toContain("20 mnt lalu");
-    expect(row.text).toContain("terlambat");
+    expect(row.text).toContain("last sample 20 min ago");
+    expect(row.text).toContain("Monitoring is behind");
   });
 
   test("checks sort worst first", () => {
@@ -186,9 +184,12 @@ const setup = (over: Partial<DevSetup> = {}): DevSetup => ({
 });
 
 describe("onboarding items", () => {
-  test("progress counts required + recommended only: 2 dari 6", () => {
+  test("progress counts required + recommended only: 2 of 6", () => {
     expect(setupProgress(setup())).toEqual({ done: 2, total: 6 });
-    expect(tDevSetup.banner.title(2, 6)).toBe("Siapkan Panel Termux: 2 dari 6 selesai");
+    expect(tDevSetup.banner.title(2, 6)).toBe("Set up Panel Termux: 2 of 6 done");
+    expect(tDevHealth.countsDetail(1, 1)).toBe("1 user · 1 active session");
+    expect(tDevHealth.countsDetail(3, 5)).toBe("3 users · 5 active sessions");
+    expect(tDevHealth.checks.errors.warn(1)).toBe("1 unhandled error in the last 5 minutes.");
   });
 
   test("access not applicable (http base) is hidden and not counted", () => {
@@ -203,6 +204,13 @@ describe("onboarding items", () => {
     expect(visibleItems(s).some((i) => i.key === "adopt_sites")).toBe(false);
   });
 
+  test("0.5.x /dev anchors still land on the renamed cards", () => {
+    expect(devAnchorFromHash("#penyiapan")).toBe("setup");
+    expect(devAnchorFromHash("#kunci-data")).toBe("data-key");
+    expect(devAnchorFromHash("#data-key")).toBe("data-key");
+    expect(devAnchorFromHash("#other")).toBe("other");
+  });
+
   test("manual tick: pending access/secret → tick; manual-done → untick; auto-done or other keys → none", () => {
     expect(manualToggle(item("access", "required"))).toBe("tick");
     expect(manualToggle(item("secret_saved", "required", true, { source: "manual" }))).toBe("untick");
@@ -211,14 +219,20 @@ describe("onboarding items", () => {
   });
 
   test("actions: backup switches to the first run, access opens the recipe, secret jumps to the data key card", () => {
-    expect(itemAction(item("backup", "required"))?.to).toBe("/dev/settings#cadangan");
+    expect(itemAction(item("backup", "required"))?.to).toBe("/dev/settings#backup");
     expect(itemAction(item("backup", "required", false, { needsFirstRun: true }))).toEqual({
       kind: "route",
       to: "/panel/backups",
       label: tDevSetup.backupFirstRun,
     });
     expect(itemAction(item("access", "required"))).toMatchObject({ kind: "external", to: ACCESS_GUIDE_URL });
-    expect(itemAction(item("secret_saved", "required"))).toMatchObject({ kind: "anchor", to: "#kunci-data" });
+    expect(itemAction(item("secret_saved", "required"))).toMatchObject({ kind: "anchor", to: "#data-key" });
+    expect(itemAction(item("apps_json", "recommended"))).toEqual({
+      kind: "route",
+      to: "/panel/sites#setup",
+      label: "Fix in Sites",
+    });
+    expect(ACCESS_GUIDE_URL).toEndWith("#install-on-your-phone");
     expect(itemAction(item("first_site", "recommended"))?.to).toBe("/panel/sites/new");
   });
 

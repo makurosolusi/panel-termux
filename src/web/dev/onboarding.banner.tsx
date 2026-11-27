@@ -11,7 +11,7 @@ import { bannerVisible, ONBOARDING_ANCHOR, SETUP_URL, saveDismissed, setupProgre
 const t = tDevSetup;
 
 /**
- * Compact onboarding prompt for Ringkasan (PLAN/05 F1.2): "Siapkan Panel Termux: n dari total selesai" + Lanjutkan
+ * Compact onboarding prompt for Overview (PLAN/05 F1.2): "Set up Panel Termux: n of total done" + Continue
  * (→ /dev) + hide. Renders nothing for non-super_admin (and never calls /api/dev/* for them), when dismissed or complete.
  */
 export function OnboardingBanner() {

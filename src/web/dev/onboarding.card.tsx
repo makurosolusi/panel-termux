@@ -8,6 +8,7 @@ import { InlineCode } from "@/web/components/inline-code";
 import { Button } from "@/web/components/ui/button";
 import { tDevSetup } from "@/web/i18n/en.dev.setup";
 import {
+  devAnchorFromHash,
   type ItemAction,
   itemAction,
   manualToggle,
@@ -107,7 +108,7 @@ export function OnboardingCard({
   const { hash } = useLocation();
   // the card renders after its own fetch, so the browser's hash scroll (banner "Lanjutkan") has already missed it
   useEffect(() => {
-    if (hash === `#${ONBOARDING_ANCHOR}`) ref.current?.scrollIntoView({ block: "start" });
+    if (devAnchorFromHash(hash) === ONBOARDING_ANCHOR) ref.current?.scrollIntoView({ block: "start" });
   }, [hash]);
   return (
     <section
