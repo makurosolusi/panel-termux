@@ -8,22 +8,29 @@ Cek: `apt-mark showhold`. Alasannya:
 - Upgrade mayor `postgresql` (mis. 18 ke 19) membuat database lama tidak bisa dibuka.
   `pg_upgrade` butuh binary versi lama, dan repo Termux tidak menyediakannya.
 
+Hold hanya menahan `pkg upgrade`. `pkg reinstall cloudflared` dan `pkg install --reinstall`
+tetap jalan walau ditahan, dan mematikan tunnel dengan cara yang sama.
+
 ## Upgrade cloudflared dengan aman
+
+Lewat ssh, jalankan dulu `export SVDIR=$PREFIX/var/service`.
 
 ```
 S=$PREFIX/var/service/cloudflared
+cp $S/run ~/cloudflared.run.bak
 sv down cloudflared
-cp -a $S ~/cloudflared-layanan.bak
 apt-mark unhold cloudflared
 pkg install cloudflared
-cp ~/cloudflared-layanan.bak/run $S/run
+cp ~/cloudflared.run.bak $S/run
+chmod 700 $S/run
 rm -f $S/down
 sv up cloudflared
 apt-mark hold cloudflared
+sv status cloudflared
 ```
 
-Periksa dengan `sv status cloudflared` dan buka panel dari domainnya. Salinan cadangan disimpan
-di luar folder layanan karena upgrade menghapus folder itu.
+Hasil terakhir harus `run:`. Cadangan disimpan di luar folder layanan karena upgrade menghapus
+folder itu dan memasang run script bawaan (`--token-file`) plus file `down`.
 
 ## Upgrade mayor PostgreSQL (dump lalu restore)
 

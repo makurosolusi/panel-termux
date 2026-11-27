@@ -3,7 +3,7 @@ import { SectionHead } from "./section.head";
 
 const t = idLanding.how;
 
-/** How it works: four numbered steps on a rail, each with the real command it involves. */
+/** How it works: four numbered steps on a rail, with the real command where one is involved. */
 export function StepsSection() {
   return (
     <section
@@ -27,12 +27,14 @@ export function StepsSection() {
             </span>
             <h3 className="mt-2 font-lp-serif text-xl font-semibold">{s.title}</h3>
             <p className="mt-2 text-sm leading-relaxed text-lp-dim">{s.body}</p>
-            <code className="mt-4 block rounded-lg bg-lp-screen px-3 py-2.5 font-lp-mono text-[11px] [overflow-wrap:anywhere] text-white/85">
-              <span aria-hidden className="text-lp-signal-bright">
-                ${" "}
-              </span>
-              {s.code}
-            </code>
+            {"code" in s && (
+              <code className="mt-4 block rounded-lg bg-lp-screen px-3 py-2.5 font-lp-mono text-[11px] [overflow-wrap:anywhere] text-white/85">
+                <span aria-hidden className="text-lp-signal-bright">
+                  ${" "}
+                </span>
+                {s.code}
+              </code>
+            )}
           </li>
         ))}
       </ol>

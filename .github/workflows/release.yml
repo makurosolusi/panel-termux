@@ -1,5 +1,6 @@
-# Builds and publishes a release. Tag pushes (v*) publish; a manual run defaults to a dry run that builds and packages
-# but never attests or creates a release. A green dry run is required before the owner pushes the tag (DECISIONS B9).
+# Builds and publishes a release. Tag pushes (v*) publish, v<version>-rc.<n> as a GitHub prerelease (C28); a manual
+# run defaults to a dry run that builds and packages but never attests or creates a release. A green dry run is
+# required before the owner pushes the tag (DECISIONS B9).
 # Security gate: PLAN/04 §3.9.3. Every action is pinned to a full commit SHA (tag in the trailing comment).
 name: release
 
@@ -52,21 +53,32 @@ jobs:
       - run: bun run lint
       - run: bun test
       - name: Shell tests
-        run: sh scripts/install-phone.test.sh && sh scripts/install-release.test.sh && sh scripts/package-release.test.sh
+        run: sh scripts/install-release.test.sh && sh scripts/package-release.test.sh
 
       - name: Version gate (tag = package.json version, CHANGELOG entry)
         run: |
           VERSION=$(jq -r .version package.json)
           grep -q "^## \[$VERSION\]" CHANGELOG.md || { echo "::error::CHANGELOG.md has no '## [$VERSION]' entry"; exit 1; }
-          if [ "$REF_TYPE" = tag ] && [ "$REF_NAME" != "v$VERSION" ]; then
-            echo "::error::tag $REF_NAME does not match package.json version v$VERSION"
-            exit 1
+          # v<version> is the release; v<version>-rc.<n> a GitHub prerelease for the final clean-Termux test (C28).
+          PRERELEASE=false
+          if [ "$REF_TYPE" = tag ]; then
+            case "$REF_NAME" in
+              "v$VERSION") ;;
+              "v$VERSION"-rc.*[!0-9]* | "v$VERSION"-rc.) echo "::error::tag $REF_NAME: want v$VERSION or v$VERSION-rc.<n>"; exit 1 ;;
+              "v$VERSION"-rc.*) PRERELEASE=true ;;
+              *) echo "::error::tag $REF_NAME does not match package.json version v$VERSION (or v$VERSION-rc.<n>)"; exit 1 ;;
+            esac
           fi
           if [ "$PUBLISH" = true ]; then TAG=$REF_NAME; else TAG=v0.0.0-dryrun; fi
           echo "VERSION=$VERSION" >>"$GITHUB_ENV"
           echo "TAG=$TAG" >>"$GITHUB_ENV"
+          echo "PRERELEASE=$PRERELEASE" >>"$GITHUB_ENV"
 
+      # The tag is baked into the binary for its self-check against SHA256SUMS (PLAN/07 K19). A dry-run binary
+      # carries v0.0.0-dryrun, whose self-check always 404s: never use it for the lab (K25).
       - run: bun run build
+        env:
+          PANEL_RELEASE_TAG: ${{ env.TAG }}
       - name: CLI shell test (native build, PLAN/07 §9.2)
         run: bun run build:local && sh scripts/cli.test.sh dist/panel
       - name: Package
@@ -86,4 +98,5 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           awk -v head="## [$VERSION]" 'index($0, head) == 1 { on = 1; next } on && /^## \[/ { exit } on' CHANGELOG.md >notes.md
-          gh release create "$TAG" dist/release/* --verify-tag --title "$TAG" --notes-file notes.md
+          if [ "$PRERELEASE" = true ]; then PRE=--prerelease; else PRE=; fi
+          gh release create "$TAG" dist/release/* --verify-tag ${PRE:+"$PRE"} --title "$TAG" --notes-file notes.md

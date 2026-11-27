@@ -3,16 +3,25 @@ import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, wri
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
+  childEnv,
+  confirmAnswer,
   createTermuxHost,
   detectCliHost,
   FakeScenarioError,
-  listProcs,
   NotTermuxError,
-  pidAlive,
+  pathsFrom,
   probePaths,
   runVisible,
 } from "@/cli/cli.host";
-import { createFakeHost, FAKE_DAEMON_PID, FAKE_PANEL_PID } from "@/cli/cli.host.fake";
+import {
+  createFakeHost,
+  FAKE_DAEMON_PID,
+  FAKE_DPKG_AUDIT,
+  FAKE_NEW_VERSION,
+  FAKE_OLD_VERSION,
+  FAKE_PANEL_PID,
+} from "@/cli/cli.host.fake";
+import { listProcs, pidAlive, procExeId } from "@/cli/cli.host.proc";
 import { readEnvFile } from "@/cli/env.file";
 import { TermuxExecError } from "@/server/exec/termux.exec";
 import { scrubPanelEnv } from "@/server/main";
@@ -116,6 +125,9 @@ describe("termux host pieces", () => {
     const sh = Bun.which("sh") as string;
     expect(await runVisible(sh, ["-c", "printf 'a\\nhttps://x\\nlast'"], { onLine: (l) => lines.push(l) })).toBe(0);
     expect(lines).toEqual(["a", "https://x", "last"]);
+    lines.length = 0; // cloudflared logs its login URL on stderr
+    expect(await runVisible(sh, ["-c", "echo https://login >&2"], { onLine: (l) => lines.push(l) })).toBe(0);
+    expect(lines).toEqual(["https://login"]);
     expect(await runVisible(sh, ["-c", "exit 3"], { stdio: "ignore" })).toBe(3);
   });
 
@@ -181,14 +193,25 @@ describe("fake host scenarios", () => {
     expect(readFileSync(probePaths(host.paths).envFile, "utf8")).toBe("APP_BASE_URL=https://panel.example.com\n");
   });
 
-  test("records argv and env key NAMES only, also to the record file", async () => {
+  test("records argv and env key NAMES only (plus LC_ALL/SVDIR/LOGDIR values), also to the record file", async () => {
     const recordFile = join(fresh(), "rec.jsonl");
     const host = createFakeHost("ready", { root: fresh(), recordFile });
+    const { svdir, logdir } = host.paths;
     await host.exec("sv", ["-w", "130", "restart", "panel"], { env: { SVDIR: "/x", SENTINEL_KEY: "s3cr3t-value" } });
-    expect(await host.run("pkg", ["install", "x"], { env: { A: "1" } })).toBe(0);
+    expect(await host.run("pkg", ["install", "x"], { env: { A: "1" }, lcAllC: true })).toBe(0);
     expect(host.records).toEqual([
-      { kind: "exec", argv: ["sv", "-w", "130", "restart", "panel"], envKeys: ["SENTINEL_KEY", "SVDIR"] },
-      { kind: "run", argv: ["pkg", "install", "x"], envKeys: ["A"] },
+      {
+        kind: "exec",
+        argv: ["sv", "-w", "130", "restart", "panel"],
+        envKeys: ["LOGDIR", "SENTINEL_KEY", "SVDIR"],
+        vars: { SVDIR: svdir, LOGDIR: logdir },
+      },
+      {
+        kind: "run",
+        argv: ["pkg", "install", "x"],
+        envKeys: ["A", "LC_ALL", "LOGDIR", "SVDIR"],
+        vars: { LC_ALL: "C", SVDIR: svdir, LOGDIR: logdir },
+      },
     ]);
     const text = readFileSync(recordFile, "utf8");
     expect(text).not.toContain("s3cr3t-value");
@@ -197,7 +220,7 @@ describe("fake host scenarios", () => {
         .trim()
         .split("\n")
         .map((l) => JSON.parse(l)),
-    ).toEqual(host.records);
+    ).toEqual(JSON.parse(JSON.stringify(host.records)));
   });
 
   test("unknown tools fail like a missing command and are still recorded", async () => {
@@ -207,12 +230,147 @@ describe("fake host scenarios", () => {
     expect(host.records.map((r) => r.argv[0])).toEqual([prev]);
   });
 
-  test("confirm answers come from the queue; tty is settable", async () => {
-    const host = createFakeHost("ready", { root: fresh(), tty: true, answers: [true, false] });
+  test("confirm answers come from the queue (booleans or typed text); empty queue = EOF = no", async () => {
+    const host = createFakeHost("ready", { root: fresh(), tty: true, answers: [true, false, "", "", "ya"] });
     expect(host.tty.isTty).toBe(true);
     expect(await host.tty.confirm("lanjut?")).toBe(true);
     expect(await host.tty.confirm("lanjut?")).toBe(false);
+    expect(await host.tty.confirm("lanjut?", true)).toBe(true); // Enter = default
     expect(await host.tty.confirm("lanjut?")).toBe(false);
+    expect(await host.tty.confirm("lanjut?")).toBe(true);
+    expect(await host.tty.confirm("lanjut?", true)).toBe(false); // EOF
+  });
+
+  test("ask and secret read the same queue; EOF = null", async () => {
+    const host = createFakeHost("fresh", { root: fresh(), answers: ["panel.contoh.com", "rahasia"] });
+    expect(await host.tty.ask("Alamat:")).toBe("panel.contoh.com");
+    expect(await host.tty.secret("Secret:")).toBe("rahasia");
+    expect(await host.tty.ask("lagi:")).toBeNull();
+  });
+
+  test("fetch: offline by default (rejects), canned when given; every URL is recorded", async () => {
+    const offline = createFakeHost("fresh", { root: fresh() });
+    await expect(offline.fetch("https://github.com/x/SHA256SUMS")).rejects.toThrow("offline");
+    const online = createFakeHost("fresh", {
+      root: fresh(),
+      fetch: async (url) => new Response(url.endsWith("SHA256SUMS") ? "abc  panel\n" : "", { status: 200 }),
+    });
+    expect(await (await online.fetch("https://h/SHA256SUMS")).text()).toBe("abc  panel\n");
+    expect(offline.records).toEqual([{ kind: "fetch", argv: ["https://github.com/x/SHA256SUMS"], envKeys: [] }]);
+  });
+
+  test("execAnswers override a canned answer, undefined falls through", async () => {
+    const host = createFakeHost("ready", {
+      root: fresh(),
+      execAnswers: (tool, args) =>
+        tool === "apt-get" && args[0] === "-s" ? { code: 0, stdout: "Inst jq (1.7)\n", stderr: "" } : undefined,
+    });
+    expect((await host.exec("apt-get", ["-s", "install", "jq"])).stdout).toBe("Inst jq (1.7)\n");
+    expect((await host.exec("dpkg", ["-s", "cloudflared"])).code).toBe(0);
+  });
+});
+
+describe("fake host: init scenarios (PLAN/07 §16 W0)", () => {
+  const exists = (host: ReturnType<typeof createFakeHost>, ...parts: string[]) =>
+    existsSync(join(host.paths.home, ...parts));
+
+  test("health answers the scenario version on the panel port only, nothing without runit", async () => {
+    expect((await createFakeHost("upgrade", { root: fresh() }).health(3200))?.version).toBe(FAKE_OLD_VERSION);
+    expect((await createFakeHost("downgrade", { root: fresh() }).health(3200))?.version).toBe(FAKE_NEW_VERSION);
+    expect((await createFakeHost("poco", { root: fresh() }).health(3200))?.version).toBe("0.5.0");
+    expect(await createFakeHost("upgrade", { root: fresh() }).health(3300)).toBeNull();
+    expect(await createFakeHost("nosv", { root: fresh() }).health(3200)).toBeNull();
+    expect(await createFakeHost("fresh", { root: fresh() }).health(3200)).toBeNull();
+  });
+
+  test("upgrade: $PREFIX/bin/panel links to the binary; poco has no link (as on POCO)", () => {
+    const up = createFakeHost("upgrade", { root: fresh() });
+    expect(readFileSync(join(up.paths.prefix, "bin", "panel"), "utf8")).toContain("fake panel");
+    expect(existsSync(join(createFakeHost("poco", { root: fresh() }).paths.prefix, "bin", "panel"))).toBe(false);
+  });
+
+  test("fresh-pg: PostgreSQL data without a panel", () => {
+    const host = createFakeHost("fresh-pg", { root: fresh() });
+    const p = probePaths(host.paths);
+    expect(existsSync(p.pgVersion)).toBe(true);
+    expect(existsSync(p.binary)).toBe(false);
+    expect(exists(host, ".cloudflared")).toBe(false);
+  });
+
+  test("fresh-resume: binary + panel service (down) + runsvdir, no user data, dpkg --audit not empty", async () => {
+    const host = createFakeHost("fresh-resume", { root: fresh() });
+    const p = probePaths(host.paths);
+    expect(existsSync(p.binary)).toBe(true);
+    expect(existsSync(join(host.paths.svdir, "panel", "run"))).toBe(true);
+    expect(existsSync(join(host.paths.svdir, "panel", "down"))).toBe(true);
+    expect(host.proc.alive(FAKE_DAEMON_PID)).toBe(true);
+    for (const d of [".cloudflared", ".pm2", "sites"]) expect(exists(host, d)).toBe(false);
+    expect(existsSync(p.pgVersion)).toBe(false);
+    expect((await host.exec("dpkg", ["--audit"])).stdout).toBe(FAKE_DPKG_AUDIT);
+    expect((await createFakeHost("ready", { root: fresh() }).exec("dpkg", ["--audit"])).stdout).toBe("");
+  });
+
+  test("upgrade-partial: the binary is selfPath, but runit's process runs another inode (K21)", () => {
+    const self = join(fresh(), "self-panel");
+    writeFileSync(self, "\x7fELF self\n"); // test-only
+    const host = createFakeHost("upgrade-partial", { root: fresh(), selfPath: self });
+    const binary = probePaths(host.paths).binary;
+    expect(readFileSync(binary, "utf8")).toBe("\x7fELF self\n");
+    expect(host.selfPath).toBe(self);
+    const file = statSync(binary);
+    expect(host.proc.exeId(FAKE_PANEL_PID)).not.toEqual({ dev: file.dev, ino: file.ino });
+    const up = createFakeHost("upgrade", { root: fresh() });
+    const upFile = statSync(probePaths(up.paths).binary);
+    expect(up.proc.exeId(FAKE_PANEL_PID)).toEqual({ dev: upFile.dev, ino: upFile.ino });
+    expect(up.proc.exeId(4242)).toBeNull();
+  });
+
+  test("asking a fresh sandbox for adapters adds no user data to it (C20)", async () => {
+    for (const scenario of ["fresh", "fresh-pg", "fresh-resume"] as const) {
+      const host = createFakeHost(scenario, { root: fresh() });
+      host.system();
+      host.resetSystem();
+      await host.system().runit.list();
+      for (const d of [".cloudflared", ".pm2", "sites"]) expect(exists(host, d)).toBe(false);
+    }
+  });
+});
+
+describe("childEnv (K11b, lab: SVDIR/LOGDIR empty in a non-login ssh)", () => {
+  const paths = pathsFrom("/h", "/p");
+  test("SVDIR/LOGDIR always from paths, ENV_VARS keys dropped even from a caller env, LC_ALL=C on request", () => {
+    const base: Record<string, string | undefined> = { PATH: "/bin", SVDIR: "", LC_ALL: "id_ID.UTF-8" };
+    for (const v of ENV_VARS) base[v.name] = "sentinel"; // test-only
+    const env = childEnv(paths, base, true);
+    expect(env).toEqual({ PATH: "/bin", SVDIR: "/p/var/service", LOGDIR: "/p/var/log", LC_ALL: "C" });
+    expect(childEnv(paths, { LC_ALL: "id_ID.UTF-8" }).LC_ALL).toBe("id_ID.UTF-8");
+  });
+
+  test("the termux host passes childEnv to the child", async () => {
+    const host = createTermuxHost();
+    const sh = Bun.which("sh") as string;
+    const r = await host.exec(sh, ["-c", 'printf "%s|%s|%s" "$SVDIR" "$LOGDIR" "$LC_ALL"'], {
+      env: { PATH: process.env.PATH },
+      lcAllC: true,
+    });
+    expect(r.stdout).toBe(`${host.paths.svdir}|${host.paths.logdir}|C`);
+  });
+});
+
+describe("confirmAnswer", () => {
+  test("y/ya/yes yes; n/tidak/other no; empty = default; EOF = no", () => {
+    for (const a of ["y", "Ya", "YES"]) expect(confirmAnswer(a)).toBe(true);
+    for (const a of ["n", "tidak", "x"]) expect(confirmAnswer(a, true)).toBe(false);
+    expect(confirmAnswer("", true)).toBe(true);
+    expect(confirmAnswer("  ")).toBe(false);
+    expect(confirmAnswer(null, true)).toBe(false);
+  });
+});
+
+describe("procExeId", () => {
+  test("own process where /proc exists; gone pid is null", () => {
+    if (existsSync("/proc")) expect(procExeId(process.pid)).toMatchObject({ ino: expect.any(Number) });
+    expect(procExeId(2 ** 22 + 12345)).toBeNull();
   });
 });
 

@@ -13,7 +13,7 @@ import {
   type FakeOptions,
   fakeEcosystem,
 } from "@/server/system/system.fake";
-import { DnsWrongZoneError, Pm2UnavailableError } from "@/server/system/system.types";
+import { DnsRecordExistsError, DnsWrongZoneError, Pm2UnavailableError } from "@/server/system/system.types";
 
 const root = mkdtempSync(join(tmpdir(), "panel-fake-test-"));
 afterAll(() => rmSync(root, { recursive: true, force: true }));
@@ -301,6 +301,17 @@ describe("fake cloudflared route dns", () => {
     const err = await sys.cloudflared.routeDns("t1", "blog.lain.test").catch((e: unknown) => e);
     expect(err).toBeInstanceOf(DnsWrongZoneError);
     expect((err as DnsWrongZoneError).fqdn).toBe(`blog.lain.test.${FAKE_DNS_ZONE}`);
+  });
+
+  test("record of another tunnel → DnsRecordExistsError; overwrite moves it, then it is ours", async () => {
+    const sys = fake();
+    const host = `panel.${FAKE_DNS_ZONE}`;
+    await sys.cloudflared.routeDns("lama", host);
+    const err = await sys.cloudflared.routeDns("baru", host).catch((e: unknown) => e);
+    expect(err).toBeInstanceOf(DnsRecordExistsError);
+    expect(await sys.cloudflared.routeDns("baru", host, { overwrite: true })).toEqual({ created: true });
+    expect(await sys.cloudflared.routeDns("baru", host)).toEqual({ created: false });
+    expect(await sys.cloudflared.routeDns("lama", host).catch((e: unknown) => e)).toBeInstanceOf(DnsRecordExistsError);
   });
 });
 

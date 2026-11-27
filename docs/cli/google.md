@@ -1,7 +1,8 @@
 # Login Google: membuat OAuth client
 
 Panel Termux memakai login Google. Kamu butuh satu OAuth client dari Google Cloud.
-Isinya (Client ID dan Client secret) ditulis ke `~/panel/.env`.
+`panel init` menanyakan Client ID dan Client secret, lalu menyimpannya di `~/panel/.env`.
+Buat client-nya dulu (boleh dari browser HP), lalu tempel saat ditanya.
 
 ## Langkah
 
@@ -19,8 +20,10 @@ Isinya (Client ID dan Client secret) ditulis ke `~/panel/.env`.
 Contoh: `https://panel.example.com/api/auth/callback/google`
 Untuk mencoba di HP tanpa domain: `http://localhost:3200/api/auth/callback/google`
 (ganti 3200 bila `PORT` kamu berbeda).
-6. Tekan Create. Salin Client ID dan Client secret.
-7. Isi `~/panel/.env`:
+
+6. Tekan Create. Salin Client ID dan Client secret, lalu tempel saat `panel init` bertanya.
+   Secret tidak tampil saat diketik; init hanya mencetak panjangnya.
+7. Tanpa init (atau untuk mengganti nilai): isi sendiri `~/panel/.env`:
 
 ```
 APP_BASE_URL=https://panel.example.com

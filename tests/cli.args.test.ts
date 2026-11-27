@@ -104,16 +104,42 @@ describe("runCli", () => {
     expect(r.stderr).not.toContain("install.sh");
   });
 
-  test("init and upgrade are not commands in 0.5.0 and point at install.sh", async () => {
-    for (const name of ["init", "upgrade"]) {
-      const r = await cli([name]);
+  test("upgrade is not a command and points at the install line or <new binary> init (C14, C18)", async () => {
+    const r = await cli(["upgrade"]);
+    expect(r.code).toBe(2);
+    expect(r.stderr).toContain("baris pasang");
+    expect(r.stderr).toContain("init");
+    expect(r.stderr).not.toContain("install.sh");
+    expect((await cli(["--help"])).stdout).not.toContain("install.sh");
+  });
+
+  test("init --help names its flags, not the removed ones (C27)", async () => {
+    const r = await cli(["init", "--help"]);
+    expect(r.code).toBe(0);
+    for (const flag of ["--yes", "--dry-run", "--ssh-key", "--skip-verify", "--skip", "--hostname", "--admin-email"])
+      expect(r.stdout).toContain(flag);
+    for (const gone of ["--downgrade", "--port", "--tunnel"]) expect(r.stdout).not.toContain(gone);
+  });
+
+  test("init usage errors exit 2 before the phone is looked at", async () => {
+    for (const argv of [
+      ["init", "--downgrade"],
+      ["init", "--port", "1"],
+      ["init", "--tunnel", "x"],
+      ["init", "extra"],
+      ["init", "--skip", "bogus"],
+      ["init", "--ssh-key", "http://x"],
+      ["init", "--ssh-key="],
+    ]) {
+      const r = await cli(argv);
       expect(r.code).toBe(2);
-      expect(r.stderr).toContain("install.sh");
     }
+    expect((await cli(["init", "--ssh-key", "http://x"])).stderr).toContain("http://");
+    expect((await cli(["init", "--skip", "bogus"])).stderr).toContain("postgres, tunnel, boot");
   });
 
   test("<command> --help prints that command's help", async () => {
-    for (const name of ["serve", "doctor", "docs", "env", "rollback"]) {
+    for (const name of ["serve", "init", "doctor", "docs", "env", "rollback"]) {
       const r = await cli([name, "--help"]);
       expect(r.code).toBe(0);
       expect(r.stdout).toContain(`panel ${name}`);
@@ -142,6 +168,7 @@ describe("CLI never evaluates the server (spy via boot.ts marker)", () => {
       [["--help"], 0],
       [["--bogus"], 2],
       [["doctor", "--help"], 0],
+      [["init", "--help"], 0],
     ] as const) {
       const r = runCliChild([...argv]);
       expect(r.code).toBe(code);

@@ -77,10 +77,11 @@ run 2 --bogus
 run 2 bogus
 run 2 docs google extra
 [ $(($(date +%s) - start)) -le 2 ] || fail "unknown arguments took more than 2 s"
-for c in init upgrade; do
-  run 2 "$c"
-  has err "install.sh"
-done
+run 2 upgrade
+has err "baris pasang"
+# init (0.5.1, W0 stub steps): fake dry run prints the plan and exits 0; W2 extends this per scenario
+fake fresh 0 init --dry-run
+has out "HP ini belum punya instalasi panel"
 
 # --- env: the 4 required keys, empty values, nothing on stderr without .env ---
 run 0 env

@@ -12,12 +12,18 @@ Buat situs di panel: panel menambah rute ke `~/.cloudflared/config.yml` (dicek d
 DNS memakai Token API Cloudflare di Administrasi → Pengaturan bila diisi (izin Zone:Read
 dan DNS:Edit), atau login cloudflared di HP.
 
-## Sekali di awal: login dan buat tunnel (di Termux)
+## Sekali di awal: `panel init` mengerjakannya
 
-1. `cloudflared tunnel login`
-   Buka tautan yang dicetak, pilih domain kamu. Hasilnya `~/.cloudflared/cert.pem`.
-2. `cloudflared tunnel create <nama>`, mis. `cloudflared tunnel create hp-saya`.
-   File kredensial `~/.cloudflared/<id>.json` dibuat. Id tunnel: `cloudflared tunnel list`.
+`panel init` menjalankan `cloudflared tunnel login` dan membuka tautannya di browser HP.
+Pilih domain kamu di halaman Cloudflare; hasilnya `~/.cloudflared/cert.pem`. Lalu init membuat
+(atau memakai ulang) tunnel, menulis `~/.cloudflared/config.yml`, membuat DNS alamat panel,
+dan memasang cloudflared sebagai layanan runit. Bila alamat itu sudah diarahkan ke tunnel
+lain, init bertanya dulu sebelum memindahkannya.
+
+## Bila memasang sendiri (tanpa init, atau `panel init --skip tunnel`)
+
+1. `cloudflared tunnel login`, buka tautannya, pilih domain.
+2. `cloudflared tunnel create <nama>`. Id tunnel: `cloudflared tunnel list`.
 3. Tulis `~/.cloudflared/config.yml`:
 
 ```
@@ -31,8 +37,7 @@ ingress:
 
 4. Periksa: `cloudflared tunnel ingress validate`
 5. Buat DNS panel: `cloudflared tunnel route dns <nama> panel.<domain>`
-6. Jadikan layanan: tulis `$PREFIX/var/service/cloudflared/run` berisi tiga baris ini,
-   lalu `sv-enable cloudflared` (menghapus file `down` dan menyalakan layanan).
+6. Tulis `$PREFIX/var/service/cloudflared/run` berisi tiga baris ini, lalu `sv-enable cloudflared`:
 
 ```
 #!/data/data/com.termux/files/usr/bin/sh

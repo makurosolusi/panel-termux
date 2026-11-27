@@ -31,7 +31,7 @@ jobs:
       - run: bun run lint
       - run: bun test
       - name: Shell tests
-        run: sh scripts/install-phone.test.sh && sh scripts/install-release.test.sh && sh scripts/package-release.test.sh
+        run: sh scripts/install-release.test.sh && sh scripts/package-release.test.sh
       - run: bun run build
       - name: CLI shell test (native build, PLAN/07 §9.2)
         run: bun run build:local && sh scripts/cli.test.sh dist/panel

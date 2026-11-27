@@ -53,11 +53,23 @@ describe("panel docs", () => {
     expect(lines.length).toBeLessThanOrEqual(70);
   });
 
-  test("every `panel <perintah>` in the docs exists in the dispatcher (no init/upgrade in 0.5.0)", () => {
+  test("every `panel <perintah>` in the docs exists in the dispatcher (no upgrade; init since 0.5.1)", () => {
     const named = Object.values(DOC_TOPICS).flatMap((d) => [...d.text.matchAll(/`panel ([a-z-]+)/g)].map((m) => m[1]));
     expect(named.length).toBeGreaterThan(0);
     expect(named.filter((n) => !(COMMAND_NAMES as readonly string[]).includes(n as string))).toEqual([]);
-    for (const d of Object.values(DOC_TOPICS)) expect(d.text).not.toMatch(/panel (init|upgrade)\b/);
+    for (const d of Object.values(DOC_TOPICS)) {
+      expect(d.text).not.toMatch(/panel upgrade\b/);
+      expect(d.text).not.toMatch(/install(-phone)?\.sh/);
+    }
+  });
+
+  test("google and cloudflare say what panel init does for them, and keep the manual fallback", () => {
+    expect(DOC_TOPICS.google?.text).toContain("`panel init` menanyakan Client ID dan Client secret");
+    expect(DOC_TOPICS.google?.text).toContain("GOOGLE_CLIENT_SECRET=");
+    const cf = DOC_TOPICS.cloudflare?.text ?? "";
+    expect(cf).toContain("`panel init` menjalankan `cloudflared tunnel login`");
+    expect(cf).toContain("--skip tunnel");
+    expect(cf).toContain("cloudflared tunnel route dns <nama> panel.<domain>");
   });
 
   test("google gives the exact redirect URI the server registers", () => {

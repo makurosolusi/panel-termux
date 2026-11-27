@@ -5,6 +5,7 @@ import { runTermux } from "../exec/termux.exec";
 import { log } from "../log.service";
 import {
   type CloudflaredAdapter,
+  DnsRecordExistsError,
   DnsWrongZoneError,
   type IngressRule,
   type ProbeResult,
@@ -68,6 +69,10 @@ const ROUTE_DNS_TIMEOUT_MS = 30_000;
 // Success lines of `cloudflared tunnel route dns` (cloudflared cfapi/hostname.go, verified on POCO 2026.11.2, gate G0).
 const ROUTE_ADDED = /Added CNAME (\S+) which will route to this tunnel/;
 const ROUTE_EXISTS = /(\S+) is already configured to route to your tunnel/;
+// With --overwrite-dns (cfapi says tunnelstore does not return "updated" today; accepted in case it starts to).
+const ROUTE_UPDATED = /(\S+) updated to route to your tunnel/;
+// Cloudflare API refusal when another A/AAAA/CNAME has the name (code 81053 behind cloudflared's 1003).
+const RECORD_EXISTS = /record with that host already exists/i;
 const normalHost = (h: string) => h.toLowerCase().replace(/\.$/, "");
 
 /**
@@ -76,11 +81,11 @@ const normalHost = (h: string) => h.toLowerCase().replace(/\.$/, "");
  */
 export function parseRouteDns(output: string, hostname: string): RouteDnsResult {
   const added = ROUTE_ADDED.exec(output);
-  const fqdn = added?.[1] ?? ROUTE_EXISTS.exec(output)?.[1];
+  const fqdn = added?.[1] ?? ROUTE_EXISTS.exec(output)?.[1] ?? ROUTE_UPDATED.exec(output)?.[1];
   if (fqdn === undefined)
     throw new SystemError(`cloudflared route dns ${hostname}: ${output.trim().slice(0, VALIDATE_MSG_MAX)}`);
   if (normalHost(fqdn) !== normalHost(hostname)) throw new DnsWrongZoneError(fqdn);
-  return { created: added !== null };
+  return { created: added !== null || ROUTE_UPDATED.test(output) };
 }
 
 /** Real cloudflared adapter reading `~/.cloudflared/config.yml` (missing file = no domains). */
@@ -106,12 +111,14 @@ export function createTermuxCloudflared(
       });
       return { ok: r.code === 0, message: (r.stdout + r.stderr).trim().slice(0, VALIDATE_MSG_MAX) };
     },
-    async routeDns(tunnel, hostname) {
-      // No --overwrite-dns: an existing record of someone else must fail, not be replaced.
-      const r = await runTermux("cloudflared", ["tunnel", "route", "dns", tunnel, hostname], {
+    async routeDns(tunnel, hostname, { overwrite = false } = {}) {
+      // Default no --overwrite-dns: an existing record of someone else must fail, not be replaced (C19).
+      const flag = overwrite ? ["--overwrite-dns"] : [];
+      const r = await runTermux("cloudflared", ["tunnel", "route", "dns", ...flag, tunnel, hostname], {
         timeoutMs: ROUTE_DNS_TIMEOUT_MS,
       });
       const out = r.stdout + r.stderr; // cloudflared logs to stderr
+      if (r.code !== 0 && RECORD_EXISTS.test(out)) throw new DnsRecordExistsError(hostname);
       if (r.code !== 0)
         throw new SystemError(
           `cloudflared route dns ${hostname} exited ${r.code}: ${out.trim().slice(0, VALIDATE_MSG_MAX)}`,

@@ -5,7 +5,7 @@ import { join, resolve } from "node:path";
 import { TermuxExecError } from "../server/exec/termux.exec";
 import type { SuperviseState } from "../server/system/system.types";
 import { ENV_VARS } from "../shared/env.schema";
-import { type CliHost, type ProcInfo, probePaths } from "./cli.host";
+import { type CliExecOptions, type CliHost, type ProcInfo, probePaths } from "./cli.host";
 import { type EnvFileValues, readEnvFile } from "./env.file";
 
 /** dpkg packages doctor asks about. */
@@ -24,8 +24,8 @@ const PANEL_BINARIES = new Set(["panel", "panel.prev", "panel.new", "panel-andro
 const CLI_COMMANDS = new Set(["doctor", "docs", "env", "rollback", "init", "upgrade", "help"]);
 /** Bun loads these from the cwd and they override `.env` (debate D8). */
 const EXTRA_ENV = /^\.env\.(local|development|production|test|.+\.local)$/;
-/** A Termux:Boot script that starts termux-services. */
-const BOOT_STARTS_SERVICES = /service-daemon|ensure-services|start-services/;
+/** A Termux:Boot script that starts termux-services (doctor's check and init's boot step). */
+export const BOOT_STARTS_SERVICES = /service-daemon|ensure-services|start-services/;
 const PANEL_HEALTH_TIMEOUT_MS = 3000;
 const CMD_TIMEOUT_MS = 5000;
 const CMD = "/system/bin/cmd";
@@ -79,25 +79,25 @@ const readOrNull = (file: string): string | null => {
 const listOrEmpty = (dir: string): string[] => (existsSync(dir) ? readdirSync(dir).sort() : []);
 
 /** `exec` that turns a missing tool or timeout into null (a probe answer, not a doctor failure). */
-async function tryExec(host: CliHost, tool: string, args: string[], timeoutMs?: number) {
+async function tryExec(host: CliHost, tool: string, args: string[], opts: CliExecOptions = {}) {
   try {
-    return await host.exec(tool, args, timeoutMs ? { timeoutMs } : {});
+    return await host.exec(tool, args, opts);
   } catch (e) {
     if (e instanceof TermuxExecError) return null; // missing command / timeout: the check reports "unknown"
     throw e;
   }
 }
 
-/** `Status: <want> <flag> <state>`: a held package reads `hold ok installed`, still installed. */
-async function dpkgState(host: CliHost, pkg: string): Promise<PackageState> {
-  const r = await tryExec(host, "dpkg", ["-s", pkg]);
+/** `dpkg -s` (LC_ALL=C, L8) `Status: <want> <flag> <state>`: `hold ok installed` is installed; no dpkg = missing. */
+export async function dpkgState(host: CliHost, pkg: string): Promise<PackageState> {
+  const r = await tryExec(host, "dpkg", ["-s", pkg], { lcAllC: true });
   const status = r?.code === 0 ? /^Status: (\S+) (\S+) (\S+)$/m.exec(r.stdout) : null;
   if (!status || status[3] === "not-installed" || status[3] === "config-files") return "missing";
   return status[2] === "ok" && status[3] === "installed" ? "installed" : "broken";
 }
 
 async function androidApp(host: CliHost, id: string): Promise<boolean | null> {
-  const r = await tryExec(host, CMD, ["package", "list", "packages", id], CMD_TIMEOUT_MS);
+  const r = await tryExec(host, CMD, ["package", "list", "packages", id], { timeoutMs: CMD_TIMEOUT_MS });
   if (r?.code !== 0) return null;
   return r.stdout.split("\n").some((l) => l.trim() === `package:${id}`);
 }

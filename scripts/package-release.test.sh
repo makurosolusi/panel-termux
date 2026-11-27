@@ -1,5 +1,5 @@
 #!/bin/sh
-# Test of package-release.sh: packs a fake binary, checks assets, tarball layout and checksums.
+# Test of package-release.sh: packs a fake binary, checks the raw binary asset, the compat tarball, install.sh and checksums.
 # Run: sh scripts/package-release.test.sh
 set -eu
 export LC_ALL=C  # stable sort order for the asset/file lists
@@ -23,30 +23,34 @@ printf 'fake-binary' >"$T/panel-android-arm64"
 
 sh "$HERE/package-release.sh" "$T/panel-android-arm64" "$OUT" "$TAG" >"$T/log" 2>&1 || { cat "$T/log"; fail "package-release.sh failed"; }
 
-# 1. Exactly the three fixed asset names.
-[ "$(cd "$OUT" && ls | sort | tr '\n' ' ')" = "SHA256SUMS install.sh panel-termux-android-arm64.tar.gz " ] ||
+# 1. Exactly the four fixed asset names; `panel` is the raw binary, executable.
+[ "$(cd "$OUT" && ls | sort | tr '\n' ' ')" = "SHA256SUMS install.sh panel panel-termux-android-arm64.tar.gz " ] ||
   fail "unexpected assets: $(ls "$OUT")"
+cmp -s "$OUT/panel" "$T/panel-android-arm64" || fail "panel asset differs from the binary"
+[ -x "$OUT/panel" ] || fail "panel asset not executable"
 
-# 2. Tarball holds what install-release.sh / install-phone.sh need, at the paths they expect.
+# 2. Tarball (compat for install.sh <= 0.5.0): binary, generated install-phone.sh, VERSION.
 tar -tzf "$OUT/panel-termux-android-arm64.tar.gz" | sort >"$T/list"
-printf '%s\n' .env.example LICENSE VERSION deploy/pm2/apps.json deploy/pm2/ecosystem.config.js deploy/pm2/run \
-  deploy/sv/panel/run panel-android-arm64 scripts/install-phone.sh | sort >"$T/want"
+printf '%s\n' VERSION panel-android-arm64 scripts/install-phone.sh | sort >"$T/want"
 cmp -s "$T/list" "$T/want" || { diff "$T/want" "$T/list" || true; fail "tarball file list"; }
 mkdir "$T/x"
 tar -xzf "$OUT/panel-termux-android-arm64.tar.gz" -C "$T/x"
 [ "$(cat "$T/x/panel-android-arm64")" = fake-binary ] || fail "binary content"
 [ "$(cat "$T/x/VERSION")" = "$TAG" ] || fail "VERSION"
-for f in scripts/install-phone.sh deploy/sv/panel/run deploy/pm2/ecosystem.config.js deploy/pm2/apps.json deploy/pm2/run \
-  .env.example LICENSE; do
-  cmp -s "$T/x/$f" "$REPO/$f" || fail "$f differs from the repo"
-done
+# The generated install-phone.sh execs `<binary> init <args>` the way install.sh <= 0.5.0 calls it.
+printf '#!/bin/sh\necho "args=$*" >"%s"\nexit 3\n' "$T/called" >"$T/x/stub"
+chmod 755 "$T/x/stub"
+rc=0
+(cd "$T/x" && sh scripts/install-phone.sh ./stub --yes </dev/null >/dev/null 2>&1) || rc=$?
+[ "$rc" = 3 ] || fail "generated install-phone.sh exit code $rc, want 3"
+[ "$(cat "$T/called")" = "args=init --yes" ] || fail "generated install-phone.sh args: $(cat "$T/called")"
 
 # 3. install.sh = install-release.sh with only the default version baked in.
 grep -q "^PANEL_VERSION_DEFAULT=\"$TAG\"\$" "$OUT/install.sh" || fail "version not baked into install.sh"
 [ "$(diff "$REPO/scripts/install-release.sh" "$OUT/install.sh" | grep -c '^[<>]')" = 2 ] || fail "install.sh changed more than one line"
 
-# 4. SHA256SUMS covers both downloadable assets and verifies.
-[ "$(awk '{ print $2 }' "$OUT/SHA256SUMS" | sort | tr '\n' ' ')" = "install.sh panel-termux-android-arm64.tar.gz " ] ||
+# 4. SHA256SUMS covers every other asset and verifies.
+[ "$(awk '{ print $2 }' "$OUT/SHA256SUMS" | sort | tr '\n' ' ')" = "install.sh panel panel-termux-android-arm64.tar.gz " ] ||
   fail "SHA256SUMS entries"
 (cd "$OUT" && sha256sum -c SHA256SUMS >/dev/null) || fail "SHA256SUMS does not verify"
 

@@ -91,7 +91,7 @@ describe("CLI import rules", () => {
     expect(files.has(join(CLI, "cli.main.ts"))).toBe(true);
   });
 
-  test("cli.main loads exactly the four commands, the host and boot on demand", () => {
+  test("cli.main loads exactly the five commands, the host and boot on demand", () => {
     const dynamic = imports(join(CLI, "cli.main.ts")).filter((i) => i.dynamic);
     expect(dynamic.map((i) => i.spec).sort()).toEqual(
       [
@@ -100,6 +100,7 @@ describe("CLI import rules", () => {
         "./docs.command",
         "./doctor.command",
         "./env.command",
+        "./init.command",
         "./rollback.command",
       ].sort(),
     );

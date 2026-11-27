@@ -8,7 +8,7 @@ const links = idLanding.links;
 const LINK =
   "inline-flex min-h-11 items-center gap-1.5 rounded font-lp-mono text-xs font-semibold underline decoration-lp-signal decoration-2 underline-offset-4 hover:text-lp-signal focus-visible:outline-2 focus-visible:outline-lp-signal";
 
-/** `#pasang`: honest prerequisites and the five install steps, with the copyable release install command. */
+/** `#pasang`: honest prerequisites and the four install steps, with the copyable one-line install (PLAN/07 K24). */
 export function InstallSection() {
   return (
     <section
@@ -59,7 +59,7 @@ export function InstallSection() {
   );
 }
 
-/** Step 1: the release install command with copy, script source and checksum note. */
+/** Step 1: the install line with copy, checksum note and the releases link. */
 function InstallCommand() {
   return (
     <div className="mt-4">
@@ -74,8 +74,8 @@ function InstallCommand() {
       </div>
       <p className="mt-2 flex flex-wrap items-center gap-x-4 text-xs text-lp-dim">
         <span>{t.checksum}</span>
-        <a className={LINK} href={links.script} rel="noreferrer">
-          {t.viewScript}
+        <a className={LINK} href={links.releases} rel="noreferrer">
+          {t.viewReleases}
         </a>
       </p>
     </div>

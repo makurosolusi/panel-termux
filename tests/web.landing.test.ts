@@ -45,13 +45,33 @@ describe("landing copy", () => {
     expect(idLanding.meta.description.length).toBeLessThanOrEqual(155);
   });
 
-  test("install command uses the release asset URL of B9 and its checksum", () => {
-    expect(idLanding.install.command).toBe(
-      "curl -fsSLo install.sh https://github.com/makurosolusi/panel-termux/releases/latest/download/install.sh && sh install.sh",
+  test("install line = PLAN/07 K24 with the release asset `panel` the packager publishes", () => {
+    const cmd = idLanding.install.command;
+    expect(cmd).toBe(
+      "cd && curl -fL --retry 3 -o panel-termux https://github.com/makurosolusi/panel-termux/releases/latest/download/panel && chmod +x panel-termux && ./panel-termux init",
     );
-    expect(idLanding.install.steps).toHaveLength(5);
-    expect(idLanding.install.steps[0].body).toContain("panel-termux-android-arm64.tar.gz");
-    expect(idLanding.install.steps[0].body).toContain("SHA256SUMS");
+    // `cd` first: ~/storage/shared is noexec (E13); local name is not `panel` because ~/panel is the install dir (Q14)
+    expect(cmd.startsWith("cd && ")).toBe(true);
+    expect(cmd).not.toMatch(/-o panel( |$)/);
+    const asset = cmd.match(/releases\/latest\/download\/(\S+)/)?.[1];
+    const packager = readFileSync(join(import.meta.dir, "../scripts/package-release.sh"), "utf8");
+    expect(packager).toContain(`"$OUT/${asset}"`);
+    expect(packager).toMatch(new RegExp(`sha256sum ${asset} `));
+  });
+
+  test("install steps: one line, what init asks (Google OAuth, Cloudflare login), then open the panel", () => {
+    const steps = idLanding.install.steps;
+    expect(steps.map((s) => s.title)).toEqual([
+      "Jalankan baris ini di Termux",
+      "Jawab pertanyaan init",
+      "Login Cloudflare di browser",
+      "Buka panel",
+    ]);
+    expect(steps[1].body).toContain("Client secret");
+    expect(idLanding.install.upgrade).toContain("baris yang sama");
+    const all = JSON.stringify(idLanding);
+    for (const gone of ["install.sh", "install-phone", "pkg install termux-services", "tutup dan buka lagi"])
+      expect(all).not.toContain(gone);
   });
 
   test("no overclaims: no one-command promise, no Google sign-in CTA, no binary-size spec", () => {

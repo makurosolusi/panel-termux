@@ -9,6 +9,7 @@ import { ENV_VARS, type EnvVar, type EnvVarName } from "../shared/env.schema";
 import { type CliHost, probePaths } from "./cli.host";
 import type { CliIo, Command, ParsedArgs } from "./cli.main";
 import { CliExit, type CliOut } from "./cli.output";
+import { REINSTALL } from "./doctor.checks.base";
 import { readEnvFile } from "./env.file";
 
 /** Test knobs: health wait, poll interval, a hook after every swap step, the clock for the backup name. */
@@ -22,7 +23,7 @@ export type RollbackOpts = {
 const FAILED = 1;
 const NEEDS_USER = 3;
 const CANCELLED = 4;
-const SV_WAIT_SEC = 130; // panel shutdown waits up to 120 s for a running site change (same as install-phone.sh)
+const SV_WAIT_SEC = 130; // panel shutdown waits up to 120 s for a running site change (same as panel init, K9)
 const SV_TIMEOUT_MS = (SV_WAIT_SEC + 10) * 1000;
 const HEALTH_TIMEOUT_MS = 30_000;
 const POLL_MS = 1000;
@@ -187,8 +188,7 @@ export async function runRollback(args: ParsedArgs, io: CliIo, opts: RollbackOpt
   const host = await io.host();
   const p = probePaths(host.paths);
   const dir = host.paths.panelDir;
-  if (!fs.existsSync(p.binary))
-    throw new CliExit(FAILED, `Tidak ada binary panel di ${p.binary}.`, "jalankan lagi perintah install.sh (README)");
+  if (!fs.existsSync(p.binary)) throw new CliExit(FAILED, `Tidak ada binary panel di ${p.binary}.`, REINSTALL);
   if (finishInterruptedSwap(dir))
     throw new CliExit(
       FAILED,
@@ -199,7 +199,7 @@ export async function runRollback(args: ParsedArgs, io: CliIo, opts: RollbackOpt
     throw new CliExit(
       FAILED,
       `Tidak ada versi sebelumnya: ${p.prev} tidak ada.`,
-      "install.sh menyimpannya saat upgrade",
+      "panel init menyimpannya saat upgrade",
     );
   let runtime: string;
   try {

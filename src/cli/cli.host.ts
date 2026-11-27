@@ -1,11 +1,14 @@
 // CliHost (PLAN/07 §7.1, K13, D1, D14, D15): everything the CLI asks of the phone, so tests and PANEL_CLI_FAKE swap
 // one object. The CLI never uses the server's mode picker: it picks fake when `sv` is missing and logs to stdout.
-import { existsSync, readdirSync, readFileSync, readlinkSync, statfsSync } from "node:fs";
+import { existsSync, statfsSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { type ExecOptions, type ExecResult, resolveArgv, runTermux, termuxPrefix } from "../server/exec/termux.exec";
 import { createTermuxSystem } from "../server/system/system.select";
 import type { SystemAdapters } from "../server/system/system.types";
+import { ENV_VARS } from "../shared/env.schema";
+import { listProcs, localHealth, pidAlive, procExeId } from "./cli.host.proc";
+import { ttyAsk, ttySecret } from "./cli.prompt";
 
 /** Base folders; every other probe path derives from these (probePaths). */
 export type CliPaths = { home: string; prefix: string; svdir: string; logdir: string; panelDir: string };
@@ -18,17 +21,43 @@ export type ProcInfo = { pid: number; uid: number; exe: string; cmdline: string[
 
 /**
  * Options of CliHost.run (D14): `inherit` = the user sees the tool (pkg, npm), `ignore` = silent (service-daemon);
- * `onLine` pipes stdout and gets each line after it is echoed to stderr (cloudflared login URL). No timeout.
+ * `onLine` pipes stdout and stderr and gets each line after it is echoed to stderr (cloudflared login URL). No timeout.
  */
 export type RunOptions = {
   stdio?: "inherit" | "ignore";
   env?: Record<string, string | undefined>;
   cwd?: string;
   onLine?: (line: string) => void;
+  /** `LC_ALL=C` for the child: apt/dpkg output parsed by the CLI must not be translated (lab L8). */
+  lcAllC?: boolean;
 };
 
-/** Fake scenarios selectable with PANEL_CLI_FAKE (D1: `nosv` = Termux without termux-services). */
-export const FAKE_SCENARIOS = ["fresh", "ready", "poco", "nosv"] as const;
+/** CliHost.exec options: runTermux's plus `lcAllC` (see RunOptions). */
+export type CliExecOptions = ExecOptions & { lcAllC?: boolean };
+
+/** /api/health of the local panel (K20): the running version and its boot id. */
+export type PanelHealth = { version: string; bootId?: unknown };
+
+/** Device + inode of a file (K21: is the process runit supervises this very file?). */
+export type FileId = { dev: number; ino: number };
+
+/**
+ * Fake scenarios selectable with PANEL_CLI_FAKE (D1: `nosv` = Termux without termux-services). 0.5.1 init (PLAN/07
+ * §16 W0): `upgrade` = older panel installed, `downgrade` = newer one, `fresh-pg` = fresh + PostgreSQL data,
+ * `fresh-resume` = interrupted fresh install (binary + panel service, no user data), `upgrade-partial` = this binary
+ * already installed but runit still runs the old file.
+ */
+export const FAKE_SCENARIOS = [
+  "fresh",
+  "ready",
+  "poco",
+  "nosv",
+  "upgrade",
+  "downgrade",
+  "fresh-pg",
+  "fresh-resume",
+  "upgrade-partial",
+] as const;
 /** One PANEL_CLI_FAKE scenario. */
 export type FakeScenarioName = (typeof FAKE_SCENARIOS)[number];
 
@@ -42,17 +71,44 @@ export interface CliHost {
   freeBytes: (path: string) => number;
   /** System adapters for this mode, created on first call (createTermuxSystem / createFakeSystem, never the server mode picker). */
   system: () => SystemAdapters;
-  /** Short probe: argv only, 10 s timeout, output captured (runTermux). Env = the scrubbed process.env (K11b). */
-  exec: (tool: string, args?: readonly string[], opts?: ExecOptions) => Promise<ExecResult>;
-  /** Long step with visible stdio, no timeout; resolves to the exit code (D14). */
+  /** Drops the cached adapters so the next system() sees tools installed meanwhile (K13: after the package step). */
+  resetSystem: () => void;
+  /**
+   * Short probe: argv only, 10 s timeout, output captured (runTermux). Child env = childEnv(): no ENV_VARS keys
+   * (K11b), SVDIR/LOGDIR always explicit (lab: empty in a non-login ssh), LC_ALL=C with `lcAllC`.
+   */
+  exec: (tool: string, args?: readonly string[], opts?: CliExecOptions) => Promise<ExecResult>;
+  /** Long step with visible stdio, no timeout; resolves to the exit code (D14). Child env as in exec. */
   run: (tool: string, args?: readonly string[], opts?: RunOptions) => Promise<number>;
-  tty: { isTty: boolean; confirm: (question: string) => Promise<boolean> };
-  proc: { selfPid: number; uid: number; list: () => ProcInfo[]; alive: (pid: number) => boolean };
+  /** HTTPS for init's self check (K19); the fake answers canned responses and records the URL. */
+  fetch: (url: string, init?: RequestInit) => Promise<Response>;
+  /** GET 127.0.0.1:<port>/api/health, 1 s; null = not answering (K20). */
+  health: (port: number) => Promise<PanelHealth | null>;
+  /** This running binary (process.execPath; the fake may point it elsewhere): what init would install. */
+  selfPath: string;
+  /**
+   * Terminal questions. `confirm` default = `defaultYes` (Enter); `ask` = one visible line, `secret` = no echo;
+   * both null at EOF. `ask` also reads one stdin line when there is no TTY (`--ssh-key -`).
+   */
+  tty: {
+    isTty: boolean;
+    confirm: (question: string, defaultYes?: boolean) => Promise<boolean>;
+    ask: (question: string) => Promise<string | null>;
+    secret: (question: string) => Promise<string | null>;
+  };
+  proc: {
+    selfPid: number;
+    uid: number;
+    list: () => ProcInfo[];
+    alive: (pid: number) => boolean;
+    /** dev+ino of /proc/<pid>/exe's target; null when unreadable or gone (K21, C21). */
+    exeId: (pid: number) => FileId | null;
+  };
 }
 
 /** Thrown when the CLI runs outside Termux without PANEL_CLI_FAKE (exit 1). */
 export class NotTermuxError extends Error {}
-/** Thrown for an unknown PANEL_CLI_FAKE value (exit 2). */
+/** Thrown for an unknown PANEL_CLI_FAKE value or a malformed PANEL_CLI_FAKE_ANSWERS (exit 2). */
 export class FakeScenarioError extends Error {}
 
 /** Files the probes and the fake agree on (one place, so the fake answers exactly what doctor reads). */
@@ -87,89 +143,78 @@ export function pathsFrom(home: string, prefix: string, env: Record<string, stri
   };
 }
 
-const PROC = "/proc";
-// A process can exit or be another user's between readdir and read: skip those, rethrow anything else.
-const GONE = new Set(["ENOENT", "ESRCH", "EACCES", "EPERM"]);
+/** y/ya/yes = yes, n/no/tidak = no, empty line = `defaultYes`; anything else (or EOF) = no. */
+export function confirmAnswer(answer: string | null, defaultYes = false): boolean {
+  const a = answer?.trim() ?? null;
+  if (a === "") return defaultYes;
+  return /^(y|ya|yes)$/i.test(a ?? "");
+}
 
-function readProc(pid: number): ProcInfo | null {
-  const dir = join(PROC, String(pid));
-  try {
-    const uid = Number(/^Uid:\s+(\d+)/m.exec(readFileSync(join(dir, "status"), "utf8"))?.[1] ?? -1);
-    const cmdline = readFileSync(join(dir, "cmdline"), "utf8").split("\0").filter(Boolean);
-    return { pid, uid, exe: readlinkSync(join(dir, "exe")), cmdline };
-  } catch (e) {
-    if (GONE.has((e as NodeJS.ErrnoException).code ?? "")) return null;
-    throw new Error(`read ${dir} failed: ${(e as Error).message}`, { cause: e });
+/** Asks on the terminal with `[Y/n]` or `[y/N]` (the capital letter = what Enter means). */
+export async function confirmOnTty(question: string, defaultYes = false): Promise<boolean> {
+  return confirmAnswer(await ttyAsk(`${question} ${defaultYes ? "[Y/n]" : "[y/N]"}`), defaultYes);
+}
+
+/**
+ * Env of every CLI child: `base` (default the already scrubbed process.env) without ENV_VARS keys (K11b, also when
+ * a caller passes its own env), SVDIR/LOGDIR from `paths`, and LC_ALL=C when asked.
+ */
+export function childEnv(
+  paths: CliPaths,
+  base: Record<string, string | undefined> = process.env,
+  lcAllC = false,
+): Record<string, string | undefined> {
+  const env: Record<string, string | undefined> = { ...base, SVDIR: paths.svdir, LOGDIR: paths.logdir };
+  for (const v of ENV_VARS) delete env[v.name];
+  if (lcAllC) env.LC_ALL = "C";
+  return env;
+}
+
+/** Echoes every line of `stream` to our stderr (the user sees it) and hands it to `onLine`; the last one too. */
+async function eachLine(stream: ReadableStream, onLine: (line: string) => void): Promise<void> {
+  let rest = "";
+  const emit = (line: string) => {
+    process.stderr.write(`${line}\n`);
+    onLine(line);
+  };
+  for await (const chunk of stream.pipeThrough(new TextDecoderStream())) {
+    const lines = (rest + chunk).split("\n");
+    rest = lines.pop() ?? "";
+    for (const line of lines) emit(line);
   }
+  if (rest) emit(rest);
 }
 
-/** Processes visible in /proc (empty where there is no /proc, e.g. macOS). */
-export function listProcs(): ProcInfo[] {
-  if (!existsSync(PROC)) return [];
-  return readdirSync(PROC)
-    .filter((n) => /^\d+$/.test(n))
-    .map(Number)
-    .sort((a, b) => a - b) // readdir order is filesystem-dependent; pids reach doctor output
-    .map(readProc)
-    .filter((p): p is ProcInfo => p !== null);
-}
-
-/** `kill -0`: true when `pid` exists (EPERM = exists, other user). */
-export function pidAlive(pid: number): boolean {
-  try {
-    process.kill(pid, 0);
-    return true;
-  } catch (e) {
-    const code = (e as NodeJS.ErrnoException).code;
-    if (code === "EPERM" || code === "ESRCH") return code === "EPERM";
-    throw new Error(`kill -0 ${pid} failed: ${(e as Error).message}`, { cause: e });
-  }
-}
-
-/** y/ya/yes on a line from the terminal = yes; anything else (or EOF) = no. */
-export async function confirmOnTty(question: string): Promise<boolean> {
-  const answer = prompt(`${question} [y/N]`);
-  return /^(y|ya|yes)$/i.test(answer?.trim() ?? "");
-}
-
-/** Runs a Termux tool with stdio per RunOptions; spawn failure throws with the command name (Rule 11). */
+/**
+ * Runs a Termux tool with stdio per RunOptions; spawn failure throws with the command name (Rule 11). With `onLine`
+ * both stdout and stderr are piped: cloudflared prints its login URL on stderr.
+ */
 export async function runVisible(tool: string, args: readonly string[] = [], opts: RunOptions = {}): Promise<number> {
   const argv = resolveArgv(tool, args);
   const stdio = opts.stdio ?? "inherit";
+  const out = opts.onLine ? "pipe" : stdio;
   let proc: Bun.Subprocess;
   try {
-    proc = Bun.spawn(argv, {
-      env: opts.env ?? process.env,
-      cwd: opts.cwd,
-      stdin: stdio,
-      stdout: opts.onLine ? "pipe" : stdio,
-      stderr: stdio,
-    });
+    proc = Bun.spawn(argv, { env: opts.env ?? process.env, cwd: opts.cwd, stdin: stdio, stdout: out, stderr: out });
   } catch (e) {
     throw new Error(`run ${tool} failed to spawn: ${(e as Error).message}`, { cause: e });
   }
-  if (opts.onLine && proc.stdout instanceof ReadableStream) {
-    let rest = "";
-    for await (const chunk of proc.stdout.pipeThrough(new TextDecoderStream())) {
-      const lines = (rest + chunk).split("\n");
-      rest = lines.pop() ?? "";
-      for (const line of lines) {
-        process.stderr.write(`${line}\n`);
-        opts.onLine(line);
-      }
-    }
-    if (rest) opts.onLine(rest);
-  }
+  const { onLine } = opts;
+  if (onLine)
+    await Promise.all(
+      [proc.stdout, proc.stderr].map((s) => (s instanceof ReadableStream ? eachLine(s, onLine) : undefined)),
+    );
   return proc.exited;
 }
 
 /** Real Termux host. */
 export function createTermuxHost(): CliHost {
   const home = process.env.HOME || homedir();
+  const paths = pathsFrom(home, termuxPrefix(), process.env);
   let system: SystemAdapters | undefined;
   return {
     mode: "termux",
-    paths: pathsFrom(home, termuxPrefix(), process.env),
+    paths,
     arch: process.arch,
     termuxEnv: process.env as TermuxEnv,
     freeBytes: (path) => {
@@ -177,11 +222,45 @@ export function createTermuxHost(): CliHost {
       return s.bavail * s.bsize;
     },
     system: () => (system ??= createTermuxSystem()),
-    exec: (tool, args, opts) => runTermux(tool, args, opts),
-    run: (tool, args, opts) => runVisible(tool, args, opts),
-    tty: { isTty: process.stdin.isTTY === true, confirm: confirmOnTty },
-    proc: { selfPid: process.pid, uid: process.getuid?.() ?? -1, list: listProcs, alive: pidAlive },
+    resetSystem: () => {
+      system = undefined;
+    },
+    exec: (tool, args, { lcAllC, ...opts } = {}) =>
+      runTermux(tool, args, { ...opts, env: childEnv(paths, opts.env, lcAllC) }),
+    run: (tool, args, { lcAllC, ...opts } = {}) =>
+      runVisible(tool, args, { ...opts, env: childEnv(paths, opts.env, lcAllC) }),
+    fetch: (url, init) => fetch(url, init),
+    health: localHealth,
+    selfPath: process.execPath,
+    tty: {
+      isTty: process.stdin.isTTY === true,
+      confirm: confirmOnTty,
+      ask: ttyAsk,
+      secret: ttySecret,
+    },
+    proc: {
+      selfPid: process.pid,
+      uid: process.getuid?.() ?? -1,
+      list: listProcs,
+      alive: pidAlive,
+      exeId: procExeId,
+    },
   };
+}
+
+/** PANEL_CLI_FAKE_ANSWERS: a JSON array of strings/booleans/null (FakeAnswer); unset = none, anything else exit 2. */
+function fakeAnswers(json: string | undefined): (string | boolean | null)[] | undefined {
+  if (!json) return undefined;
+  let v: unknown;
+  try {
+    v = JSON.parse(json);
+  } catch (e) {
+    throw new FakeScenarioError(`PANEL_CLI_FAKE_ANSWERS bukan JSON: ${(e as Error).message}`);
+  }
+  const answer = (a: unknown) => a === null || typeof a === "string" || typeof a === "boolean";
+  if (!Array.isArray(v) || !v.every(answer))
+    throw new FakeScenarioError("PANEL_CLI_FAKE_ANSWERS harus array JSON berisi teks, true/false atau null");
+  return v;
 }
 
 /**
@@ -194,7 +273,12 @@ export async function detectCliHost(): Promise<CliHost> {
     if (!(FAKE_SCENARIOS as readonly string[]).includes(fake))
       throw new FakeScenarioError(`PANEL_CLI_FAKE="${fake}" tidak dikenal (pilihan: ${FAKE_SCENARIOS.join(", ")})`);
     const { createFakeHost } = await import("./cli.host.fake");
-    return createFakeHost(fake as FakeScenarioName, { recordFile: process.env.PANEL_CLI_FAKE_RECORD });
+    const answers = fakeAnswers(process.env.PANEL_CLI_FAKE_ANSWERS);
+    // scripted answers stand in for a terminal (shell tests run with stdin </dev/null)
+    return createFakeHost(fake as FakeScenarioName, {
+      recordFile: process.env.PANEL_CLI_FAKE_RECORD,
+      ...(answers ? { answers, tty: true } : {}),
+    });
   }
   const p = probePaths(pathsFrom("", termuxPrefix()));
   if (existsSync(p.pkg) || existsSync(p.apt) || process.env.TERMUX_VERSION) return createTermuxHost();

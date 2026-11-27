@@ -14,13 +14,13 @@ sama dengan Termux, karena tanda tangannya harus cocok. Jangan campur F-Droid de
 1. Pasang aplikasi Termux:Boot (`com.termux.boot`).
 2. Buka Termux:Boot sekali dari laci aplikasi. Tanpa dibuka sekali, Android tidak
    menjalankannya saat HP menyala.
-3. Skrip di `~/.termux/boot/` dijalankan setiap HP menyala. Skrip itu memanggil
-   `termux-wake-lock` dan menyalakan layanan runit (paket `termux-services`).
+3. `panel init` menulis skrip `~/.termux/boot/panel-termux`, yang dijalankan setiap HP
+   menyala: memanggil `termux-wake-lock` dan menyalakan layanan runit (`termux-services`).
 
 ## 3. Termux:API (baterai, wake-lock, membuka tautan)
 
 1. Pasang aplikasi Termux:API (`com.termux.api`).
-2. Di Termux: `pkg install termux-api`
+2. Paket `termux-api` dipasang oleh `panel init` (manual: `pkg install termux-api`).
 3. Coba: `termux-battery-status`. Bila mencetak JSON, berarti sudah tersambung.
 
 ## 4. Baterai tanpa batasan

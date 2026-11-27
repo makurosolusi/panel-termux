@@ -1,6 +1,4 @@
 import { describe, expect, test } from "bun:test";
-import { readFileSync } from "node:fs";
-import { join } from "node:path";
 import { type Env, EnvError, parseEnv } from "@/server/env";
 import { CONNECTIVITY_PROBE_URL } from "@/server/monitor/monitor.service";
 import { findEnvLine } from "@/shared/env.codec";
@@ -75,11 +73,6 @@ describe("ENV_VARS", () => {
       findEnvLine(ENV_EXAMPLE_040, "SUPER_ADMIN_EMAILS") ?? "",
     ]);
     expect(vars.filter((v) => v.placeholders).map((v) => v.name)).toEqual(["APP_BASE_URL", "SUPER_ADMIN_EMAILS"]);
-  });
-
-  test("install-phone.sh REQUIRED_VARS = schema required list", () => {
-    const sh = readFileSync(join(import.meta.dir, "../scripts/install-phone.sh"), "utf8");
-    expect(/^REQUIRED_VARS="([^"]*)"/m.exec(sh)?.[1]?.split(" ")).toEqual(requiredNames);
   });
 });
 
