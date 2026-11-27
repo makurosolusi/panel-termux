@@ -354,9 +354,9 @@ Panel memiliki `~/sites/apps.json` (dibuat otomatis saat start bila belum ada). 
 HP baru memakai template [`deploy/pm2/ecosystem.config.js`](deploy/pm2/ecosystem.config.js) (salinan persis `files/sites/ecosystem.config.js` di [server-termux](https://github.com/makurosolusi/server-termux), sumbernya), yang memuat blok `panelApps` berikut dengan `...panelApps` sebagai elemen terakhir `apps`. Snippet ini tetap dianggap benar oleh Persiapan:
 
 ```js
-// Panel Termux: situs buatan panel tercatat di apps.json (dikelola panel, jangan diedit tangan).
-// Aman bila apps.json belum ada, kosong, atau rusak; entri yang binary-nya belum ada dilewati,
-// karena satu script yang hilang membuat pm2-runtime menghentikan semua aplikasi.
+// Panel Termux: sites created by the panel are listed in apps.json (managed by the panel, do not edit by hand).
+// Safe when apps.json is missing, empty or broken; entries whose binary does not exist yet are skipped,
+// because one missing script makes pm2-runtime stop every app.
 const panelApps = (() => {
   try {
     const fs = require("fs");
@@ -368,7 +368,7 @@ const panelApps = (() => {
         )
       : [];
   } catch (e) {
-    console.error(`[ecosystem] apps.json dilewati: ${e.message}`);
+    console.error(`[ecosystem] apps.json skipped: ${e.message}`);
     return [];
   }
 })();

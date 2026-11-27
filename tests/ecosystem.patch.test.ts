@@ -8,6 +8,7 @@ import {
   type EcosystemFixPlan,
   ecosystemBlock,
   planEcosystemFix,
+  snippetCurrent,
 } from "@/server/sites/ecosystem.patch";
 import { type EcosystemProbe, probeEcosystem } from "@/server/sites/ecosystem.probe";
 import type { SystemAdapters } from "@/server/system/system.types";
@@ -66,6 +67,27 @@ describe.skipIf(!node)("fixtures under node", () => {
     const { p } = await plan(fixture);
     expect(p.kind).toBe(kind as EcosystemFixPlan["kind"]);
     if (p.kind === "manual") expect(p.reason as string).toBe(reason as string);
+  });
+
+  test("old Indonesian template and the shipped English one are both current: no Fix, no rewrite", async () => {
+    const old = readFileSync(join(FIXTURES, "template.config.js"), "utf8");
+    const shipped = readFileSync(join(import.meta.dir, "..", "deploy", "pm2", "ecosystem.config.js"), "utf8");
+    expect(old).toContain("apps.json dilewati: ");
+    expect(shipped).toContain("apps.json skipped: ");
+    expect(snippetCurrent(old)).toBe(true);
+    expect(snippetCurrent(shipped)).toBe(true);
+    const { dir, eco } = sitesWith("template");
+    writeFileSync(eco, shipped);
+    const p = planEcosystemFix({
+      bytes: Buffer.from(shipped),
+      path: eco,
+      realDir: dir,
+      sitesDirReal: dir,
+      nlink: 1,
+      probeBefore: await probe(dir, eco),
+      prefix: PREFIX,
+    });
+    expect(p.kind).toBe("unchanged");
   });
 
   test("POCO: candidate = original bytes + blank line + block; hand apps kept, no guard", async () => {

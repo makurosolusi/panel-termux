@@ -4,7 +4,7 @@
 
 Turn a spare Android phone into a server for Bun apps: a web panel to manage runit services, pm2 apps, Cloudflare Tunnel domains, Postgres databases, sites, binary deploys, and backups. Access it with Google sign-in, no root and no Docker.
 
-> The panel's interface is in Indonesian. UI labels below are quoted as they appear in the app, with an English gloss in parentheses the first time, e.g. **Perbaiki** (Fix).
+> The interface is in English; Indonesian is available under **Profile → Language** (for the CLI, `panel init` asks, or set `PANEL_LANG=id`). See [Language](#language).
 
 ![Panel overview: phone health, services, and open problems on one screen](README_ASSETS/01-ringkasan.png)
 
@@ -12,22 +12,23 @@ Turn a spare Android phone into a server for Bun apps: a web panel to manage run
 - [Problems it solves](#problems-it-solves)
 - [Install on your phone](#install-on-your-phone)
 - [Requirements and configuration](#requirements-and-configuration)
+- [Language](#language)
 - [CLI commands](#cli-commands)
 - [Troubleshooting](#troubleshooting)
 - [Backup and restore](#backup-and-restore) · [Rollback](#rollback) · [Security](#security) · [Development](#local-development)
 
 ## Highlights
 
-**Built for phone screens.** Every page is comfortable to use from a phone, with a bottom navigation bar and dark mode. The overview shows problems first, or "Semua sehat" (All healthy).
+**Built for phone screens.** Every page is comfortable to use from a phone, with a bottom navigation bar and dark mode. The overview shows problems first, or "All healthy".
 
 ![Overview on a phone screen in dark mode](README_ASSETS/02-ringkasan-hp.png)
 
-**The panel fixes things itself.** **Situs → Persiapan** (Sites → Setup) checks the pm2 integration and shows one row per problem. The **Perbaiki** (Fix) or **Perbaiki semua** (Fix all) button first explains the change in plain language, with a diff under **Lihat perubahan pada file** (View file changes). A copy of the old file is kept, and **Batalkan perubahan** (Undo changes) restores it. No need to open `nano` in Termux. Details in [pm2 integration](#pm2-integration-appsjson).
+**The panel fixes things itself.** **Sites → Setup** checks the pm2 integration and shows one row per problem. The **Fix** or **Fix all** button first explains the change in plain language, with a diff under **Show the file changes**. A copy of the old file is kept, and **Undo change** restores it. No need to open `nano` in Termux. Details in [pm2 integration](#pm2-integration-appsjson).
 
 ![Setup card with the Fix button](README_ASSETS/03-persiapan-perbaiki.png)
 ![Fix preview before applying](README_ASSETS/04-perbaiki-pratinjau.png)
 
-**Safe binary deploys.** Upload a Bun binary from the browser. An interrupted upload can be resumed (**Lanjutkan unggahan**, Resume upload). The panel waits until the app is healthy, and if it is not healthy within the time limit, the deploy is rolled back automatically. **Kembalikan versi sebelumnya** (Restore previous version) is available at any time. See [Deploying binaries](#deploying-binaries).
+**Safe binary deploys.** Upload a Bun binary from the browser. An interrupted upload can be resumed (**Resume upload**). The panel waits until the app is healthy, and if it is not healthy within the time limit, the deploy is rolled back automatically. **Restore previous version** is available at any time. See [Deploying binaries](#deploying-binaries).
 
 ![Site deploy page](README_ASSETS/05-situs-deploy.png)
 
@@ -35,11 +36,11 @@ Turn a spare Android phone into a server for Bun apps: a web panel to manage run
 
 ![Create site wizard](README_ASSETS/06-situs-baru.png)
 
-**Daily backups to S3/R2 with restore tests.** Postgres databases, site folders, tunnel configuration, and `panel.db` are uploaded every day with checksums and retention. **Pulihkan ke database baru** (Restore to a new database) proves a backup can be restored without touching the original database. See [Backup and restore](#backup-and-restore).
+**Daily backups to S3/R2 with restore tests.** Postgres databases, site folders, tunnel configuration, and `panel.db` are uploaded every day with checksums and retention. **Restore to a new database** proves a backup can be restored without touching the original database. See [Backup and restore](#backup-and-restore).
 
 ![Backups page](README_ASSETS/07-cadangan.png)
 
-**Monitoring and Telegram notifications.** A sampler reads battery, memory, storage, services, apps, and domains every 60 seconds (configurable). New problems, problems that get worse, and problems that recover are sent to Telegram. See [Monitoring and notifications](#monitoring-and-notifications).
+**Monitoring and Telegram notifications.** A sampler reads battery, memory, storage, services, apps, and domains every 60 seconds (configurable). New problems, problems that get worse, and problems that recover are sent to Telegram, in English or Indonesian. See [Monitoring and notifications](#monitoring-and-notifications).
 
 **System health and setup.** The super admin sees setup cards (Cloudflare Access, data key, backups, Cloudflare token, first site, admin) with their progress, and the state of the panel, on one page.
 
@@ -49,13 +50,13 @@ Turn a spare Android phone into a server for Bun apps: a web panel to manage run
 
 ![Audit page](README_ASSETS/09-audit.png)
 
-**Settings from the browser.** The Cloudflare token, S3/R2 keys, and Telegram bot are entered under Pengaturan (Settings), with connection test buttons. Secret values are stored encrypted and never shown again.
+**Settings from the browser.** The Cloudflare token, S3/R2 keys, and Telegram bot are entered under Settings, with connection test buttons. Secret values are stored encrypted and never shown again.
 
 ![Settings with connection tests](README_ASSETS/10-pengaturan.png)
 
 **Secure by default.** The panel only listens on `127.0.0.1` and is reached through Cloudflare Tunnel. Private paths are protected by Cloudflare Access, requests that change data are guarded against CSRF, and roles (`user`, `admin`, `super_admin`) are checked on the server. See [Security](#security).
 
-**Public product page.** `/` introduces the panel to visitors, complete with the install line and a "Masuk dengan Google" (Sign in with Google) button.
+**Public product page.** `/` introduces the panel to visitors, complete with the install line and a "Sign in with Google" button.
 
 ![Landing page](README_ASSETS/11-landing.png)
 
@@ -67,7 +68,7 @@ Turn a spare Android phone into a server for Bun apps: a web panel to manage run
 ## Problems it solves
 
 - **A spare phone becomes a server without root or Docker.** Bun apps are compiled to a single binary and run by pm2 in Termux; public domains go through Cloudflare Tunnel, with no public IP or port forwarding.
-- **No Termux commands to memorize.** Installation is one line; after that, services, sites, domains, and databases are managed from the browser. Setup problems are fixed with the **Perbaiki** (Fix) button, not by editing files.
+- **No Termux commands to memorize.** Installation is one line; after that, services, sites, domains, and databases are managed from the browser. Setup problems are fixed with the **Fix** button, not by editing files.
 - **Deploys do not take sites down.** The old binary is kept, app health is checked, and a failed version is rolled back automatically.
 - **No data loss if the phone breaks or is stolen.** Daily backups to S3/R2 with a [Restore to a new phone](#restore-to-a-new-phone) runbook.
 - **Know when something breaks.** Overview, problem history, and Telegram notifications for battery, stopped services, crashing apps, unresponsive domains, and stale backups.
@@ -92,6 +93,7 @@ In short: set up the Android apps, create a Google OAuth client, run one line in
    This line only works from v0.5.1 on (earlier releases have no `panel` asset). For a specific version, replace `latest/download` with `download/<tag>`. To see the plan first without changing anything: `./panel-termux init --dry-run`.
 
    `panel init` installs the binary to `~/panel/panel`, then sets up packages, runit, PostgreSQL, `~/panel/.env`, the panel service, pm2, the cloudflared tunnel, Termux:Boot, and starts the panel. Before changing anything, init prints its plan and asks for approval. It is safe to run again: what already exists is not overwritten. It asks for (only what is still empty):
+   - **Language / Bahasa** for the CLI (asked once, saved as `PANEL_LANG`);
    - **panel address**, e.g. `panel.contoh.com` (becomes `APP_BASE_URL`);
    - **admin Google email** (`SUPER_ADMIN_EMAILS`);
    - **Google Client ID and secret**. Init prints the redirect URI to paste into the OAuth client's "Authorized redirect URIs", namely `https://<address>/api/auth/callback/google`;
@@ -99,7 +101,7 @@ In short: set up the Android apps, create a Google OAuth client, run one line in
 
    `.env` answers are saved immediately (mode 600) and their values are never printed. If interrupted midway, run the same line again: init continues with what is still missing. Follow the notes printed at the end (battery permission, open Termux:Boot once).
 
-   **Upgrading** = running the same line again. Only the binary is swapped (the old version is kept as `panel.prev`) and the panel service is restarted. Afterwards open **Situs → Persiapan** (Sites → Setup): if anything needs adjusting, press **Perbaiki semua** (Fix all) there.
+   **Upgrading** = running the same line again. Only the binary is swapped (the old version is kept as `panel.prev`) and the panel service is restarted. Afterwards open **Sites → Setup**: if anything needs adjusting, press **Fix all** there.
 
    `panel init` options:
 
@@ -112,6 +114,7 @@ In short: set up the Android apps, create a Google OAuth client, run one line in
    | `--skip <postgres\|tunnel\|boot>` | Skip one part; may be repeated.                                                                      |
    | `--ssh-key <https-url\|file\|->`  | Add an SSH key from an `https://` URL, a file, or `-` (paste), then enable sshd with key-only login. |
    | `--skip-verify`                   | Skip the self-check against the release's `SHA256SUMS`. Terminal only, with confirmation.            |
+   | `--lang <en\|id>`                 | CLI language for this run (any command accepts it); without it, init asks once.                     |
 
    <details>
    <summary>Init modes, what init protects, and the self-check</summary>
@@ -124,12 +127,12 @@ In short: set up the Android apps, create a Google OAuth client, run one line in
    A binary older than the installed one is refused; to go back use [`panel rollback`](#rollback).
 
    What init protects:
-   - `pkg upgrade` only on a new phone without PostgreSQL. If PostgreSQL data exists, there is never a `pkg upgrade`, and installing packages that would replace `cloudflared`, `postgresql`, or `nodejs` is refused. `cloudflared` and `postgresql` are held from `pkg upgrade`, see `panel docs paket`.
-   - A hand-written `ecosystem.config.js` and an existing pm2 setup are not touched. Anything that needs adjusting is done through **Situs → Persiapan → Perbaiki** (Sites → Setup → Fix).
+   - `pkg upgrade` only on a new phone without PostgreSQL. If PostgreSQL data exists, there is never a `pkg upgrade`, and installing packages that would replace `cloudflared`, `postgresql`, or `nodejs` is refused. `cloudflared` and `postgresql` are held from `pkg upgrade`, see `panel docs packages`.
+   - A hand-written `ecosystem.config.js` and an existing pm2 setup are not touched. Anything that needs adjusting is done through **Sites → Setup → Fix**.
    - DNS records pointing to another tunnel are only moved after you answer yes in the terminal.
    - pm2 is never restarted. The panel is only restarted on upgrade; in other modes a running panel is left alone.
 
-   If a site change is in progress (deploy, create site, etc.), the panel restart during an upgrade waits for it to finish, **up to 2 minutes**. During that time the panel is unreachable. Changes not finished after 2 minutes are interrupted and shown as "Terputus" (Interrupted) in Riwayat perubahan (Change history), with a **Pulihkan** (Recover) button to clean them up.
+   If a site change is in progress (deploy, create site, etc.), the panel restart during an upgrade waits for it to finish, **up to 2 minutes**. During that time the panel is unreachable. Changes not finished after 2 minutes are interrupted and shown as "Interrupted" in Change history, with a **Recover** button to clean them up.
 
    **Self-check**: before installing, init matches itself against the `panel` line in its release's `SHA256SUMS` (downloaded over HTTPS). This proves the download is intact, not where the release came from. To verify the release's origin (optional, on a computer): `gh attestation verify panel --repo makurosolusi/panel-termux`.
 
@@ -152,19 +155,19 @@ In short: set up the Android apps, create a Google OAuth client, run one line in
 
    Add one **Allow** policy with the **Emails** selector containing the panel owner's email (more than one is fine), then **Create**. When you make someone an Admin, add their email to the Access policy too.
 
-   Access is only the front layer. Behind it the panel's Google sign-in and roles still apply, and `/api/panel/*` and `/api/dev/*` are still guarded by roles on the server even if Access is misconfigured. System health shows "Cloudflare Access belum terdeteksi" (Cloudflare Access not detected yet) until the panel sees a request to `/api/panel` or `/api/dev` carrying an Access token.
+   Access is only the front layer. Behind it the panel's Google sign-in and roles still apply, and `/api/panel/*` and `/api/dev/*` are still guarded by roles on the server even if Access is misconfigured. System health shows "Cloudflare Access not detected yet" until the panel sees a request to `/api/panel` or `/api/dev` carrying an Access token.
 
    <details>
    <summary>What is deliberately not protected by Access, and how Access sign-in behaves in the SPA</summary>
 
    What is deliberately **not** protected by Access, and why:
    - `/` (landing page) and `/login`: must be open to anyone.
-   - `/profile`: only shows your own account from `/api/me`, and a different Google account that signs in needs to see the "belum punya akses" (no access yet) explanation there.
+   - `/profile`: only shows your own account from `/api/me`, and a different Google account that signs in needs to see the "doesn't have access to this panel yet" explanation there.
    - `/api/auth/...`: Google sign-in and the Better Auth callback; if protected, signing in from the landing page does not work for visitors.
    - `/api/me`: called by the landing page for visitors (answers 401 when not signed in); if protected, its fetch is redirected to the Access login page and the landing page fails to load.
    - `/api/health` and the bundle assets at the root (`/chunk-*.js`, `/chunk-*.css`): contain no data, and the landing page needs them.
 
-   Practical effect because the panel is an SPA: Access can only show its login page when the browser loads a full page on a protected path. That is why moving from a public page to the private area (the "Buka panel" (Open panel) button on `/`, and the redirect from `/login` to the role's home page after Google sign-in) deliberately does a full page load, so Access gets a chance to ask for login; navigation inside `/panel`, `/dev`, `/profile` stays client-side. For an Access session that expires (24 hours by default) while the panel is open, every panel API call sends the header `X-Requested-With: XMLHttpRequest`, so Access answers `401` (instead of redirecting to its login domain); the panel then reloads the page once automatically and Access shows its login. If Access still refuses within 30 seconds after the reload, the panel stops reloading and shows a message: open `https://panel.<domain>/panel` (or `/dev`) directly in the address bar, and check whether your email is allowed in the Access policy. After the Access login, the `CF_Authorization` cookie applies to that hostname and navigation inside the panel works normally until the Access session ends.
+   Practical effect because the panel is an SPA: Access can only show its login page when the browser loads a full page on a protected path. That is why moving from a public page to the private area (the "Open panel" button on `/`, and the redirect from `/login` to the role's home page after Google sign-in) deliberately does a full page load, so Access gets a chance to ask for login; navigation inside `/panel`, `/dev`, `/profile` stays client-side. For an Access session that expires (24 hours by default) while the panel is open, every panel API call sends the header `X-Requested-With: XMLHttpRequest`, so Access answers `401` (instead of redirecting to its login domain); the panel then reloads the page once automatically and Access shows its login. If Access still refuses within 30 seconds after the reload, the panel stops reloading and shows a message: open `https://panel.<domain>/panel` (or `/dev`) directly in the address bar, and check whether your email is allowed in the Access policy. After the Access login, the `CF_Authorization` cookie applies to that hostname and navigation inside the panel works normally until the Access session ends.
 
    </details>
 
@@ -217,7 +220,7 @@ Bun loads `.env` automatically from the working directory. The panel refuses to 
 
 ### Settings in the panel
 
-All other settings are entered under **Administrasi → Pengaturan** (Administration → Settings, `/dev/settings`), in six groups. Each group is saved at once; secret values are stored encrypted with the data key and never shown again. The Cloudflare, Cadangan (Backups), and Notifikasi Telegram (Telegram notifications) groups have connection test buttons.
+All other settings are entered under **Administration → Settings** (`/dev/settings`), in six groups. Each group is saved at once; secret values are stored encrypted with the data key and never shown again. The Cloudflare, Backup, and Telegram alerts groups have connection test buttons.
 
 <details>
 <summary>Full list of settings</summary>
@@ -264,7 +267,7 @@ The same binary also has commands for the terminal. Run them from `~/panel` (`cd
 | `panel serve`                   | Runs the server. runit still runs `panel` without arguments; in a terminal, `panel` without arguments only prints help.                                                                                                     |
 | `panel doctor [--json]`         | Checks the phone without changing anything: packages and holds, Termux:Boot/API, runit, `.env`, duplicate panels, Setup cards (with the same messages), tunnel, PostgreSQL version. Exit code 1 only if there is a ❌.      |
 | `panel env [--full]`            | Prints an empty `.env` template to stdout (also `panel --env`). Write it to a new file (`panel env > .env.new`); appending to a `.env` that already has content (`>>`) is refused.                                          |
-| `panel docs [topic]`            | Offline guides: `google`, `cloudflare`, `android`, `paket` (why `cloudflared` and `postgresql` are held from `pkg upgrade`, and how to upgrade them safely). Sources in [docs/cli](docs/cli). The guides are in Indonesian. |
+| `panel docs [topic]`            | Offline guides: `google`, `cloudflare`, `android`, `packages` (why `cloudflared` and `postgresql` are held from `pkg upgrade`, and how to upgrade them safely; the old name `paket` still works). Sources in [docs/cli](docs/cli) (English) and [docs/cli/id](docs/cli/id) (Indonesian). |
 | `panel rollback [--db] [--yes]` | Go back to the previous binary, see [Rollback](#rollback).                                                                                                                                                                  |
 
 Exit codes: 0 success, 1 failure, 2 usage error, 3 action needed then retry, 4 cancelled (`init` also 130 for Ctrl-C). CLI commands do not pass the panel's `.env` contents to the programs they run.
@@ -279,17 +282,17 @@ First step for any problem: `cd ~/panel && ./panel doctor`. Every ❌/⚠️ is 
 | `/panel` keeps asking for the Access login, or is refused                     | The email is not allowed in the Access policy, or the Access session expired (24 hours by default).                                                                     | Add the email to the Access policy. Open `https://panel.<domain>/panel` directly in the address bar. Check that Access paths are written without `/*` ([step 4](#install-on-your-phone)).                                                            |
 | The landing page `/` asks for the Access login                                | The Access application's Path field was left empty, so the whole hostname is protected.                                                                                 | Fill in a Path per hostname: `panel`, `dev`, `api/panel`, `api/dev`.                                                                                                                                                                                 |
 | Google sign-in fails (`redirect_uri_mismatch`)                                | The redirect URI in the OAuth client does not exactly match `APP_BASE_URL`.                                                                                             | Add `<APP_BASE_URL>/api/auth/callback/google` to Authorized redirect URIs ([Google OAuth client](#google-oauth-client)). Scheme, domain, and port must match. Google does not accept LAN/Tailscale IPs.                                              |
-| Sign-in works but you only see "belum punya akses" (no access yet)            | New accounts start as `user`.                                                                                                                                           | The super admin changes the role under **Administrasi → Pengguna** (Administration → Users), or add the email to `SUPER_ADMIN_EMAILS` then `sv restart panel`.                                                                                       |
+| Sign-in works but you only see "doesn't have access to this panel yet"       | New accounts start as `user`.                                                                                                                                           | The super admin changes the role under **Administration → Users**, or add the email to `SUPER_ADMIN_EMAILS` then `sv restart panel`.                                                                                       |
 | The panel does not start, the log names an env variable                       | A required variable is empty or invalid.                                                                                                                                | Run the install line again: init asks for what is empty. Compare with `panel env --full`.                                                                                                                                                            |
 | `panel serve` exits with code 1: another panel already answers on the port    | The panel run by runit is alive; a second panel refuses to start before touching any data.                                                                              | Use `sv restart panel`, not `panel serve`.                                                                                                                                                                                                           |
-| The **Situs → Persiapan** (Sites → Setup) card is red                         | `ecosystem.config.js`, `apps.json`, the pm2 run script, or the site folder is not right yet (e.g. a 0.2.x snippet).                                                     | Press **Perbaiki** (Fix) or **Perbaiki semua** (Fix all). If the file cannot be changed safely, that row opens **Cara manual** (Manual steps). See [pm2 integration](#pm2-integration-appsjson).                                                     |
-| pm2 stops and takes all apps down with it                                     | pm2 run script without `--no-auto-exit`, a 0.2.x `apps.json` snippet (one missing binary stops all apps), or an ecosystem with no apps because `pm2-guard` was removed. | **Perbaiki** (Fix) in Setup adds `--no-auto-exit` and the panel block; do not remove `pm2-guard`. Pages that need pm2 offer **Jalankan pm2** (Start pm2).                                                                                            |
-| `pkg upgrade` skips `cloudflared`/`postgresql`                                | Both are deliberately held because upgrading them kills the tunnel or makes the database unreadable.                                                                    | Follow `panel docs paket` for a safe upgrade. Do not `pkg upgrade` to fix "installed incomplete" packages; use `dpkg --configure -a`.                                                                                                                |
+| The **Sites → Setup** card is red                                             | `ecosystem.config.js`, `apps.json`, the pm2 run script, or the site folder is not right yet (e.g. a 0.2.x snippet).                                                     | Press **Fix** or **Fix all**. If the file cannot be changed safely, that row opens **Manual steps**. See [pm2 integration](#pm2-integration-appsjson).                                                     |
+| pm2 stops and takes all apps down with it                                     | pm2 run script without `--no-auto-exit`, a 0.2.x `apps.json` snippet (one missing binary stops all apps), or an ecosystem with no apps because `pm2-guard` was removed. | **Fix** in Setup adds `--no-auto-exit` and the panel block; do not remove `pm2-guard`. Pages that need pm2 offer **Start pm2**.                                                                                            |
+| `pkg upgrade` skips `cloudflared`/`postgresql`                                | Both are deliberately held because upgrading them kills the tunnel or makes the database unreadable.                                                                    | Follow `panel docs packages` for a safe upgrade. Do not `pkg upgrade` to fix "installed incomplete" packages; use `dpkg --configure -a`.                                                                                                                |
 | The server dies when the screen is off or after the phone restarts            | Android battery optimization, Termux:Boot never opened, wake-lock not active, or the phantom process killer.                                                            | Follow `panel docs android`: battery "Unrestricted" for Termux, Termux:Boot, Termux:API (Xiaomi/POCO: Autostart), open Termux:Boot once, allow wake-lock, disable the phantom process killer (Android 12+). After a reboot, unlock the phone once.   |
-| Deploy cancelled: app not healthy                                             | The app did not answer the health check within the time limit, or pm2 restarted it.                                                                                     | The deploy has already been rolled back to `app.prev`. Check the log in **Riwayat perubahan** (Change history), check the health check path/status/time limit in the site details, then deploy again. See [Deploying binaries](#deploying-binaries). |
-| Deploy upload interrupted                                                     | The network dropped or the page was reloaded.                                                                                                                           | **Lanjutkan unggahan** (Resume upload) within 1 hour. Needs free space equal to the file size + 200 MB.                                                                                                                                              |
-| Backup fails                                                                  | The S3/R2 endpoint, bucket, or keys are wrong, or the token lacks a needed permission.                                                                                  | **Pengaturan → Cadangan → Uji koneksi** (Settings → Backups → Test connection), then **Cadangkan sekarang** (Back up now). Retention being refused by a token without delete permission is expected ([Backup and restore](#backup-and-restore)).     |
-| "Kunci data tidak cocok" (Data key mismatch)                                  | `PANEL_DATA_DIR/secret` is missing or swapped.                                                                                                                          | Restore the old file, or choose "Hapus pengaturan rahasia lama" (Delete old secret settings) and re-enter them ([Data key](#data-key)).                                                                                                              |
+| Deploy cancelled: app not healthy                                             | The app did not answer the health check within the time limit, or pm2 restarted it.                                                                                     | The deploy has already been rolled back to `app.prev`. Check the log in **Change history**, check the health check path/status/time limit in the site details, then deploy again. See [Deploying binaries](#deploying-binaries). |
+| Deploy upload interrupted                                                     | The network dropped or the page was reloaded.                                                                                                                           | **Resume upload** within 1 hour. Needs free space equal to the file size + 200 MB.                                                                                                                                              |
+| Backup fails                                                                  | The S3/R2 endpoint, bucket, or keys are wrong, or the token lacks a needed permission.                                                                                  | **Settings → Backup → Test connection**, then **Back up now**. Retention being refused by a token without delete permission is expected ([Backup and restore](#backup-and-restore)).     |
+| "The data key doesn't match"                                                  | `PANEL_DATA_DIR/secret` is missing or swapped.                                                                                                                          | Restore the old file, or choose "Delete old secret settings" and re-enter them ([Data key](#data-key)).                                                                                                              |
 | `panel init` exits with code 3                                                | A step needs action in the terminal (Cloudflare login, moving DNS, restarting cloudflared, approving the plan).                                                         | Run the same line in the Termux app (not ssh without `-t`) and follow its messages.                                                                                                                                                                  |
 | `panel init` exits with code 1                                                | Problems remain at the end; init prints the list with hints.                                                                                                            | Follow those hints, then run the same line again. If the new panel fails to start: [`panel rollback`](#rollback).                                                                                                                                    |
 | The panel does not start after an upgrade, the log mentions a failed snapshot | The pre-migration snapshot failed, usually because storage is full.                                                                                                     | Free up space, or set `PANEL_SKIP_SNAPSHOT=1` in `~/panel/.env` for one start and then remove it. Or `panel rollback`.                                                                                                                               |
@@ -316,41 +319,41 @@ The panel creates a snapshot `panel.db.<old version>.<time>` in `<PANEL_DATA_DIR
 | `admin`       | `/panel`   | Overview, Sites (create/adopt/deploy/delete), runit Services, pm2 Apps, Domains, Databases, Backups, Change history, Problem history |
 | `super_admin` | `/panel`   | Everything in `admin`, plus Administration at `/dev`: System health, Users, Audit, Logs, Settings                                    |
 
-Higher roles can open all pages of the roles below them. The super admin also lands on `/panel`; Administration is in the side menu (on a phone: the **Lainnya** (More) menu in the bottom bar).
+Higher roles can open all pages of the roles below them. The super admin also lands on `/panel`; Administration is in the side menu (on a phone: the **More** menu in the bottom bar).
 
-`/` is the public introduction page (no sign-in); its button is "Masuk dengan Google" (Sign in with Google) for visitors or "Buka panel" (Open panel) to the role's home page when signed in. After Google sign-in, users return to `/login` and are forwarded to their role's home page. Unknown addresses answer 404: visitors see a public "tidak ditemukan" (not found) page with a link to `/`, signed-in users see a 404 inside the panel.
+`/` is the public introduction page (no sign-in); its button is "Sign in with Google" for visitors or "Open panel" to the role's home page when signed in. After Google sign-in, users return to `/login` and are forwarded to their role's home page. Unknown addresses answer 404: visitors see a public "Page not found" page with a link to `/`, signed-in users see a 404 inside the panel.
 
 ### Sign-in and roles
 
-- Anyone with a Google account can sign in. New accounts start as `user` (only `/profile`, with a "belum punya akses" (no access yet) explanation).
+- Anyone with a Google account can sign in. New accounts start as `user` (only `/profile`, with a "doesn't have access to this panel yet" explanation).
 - Emails in `SUPER_ADMIN_EMAILS` become `super_admin` on sign-in.
-- Make someone admin under **Administrasi → Pengguna** (Administration → Users) (change the role to `admin`). The `super_admin` role only comes from env. If the panel uses Cloudflare Access, add that email to the Access policy too.
+- Make someone admin under **Administration → Users** (change the role to `admin`). The `super_admin` role only comes from env. If the panel uses Cloudflare Access, add that email to the Access policy too.
 - **Admins have full control of the phone.** An admin can deploy programs that run with the same access as the panel, so they can read all files, databases, and the data key, and then make themselves super admin. Only give the Admin role to people you trust like the phone's owner.
-- Sign-in sessions last at most 30 days. Under **Profil** (Profile) you can see and revoke active sessions; the super admin can revoke other users' sessions and use "Keluarkan semua pengguna" (Sign out all users) in System health.
+- Sign-in sessions last at most 30 days. Under **Profile** you can see and revoke active sessions and choose the language; the super admin can revoke other users' sessions and use "Sign out every user" in System health.
 - Users with the `user` role can delete their own account from Profile. Audit records about that account are kept until they pass `audit.retention_days` (default 365 days).
 
 ## Monitoring and notifications
 
-- One sampler reads the phone (battery, memory, storage, load), runit services, pm2 apps, domains, and backups every `monitor.sample_interval_sec` (default 60 seconds). **Ringkasan** (Overview, `/panel`) shows problems first, or "Semua sehat" (All healthy). Idle CPU cost is about 1% on the test phone.
+- One sampler reads the phone (battery, memory, storage, load), runit services, pm2 apps, domains, and backups every `monitor.sample_interval_sec` (default 60 seconds). **Overview** (`/panel`) shows problems first, or "All healthy". Idle CPU cost is about 1% on the test phone.
 - Metric history (24-hour and 7-day battery/memory charts) and the last 30 checks per domain are kept for 7 days (±3 MB); problem history (`/panel/problems`) for 30 days. Flash writes are about 70-100 MB per day at the default interval; a larger interval cuts that.
-- Battery level only counts as a problem when it is **low and not charging** (`monitor.battery_warn_percent`; below 15% is always severe); unplugging the charger by itself is not a problem. A hot battery is reported separately. A temperature that cannot be read is shown as "tidak ada data" (no data), not 0 °C.
+- Battery level only counts as a problem when it is **low and not charging** (`monitor.battery_warn_percent`; below 15% is always severe); unplugging the charger by itself is not a problem. A hot battery is reported separately. A temperature that cannot be read is shown as "Not available", not 0 °C.
 - An app that crashes repeatedly is only detected after the panel has been running for a few minutes, because the count is kept in memory.
-- **Telegram**: create a bot with @BotFather, fill in **Token bot Telegram** (Telegram bot token) under Settings → Telegram notifications, send any message to the bot, then press **Cari chat** (Find chat) and **Kirim pesan uji** (Send test message). The panel sends one summary message per sampler round: when a problem appears, when it gets worse, a reminder if it is still open after 24 hours, and when it recovers. The same problem is not resent within 15 minutes, and the number of messages per hour is limited. "Cadangan belum diatur" (Backups not configured) and "Access belum terdeteksi" (Access not detected yet) are informational only and are not sent.
+- **Telegram**: create a bot with @BotFather, fill in **Telegram bot token** under Settings → Telegram alerts, send any message to the bot, then press **Find chats** and **Send test message**. **Telegram language** picks English or Indonesian for the messages. The panel sends one summary message per sampler round: when a problem appears, when it gets worse, a reminder if it is still open after 24 hours, and when it recovers. The same problem is not resent within 15 minutes, and the number of messages per hour is limited. "Backup isn't set up" and "Cloudflare Access not detected" are informational only and are not sent.
 - The panel **cannot report its own death**. When it comes back up, the panel reports if the phone has just rebooted or the previous panel stopped abnormally. To know when the phone is down, use an external monitor (e.g. a periodic HTTP check to `https://panel.<domain>/api/health`).
 - The log pages mask known secret values (site `.env` contents, tokens) before showing or downloading them. This masking is not perfect: do not write secrets to your app logs.
 
 ## pm2 integration (`apps.json`)
 
-The panel owns `~/sites/apps.json` (created automatically at start if missing). For pm2 to run sites created by the panel, `~/sites/ecosystem.config.js` must include the entries from `apps.json`. The **Situs → Persiapan** (Sites → Setup) page checks this (loading the ecosystem with `node` like pm2 does) and shows one row per problem.
+The panel owns `~/sites/apps.json` (created automatically at start if missing). For pm2 to run sites created by the panel, `~/sites/ecosystem.config.js` must include the entries from `apps.json`. The **Sites → Setup** page checks this (loading the ecosystem with `node` like pm2 does) and shows one row per problem.
 
-**Fix from the panel.** When the panel can fix it itself, the row has a **Perbaiki** (Fix) button, and the card has **Perbaiki semua (n)** (Fix all). The panel first shows what it means in plain language (hand-written apps that stay, panel sites that are added), with **Lihat perubahan pada file** (View file changes) for the diff, then **Terapkan** (Apply):
+**Fix from the panel.** When the panel can fix it itself, the row has a **Fix** button, and the card has **Fix all (n)**. The panel first shows what it means in plain language (hand-written apps that stay, panel sites that are added), with **Show the file changes** for the diff, then **Apply**:
 
-- In `ecosystem.config.js` the panel only adds a block marked `panel-termux:apps v1` at the **end** of the file (and removes an old `...require("./apps.json")` if present). Hand-written apps are not changed or restarted. The `pm2-guard` keeper is only added when there are no hand-written apps.
-- In the pm2 service run script the panel only adds `--no-auto-exit` after `pm2-runtime`. This takes effect at the next pm2 start (phone or pm2 restarted). **Mulai ulang pm2 sekarang** (Restart pm2 now) (optional, asks for a confirmation that names the running apps) checks that all apps are running again; if not, the panel offers **Kembalikan file ecosystem dan mulai ulang pm2** (Restore the ecosystem file and restart pm2). If the restart would stop apps not listed in `ecosystem.config.js`, the confirmation names them and asks you to type `pm2`.
-- Site folders that do not exist yet can be created from the same card. A broken `apps.json` is rebuilt from the panel's site list, and a missing `ecosystem.config.js` is created from the template [`deploy/pm2/ecosystem.config.js`](deploy/pm2/ecosystem.config.js). After a fix that takes effect at the next pm2 start, the card offers **Mulai ulang pm2 sekarang** (Restart pm2 now).
-- Before writing, the panel validates the result with `node`; if that fails, the old file stays in use ("Tidak diterapkan", Not applied). pm2 is never restarted by the fix itself.
-- **Batalkan perubahan** (Undo changes) restores each changed file to its version before the fix (one undo per file). Copies are kept in `<PANEL_DATA_DIR>/fix-backups/`, the last 10 per file, only on the phone (not included in R2/S3 backups because the ecosystem can contain secret `env`).
-- Files that cannot be changed safely (not UTF-8, symlink, broken block marker, `apps.json` used in another way) are not touched. The row states the reason and opens **Cara manual (untuk pengguna teknis)** (Manual steps, for technical users).
+- In `ecosystem.config.js` the panel only adds a block marked `panel-termux:apps v2` at the **end** of the file (and removes an old `...require("./apps.json")` if present). Hand-written apps are not changed or restarted. The `pm2-guard` keeper is only added when there are no hand-written apps. A `v1` block from 0.5.x still works (its code is the same, only the comments were Indonesian); Setup reports it as an older version and **Fix** replaces it.
+- In the pm2 service run script the panel only adds `--no-auto-exit` after `pm2-runtime`. This takes effect at the next pm2 start (phone or pm2 restarted). **Restart pm2 now** (optional, asks for a confirmation that names the running apps) checks that all apps are running again; if not, the panel offers **Restore the ecosystem file and restart pm2**. If the restart would stop apps not listed in `ecosystem.config.js`, the confirmation names them and asks you to type `pm2`.
+- Site folders that do not exist yet can be created from the same card. A broken `apps.json` is rebuilt from the panel's site list, and a missing `ecosystem.config.js` is created from the template [`deploy/pm2/ecosystem.config.js`](deploy/pm2/ecosystem.config.js). After a fix that takes effect at the next pm2 start, the card offers **Restart pm2 now**.
+- Before writing, the panel validates the result with `node`; if that fails, the old file stays in use ("Not applied"). pm2 is never restarted by the fix itself.
+- **Undo change** restores each changed file to its version before the fix (one undo per file). Copies are kept in `<PANEL_DATA_DIR>/fix-backups/`, the last 10 per file, only on the phone (not included in R2/S3 backups because the ecosystem can contain secret `env`).
+- Files that cannot be changed safely (not UTF-8, symlink, broken block marker, `apps.json` used in another way) are not touched. The row states the reason and opens **Manual steps (for technical users)**.
 
 <details>
 <summary>Manual steps (for technical users)</summary>
@@ -358,9 +361,9 @@ The panel owns `~/sites/apps.json` (created automatically at start if missing). 
 New phones use the template [`deploy/pm2/ecosystem.config.js`](deploy/pm2/ecosystem.config.js) (an exact copy of `files/sites/ecosystem.config.js` in [server-termux](https://github.com/makurosolusi/server-termux), its source), which contains the following `panelApps` block with `...panelApps` as the last element of `apps`. Setup still considers this snippet correct:
 
 ```js
-// Panel Termux: situs buatan panel tercatat di apps.json (dikelola panel, jangan diedit tangan).
-// Aman bila apps.json belum ada, kosong, atau rusak; entri yang binary-nya belum ada dilewati,
-// karena satu script yang hilang membuat pm2-runtime menghentikan semua aplikasi.
+// Panel Termux: sites created by the panel are listed in apps.json (managed by the panel, do not edit by hand).
+// Safe when apps.json is missing, empty or broken; entries whose binary does not exist yet are skipped,
+// because one missing script makes pm2-runtime stop every app.
 const panelApps = (() => {
   try {
     const fs = require("fs");
@@ -372,41 +375,41 @@ const panelApps = (() => {
         )
       : [];
   } catch (e) {
-    console.error(`[ecosystem] apps.json dilewati: ${e.message}`);
+    console.error(`[ecosystem] apps.json skipped: ${e.message}`);
     return [];
   }
 })();
 
 module.exports = {
   apps: [
-    // entri tulisan tangan tetap seperti semula
+    // hand-written entries stay as they are
     ...panelApps,
   ],
 };
 ```
 
-(The comments in this snippet are Indonesian because it is copied verbatim from the template.) For hand-written files, the Manual steps section of the Setup card shows a ready-to-copy `panel-termux:apps v1` block to paste at the end of the file.
+(The comments in this snippet are Indonesian because it is copied verbatim from the template.) For hand-written files, the Manual steps section of the Setup card shows a ready-to-copy `panel-termux:apps v2` block to paste at the end of the file.
 
 </details>
 
-- The old `...require("./apps.json")` snippet from 0.2.x is flagged as an error in Setup. That snippet throws if `apps.json` is missing or broken, and one entry with a missing binary makes pm2-runtime stop **all** apps. **Perbaiki** (Fix) replaces it with the panel block.
+- The old `...require("./apps.json")` snippet from 0.2.x is flagged as an error in Setup. That snippet throws if `apps.json` is missing or broken, and one entry with a missing binary makes pm2-runtime stop **all** apps. **Fix** replaces it with the panel block.
 - **Do not remove `pm2-guard`.** pm2-runtime exits if the ecosystem has no apps at start, even with `--no-auto-exit`. The `pm2-guard` keeper app (`sleep infinity`, ±1 MB) keeps it alive on phones that have no sites yet. The panel hides it from the Apps list.
-- The `pm2` runit service should run `pm2-runtime --no-auto-exit` (see [`deploy/pm2/run`](deploy/pm2/run)). The panel never calls the `pm2` CLI while that service is down, so it does not start a second pm2 daemon; pages that need pm2 show "pm2 tidak berjalan" (pm2 is not running) with a **Jalankan pm2** (Start pm2) button (**Jalankan postgres** (Start postgres) for postgres). That button also removes the service's `down` file so the service starts again after the phone restarts.
-- Sites recorded in the panel but missing from pm2 are marked "Tidak berjalan di pm2" (Not running in pm2) with a **Jalankan lagi** (Start again) button. Adopted sites are loaded from `ecosystem.config.js`.
+- The `pm2` runit service should run `pm2-runtime --no-auto-exit` (see [`deploy/pm2/run`](deploy/pm2/run)). The panel never calls the `pm2` CLI while that service is down, so it does not start a second pm2 daemon; pages that need pm2 show "pm2 isn't running" with a **Start pm2** button (**Start postgres** for postgres). That button also removes the service's `down` file so the service starts again after the phone restarts.
+- Sites recorded in the panel but missing from pm2 are marked "Not running in pm2" with a **Start again** button. Adopted sites are loaded from `ecosystem.config.js`.
 
 ## Creating a site
 
-**Situs → Buat situs** (Sites → Create site): fill in the name, one or more hostnames, a port (suggested automatically from `sites.port_range`), an optional database, and extra `.env` variables. The wizard checks the name, port, and hostname as you type. The panel runs the change in stages: folder `~/sites/<name>` → Postgres database and role (optional, `DATABASE_URL` is written to `.env`) → `.env` (`PORT` filled in by the panel) → `apps.json` entry → `config.yml` ingress (validated by cloudflared first, backup `config.yml.bak`) → DNS CNAME → one cloudflared restart. If one step fails, earlier steps are undone. Per-step progress, duration, and logs are visible in **Riwayat perubahan** (Change history, `/panel/jobs`).
+**Sites → Create site**: fill in the name, one or more hostnames, a port (suggested automatically from `sites.port_range`), an optional database, and extra `.env` variables. The wizard checks the name, port, and hostname as you type. The panel runs the change in stages: folder `~/sites/<name>` → Postgres database and role (optional, `DATABASE_URL` is written to `.env`) → `.env` (`PORT` filled in by the panel) → `apps.json` entry → `config.yml` ingress (validated by cloudflared first, backup `config.yml.bak`) → DNS CNAME → one cloudflared restart. If one step fails, earlier steps are undone. Per-step progress, duration, and logs are visible in **Change history** (`/panel/jobs`).
 
-DNS is created through the Cloudflare API token if set. Without a token, the panel uses the phone's cloudflared login (`~/.cloudflared/cert.pem`, `cloudflared tunnel route dns`) and only accepts the result if cloudflared creates a record with exactly the same name; deleting that record later still needs a token. If neither is available, or cloudflared creates the record in another zone, the DNS step is skipped (the site is still created) and the panel shows a ready-to-copy record card (type, name, content, proxy) with **Periksa lagi** (Check again). The wizard summary states which DNS method will be used.
+DNS is created through the Cloudflare API token if set. Without a token, the panel uses the phone's cloudflared login (`~/.cloudflared/cert.pem`, `cloudflared tunnel route dns`) and only accepts the result if cloudflared creates a record with exactly the same name; deleting that record later still needs a token. If neither is available, or cloudflared creates the record in another zone, the DNS step is skipped (the site is still created) and the panel shows a ready-to-copy record card (type, name, content, proxy) with **Check again**. The wizard summary states which DNS method will be used.
 
-On the site details page: add/remove domains, edit environment variables (paste a `.env` with a preview; "Simpan" (Save) or "Simpan dan mulai ulang" (Save and restart), which restores the old values if the app fails to become healthy), restart, and health check settings (path, expected status, time limit 10-300 seconds, default 60).
+On the site details page: add/remove domains, edit environment variables (paste a `.env` with a preview; "Save" or "Save and restart", which restores the old values if the app fails to become healthy), restart, and health check settings (path, expected status, time limit 10-300 seconds, default 60).
 
 Domain routes written manually in `config.yml` can also be removed from the site details: type the domain name to confirm. The panel only removes that route line; the rest of the config is not changed.
 
-If a site folder is missing from the phone, deploying to a panel-created site without a database recreates that folder. For sites with a database or adopted sites, the panel does not guess their contents and shows guidance with **Hapus situs** (Delete site) and **Buka Cadangan** (Open Backups).
+If a site folder is missing from the phone, deploying to a panel-created site without a database recreates that folder. For sites with a database or adopted sites, the panel does not guess their contents and shows guidance with **Delete site** and **Open Backups**.
 
-Interrupted changes (panel restarted midway) show as "Terputus" (Interrupted) with a **Pulihkan** (Recover) button, which cleans up the remaining steps; an interrupted site or domain deletion can be retried (**Ulangi hapus situs** (Retry site deletion), **Ulangi hapus domain** (Retry domain deletion)).
+Interrupted changes (panel restarted midway) show as "Interrupted" with a **Recover** button, which cleans up the remaining steps; an interrupted site or domain deletion can be retried (**Retry site deletion**, **Retry domain removal**).
 
 ## Deploying binaries
 
@@ -419,15 +422,15 @@ bun build --compile --target=bun-linux-arm64 src/index.ts --outfile app         
 
 - Uploads are sent in 8 MB chunks (Cloudflare limits request bodies to 100 MB), up to 300 MB, and each chunk's SHA-256 is checked. An interrupted upload (network, page reload) can be continued with **Lanjutkan unggahan** (Resume upload) for 1 hour; after that it is discarded. Uploads need free space in the data dir equal to the file size + 200 MB.
 - The panel keeps the old binary as `app.prev` (on Termux this is a copy, so every deploy writes about the binary's size to flash, ±89 MB for a typical Bun app), swaps `app`, adjusts the runtime in `apps.json`, restarts the pm2 app, then waits until the app is **healthy**: the port answers according to the health check settings twice in a row **and** pm2 shows the same pid with no new restart, still true after 5 seconds. If it is not healthy within the time limit, the deploy is rolled back automatically.
-- **Kembalikan versi sebelumnya** (Restore previous version) uses `app.prev`. What is not restored: environment variables (`.env`), database contents and structure, files in `data/`, and domains.
+- **Restore previous version** uses `app.prev`. What is not restored: environment variables (`.env`), database contents and structure, files in `data/`, and domains.
 
 ## Adopting existing sites
 
-pm2 apps that are already running but not yet managed by the panel appear under **Belum dikelola** (Not managed yet) on the Sites page and can be adopted: the panel records them (name, hostname from the ingress, port, pm2 app name, runtime) without changing any files. Deploying to an adopted site swaps `~/sites/<name>/app` and restarts its pm2 app; `apps.json` is not touched. Deleting an adopted site only removes the ingress/DNS the panel added and its record.
+pm2 apps that are already running but not yet managed by the panel appear under **Not managed yet** on the Sites page and can be adopted: the panel records them (name, hostname from the ingress, port, pm2 app name, runtime) without changing any files. Deploying to an adopted site swaps `~/sites/<name>/app` and restarts its pm2 app; `apps.json` is not touched. Deleting an adopted site only removes the ingress/DNS the panel added and its record.
 
 ## Backup and restore
 
-Fill in the **Cadangan** (Backups) group in Settings, press **Uji koneksi** (Test connection), and backups then run daily at `backup.hour` (or **Cadangkan sekarang** (Back up now) on the **Cadangan** (Backups) page). One run uploads, under `<prefix><yyyy-mm-dd>/<HHMMSS>-`:
+Fill in the **Backup** group in Settings, press **Test connection**, and backups then run daily at `backup.hour` (or **Back up now** on the **Backups** page). One run uploads, under `<prefix><yyyy-mm-dd>/<HHMMSS>-`:
 
 | File                 | Contents                                                                                                            |
 | -------------------- | ------------------------------------------------------------------------------------------------------------------- |
@@ -444,15 +447,15 @@ The Backups page shows the last valid backup of each item, the run history, and 
 
 **Retention**: after a run that did not fail, objects older than `backup.retention_days` are deleted, except the `backup.keep_min_runs` latest successful runs and the last valid backup of each item, which are always kept. As a result, the last backup of a deleted site's database is **kept forever**; delete it manually in the bucket when no longer needed. Retention does not delete objects the panel has not recorded.
 
-**Token without delete permission** (the best protection if the phone is stolen, because a thief cannot delete the backups): give the R2 token read/write permission only. When retention is refused, the panel stops trying for that run and marks "retensi diserahkan ke lifecycle rule bucket" (retention handed over to the bucket's lifecycle rule). Set an object expiration lifecycle rule on the bucket, at least 30 days. Lifecycle deletes by age, so the last valid backup of each item is not guaranteed to be kept; watch for stale backup warnings in the Overview.
+**Token without delete permission** (the best protection if the phone is stolen, because a thief cannot delete the backups): give the R2 token read/write permission only. When retention is refused, the panel stops trying for that run and notes that retention is left to the bucket's lifecycle rule. Set an object expiration lifecycle rule on the bucket, at least 30 days. Lifecycle deletes by age, so the last valid backup of each item is not guaranteed to be kept; watch for stale backup warnings in the Overview.
 
-**Restore test**: on the Backups page, **Pulihkan ke database baru** (Restore to a new database) restores a dump into a new database `<db>_r<yyyymmddHHMM>` without touching the original. Delete that test database after checking it.
+**Restore test**: on the Backups page, **Restore to a new database** restores a dump into a new database `<db>_r<yyyymmddHHMM>` without touching the original. Delete that test database after checking it.
 
 Deleting a site that has a database is refused while a backup is running.
 
 ### Data key
 
-`PANEL_DATA_DIR/secret` encrypts the secret settings (Cloudflare token, S3 keys, Telegram token). This file is **not** included in backups unless `backup.include_secrets` is turned on. Download a copy under **Kesehatan sistem → Kunci data** (System health → Data key) (needs a fresh session) and keep it somewhere safe. If this file is lost or swapped, the panel still starts with a new key, marks "Kunci data tidak cocok" (Data key mismatch), and refuses to save secret settings until the old file is restored or you choose "Hapus pengaturan rahasia lama" (Delete old secret settings) and re-enter them.
+`PANEL_DATA_DIR/secret` encrypts the secret settings (Cloudflare token, S3 keys, Telegram token). This file is **not** included in backups unless `backup.include_secrets` is turned on. Download a copy under **System health → Data key** (needs a fresh session; the file is `panel-termux-data-key-<date>.txt`) and keep it somewhere safe. If this file is lost or swapped, the panel still starts with a new key, reports "The data key doesn't match", and refuses to save secret settings until the old file is restored or you choose "Delete old secret settings" (type `delete` to confirm) and re-enter them.
 
 Restore `panel.db` on the same phone:
 
@@ -489,7 +492,7 @@ Assumptions: the new phone is clean, you have a Cloudflare account (dashboard + 
    pkg upgrade -y && pkg install -y rclone cloudflared
    ```
 
-   `pkg upgrade` is safe here because this phone has no PostgreSQL data yet. After step 11, do not run `pkg upgrade` carelessly (see `panel docs paket`).
+   `pkg upgrade` is safe here because this phone has no PostgreSQL data yet. After step 11, do not run `pkg upgrade` carelessly (see `panel docs packages`).
 
 3. **Read-only R2 token**: in the Cloudflare dashboard → R2 → Manage API tokens → create an **Object Read only** token for bucket `BUCKET`. Note the Access Key ID, Secret Access Key, and endpoint `https://<account>.r2.cloudflarestorage.com`. In Termux, type the values yourself; these commands do not print the secret:
 
@@ -568,7 +571,7 @@ Assumptions: the new phone is clean, you have a Cloudflare account (dashboard + 
 
     Follow the notes init prints at the end (battery permission, open Termux:Boot once), then reboot and unlock the phone once. Check with `SVDIR=$PREFIX/var/service sv status postgres cloudflared pm2 panel`: all must be `run:`. If interrupted midway, run the same command again.
 
-    Hand-written apps in `ecosystem.config.js` (e.g. your own `apps` list) are still run by pm2-runtime, which reads that file; init does not change or restart them. If **Situs → Persiapan** (Sites → Setup) asks for adjustments, press **Perbaiki** (Fix) there. pm2 apps will be **errored** until step 14 because site binaries are not backed up.
+    Hand-written apps in `ecosystem.config.js` (e.g. your own `apps` list) are still run by pm2-runtime, which reads that file; init does not change or restart them. If **Sites → Setup** asks for adjustments, press **Fix** there. pm2 apps will be **errored** until step 14 because site binaries are not backed up.
 
 12. **Postgres roles and databases**. Compare `postgresVersion` in the manifest with `psql -V`: the new phone's major version must be ≥ the old major.
 
@@ -579,7 +582,7 @@ Assumptions: the new phone is clean, you have a Cloudflare account (dashboard + 
     ```
 
 13. **Sign-in and key**: open `APP_BASE_URL`, sign in with Google.
-    - If step 10 (c): Administrasi → Kesehatan sistem → Kunci data (Administration → System health → Data key) → "Hapus pengaturan rahasia lama" (Delete old secret settings), then Pengaturan (Settings) → re-enter the Cloudflare API token, new R2 keys with read/write/delete permission (not the read-only token from step 3), and the Telegram bot token. Then "Uji koneksi" (Test connection).
+    - If step 10 (c): Administration → System health → Data key → "Delete old secret settings", then Settings → re-enter the Cloudflare API token, new R2 keys with read/write/delete permission (not the read-only token from step 3), and the Telegram bot token. Then "Test connection".
     - Delete the read-only token from step 3 in the R2 dashboard.
 14. **Site binaries**: for every `sites[].needsBinary` in the manifest, open the site in the panel → Deploy → upload the binary from your build (CI/laptop). The deploy restarts its app, and pm2-runtime reads `~/sites/ecosystem.config.js`, so `pm2 save` is not needed.
 15. **Final check**:
@@ -587,7 +590,7 @@ Assumptions: the new phone is clean, you have a Cloudflare account (dashboard + 
     - Overview with no red problems;
     - Zero Trust dashboard → the tunnel shows **one** connector;
     - `rm -rf ~/pulih`, drop the rclone configuration (`unset RCLONE_CONFIG_R2_*`);
-    - run "Cadangkan sekarang" (Back up now).
+    - run "Back up now".
 
 </details>
 
@@ -606,10 +609,10 @@ Assumptions: the new phone is clean, you have a Cloudflare account (dashboard + 
 - **Trust model**: the super admin and admins are both equivalent to the phone's owner (see [Sign-in and roles](#sign-in-and-roles)). Site programs you deploy also run with the same access as the panel.
 - **The super admin's Google account is the master key.** Turn on 2-Step Verification or a passkey on that account. If possible, add a second factor in the Access policy (e.g. a One-time PIN to another email).
 - API requests that change data (`POST`/`PUT`/`PATCH`/`DELETE` on `/api/*`, except `/api/auth/*`, which Better Auth guards) are only accepted from the panel's own pages: the `Origin` header must equal `APP_BASE_URL`, `Sec-Fetch-Site` (if present) must be `same-origin`, and the header `X-Requested-With: XMLHttpRequest` is required; otherwise the answer is `403 { "error": "forbidden_origin" }`. This closes CSRF attacks from other sites on the same domain (e.g. `solusi.<domain>`), which still carry the panel's session cookie. Non-browser clients (curl/scripts) just need to send `X-Requested-With: XMLHttpRequest`. Requests with an unknown `Host` header get `421`.
-- **Fresh session**: downloading or resetting the data key, downloading the `secrets` item, turning on `backup.include_secrets`, and changing the backup endpoint/bucket/prefix need a sign-in no older than 15 minutes; otherwise the panel offers "Masuk ulang" (Sign in again). This protects against cookies stolen on another device, not against a taken-over Google account.
+- **Fresh session**: downloading or resetting the data key, downloading the `secrets` item, turning on `backup.include_secrets`, and changing the backup endpoint/bucket/prefix need a sign-in no older than 15 minutes; otherwise the panel offers "Sign in again". This protects against cookies stolen on another device, not against a taken-over Google account.
 - Super admins from env are re-synced on every boot and sign-in (emails removed from env drop to `user`).
 - Secret values in settings are encrypted with the data key (`PANEL_DATA_DIR/secret`, created automatically, mode 600). Keep a separate copy (see [Data key](#data-key)).
-- The audit log records who (name, email, masked IP), when, and from which device for every change; it can be filtered and exported as CSV under Administration → Audit.
+- The audit log records who (name, email, masked IP), when, and from which device for every change; it can be filtered and exported as CSV under Administration → Audit (header: `time,actor,actor_email,action,target,ip_masked,request_id`).
 - The panel only listens on `127.0.0.1`. Never expose the panel port to the public/LAN; access it through the tunnel, with private paths behind Cloudflare Access.
 - The panel `.env` and site `.env` files are stored with mode 600.
 
