@@ -20,6 +20,7 @@
 - Petunjuk di `panel doctor`, `panel docs`, bantuan CLI, dan landing page kini menunjuk ke `panel init`.
 - Build tanpa tag rilis (build lokal) hanya dipasang oleh `panel init` bila `PANEL_DEV_INSTALL=1` diset, karena tidak bisa dicek dengan `SHA256SUMS`. Runtime bun tidak pernah dipasang.
 - Pertanyaan tunnel (login Cloudflare, restart cloudflared) diajukan sebelum DNS atau `config.yml` diubah. Tanpa terminal, tunnel dilewati tanpa perubahan, langkah lain tetap jalan, dan init keluar dengan kode 3.
+- README baru dengan tangkapan layar fitur, pemecahan masalah, dan troubleshooting.
 
 ### Removed
 
