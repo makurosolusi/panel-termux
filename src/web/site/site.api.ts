@@ -1,6 +1,5 @@
 import { createElement, useEffect, useState } from "react";
-import { toast } from "sonner";
-import type { FixKey, FixPreview, FixResult, Pm2RestartResult } from "@/shared/fix.types";
+import type { FixBlockReason, FixKey, FixPreview, FixResult, Pm2RestartResult } from "@/shared/fix.types";
 import type { Integration, JobAccepted, SiteCheckRequest, SiteCheckResult } from "@/shared/site.types";
 import { CodeText } from "@/web/components/code-text";
 import { idServiceStart } from "@/web/i18n/id.service-start";
@@ -9,6 +8,7 @@ import { panelUrl } from "@/web/panel/panel.api";
 import { ERROR_TOAST_MS } from "@/web/shared/api.action";
 import { ApiError, apiErrorMessage, apiFetch } from "@/web/shared/api.client";
 import { startService } from "@/web/shared/service-start";
+import { toast } from "@/web/shared/toast.lazy";
 
 /** Error copy of the site API by code (409 `busy` = another change is running). */
 export const SITE_ERROR_CODES: Readonly<Record<string, string>> = idSite.errorCodes;
@@ -105,6 +105,16 @@ export function useSiteCheck(req: SiteCheckRequest | null) {
 /** Error copy of the fix endpoints: the fix-specific text wins over the site one (e.g. `busy`). */
 export const FIX_ERROR_CODES: Readonly<Record<string, string>> = { ...SITE_ERROR_CODES, ...idSite.setup.errors };
 
+/** Message of a fix-endpoint error; 422 `not_fixable` names why (the `reason` the server sent). */
+export function fixErrorMessage(err: unknown): string {
+  const t = idSite.setup;
+  const why =
+    err instanceof ApiError && err.code === "not_fixable" && err.reason
+      ? t.unfixable[err.reason as FixBlockReason]
+      : undefined;
+  return why ? `${why} ${t.unfixableElsewhere}` : apiErrorMessage(err, FIX_ERROR_CODES);
+}
+
 const integrationUrl = (rest: string) => panelUrl(`/integration${rest}`);
 
 /** POST /integration/fixes/:key/preview (writes nothing). */
@@ -151,5 +161,5 @@ export function toastFixRun(run: FixRun): void {
     toast.warning(t.notApplied, { duration: ERROR_TOAST_MS });
     return;
   }
-  toastSiteError(run.error, FIX_ERROR_CODES);
+  toastSiteError(run.error, { ...FIX_ERROR_CODES, not_fixable: fixErrorMessage(run.error) });
 }

@@ -2,10 +2,10 @@
 import { afterAll, afterEach, describe, expect, mock, spyOn, test } from "bun:test";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
-import { toast } from "sonner";
 import { idPanel } from "@/web/i18n/id.panel";
 import { idServiceStart } from "@/web/i18n/id.service-start";
 import { ServiceStartButton, startService } from "@/web/shared/service-start";
+import { toast } from "@/web/shared/toast.lazy";
 
 const realFetch = globalThis.fetch;
 const success = spyOn(toast, "success").mockImplementation(() => 1);

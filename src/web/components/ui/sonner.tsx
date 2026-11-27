@@ -1,6 +1,8 @@
 import { CircleCheckIcon, InfoIcon, Loader2Icon, OctagonXIcon, TriangleAlertIcon } from "lucide-react";
+import { useEffect } from "react";
 import { Toaster as Sonner, type ToasterProps } from "sonner";
 import { idShell } from "@/web/i18n/id.shell";
+import { toasterReady } from "@/web/shared/toast.lazy";
 import { useTheme } from "@/web/theme/theme.store";
 
 /** Phones: stack toasts above the bottom nav and the ActionBar (heights come from styles.css). */
@@ -8,9 +10,10 @@ const MOBILE_OFFSET = {
   bottom: "calc(var(--bottom-nav-h, 0px) + var(--action-bar-h, 0px) + 0.75rem + env(safe-area-inset-bottom))",
 };
 
-/** The app's single toast region: bottom-right, max 3, closable, icons coloured by tone tokens. */
+/** The app's single toast region (mounted lazily by AppLayout, see toast.lazy.ts): bottom-right, max 3, closable, icons coloured by tone tokens. */
 const Toaster = ({ ...props }: ToasterProps) => {
   const { resolved } = useTheme(); // app theme store (web/theme), so no next-themes provider
+  useEffect(toasterReady, []); // runs after Sonner's own effect subscribed, so queued toasts are not lost
   return (
     <Sonner
       theme={resolved}

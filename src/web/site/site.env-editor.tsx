@@ -2,7 +2,6 @@ import { cn } from "cn";
 import { ClipboardPasteIcon, RotateCwIcon, SaveIcon, Trash2Icon, Undo2Icon } from "lucide-react";
 import { useState } from "react";
 import { useNavigate } from "react-router";
-import { toast } from "sonner";
 import type { EnvValueProblem } from "@/shared/env.codec";
 import type { JobAccepted, SiteDetail, SiteEnvSaved, SiteEnvUpdate } from "@/shared/site.types";
 import { ActionBar } from "@/web/components/action-bar";
@@ -12,6 +11,7 @@ import { idSiteDetail } from "@/web/i18n/id.site-detail";
 import { useTaskMode } from "@/web/layout/task.mode";
 import { ERROR_TOAST_MS } from "@/web/shared/api.action";
 import { apiErrorMessage, apiFetch, type ErrorCodes } from "@/web/shared/api.client";
+import { toast } from "@/web/shared/toast.lazy";
 import { EnvPasteDialog, EnvRowsEditor } from "./env.editor";
 import {
   type EnvDraft,

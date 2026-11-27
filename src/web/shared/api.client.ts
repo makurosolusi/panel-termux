@@ -9,7 +9,7 @@ export type ApiErrorKind = "network" | "unauthorized" | "access" | "forbidden" |
 /** Indonesian messages per server error code (`{ error: code }`), owned by each section. */
 export type ErrorCodes = Readonly<Record<string, string>>;
 
-/** Failure of an `/api/*` call; `code`/`serverMessage` come from the `{ error, message }` body when present. */
+/** Failure of an `/api/*` call; `code`/`serverMessage`/`reason` come from the `{ error, message, reason }` body. */
 export class ApiError extends Error {
   constructor(
     readonly kind: ApiErrorKind,
@@ -17,6 +17,8 @@ export class ApiError extends Error {
     readonly code: string | null,
     readonly serverMessage: string | null,
     options?: ErrorOptions,
+    /** Machine-readable sub-code, e.g. why a 422 `not_fixable` cannot be fixed. */
+    readonly reason: string | null = null,
   ) {
     super(`api ${kind}${status ? ` HTTP ${status}` : ""}${code ? ` (${code})` : ""}`, options);
   }
@@ -51,7 +53,8 @@ export function errorFromResponse(status: number, body: unknown): ApiError {
           : "client";
   const code = isErrorBody(body) ? body.error : null;
   const msg = isErrorBody(body) && typeof body.message === "string" ? body.message : null;
-  return new ApiError(kind, status, code, msg);
+  const reason = isErrorBody(body) && typeof body.reason === "string" ? body.reason : null;
+  return new ApiError(kind, status, code, msg, undefined, reason);
 }
 
 /**

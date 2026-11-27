@@ -1,6 +1,6 @@
 import { WrenchIcon } from "lucide-react";
 import { Link } from "react-router";
-import type { FixBlockReason, FixKey } from "@/shared/fix.types";
+import type { FixKey } from "@/shared/fix.types";
 import { hasRole } from "@/shared/roles";
 import type { Integration, IntegrationCheck } from "@/shared/site.types";
 import { CodeText } from "@/web/components/code-text";
@@ -13,8 +13,6 @@ import { ServiceStartButton } from "@/web/shared/service-start";
 import { checkText, rowBlocked, rowFix, visibleChecks } from "./site.adopt";
 
 const t = idSite.setup;
-/** Reason copy; `not_verified` (pre-E11 gate) has none since the gate was removed. */
-const UNFIXABLE: Partial<Record<FixBlockReason, string>> = t.unfixable;
 const CHECK_STATE: Record<IntegrationCheck["state"], StatusKey> = { ok: "done", warning: "attention", error: "failed" };
 
 /** Action of a failing row: Perbaiki, Jalankan pm2, or the plain reason the panel cannot fix it. */
@@ -43,7 +41,7 @@ function RowAction({
   if (!blocked) return null;
   return (
     <span className="text-xs text-muted-foreground">
-      <CodeText>{`${UNFIXABLE[blocked] ?? ""} ${t.unfixableSuffix}`.trim()}</CodeText>
+      <CodeText>{`${t.unfixable[blocked]} ${t.unfixableSuffix}`}</CodeText>
     </span>
   );
 }

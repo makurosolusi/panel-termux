@@ -117,7 +117,6 @@ export const idPanel = {
     emptyBody: "Aplikasi muncul setelah kamu membuat situs atau menambahkannya ke `ecosystem.config.js`.",
     pm2Down: "pm2 tidak berjalan",
     pm2DownBody: "Layanan pm2 tidak berjalan, jadi semua situs ikut berhenti.",
-    openServices: "Buka Layanan",
   },
   domains: {
     title: "Domain",
@@ -169,7 +168,6 @@ export const idPanel = {
     emptyBody: "Database dibuat otomatis saat kamu membuat situs dengan PostgreSQL.",
     postgresDown: "Layanan postgres tidak berjalan",
     postgresDownBody: "Situs yang memakai database tidak bisa diakses sampai postgres berjalan lagi.",
-    openServices: "Buka Layanan",
   },
   log: {
     title: (name: string) => `Log ${name}`,

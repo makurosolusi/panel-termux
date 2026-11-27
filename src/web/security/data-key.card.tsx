@@ -1,6 +1,5 @@
 import { DownloadIcon, Trash2Icon } from "lucide-react";
 import { useState } from "react";
-import { toast } from "sonner";
 import type { SecurityStatus } from "@/shared/security.types";
 import { ConfirmAction } from "@/web/components/confirm-action";
 import { InlineCode } from "@/web/components/inline-code";
@@ -11,6 +10,7 @@ import { StatusBadge } from "@/web/components/status-badge";
 import { Button } from "@/web/components/ui/button";
 import { idSecurity } from "@/web/i18n/id.security";
 import { idSettings } from "@/web/i18n/id.settings";
+import { toast } from "@/web/shared/toast.lazy";
 import { exportDataKey, isReauthRequired, resetDataKey, SECURITY_ERROR_CODES } from "./security.api";
 import { Notice, ReauthNotice } from "./security.notice";
 import { dataKeyStatusKey } from "./security.state";

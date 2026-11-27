@@ -1,11 +1,11 @@
 // Persiapan card with in-UI fixes (PLAN/06 §4): rows, fix buttons, dialog copy, diff, apply run, undo/restart text.
 import { afterAll, afterEach, describe, expect, mock, spyOn, test } from "bun:test";
-import { toast } from "sonner";
 import type { FixAvailability, FixBackup, FixPreview } from "@/shared/fix.types";
 import type { Integration, IntegrationCheck, IntegrationCheckKey } from "@/shared/site.types";
 import { idSite } from "@/web/i18n/id.site";
 import { joinNames } from "@/web/i18n/id.site.setup";
 import { ApiError } from "@/web/shared/api.client";
+import { toast } from "@/web/shared/toast.lazy";
 import { fixDialogTitle } from "@/web/site/fix.dialog";
 import { diffLines } from "@/web/site/fix.diff";
 import { restartDescription, undoDescription } from "@/web/site/setup.actions";
@@ -20,7 +20,7 @@ import {
   setupNeeded,
   visibleChecks,
 } from "@/web/site/site.adopt";
-import { applyFixes, fixExpect, toastFixRun, toastSiteError } from "@/web/site/site.api";
+import { applyFixes, fixErrorMessage, fixExpect, toastFixRun, toastSiteError } from "@/web/site/site.api";
 
 const t = idSite.setup;
 
@@ -36,7 +36,7 @@ const integration = (checks: IntegrationCheck[], fixes?: FixAvailability[], over
     ready: false,
     checks,
     fixes,
-    lastFix: null,
+    lastFixes: [],
     appNames: ["makuro-solusi", "adminneo"],
     snippet: "// >>> panel-termux:apps v1",
     ecosystemPath: "/data/sites/ecosystem.config.js",
@@ -217,6 +217,18 @@ describe("apply run", () => {
     expect(success).not.toHaveBeenCalled();
   });
 
+  test("422 not_fixable names the server's reason; an unknown reason falls back to the generic copy", async () => {
+    stub([[422, { error: "not_fixable", message: "x", reason: "markers_broken" }]]);
+    const run = await applyFixes([preview()]);
+    expect(fixErrorMessage(run.error)).toBe(`${t.unfixable.markers_broken} ${t.unfixableElsewhere}`);
+    toastFixRun(run);
+    const toastEl = error.mock.calls[0]?.[0] as unknown as { props: { children: string } };
+    expect(toastEl.props.children).toBe(`${t.unfixable.markers_broken} ${t.unfixableElsewhere}`);
+    expect(fixErrorMessage(new ApiError("client", 422, "not_fixable", null, undefined, "from_the_future"))).toBe(
+      t.errors.not_fixable,
+    );
+  });
+
   test("pm2 down error toast carries a 'Jalankan pm2' action; other errors do not", () => {
     toastSiteError(new ApiError("client", 409, "pm2_not_running", null));
     const opts = (n: number) => error.mock.calls[n]?.[1] as { action?: { label: string } } | undefined;
@@ -243,7 +255,9 @@ describe("undo and checked restart", () => {
     expect(restartDescription(i)).toBe(
       "Semua aplikasi berhenti beberapa detik lalu berjalan lagi: makuro-solusi dan adminneo. Pengunjung bisa terputus sebentar.",
     );
-    expect(restartDescription({ ...i, lastFix: backup() })).toContain(t.restartPm2FileNote);
+    expect(restartDescription({ ...i, lastFixes: [backup({ file: "pm2_run" }), backup()] })).toContain(
+      t.restartPm2FileNote,
+    );
     expect(t.restartCheckFailed(["adminneo"])).toBe("adminneo tidak berjalan lagi setelah pm2 dimulai ulang.");
   });
 

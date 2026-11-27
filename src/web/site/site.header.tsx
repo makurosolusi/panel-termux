@@ -9,7 +9,6 @@ import {
   UploadIcon,
 } from "lucide-react";
 import { Link, useNavigate } from "react-router";
-import { toast } from "sonner";
 import { type JobAccepted, missingFromPm2, type SiteDetail } from "@/shared/site.types";
 import { CodeText } from "@/web/components/code-text";
 import { ConfirmAction } from "@/web/components/confirm-action";
@@ -26,6 +25,7 @@ import {
 import { idSiteDetail } from "@/web/i18n/id.site-detail";
 import { ERROR_TOAST_MS } from "@/web/shared/api.action";
 import { apiErrorMessage, apiFetch, type ErrorCodes } from "@/web/shared/api.client";
+import { toast } from "@/web/shared/toast.lazy";
 import { deployOutcomeSuffix } from "./job.status-key";
 import { jobPath, siteUrl } from "./site.api";
 import { canRestart, HostLink, SiteAppBadge } from "./site.card";

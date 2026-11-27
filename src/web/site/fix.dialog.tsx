@@ -13,12 +13,11 @@ import {
   DialogTitle,
 } from "@/web/components/ui/dialog";
 import { idSite } from "@/web/i18n/id.site";
-import { apiErrorMessage } from "@/web/shared/api.client";
 import { useReturnFocus } from "@/web/shared/focus.return";
 import { PHONE_SHEET } from "./adopt.dialog";
 import { FixDiff } from "./fix.diff";
 import { fixSummary } from "./site.adopt";
-import { applyFixes, FIX_ERROR_CODES, previewFix, toastFixRun } from "./site.api";
+import { applyFixes, fixErrorMessage, previewFix, toastFixRun } from "./site.api";
 
 const t = idSite.setup.dialog;
 
@@ -80,7 +79,7 @@ function FixBody({
     let live = true;
     Promise.all(keys.map(previewFix)).then(
       (p) => live && setPreviews(p),
-      (err: unknown) => live && setError(apiErrorMessage(err, FIX_ERROR_CODES)),
+      (err: unknown) => live && setError(fixErrorMessage(err)),
     );
     return () => {
       live = false;

@@ -1,6 +1,5 @@
 import { CircleCheckIcon, InfoIcon, RefreshCwIcon, WrenchIcon } from "lucide-react";
 import { lazy, Suspense, useState } from "react";
-import { toast } from "sonner";
 import type { FixKey } from "@/shared/fix.types";
 import type { Integration } from "@/shared/site.types";
 import { RelativeTime } from "@/web/components/relative-time";
@@ -9,6 +8,7 @@ import { idSite } from "@/web/i18n/id.site";
 import { panelUrl } from "@/web/panel/panel.api";
 import { ERROR_TOAST_MS } from "@/web/shared/api.action";
 import { apiErrorMessage, apiFetch } from "@/web/shared/api.client";
+import { toast } from "@/web/shared/toast.lazy";
 import { SetupActions } from "./setup.actions";
 import { SetupChecklist } from "./setup.checklist";
 import { SetupManual } from "./setup.manual";

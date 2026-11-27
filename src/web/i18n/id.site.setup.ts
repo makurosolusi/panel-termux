@@ -1,4 +1,4 @@
-import type { FixBlockReason, FixErrorCode } from "@/shared/fix.types";
+import type { FixBlockReason, FixErrorCode, FixFile } from "@/shared/fix.types";
 import type { IntegrationCheckKey, JobParams } from "@/shared/site.types";
 
 /** Copy that may interpolate server params (`{path}`, `{count}` …). */
@@ -134,8 +134,16 @@ export const idSiteSetup = {
   doneAll: (n: number) => `${n} hal diperbaiki. Pemeriksaan sudah diulang.`,
   notApplied: "Tidak diterapkan: hasil perubahan tidak bisa dimuat pm2. File lama tetap dipakai.",
   more: "Perubahan oleh panel",
-  lastFix: (ago: string) => `Diperbaiki panel ${ago}.`,
+  lastFix: {
+    ecosystem: (ago: string) => `File ecosystem diubah panel ${ago}.`,
+    pm2_run: (ago: string) => `Run script pm2 diubah panel ${ago}.`,
+  } satisfies Record<FixFile, (ago: string) => string>,
+  lastFixSites: (sites: readonly string[]) => `Situs: ${joinNames(sites)}.`,
   undoAction: "Batalkan perubahan",
+  undoLabel: {
+    ecosystem: "Batalkan perubahan pada file ecosystem",
+    pm2_run: "Batalkan perubahan pada run script pm2",
+  } satisfies Record<FixFile, string>,
   undoTitle: (at: string) => `Kembalikan file ke versi ${at}?`,
   undoBody: {
     ecosystem: "Situs buatan panel tidak lagi ikut dijalankan pm2 setelah HP dinyalakan ulang.",
@@ -153,6 +161,7 @@ export const idSiteSetup = {
       ? `Semua aplikasi berhenti beberapa detik lalu berjalan lagi: ${joinNames(apps)}. Pengunjung bisa terputus sebentar.`
       : "pm2 berhenti beberapa detik lalu berjalan lagi.",
   restartPm2FileNote: "Perubahan yang dibuat panel pada `ecosystem.config.js` ikut berlaku sekarang.",
+  restartNotFound: "Layanan pm2 tidak terdaftar di runit HP ini, jadi pm2 tidak dimulai ulang.",
   restartOk: "pm2 dimulai ulang. Semua aplikasi berjalan lagi.",
   restartCheckFailed: (apps: readonly string[]) => `${joinNames(apps)} tidak berjalan lagi setelah pm2 dimulai ulang.`,
   restartFailedHint: "Mengembalikan file ecosystem ke versi sebelum perbaikan biasanya memulihkannya.",
@@ -194,6 +203,7 @@ export const idSiteSetup = {
     run_script_missing: "Run script layanan pm2 tidak ditemukan.",
     run_script_unknown: "Run script layanan pm2 ditulis dengan cara yang tidak dikenali panel.",
     sites_dir_outside_home: "Folder situs berada di luar folder home Termux, jadi panel tidak membuatnya.",
-  } satisfies Record<Exclude<FixBlockReason, "not_verified">, string>,
+  } satisfies Record<FixBlockReason, string>,
   unfixableSuffix: "Ikuti Cara manual di bawah.",
+  unfixableElsewhere: "Ikuti Cara manual di kartu Persiapan.",
 } as const;

@@ -1,6 +1,5 @@
 import { Loader2Icon } from "lucide-react";
 import { type ReactElement, type ReactNode, useId, useRef, useState } from "react";
-import { toast } from "sonner";
 import { CodeText } from "@/web/components/code-text";
 import {
   AlertDialog,
@@ -18,6 +17,7 @@ import { idCommon } from "@/web/i18n/id.common";
 import { idShell } from "@/web/i18n/id.shell";
 import { apiErrorMessage, type ErrorCodes } from "@/web/shared/api.client";
 import { useReturnFocus } from "@/web/shared/focus.return";
+import { toast } from "@/web/shared/toast.lazy";
 
 const t = idShell.confirm;
 

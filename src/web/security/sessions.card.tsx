@@ -1,10 +1,10 @@
 import { LogOutIcon } from "lucide-react";
-import { toast } from "sonner";
 import type { SecurityStatus } from "@/shared/security.types";
 import { ConfirmAction } from "@/web/components/confirm-action";
 import { Section } from "@/web/components/section";
 import { Button } from "@/web/components/ui/button";
 import { idSecurity } from "@/web/i18n/id.security";
+import { toast } from "@/web/shared/toast.lazy";
 import { revokeAllSessions, SECURITY_ERROR_CODES } from "./security.api";
 
 const t = idSecurity.sessions;

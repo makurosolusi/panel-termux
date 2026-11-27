@@ -1,9 +1,8 @@
 import { cn } from "cn";
-import { type ReactNode, type RefObject, useCallback, useEffect, useRef, useState } from "react";
+import { lazy, type ReactNode, type RefObject, Suspense, useCallback, useEffect, useRef, useState } from "react";
 import { Outlet, useLocation, useNavigation } from "react-router";
 import { homeFor } from "@/shared/roles";
 import { ShellPageContext } from "@/web/components/page-header";
-import { Toaster } from "@/web/components/ui/sonner";
 import { TooltipProvider } from "@/web/components/ui/tooltip";
 import { idShell } from "@/web/i18n/id.shell";
 import { NavBadgeProvider } from "@/web/panel/nav.badge.provider";
@@ -16,6 +15,9 @@ import { MobileTopBar } from "./mobile.topbar";
 import { breadcrumbsFor, mobileNavFor, navGroupsFor, navMatch } from "./nav.items";
 import { useShellPage } from "./shell.page";
 import { TaskModeContext } from "./task.mode";
+
+/** sonner stays off the initial path; toasts fired before it loads wait for it (toast.lazy.ts). */
+const Toaster = lazy(() => import("@/web/components/ui/sonner").then((m) => ({ default: m.Toaster })));
 
 const COLLAPSED_KEY = "panel-termux:sidebar-collapsed";
 const MAIN_ID = "main";
@@ -144,7 +146,9 @@ export function AppLayout({ children }: { children?: ReactNode }) {
               </div>
             </div>
             {bottomBar && <MobileNav primary={mobile.primary} more={mobile.more} me={me} />}
-            <Toaster />
+            <Suspense fallback={null}>
+              <Toaster />
+            </Suspense>
           </TooltipProvider>
         </NavBadgeProvider>
       </TaskModeContext.Provider>
