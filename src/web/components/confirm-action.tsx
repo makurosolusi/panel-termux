@@ -32,6 +32,8 @@ type ConfirmBase = {
   codes?: ErrorCodes;
   /** Receives the trimmed typed value (tier typed) for `?confirm=` / `ControlBody.confirm`. Reject = stay open + inline error. */
   onConfirm: (typed?: string) => Promise<unknown>;
+  /** Button text while `onConfirm` runs, for waits longer than a moment ("Menunggu aplikasi berjalan lagi…"). */
+  pendingLabel?: string;
   /** "Situs blog dihapus." */
   successToast?: string;
   /** Omitted when the dialog is opened from a "⋯" menu (then use `open`/`onOpenChange`). */
@@ -168,7 +170,7 @@ export function ConfirmAction(props: ConfirmActionProps) {
             onClick={() => void confirm()}
           >
             {pending && <Loader2Icon className="motion-safe:animate-spin" aria-hidden />}
-            {confirmLabel}
+            {pending && props.pendingLabel ? props.pendingLabel : confirmLabel}
           </Button>
         </AlertDialogFooter>
       </AlertDialogContent>

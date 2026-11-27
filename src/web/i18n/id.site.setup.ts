@@ -1,5 +1,5 @@
 import type { FixBlockReason, FixErrorCode, FixFile } from "@/shared/fix.types";
-import type { IntegrationCheckKey, JobParams } from "@/shared/site.types";
+import { type IntegrationCheckKey, type JobParams, PM2_GUARD_NAME } from "@/shared/site.types";
 
 /** Copy that may interpolate server params (`{path}`, `{count}` …). */
 type Copy = string | ((p: JobParams) => string);
@@ -12,6 +12,10 @@ export function joinNames(names: readonly string[]): string {
   if (names.length === 2) return `${names[0]} dan ${names[1]}`;
   return `${names.slice(0, -1).join(", ")}, dan ${names.at(-1)}`;
 }
+
+/** pm2 app names for people: the panel's guard gets a plain label instead of its internal name (QA fix-07 N4). */
+export const appNamesText = (names: readonly string[]): string =>
+  joinNames(names.map((n) => (n === PM2_GUARD_NAME ? "penjaga pm2" : n)));
 
 /** Indonesian strings of the Persiapan card on /panel/sites (PLAN/03 §5.1, PLAN/06 §4.2); part of `idSite.setup`. */
 export const idSiteSetup = {
@@ -125,7 +129,10 @@ export const idSiteSetup = {
           ? `Panel membuat folder \`${dir}\` untuk situs-situsmu, beserta \`apps.json\` dan \`ecosystem.config.js\` yang dibaca pm2.`
           : `Panel membuat folder \`${dir}\` untuk situs-situsmu, beserta \`apps.json\`.`,
       ecosystemOnly: (path: string) =>
-        `Panel membuat \`${path}\`, file yang memberi tahu pm2 aplikasi mana yang dijalankan, termasuk situs buatan panel. Aplikasi yang berjalan tidak terganggu.`,
+        `Panel membuat \`${path}\`, file yang memberi tahu pm2 aplikasi mana yang dijalankan, termasuk situs buatan panel.`,
+      runningSafe: "Aplikasi yang berjalan tidak terganggu sekarang.",
+      stopApps: (apps: readonly string[]) =>
+        `${appNamesText(apps)} sedang berjalan tetapi tidak ada di file baru ini: akan berhenti saat pm2 dimulai ulang dan tidak dijalankan lagi. Sekarang tetap berjalan. Agar tetap jalan, tambahkan entrinya ke file itu sebelum memulai ulang pm2.`,
     },
     apps_json_rebuild: {
       title: "Susun ulang apps.json?",
@@ -182,12 +189,21 @@ export const idSiteSetup = {
   restartPm2Title: "Mulai ulang pm2 sekarang?",
   restartPm2Body: (apps: readonly string[]) =>
     apps.length
-      ? `Semua aplikasi berhenti beberapa detik lalu berjalan lagi: ${joinNames(apps)}. Pengunjung bisa terputus sebentar.`
+      ? `Semua aplikasi berhenti beberapa detik lalu berjalan lagi: ${appNamesText(apps)}. Pengunjung bisa terputus sebentar.`
       : "pm2 berhenti beberapa detik lalu berjalan lagi.",
+  restartPm2Stops: (apps: readonly string[]) =>
+    `${appNamesText(apps)} akan berhenti dan tidak dijalankan lagi: sedang berjalan, tetapi tidak ada di \`ecosystem.config.js\`.`,
+  restartTyped: "pm2",
+  restartWaiting: "Menunggu aplikasi berjalan lagi…",
   restartPm2FileNote: "Perubahan yang dibuat panel pada `ecosystem.config.js` ikut berlaku sekarang.",
   restartNotFound: "Layanan pm2 tidak terdaftar di runit HP ini, jadi pm2 tidak dimulai ulang.",
   restartOk: "pm2 dimulai ulang. Semua aplikasi berjalan lagi.",
-  restartCheckFailed: (apps: readonly string[]) => `${joinNames(apps)} tidak berjalan lagi setelah pm2 dimulai ulang.`,
+  restartCheckFailed: (apps: readonly string[]) =>
+    `${appNamesText(apps)} tidak berjalan lagi setelah pm2 dimulai ulang.`,
+  restartNotListed: (apps: readonly string[]) =>
+    `${appNamesText(apps)} tidak ada di \`ecosystem.config.js\`, jadi pm2 tidak menjalankannya lagi. Tambahkan lagi entrinya ke file itu, lalu mulai ulang pm2.`,
+  restartListedHint: "Lihat log aplikasinya untuk tahu kenapa belum berjalan.",
+  restartAppsLink: "Buka Aplikasi",
   restartFailedHint: "Mengembalikan file ecosystem ke versi sebelum perbaikan biasanya memulihkannya.",
   restoreAndRestart: "Kembalikan file ecosystem dan mulai ulang pm2",
   restoreAndRestartTitle: "Kembalikan file ecosystem lalu mulai ulang pm2?",

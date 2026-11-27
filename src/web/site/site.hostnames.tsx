@@ -61,7 +61,8 @@ export function SiteHostnames({ site, busy, codes }: { site: SiteDetail; busy: b
                 <>
                   <span>{hand(h) ? t.removeHandBody : t.removeBody}</span>
                   <span>{t.blip(blinkingHosts(all, [h]))}</span>
-                  <span>{t.removeDnsNote}</span>
+                  {/* only a record the panel made is deleted, so only then can deleting it fail (QA fix-07 N8) */}
+                  {dnsManaged.get(h) && <span>{t.removeDnsNote}</span>}
                 </>
               }
               confirmLabel={idSiteDetail.domains.remove(h)}

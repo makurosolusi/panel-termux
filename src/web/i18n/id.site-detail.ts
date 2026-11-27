@@ -33,6 +33,7 @@ export const idSiteDetail = {
       "pm2 tidak menjalankan aplikasi ini. Tekan Jalankan lagi untuk memuatnya dari `ecosystem.config.js`.",
     /** Label of the restart button while pm2 does not run the app (PLAN/06 §6.3). */
     runAgain: "Jalankan lagi",
+    pm2Down: "Layanan pm2 sedang tidak berjalan. Jalankan pm2 dulu, lalu tekan tombol di bawah.",
     runAgainTitle: (name: string) => `Jalankan lagi aplikasi ${name}?`,
     runAgainBody: "Panel memuat aplikasi ini ke pm2 lagi. Situs bisa dibuka setelah aplikasinya berjalan.",
   },
@@ -195,6 +196,8 @@ export const idSiteDetail = {
     title: (name: string) => `Hapus situs ${name}?`,
     stops: (hosts: string) => `Domain berhenti bisa dibuka: ${hosts}.`,
     removes: (dir: string, app: string) => `Yang dihapus: aplikasi pm2 ${app}, folder ${dir} beserta data/.`,
+    removesNoFolder: (dir: string, app: string) =>
+      `Yang dihapus: aplikasi pm2 ${app}. Folder ${dir} sudah tidak ada di HP.`,
     removesDb: (db: string) => `Database ${db} beserta role-nya ikut dihapus, kecuali kamu memilih menyimpannya.`,
     adopted:
       "Situs ini diadopsi, jadi hanya catatannya di panel yang dihapus. Folder, aplikasi pm2, domain, dan database-nya tidak disentuh.",

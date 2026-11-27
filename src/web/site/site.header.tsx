@@ -25,6 +25,7 @@ import {
 import { idSiteDetail } from "@/web/i18n/id.site-detail";
 import { ERROR_TOAST_MS } from "@/web/shared/api.action";
 import { apiErrorMessage, apiFetch, type ErrorCodes } from "@/web/shared/api.client";
+import { ServiceStartButton } from "@/web/shared/service-start";
 import { toast } from "@/web/shared/toast.lazy";
 import { deployOutcomeSuffix } from "./job.status-key";
 import { jobPath, siteUrl } from "./site.api";
@@ -35,11 +36,14 @@ const t = idSiteDetail.header;
 
 /**
  * "Mulai ulang" with its confirmation (job `site.restart` → progress page); disabled while busy or not deployed.
- * While pm2 does not run the app it is the primary "Jalankan lagi" (the same job loads it again, PLAN/06 §6.3).
+ * While pm2 does not run the app it is the primary "Jalankan lagi" (the same job loads it again, PLAN/06 §6.3),
+ * unless the folder is gone: then nothing can run and the no_folder banner leads (QA fix-07 N9). pm2 down: the
+ * dialog carries "Jalankan pm2" itself (QA fix-04 MINOR-8).
  */
-export function RestartAction({ site, codes, variant = "outline" }: RestartProps) {
+export function RestartAction({ site, codes, variant = "outline", onChanged }: RestartProps) {
   const navigate = useNavigate();
   const missing = missingFromPm2(site);
+  const noFolder = site.deployBlocker === "no_folder";
   const label = missing ? t.runAgain : t.restart;
   return (
     <ConfirmAction
@@ -48,6 +52,12 @@ export function RestartAction({ site, codes, variant = "outline" }: RestartProps
         <>
           <span>{missing ? t.runAgainBody : t.restartBody}</span>
           <span>{t.restartAfter}</span>
+          {site.deployBlocker === "pm2_not_running" && (
+            <span className="flex flex-col items-start gap-2 text-foreground">
+              {t.pm2Down}
+              <ServiceStartButton service="pm2" onStarted={onChanged} />
+            </span>
+          )}
         </>
       }
       confirmLabel={label}
@@ -56,7 +66,11 @@ export function RestartAction({ site, codes, variant = "outline" }: RestartProps
         navigate(jobPath((await apiFetch<JobAccepted>("POST", siteUrl(site.name, "/restart"))).jobId))
       }
       trigger={
-        <Button variant={missing ? "default" : variant} size="sm" disabled={siteBusy(site) || !canRestart(site)}>
+        <Button
+          variant={missing && !noFolder ? "default" : variant}
+          size="sm"
+          disabled={siteBusy(site) || !canRestart(site) || noFolder}
+        >
           {missing ? <PlayIcon aria-hidden /> : <RotateCwIcon aria-hidden />}
           {label}
         </Button>
@@ -64,7 +78,7 @@ export function RestartAction({ site, codes, variant = "outline" }: RestartProps
     />
   );
 }
-type RestartProps = { site: SiteDetail; codes: ErrorCodes; variant?: "outline" | "default" };
+type RestartProps = { site: SiteDetail; codes: ErrorCodes; variant?: "outline" | "default"; onChanged?: () => void };
 
 async function checkHealth(name: string) {
   try {
@@ -102,7 +116,7 @@ export function SiteHeader(props: { site: SiteDetail; meta: PageMeta; codes: Err
           </span>
           {!site.managed && <span>{t.adopted}</span>}
           {site.appStatus === "unknown" && <span>{t.pm2Unknown}</span>}
-          {missingFromPm2(site) && (
+          {missingFromPm2(site) && site.deployBlocker !== "no_folder" && (
             <span className="text-danger">
               <CodeText>{site.managed ? t.missingFromPm2Help : t.missingFromPm2Adopted}</CodeText>
             </span>
@@ -117,7 +131,7 @@ export function SiteHeader(props: { site: SiteDetail; meta: PageMeta; codes: Err
               {t.deploy}
             </a>
           </Button>
-          <RestartAction site={site} codes={props.codes} />
+          <RestartAction site={site} codes={props.codes} onChanged={props.meta.onRefresh} />
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <Button variant="ghost" size="icon-sm" aria-label={t.more(site.name)}>

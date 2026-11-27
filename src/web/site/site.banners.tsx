@@ -5,6 +5,7 @@ import type { Job, SiteDetail } from "@/shared/site.types";
 import { Button } from "@/web/components/ui/button";
 import { noFolderText } from "@/web/deploy/deploy.state";
 import { idSiteDetail } from "@/web/i18n/id.site-detail";
+import { TOUCH_BOX } from "@/web/panel/panel.touch";
 import type { ErrorCodes } from "@/web/shared/api.client";
 import { ServiceStartButton } from "@/web/shared/service-start";
 import { jobPath } from "./site.api";
@@ -17,7 +18,7 @@ const BANNER = {
   info: { Icon: InfoIcon, box: "border-info/25 bg-info-subtle", icon: "text-info" },
   warning: { Icon: TriangleAlertIcon, box: "border-warning/25 bg-warning-subtle", icon: "text-warning" },
 };
-const linkCls = "font-medium underline underline-offset-4";
+const linkCls = `font-medium underline underline-offset-4 ${TOUCH_BOX}`;
 type BannersProps = {
   site: SiteDetail;
   interrupted: Job | null;
@@ -78,7 +79,8 @@ export function SiteBanners({ site, interrupted, codes, onChanged, onDelete }: B
         className={`flex flex-wrap items-center gap-x-3 gap-y-2 rounded-md border px-3 py-2 text-sm ${box}`}
       >
         <Icon className={`size-4 shrink-0 ${icon}`} aria-hidden />
-        <span className="min-w-0 flex-1">{text}</span>
+        {/* at least ~16 rem of text before the action wraps below it, never a thin column (QA fix-07 N9) */}
+        <span className="min-w-[min(100%,16rem)] flex-1">{text}</span>
         {action}
       </div>
     );

@@ -8,6 +8,7 @@ import type { StatusKey } from "@/web/components/status.vocab";
 import { StatusIcon } from "@/web/components/status-icon";
 import { Button } from "@/web/components/ui/button";
 import { idSite } from "@/web/i18n/id.site";
+import { TOUCH_BOX } from "@/web/panel/panel.touch";
 import { useMe } from "@/web/session/use-me";
 import { ServiceStartButton } from "@/web/shared/service-start";
 import { checkText, rowBlocked, rowFix, visibleChecks } from "./site.adopt";
@@ -68,7 +69,7 @@ export function SetupChecklist({
               {c.key === "cloudflare_token" && c.state !== "ok" && hasRole(me.role, "super_admin") && (
                 <>
                   {" "}
-                  <Link to="/dev/settings" className="font-medium underline underline-offset-2">
+                  <Link to="/dev/settings" className={`font-medium underline underline-offset-2 ${TOUCH_BOX}`}>
                     {t.tokenLink}
                   </Link>
                 </>

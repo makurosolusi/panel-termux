@@ -3,13 +3,11 @@
 // env values never reach the audit or the log.
 import { existsSync, mkdirSync, readFileSync, statSync } from "node:fs";
 import type { FixEffects, FixKey, FixPreview, FixResult, Pm2RestartResult } from "../../shared/fix.types";
-import type { App } from "../../shared/panel.types";
 import { recordAudit } from "../audit.service";
 import { log } from "../log.service";
 import type { Monitor } from "../monitor/monitor.contract";
 import { createActionLocks } from "../panel/action.lock";
 import { ApiError } from "../routes/http.error";
-import { Pm2UnavailableError } from "../system/system.types";
 import { ensureAppsJson } from "./apps.file";
 import { ecosystemFromTemplate } from "./ecosystem.template";
 import { fixIoError, listFixBackups, resolveFixBackup, saveFixBackup } from "./fix.backup";
@@ -20,6 +18,7 @@ import {
   type FixCtx,
   fixTargetPath,
   NO_EFFECTS,
+  onlinePm2Apps,
   prefixOf,
   runnablePanelApps,
   runScriptPath,
@@ -80,6 +79,8 @@ export function createIntegrationFixes(deps: IntegrationFixDeps) {
   const poll = deps.poll ?? DEFAULT_RESTART_POLL;
   const withLock = createActionLocks();
   let restarting: Promise<Pm2RestartResult> | null = null;
+  // ponytail: in memory, so a panel restart forgets it; the audit log has the history if that ever matters.
+  let lostAfter: string | null = null; // ecosystem backup id after which a checked restart already lost apps
 
   /** 409 `busy` while a site job or a backup runs, then the `integration` lock (a second click is 409 too). */
   function exclusive<T>(fn: () => Promise<T>): Promise<T> {
@@ -160,26 +161,15 @@ export function createIntegrationFixes(deps: IntegrationFixDeps) {
     log.info(`[integration] fix ${key} applied to ${patch.path} by ${actorId} (backup ${backup.id})`);
   }
 
-  /** Online pm2 apps with a pid (B18); [] while pm2 is down. */
-  async function onlineApps(): Promise<string[]> {
-    let apps: App[];
-    try {
-      apps = await system.pm2.list();
-    } catch (e) {
-      if (e instanceof Pm2UnavailableError) return [];
-      throw e;
-    }
-    return apps.filter((a) => a.status === "online" && (a.pid ?? 0) > 0 && !a.module).map((a) => a.name);
-  }
-
   /**
    * PLAN/06 §3.7 without the lock: restart runit pm2, wait for every app that was online. `offer` false (restore +
    * restart) never offers another restore: the newest backup then holds the fixed file.
    */
   async function restartChecked(actorId: string, offer: boolean): Promise<Pm2RestartResult> {
     // Expected back: what ran before plus every runnable apps.json entry, so a site an earlier restart lost is still
-    // reported as missing (QA fix-04 MAJOR-1). A hand-written app that was stopped stays out.
-    const before = [...new Set([...(await onlineApps()), ...runnablePanelApps(ctx)])];
+    // reported as missing (QA fix-04 MAJOR-1). A hand-written app that was stopped stays out; one running but not in
+    // the ecosystem (a template made by sites_dir_create) is expected and reported (QA fix-07 MAJOR-N2).
+    const before = [...new Set([...(await onlinePm2Apps(ctx)), ...runnablePanelApps(ctx)])];
     const sup = await system.runit.supervise("pm2");
     const startedAt = sup?.uptimeSec === undefined ? null : Date.now() - sup.uptimeSec * MS_PER_SEC;
     if (!(await system.runit.control("pm2", "restart"))) throw new ApiError(404, "not_found", "unknown service pm2");
@@ -188,15 +178,22 @@ export function createIntegrationFixes(deps: IntegrationFixDeps) {
     // ponytail: trusts the pid pm2 reports (no /proc liveness check); add one if pm2 is seen lying about pids.
     let missing = before;
     for (const end = Date.now() + poll.timeoutMs; ; await Bun.sleep(poll.intervalMs)) {
-      const now = await onlineApps();
+      const now = await onlinePm2Apps(ctx);
       missing = before.filter((n) => !now.includes(n));
       if (missing.length === 0 || Date.now() >= end) break;
     }
+    // The newest fix is to blame when pm2 had not started since it, or when an earlier checked restart after it also
+    // lost apps (QA fix-07 N3: the second restart kept the warning but lost its restore button).
     const eco = offer && missing.length > 0 ? listFixBackups(dataDir, "ecosystem")[0] : undefined;
-    const offerRestore = eco && (startedAt === null || Date.parse(eco.at) > startedAt) ? eco.id : null;
+    const fresh = eco && (startedAt === null || Date.parse(eco.at) > startedAt || lostAfter === eco.id);
+    const offerRestore = eco && fresh ? eco.id : null;
+    lostAfter = missing.length > 0 ? (offerRestore ?? lostAfter) : null;
     recordAudit(db, { actorId, action: "integration.pm2_restart", target: "pm2", meta: { missing: missing.length } });
     if (missing.length) log.warn(`[integration] pm2 restart by ${actorId}: ${missing.length} app(s) did not come back`);
-    return { ok: missing.length === 0, missing, offerRestore, integration: await integration.refresh() };
+    const after = await integration.refresh();
+    const listed = new Set(after.appNames ?? []);
+    const notListed = missing.filter((n) => !listed.has(n));
+    return { ok: missing.length === 0, missing, offerRestore, notListed, integration: after };
   }
 
   return {

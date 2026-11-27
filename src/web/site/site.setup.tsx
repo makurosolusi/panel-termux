@@ -13,7 +13,7 @@ import { toast } from "@/web/shared/toast.lazy";
 import { SetupActions } from "./setup.actions";
 import { SetupChecklist } from "./setup.checklist";
 import { SetupManual } from "./setup.manual";
-import { applicableFixes, checkText, failingChecks, pm2Pending, setupNeeded } from "./site.adopt";
+import { applicableFixes, checkText, pm2Pending, remainingProblems, setupNeeded } from "./site.adopt";
 import { SITE_ERROR_CODES } from "./site.api";
 
 // preview dialog + diff only load when Perbaiki is pressed (bundle budget, PLAN/06 §4.1)
@@ -70,21 +70,21 @@ export function SiteSetup({
   onVerified: () => void;
 }) {
   const [verifying, setVerifying] = useState(false);
-  const [result, setResult] = useState("");
+  const [checked, setChecked] = useState<Integration | null>(null); // answer of the last "Periksa lagi"
   const [fixing, setFixing] = useState<FixKey[] | null>(null);
   const [restartWanted, setRestartWanted] = useState(false); // a fix applied here waits for a pm2 restart
   const card = useRef<HTMLElement>(null);
   const focusCard = () => card.current;
   const all = applicableFixes(integration);
-  const ready = !setupNeeded(integration);
+  // the line follows the newest status, so a later fix or restart updates its count (QA fix-07 MAJOR-N1)
+  const newest = checked && (checked.checkedAt ?? "") > (integration.checkedAt ?? "") ? checked : integration;
+  const ready = !setupNeeded(integration); // folded: lists nothing, so never "Masih ada n"
 
   const verify = async () => {
     setVerifying(true);
-    setResult("");
+    setChecked(null);
     try {
-      const fresh = await apiFetch<Integration>("POST", panelUrl("/integration/verify"));
-      const errors = failingChecks(fresh).filter((c) => c.state === "error").length;
-      setResult(errors ? t.stillFailing(errors) : t.allOk);
+      setChecked(await apiFetch<Integration>("POST", panelUrl("/integration/verify")));
     } catch (err) {
       toast.error(apiErrorMessage(err, SITE_ERROR_CODES), { duration: ERROR_TOAST_MS });
     } finally {
@@ -115,7 +115,7 @@ export function SiteSetup({
   );
   const resultLine = (
     <p aria-live="polite" className="text-sm font-medium empty:hidden">
-      {result}
+      {checked ? (remainingProblems(newest) && !ready ? t.stillFailing(remainingProblems(newest)) : t.allOk) : ""}
     </p>
   );
 

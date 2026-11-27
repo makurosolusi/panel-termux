@@ -1,7 +1,7 @@
 // QA fix-04 follow-ups on the fake system: apps.json rebuild (R&D/07 #7), the checked pm2 restart's expected set and
 // repeat POST (MAJOR-1, BLOCKER-1), and fake DNS without a token (MAJOR-3).
 import { describe, expect, test } from "bun:test";
-import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { site } from "@/server/db/schema";
 import { panelAppEntry } from "@/server/deploy/run.script";
@@ -107,5 +107,67 @@ describe("fake DNS without a token", () => {
     const i = await dnsH.json<Integration>(await dnsH.call("POST", "/integration/verify"));
     expect(i.dnsMode).toBe("token");
     expect(dnsStep(await create("toko", "toko.lain.org"))).toMatchObject({ code: "dns_created" });
+  });
+});
+
+// QA fix-07 MAJOR-N2: POCO's hand-written apps keep running from the old pm2 process while the ecosystem is gone; a
+// template ecosystem does not list them, so the restart drops them (simulated by pm2LostOnRestart).
+const HAND = ["makuro-solusi", "adminneo"];
+const tpl = siteHarness({ fake: { integration: "poco", pm2LostOnRestart: HAND }, pm2RestartPoll: POLL });
+
+describe.skipIf(!node)("template ecosystem while hand-written apps run (MAJOR-N2)", () => {
+  test("preview, restart confirmation and the checked restart all name the apps that will not come back", async () => {
+    rmSync(join(tpl.home, "sites", "ecosystem.config.js"));
+    const p = await tpl.json<FixPreview>(await tpl.call("POST", "/integration/fixes/sites_dir_create/preview"));
+    expect(p.effects.stopApps?.sort()).toEqual([...HAND].sort());
+    const r = await tpl.json<FixResult>(await tpl.call("POST", "/integration/fixes/sites_dir_create", { expect: {} }));
+    expect(r.integration.wouldStop?.sort()).toEqual([...HAND].sort());
+    expect(r.integration.appNames).toContain("pm2-guard");
+    const restart = await tpl.json<Pm2RestartResult>(await tpl.call("POST", "/integration/pm2/restart"));
+    expect(restart.ok).toBe(false);
+    expect(restart.missing.sort()).toEqual([...HAND].sort());
+    expect(restart.notListed?.sort()).toEqual([...HAND].sort());
+    expect(restart.offerRestore).toBeNull(); // there was no older file to put back
+    expect(restart.integration.wouldStop).toEqual([]); // nothing left running that the file does not list
+  });
+});
+
+describe.skipIf(!node)("restore offer survives a second restart (N3)", () => {
+  const second = siteHarness({ fake: { integration: "poco", pm2LostOnRestart: ["blog"] }, pm2RestartPoll: POLL });
+  test("the fix is still in place and an earlier checked restart already lost apps → offered again", async () => {
+    const dir = addSite(second, "blog", 3101, ["run", "app"]);
+    writeFileSync(second.appsJson, `${JSON.stringify([panelAppEntry("blog", dir)])}\n`);
+    const p = await second.json<FixPreview>(await second.call("POST", "/integration/fixes/ecosystem_block/preview"));
+    const expect_ = Object.fromEntries(p.files.map((f) => [f.path, f.sha]));
+    await second.json(await second.call("POST", "/integration/fixes/ecosystem_block", { expect: expect_ }));
+    const id = listFixBackups(second.dir, "ecosystem")[0]?.id;
+    const first = await second.json<Pm2RestartResult>(await second.call("POST", "/integration/pm2/restart"));
+    expect(first).toMatchObject({ ok: false, offerRestore: id, notListed: [] });
+    await Bun.sleep(1100); // test-only: pm2's uptime has 1 s steps, the backup must be older than this start
+    const again = await second.json<Pm2RestartResult>(await second.call("POST", "/integration/pm2/restart"));
+    expect(again).toMatchObject({ ok: false, missing: ["blog"], offerRestore: id, notListed: [] });
+  });
+});
+
+describe("broken apps.json is not 'no sites yet' (N10)", () => {
+  const n10 = siteHarness({ fake: { integration: "poco" } });
+  test("ecosystem row keeps the not-loaded copy; the binary row is not a pass over nothing", async () => {
+    writeFileSync(n10.appsJson, "{ not json");
+    const i = await n10.json<Integration>(await n10.call("POST", "/integration/verify"));
+    expect(i.checks?.find((c) => c.key === "ecosystem_spreads_apps_json")?.params).toEqual({});
+    expect(i.checks?.some((c) => c.key === "apps_entries_runnable")).toBe(false);
+  });
+});
+
+describe("site.restart without its folder (N9)", () => {
+  test("fails at app_restart naming the folder, not 60 s later in health", async () => {
+    const dir = addSite(h, "hilang", 3199, ["run", "app"]);
+    rmSync(dir, { recursive: true });
+    const j = await h.startJob("POST", "/sites/hilang/restart");
+    expect(j.steps.find((s) => s.key === "app_restart")).toMatchObject({
+      status: "failed",
+      code: "restart_no_folder",
+      params: { path: dir },
+    });
   });
 });

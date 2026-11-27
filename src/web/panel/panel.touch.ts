@@ -5,3 +5,6 @@
  */
 export const TOUCH_HIT =
   "relative pointer-coarse:after:absolute pointer-coarse:after:-inset-x-[max(12px,calc(22px_-_50%))] pointer-coarse:after:-inset-y-[max(0px,calc(22px_-_50%))] pointer-coarse:after:content-['']";
+
+/** 44 px tall box under a coarse pointer for links that stand alone (QA fix-07 MINOR-3 measured the box, not ::after). */
+export const TOUCH_BOX = "pointer-coarse:inline-flex pointer-coarse:min-h-11 pointer-coarse:items-center";

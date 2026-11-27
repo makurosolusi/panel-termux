@@ -2,11 +2,14 @@ import { ExternalLinkIcon } from "lucide-react";
 import { Link } from "react-router";
 import type { JobStep } from "@/shared/job.types";
 import type { Domain } from "@/shared/panel.types";
+import { hasRole } from "@/shared/roles";
 import type { Integration } from "@/shared/site.types";
 import { CopyButton } from "@/web/components/copy-button";
 import { idSiteDetail } from "@/web/i18n/id.site-detail";
 import { DomainCheckButton } from "@/web/panel/domain.check";
 import { panelUrl } from "@/web/panel/panel.api";
+import { TOUCH_BOX } from "@/web/panel/panel.touch";
+import { useMe } from "@/web/session/use-me";
 import { useApiQuery } from "@/web/shared/use-api-query";
 
 const t = idSiteDetail.dnsManual;
@@ -52,23 +55,28 @@ export function hostsNeedingRecord(
     .map((d) => d.hostname);
 }
 
+/** One record as label/value pairs, labels always visible and never squeezed (QA fix-07 N6), same at every width. */
 function RecordRow({ r }: { r: DnsRecord }) {
-  const cell = "flex min-w-0 items-center gap-1 font-mono text-[0.8125rem] break-all";
+  const label = "whitespace-nowrap text-muted-foreground";
+  const value = "flex min-w-0 items-center gap-1 font-mono text-[0.8125rem] break-all";
   return (
-    <li className="flex flex-col gap-1 py-2 sm:grid sm:grid-cols-[5rem_1fr_1fr_auto] sm:items-center sm:gap-3">
-      <span className="text-xs text-muted-foreground sm:text-sm sm:text-foreground">
-        {t.type}: <span className="font-mono">{r.type}</span> · {t.proxy}: {t.proxyOn}
-      </span>
-      <span className={cell}>
-        <span className="text-muted-foreground sm:sr-only">{t.name}: </span>
-        {r.name}
-        <CopyButton value={r.name} label={t.copyName(r.name)} />
-      </span>
-      <span className={cell}>
-        <span className="text-muted-foreground sm:sr-only">{t.content}: </span>
-        {r.content}
-        <CopyButton value={r.content} label={t.copyContent} />
-      </span>
+    <li className="flex flex-col gap-2 py-2">
+      <dl className="grid grid-cols-[auto_minmax(0,1fr)] items-center gap-x-3 gap-y-1">
+        <dt className={label}>{t.name}</dt>
+        <dd className={value}>
+          {r.name}
+          <CopyButton value={r.name} label={t.copyName(r.name)} />
+        </dd>
+        <dt className={label}>{t.content}</dt>
+        <dd className={value}>
+          {r.content}
+          <CopyButton value={r.content} label={t.copyContent} />
+        </dd>
+        <dt className={label}>{t.type}</dt>
+        <dd>
+          <span className="font-mono">{r.type}</span> · {t.proxy}: {t.proxyOn}
+        </dd>
+      </dl>
       <DomainCheckButton hostname={r.name} onChecked={() => {}} />
     </li>
   );
@@ -80,9 +88,10 @@ function RecordRow({ r }: { r: DnsRecord }) {
  */
 export function DnsManualCard({ hostnames, open = false }: { hostnames: readonly string[]; open?: boolean }) {
   const integration = useApiQuery<Integration>(panelUrl("/integration"));
+  const me = useMe();
   const info = integration.data;
   if (!info || info.cloudflareTokenSet) return null;
-  const link = "inline-flex items-center gap-1 font-medium underline underline-offset-4";
+  const link = `inline-flex items-center gap-1 font-medium underline underline-offset-4 ${TOUCH_BOX}`;
   return (
     <details open={open} className="rounded-lg border p-3 text-sm">
       <summary className="cursor-pointer font-medium">{t.title(hostnames.length)}</summary>
@@ -103,9 +112,12 @@ export function DnsManualCard({ hostnames, open = false }: { hostnames: readonly
             {t.createToken}
             <ExternalLinkIcon className="size-3.5" aria-hidden />
           </a>
-          <Link className={link} to={SETTINGS_TOKEN_PATH}>
-            {t.openSettings}
-          </Link>
+          {/* the settings page is super_admin's: an admin would be sent back to Ringkasan (QA fix-07 N7) */}
+          {hasRole(me.role, "super_admin") && (
+            <Link className={link} to={SETTINGS_TOKEN_PATH}>
+              {t.openSettings}
+            </Link>
+          )}
         </p>
       </div>
     </details>

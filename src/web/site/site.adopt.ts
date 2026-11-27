@@ -178,6 +178,13 @@ export function rowBlocked(i: Integration, c: IntegrationCheck): FixBlockReason 
 /** Fixes behind "Perbaiki semua (n)": one per failing row, in checklist order. */
 export const applicableFixes = (i: Integration): FixKey[] => visibleChecks(i).flatMap((c) => rowFix(i, c) ?? []);
 
+/**
+ * Rows the "Periksa lagi" line counts as still to fix: every failing error plus every warning with a fix, so the number
+ * never trails "Perbaiki semua (n)" (QA fix-07 MAJOR-N1). Optional warnings without a fix (token) are not counted.
+ */
+export const remainingProblems = (i: Integration): number =>
+  visibleChecks(i).filter((c) => c.state === "error" || (c.state === "warning" && rowFix(i, c) !== null)).length;
+
 /** "Cara manual" opens by itself when a failing row has a fix the panel cannot apply. */
 export const manualOpen = (i: Integration): boolean => visibleChecks(i).some((c) => rowBlocked(i, c) !== null);
 
@@ -205,8 +212,10 @@ export function fixSummary(p: FixPreview): string[] {
   if (p.key === "apps_json_rebuild") return [dl.apps_json_rebuild.body(e.addApps), ...restart];
   if (p.key === "sites_dir_create") {
     const sd = dl.sites_dir_create;
-    if (e.dir) return [sd.body(e.dir, Boolean(e.newEcosystem)), ...restart];
-    return e.newEcosystem ? [sd.ecosystemOnly(e.newEcosystem), ...restart] : [];
+    // running apps the new file does not list stop for good on the restart (QA fix-07 MAJOR-N2)
+    const stop = e.stopApps?.length ? [sd.stopApps(e.stopApps)] : [sd.runningSafe];
+    if (e.dir) return [sd.body(e.dir, Boolean(e.newEcosystem)), ...(e.newEcosystem ? stop : []), ...restart];
+    return e.newEcosystem ? [sd.ecosystemOnly(e.newEcosystem), ...stop, ...restart] : [];
   }
   return [
     dl.ecosystem_block.body(e.keepApps),

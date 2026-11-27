@@ -259,7 +259,14 @@ type SiteRow = typeof site.$inferSelect;
 /** app_restart → health (deploy's D16 check), shared by site.restart, site.env and their cleanups. */
 export function restartSteps(ctx: SiteCtx, s: SiteRow): StepDef[] {
   const st = newState(s.runtime);
-  return [appRestartStep(ctx, s, st), healthStep(ctx, s, st)];
+  const restart = appRestartStep(ctx, s, st);
+  // A missing folder fails here, by name, not 60 s later as "port refused" in health (QA fix-07 N9).
+  const run: StepDef["run"] = async (c) => {
+    if (!existsSync(s.dir))
+      throw new StepError("restart_no_folder", { path: s.dir }, `site folder ${s.dir} is missing`);
+    return restart.run(c);
+  };
+  return [{ ...restart, run }, healthStep(ctx, s, st)];
 }
 
 const HEALTH_PROBE_TIMEOUT_MS = 5000;

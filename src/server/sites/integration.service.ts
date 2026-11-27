@@ -7,7 +7,7 @@ import { Pm2UnavailableError } from "../system/system.types";
 import { ensureAppsJson, parseApps } from "./apps.file";
 import { ecosystemBlock, snippetCurrent } from "./ecosystem.patch";
 import { type EcosystemProbe, probeEcosystem } from "./ecosystem.probe";
-import { type FixCtx, lastFixesOf, prefixOf, runnablePanelApps, runScriptPath } from "./fix.plan";
+import { type FixCtx, lastFixesOf, onlinePm2Apps, prefixOf, runnablePanelApps, runScriptPath } from "./fix.plan";
 import { fixAvailability } from "./fix.planners";
 import { readTunnelId } from "./ingress.editor";
 import { sitePaths } from "./site.checks";
@@ -78,6 +78,9 @@ async function compute(ctx: FixCtx, probe: EcosystemProbe): Promise<Integration>
   } catch (e) {
     pm2Reason = e instanceof Pm2UnavailableError ? e.reason : (e as Error).message;
   }
+  // What pm2 loads on its next start; a file that does not load starts nothing.
+  const appNames = probe.ok ? [...new Set([...probe.names, ...runnable])] : [];
+  const online = pm2Reason === null ? await onlinePm2Apps(ctx) : [];
   // The flag must be on a command line: the shipped script also names it in a comment.
   const runPath = runScriptPath(ctx);
   const svRun = readTextOrNull(runPath);
@@ -87,7 +90,8 @@ async function compute(ctx: FixCtx, probe: EcosystemProbe): Promise<Integration>
   const tokenSet = describeSetting(ctx.db, "cloudflare.api_token").isSet;
   // The probe serves a sentinel as apps.json: it reaching the list proves the spread/block (debat C3).
   const spreads = probe.ok && probe.spreads;
-  const noSites: JobParams = !spreads && (apps ?? []).length === 0 ? { noSites: 1 } : {};
+  // A broken apps.json is not "no sites yet" (QA fix-07 N10): its own row says so.
+  const noSites: JobParams = !spreads && (apps === null ? appsText === null : apps.length === 0) ? { noSites: 1 } : {};
   const loads = check("ecosystem_loads", probe.ok, "error", probe.ok ? {} : { reason: probe.reason });
   if (!probe.ok) loads.detail = probe.detail;
   const checks: IntegrationCheck[] = [
@@ -115,8 +119,11 @@ async function compute(ctx: FixCtx, probe: EcosystemProbe): Promise<Integration>
   // `ready` stays false: the hidden READY_KEYS are missing, so they do not count as ok. A file that never names
   // apps.json has no "old block" either: ecosystem_spreads_apps_json alone is the root cause.
   const noOldBlock = eco !== null && !MENTIONS_APPS_JSON.test(eco);
+  // Unreadable apps.json: "every entry has a binary" would be a pass over nothing (QA fix-07 N10).
   const moot = (k: IntegrationCheckKey) =>
-    (eco === null && NEEDS_ECOSYSTEM.has(k)) || (k === "snippet_current" && noOldBlock);
+    (eco === null && NEEDS_ECOSYSTEM.has(k)) ||
+    (k === "snippet_current" && noOldBlock) ||
+    (k === "apps_entries_runnable" && apps === null && appsText !== null);
   const shown = checks.filter((c) => !moot(c.key));
   const failing = shown.filter((c) => c.state !== "ok");
   const ok = (k: IntegrationCheckKey) =>
@@ -127,7 +134,8 @@ async function compute(ctx: FixCtx, probe: EcosystemProbe): Promise<Integration>
     snippet: ecosystemBlock(prefixOf(ctx)),
     ecosystemPath: p.ecosystem,
     appsJsonPath: p.appsJson,
-    appNames: probe.ok ? [...new Set([...probe.names, ...runnable])] : [],
+    appNames,
+    wouldStop: online.filter((n) => !appNames.includes(n)),
     checkedAt: new Date().toISOString(),
     fixes: await fixAvailability(ctx, new Set(failing.map((c) => c.key)), probe),
     lastFixes: lastFixesOf(ctx),

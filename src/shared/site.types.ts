@@ -269,6 +269,11 @@ export type Integration = {
   appNames?: string[];
   /** 0.3.0 */
   checkedAt?: string;
+  /**
+   * 0.4.0: apps pm2 runs now that the current ecosystem does not list (`appNames`): a pm2 restart stops them for good
+   * (hand-written apps loaded some other way, QA fix-07 MAJOR-N2). The restart confirmation names them.
+   */
+  wouldStop?: string[];
   /** 0.4.0: fixes the panel can apply, per check (PLAN/06 §5.1). */
   fixes?: FixAvailability[];
   /** 0.4.0: newest panel backup of each fixed file, newest first (one undo per file). */

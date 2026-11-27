@@ -76,13 +76,17 @@ describe("sites_dir_create: folder + files, or only the ecosystem file", () => {
     expect(previewTitle(p)).toBe(dl.sites_dir_create.title);
     const lines = fixSummary(p);
     expect(lines[0]).toContain("`ecosystem.config.js`");
-    expect(lines[1]).toBe(dl.restartNote);
+    expect(lines.slice(1)).toEqual([dl.sites_dir_create.runningSafe, dl.restartNote]);
   });
 
   test("folder there, only the ecosystem missing: own title and the restart CTA", () => {
     const p = preview("sites_dir_create", { newEcosystem: "/h/sites/ecosystem.config.js", appliesOnRestart: true });
     expect(previewTitle(p)).toBe("Buat file ecosystem.config.js?");
-    expect(fixSummary(p)).toEqual([dl.sites_dir_create.ecosystemOnly("/h/sites/ecosystem.config.js"), dl.restartNote]);
+    expect(fixSummary(p)).toEqual([
+      dl.sites_dir_create.ecosystemOnly("/h/sites/ecosystem.config.js"),
+      dl.sites_dir_create.runningSafe,
+      dl.restartNote,
+    ]);
   });
 
   test("restart is offered after a fix that waits for pm2, not after pm2_auto_exit or unapplied ones", () => {

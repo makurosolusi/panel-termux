@@ -135,6 +135,8 @@ export const idJob = {
     size_mismatch: (p) => `Ukuran file ${b(p.got)}, padahal seharusnya ${b(p.expected)}. Unggah ulang.`,
     sha_mismatch: () => "Checksum file tidak cocok. Unggah ulang binary-nya.",
     folder_missing: (p) => `Folder situs ${s(p.path)} tidak ada.`,
+    restart_no_folder: (p) =>
+      `Folder situs ${s(p.path)} tidak ada lagi, jadi aplikasinya tidak bisa dijalankan. Buka detail situs: hapus situs lalu buat ulang, atau pulihkan dari cadangan.`,
     disk_full: () => "Penyimpanan HP penuh. Kosongkan ruang, lalu coba lagi.",
     runtime_native: () => "Binary Android native.",
     runtime_grun: () => "Binary glibc, dijalankan lewat grun.",

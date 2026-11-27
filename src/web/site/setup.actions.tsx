@@ -1,7 +1,9 @@
 import { TriangleAlertIcon } from "lucide-react";
 import { useState } from "react";
+import { Link } from "react-router";
 import type { FixBackup, Pm2RestartResult } from "@/shared/fix.types";
 import type { Integration } from "@/shared/site.types";
+import { CodeText } from "@/web/components/code-text";
 import { ConfirmAction } from "@/web/components/confirm-action";
 import { Button } from "@/web/components/ui/button";
 import { idSite } from "@/web/i18n/id.site";
@@ -14,11 +16,18 @@ const t = idSite.setup;
 /** The restart's 404 means runit has no pm2 service, not a missing backup. */
 const RESTART_CODES = { ...FIX_ERROR_CODES, not_found: t.restartNotFound };
 
-/** Restart dialog text: who stops briefly, plus the panel's ecosystem change taking effect now. */
-export const restartDescription = (i: Integration): string =>
-  i.lastFixes?.some((b) => b.file === "ecosystem")
-    ? `${t.restartPm2Body(i.appNames ?? [])} ${t.restartPm2FileNote}`
-    : t.restartPm2Body(i.appNames ?? []);
+/** Restart dialog text: apps that stop for good first, then who stops briefly, then the panel's file change. */
+export function restartDescription(i: Integration): string {
+  const stops = i.wouldStop?.length ? [t.restartPm2Stops(i.wouldStop)] : [];
+  const file = i.lastFixes?.some((b) => b.file === "ecosystem") ? [t.restartPm2FileNote] : [];
+  return [...stops, t.restartPm2Body(i.appNames ?? []), ...file].join(" ");
+}
+
+/** Restart confirmation: typed ("pm2") and destructive when running apps would not come back (QA fix-07 MAJOR-N2). */
+export const restartTier = (i: Integration) =>
+  i.wouldStop?.length
+    ? ({ tier: "typed", typedValue: t.restartTyped, destructive: true } as const)
+    : ({ tier: "confirm" } as const);
 
 /** Warning after a checked restart where apps did not come back; offers restore + restart when the fix is to blame. */
 function RestartFailed({
@@ -33,6 +42,9 @@ function RestartFailed({
   focusCard: () => HTMLElement | null;
 }) {
   const offer = result.offerRestore;
+  const notListed = result.notListed ?? [];
+  // listed but not running: the app itself fails to start, its log says why (QA fix-07 N3)
+  const listed = result.missing.filter((n) => !notListed.includes(n));
   return (
     <div
       role="status"
@@ -41,14 +53,24 @@ function RestartFailed({
       <p className="flex items-start gap-2">
         <TriangleAlertIcon className="mt-0.5 size-4 shrink-0 text-warning" aria-hidden />
         <span>
-          {t.restartCheckFailed(result.missing)} {offer && t.restartFailedHint}
+          <CodeText>
+            {[
+              listed.length ? t.restartCheckFailed(listed) : "",
+              notListed.length ? t.restartNotListed(notListed) : "",
+              offer ? t.restartFailedHint : listed.length ? t.restartListedHint : "",
+            ]
+              .filter(Boolean)
+              .join(" ")}
+          </CodeText>
         </span>
       </p>
-      {offer && (
+      {offer ? (
         <ConfirmAction
           title={t.restoreAndRestartTitle}
-          description={`${t.undoBody.ecosystem} ${t.restartPm2Body(result.integration.appNames ?? [])}`}
+          // no app list: the names pm2 loads now are the fixed file's, not the restored one's (QA fix-07 N5)
+          description={`${t.undoBody.ecosystem} ${t.restartPm2Body([])}`}
           confirmLabel={t.restoreAndRestart}
+          pendingLabel={t.restartWaiting}
           codes={FIX_ERROR_CODES}
           focusAfter={focusCard}
           onConfirm={async () => {
@@ -62,6 +84,12 @@ function RestartFailed({
             </Button>
           }
         />
+      ) : (
+        listed.length > 0 && (
+          <Button size="sm" variant="outline" className="w-fit" asChild>
+            <Link to="/panel/apps">{t.restartAppsLink}</Link>
+          </Button>
+        )
       )}
     </div>
   );
@@ -102,9 +130,11 @@ export function SetupActions({
 
   const restart = (
     <ConfirmAction
+      {...restartTier(integration)}
       title={t.restartPm2Title}
       description={restartDescription(integration)}
       confirmLabel={t.restartPm2}
+      pendingLabel={t.restartWaiting}
       codes={RESTART_CODES}
       focusAfter={focusCard}
       onConfirm={async () => onResult(await restartPm2())}

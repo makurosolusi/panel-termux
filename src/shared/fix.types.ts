@@ -49,6 +49,8 @@ export type FixEffects = {
   dir: string | null;
   /** sites_dir_create: path of the ecosystem.config.js written from the shipped template (null/absent = it exists). */
   newEcosystem?: string | null;
+  /** sites_dir_create with a new ecosystem: apps running now that the new file does not list (they stop on restart). */
+  stopApps?: string[];
 };
 /** POST /integration/fixes/:key/preview. */
 export type FixPreview = { key: FixKey; files: FixFilePreview[]; effects: FixEffects };
@@ -72,6 +74,8 @@ export type Pm2RestartResult = {
   ok: boolean;
   missing: string[];
   offerRestore: string | null;
+  /** Missing apps the ecosystem no longer lists at all: no restore brings them back, only a new entry in the file. */
+  notListed?: string[];
   integration: Integration;
 };
 /** Result of a fix or a restore. */

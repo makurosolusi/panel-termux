@@ -3,7 +3,7 @@
 import { existsSync, lstatSync, statSync } from "node:fs";
 import { dirname, resolve, sep } from "node:path";
 import type { FixAvailability, FixBlockReason, FixKey } from "../../shared/fix.types";
-import type { IntegrationCheckKey } from "../../shared/site.types";
+import { type IntegrationCheckKey, PM2_GUARD_NAME } from "../../shared/site.types";
 import { planAppsRebuild } from "./apps.rebuild";
 import { planEcosystemFix } from "./ecosystem.patch";
 import { type EcosystemProbe, probeEcosystem } from "./ecosystem.probe";
@@ -12,6 +12,7 @@ import {
   FIX_KEYS,
   type FixPlan,
   NO_EFFECTS,
+  onlinePm2Apps,
   prefixOf,
   realOrNull,
   runnablePanelApps,
@@ -113,12 +114,18 @@ const lexists = (path: string) => {
   }
 };
 
-/** Folder and/or ecosystem.config.js missing → make them (+ apps.json); pm2 loads a new ecosystem when it starts. */
-function planSitesDir(ctx: SiteCtx): FixPlan {
+/**
+ * Folder and/or ecosystem.config.js missing → make them (+ apps.json); pm2 loads a new ecosystem when it starts.
+ * `stopApps`: apps pm2 runs now (loaded some other way) that the template does not list, so the next pm2 start drops
+ * them (QA fix-07 MAJOR-N2). The template lists the guard and the runnable apps.json sites.
+ */
+async function planSitesDir(ctx: SiteCtx): Promise<FixPlan> {
   const p = sitePaths(ctx);
   const dir = resolve(p.sitesDir);
   const newEcosystem = lexists(p.ecosystem) ? null : p.ecosystem;
-  const effects = { ...NO_EFFECTS, newEcosystem, appliesOnRestart: newEcosystem !== null };
+  const listed = new Set([PM2_GUARD_NAME, ...runnablePanelApps(ctx)]);
+  const stopApps = newEcosystem === null ? [] : (await onlinePm2Apps(ctx)).filter((n) => !listed.has(n));
+  const effects = { ...NO_EFFECTS, newEcosystem, stopApps, appliesOnRestart: newEcosystem !== null };
   if (existsSync(dir))
     return newEcosystem === null ? { kind: "unchanged" } : { kind: "patch", patch: null, probe: null, effects };
   let parent = dirname(dir);

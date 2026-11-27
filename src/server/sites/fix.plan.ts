@@ -7,6 +7,7 @@ import type { FixBackup, FixBlockReason, FixChange, FixEffects, FixFile, FixKey 
 import { PM2_GUARD_NAME } from "../../shared/site.types";
 import { runTermux, termuxPrefix } from "../exec/termux.exec";
 import { redactLines } from "../system/log.redact";
+import { Pm2UnavailableError } from "../system/system.types";
 import { entryBinary, parseApps } from "./apps.file";
 import { BLOCK_VERSION, ECOSYSTEM_CANDIDATE } from "./ecosystem.patch";
 import { type EcosystemProbe, probeEcosystem } from "./ecosystem.probe";
@@ -97,6 +98,17 @@ export function runnablePanelApps(ctx: SiteCtx): string[] {
     .filter((a) => typeof a.script === "string" && a.script !== "")
     .filter((a) => entryBinary(a, sitesDir).every((f) => existsSync(f)))
     .map((a) => a.name as string);
+}
+
+/** Online pm2 apps with a pid (B18), modules left out; [] while pm2 is down. */
+export async function onlinePm2Apps(ctx: SiteCtx): Promise<string[]> {
+  try {
+    const apps = await ctx.system.pm2.list();
+    return apps.filter((a) => a.status === "online" && (a.pid ?? 0) > 0 && !a.module).map((a) => a.name);
+  } catch (e) {
+    if (e instanceof Pm2UnavailableError) return [];
+    throw e;
+  }
 }
 
 /** FixBackup view of a backup entry: edited since (sha8 of the live file differs) and the sites a restore affects. */
