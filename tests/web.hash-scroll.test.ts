@@ -2,7 +2,7 @@
 // navigations scroll (first load and PUSH/REPLACE, not back/forward).
 import { afterEach, describe, expect, test } from "bun:test";
 import type { DataRouter } from "react-router";
-import { followUrlHash, resolveHashTarget, waitFor } from "@/web/shared/hash.scroll";
+import { followUrlHash, keepAligned, resolveHashTarget, waitFor } from "@/web/shared/hash.scroll";
 
 const el = (id: string) => ({ id }) as unknown as Element;
 const byIds =
@@ -48,8 +48,70 @@ describe("waitFor", () => {
   });
 });
 
+describe("keepAligned", () => {
+  // Fake target: scrollIntoView puts it at `margin` only once the document is scrollable (`room` = how far it can go).
+  const target = (top: number, margin = 0) => {
+    const t = {
+      top,
+      room: 0,
+      calls: 0,
+      getBoundingClientRect: () => ({ top: t.top }) as DOMRect,
+      scrollIntoView: () => {
+        t.calls++;
+        const by = Math.min(t.top - margin, t.room);
+        t.top -= by;
+        t.room -= by;
+      },
+    };
+    return t;
+  };
+  const opts = { intervalMs: 2, timeoutMs: 400 };
+
+  test("re-aligns when content rendered above pushes the target down (cold /panel/sites)", async () => {
+    const t = target(300); // document not scrollable yet: the first scrollIntoView is a no-op
+    const p = keepAligned(t, 0, opts);
+    await Bun.sleep(10);
+    expect(t.top).toBe(300);
+    t.top = 1198; // the list above rendered
+    t.room = 2000;
+    await p;
+    expect(t.top).toBe(0);
+  });
+  test("honours scroll-margin-top and stops once settled", async () => {
+    const t = target(800, 64);
+    t.room = 5000;
+    const start = Date.now();
+    await keepAligned(t, 64, opts);
+    expect(t.top).toBe(64);
+    expect(t.calls).toBe(1);
+    expect(Date.now() - start).toBeLessThan(300);
+  });
+  test("gives up after the timeout when it can never be in place", async () => {
+    const t = target(300);
+    const start = Date.now();
+    await keepAligned(t, 0, { intervalMs: 5, timeoutMs: 40 });
+    expect(Date.now() - start).toBeLessThan(300);
+    expect(t.top).toBe(300);
+  });
+  test("user input (abort) stops the re-alignment", async () => {
+    const ac = new AbortController();
+    const t = target(300);
+    const p = keepAligned(t, 0, { ...opts, signal: ac.signal });
+    ac.abort();
+    t.top = 1198;
+    t.room = 2000;
+    await p;
+    await Bun.sleep(10);
+    expect(t.top).toBe(1198);
+  });
+});
+
 describe("followUrlHash", () => {
-  const saved = { window: globalThis.window, document: globalThis.document };
+  const saved = {
+    window: globalThis.window,
+    document: globalThis.document,
+    getComputedStyle: globalThis.getComputedStyle,
+  };
   afterEach(() => Object.assign(globalThis, saved));
 
   type State = DataRouter["state"];
@@ -66,9 +128,19 @@ describe("followUrlHash", () => {
     Object.assign(globalThis, {
       window: { addEventListener() {}, removeEventListener() {} },
       document: {
-        getElementById: (id: string) =>
-          ["install", "data-key"].includes(id) ? { scrollIntoView: () => scrolled.push(id) } : null,
+        getElementById: (id: string) => {
+          if (!["install", "data-key"].includes(id)) return null;
+          let top = 500;
+          return {
+            getBoundingClientRect: () => ({ top }),
+            scrollIntoView: () => {
+              scrolled.push(id);
+              top = 0;
+            },
+          };
+        },
       },
+      getComputedStyle: () => ({ scrollMarginTop: "0px" }),
     });
     let listener: ((s: State) => void) | undefined;
     const subscribe = (fn: (s: State) => void) => {
@@ -77,7 +149,7 @@ describe("followUrlHash", () => {
     };
     const router = { state: initial, subscribe };
     followUrlHash(router as unknown as DataRouter);
-    const flush = () => new Promise((r) => setTimeout(r, 20));
+    const flush = () => new Promise((r) => setTimeout(r, 30));
     return { scrolled, emit: (s: State) => listener?.(s), flush };
   };
 

@@ -52,18 +52,61 @@ export function waitFor<T>(
 }
 
 const USER_SCROLL_EVENTS = ["wheel", "touchmove", "keydown", "mousedown"] as const;
+/** Consecutive in-place polls after which the target counts as settled. */
+const STABLE_POLLS = 5;
 
-/** Scrolls to `hash` once its target exists; gives up after HASH_WAIT_MS or as soon as the user scrolls. */
+type Alignable = Pick<Element, "getBoundingClientRect" | "scrollIntoView">;
+
+/**
+ * Keeps `el` aligned to the viewport top (`marginTop` = its scroll-margin-top) while the page settles. A single
+ * scrollIntoView is not enough: on a cold load the target can exist before the document is tall enough to scroll, and
+ * content rendered above it later pushes it down (0.6.0 QA: /panel/sites#not-managed landed at top 1198 on 4/17 loads).
+ * Re-aligns whenever the target is off its place; stops once it stayed in place for STABLE_POLLS polls, after
+ * `timeoutMs`, or when `signal` aborts (user input, newer navigation).
+ */
+export function keepAligned(
+  el: Alignable,
+  marginTop: number,
+  {
+    timeoutMs = HASH_WAIT_MS,
+    intervalMs = POLL_MS,
+    signal,
+  }: { timeoutMs?: number; intervalMs?: number; signal?: AbortSignal } = {},
+): Promise<void> {
+  return new Promise((resolve) => {
+    const deadline = Date.now() + timeoutMs;
+    let inPlace = 0;
+    const tick = () => {
+      if (signal?.aborted) return resolve();
+      if (Math.abs(el.getBoundingClientRect().top - marginTop) <= 2) inPlace++;
+      else {
+        inPlace = 0;
+        // "auto" follows CSS scroll-behavior, which styles.css forces to auto under prefers-reduced-motion
+        el.scrollIntoView({ behavior: "auto", block: "start" });
+      }
+      if (inPlace >= STABLE_POLLS || Date.now() >= deadline) return resolve();
+      setTimeout(tick, intervalMs);
+    };
+    tick();
+  });
+}
+
+/** Scrolls to `hash` once its target exists and keeps it there while the page settles; the user's input wins. */
 function scrollToHash(hash: string, signal: AbortSignal): void {
+  const done = new AbortController();
   const userMoved = new AbortController();
   const stop = () => userMoved.abort();
-  for (const e of USER_SCROLL_EVENTS) window.addEventListener(e, stop, { passive: true, once: true, signal });
+  const listening = AbortSignal.any([signal, done.signal]);
+  for (const e of USER_SCROLL_EVENTS)
+    window.addEventListener(e, stop, { passive: true, once: true, signal: listening });
   const both = AbortSignal.any([signal, userMoved.signal]);
-  void waitFor(() => resolveHashTarget(hash, (id) => document.getElementById(id)), { signal: both }).then((el) => {
-    for (const e of USER_SCROLL_EVENTS) window.removeEventListener(e, stop);
-    // "auto" follows CSS scroll-behavior, which styles.css forces to auto under prefers-reduced-motion
-    if (el && !both.aborted) el.scrollIntoView({ behavior: "auto", block: "start" });
-  });
+  void waitFor(() => resolveHashTarget(hash, (id) => document.getElementById(id)), { signal: both })
+    .then((el) => {
+      if (!el || both.aborted) return;
+      const marginTop = Number.parseFloat(getComputedStyle(el).scrollMarginTop) || 0;
+      return keepAligned(el, marginTop, { signal: both });
+    })
+    .finally(() => done.abort());
 }
 
 /**
