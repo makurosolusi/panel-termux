@@ -1,7 +1,8 @@
 // Crash-safe binary swap of a site folder (PLAN/03 D23): `app` exists at every point of a deploy or rollback, and
 // `repairSwap` brings any interrupted state back (cleanup table S1–S3 / R1–R3 / D1–D5, PLAN/03 §4.11).
-import { copyFileSync, existsSync, linkSync, renameSync, rmSync } from "node:fs";
+import { existsSync, linkSync, renameSync, rmSync } from "node:fs";
 import { join } from "node:path";
+import { type LinkFn, linkOrCopy } from "../../shared/file.link";
 
 /** Binary files of one site folder: live, previous, staged, old previous set aside, rollback/copy temp. */
 export type BinPaths = { app: string; prev: string; next: string; drop: string; swp: string };
@@ -28,33 +29,9 @@ export type SwapPoint =
   | "rollback:renamed"
   | "rollback:done";
 
-/** `link` errors that mean "no hardlinks here" (E9: EACCES in Termux app data) → copy instead. */
-const LINK_REFUSED = new Set(["EACCES", "EPERM", "EXDEV", "ENOTSUP", "EOPNOTSUPP", "EMLINK"]);
 const noop: SwapHook = () => {};
 
-/** `link(2)`; tests pass one that fails like Termux (EACCES) to take the copy path. */
-export type LinkFn = (src: string, dst: string) => void;
-
-/** Hardlinks `src` to `dst`; when refused, copies `src` to `via` (if given, then renames it to `dst`). */
-function linkOrCopy(
-  src: string,
-  dst: string,
-  via: string | null,
-  o: { hook: SwapHook; link: LinkFn },
-  copied: SwapPoint,
-): boolean {
-  try {
-    o.link(src, dst);
-    return true;
-  } catch (e) {
-    const code = (e as NodeJS.ErrnoException).code ?? "";
-    if (!LINK_REFUSED.has(code)) throw new Error(`link ${src} → ${dst}: ${(e as Error).message}`, { cause: e });
-  }
-  copyFileSync(src, via ?? dst);
-  o.hook(copied);
-  if (via) renameSync(via, dst);
-  return false;
-}
+export type { LinkFn };
 
 /** What a deploy swap found and did; `linked` null = there was no live binary to keep. */
 export type DeploySwap = { hadApp: boolean; hadPrev: boolean; linked: boolean | null };
@@ -73,7 +50,7 @@ export function deploySwap(p: BinPaths, hook: SwapHook = noop, link: LinkFn = li
   }
   let linked: boolean | null = null;
   if (hadApp) {
-    linked = linkOrCopy(p.app, p.prev, p.swp, { hook, link }, "deploy:copied");
+    linked = linkOrCopy(p.app, p.prev, { link, via: p.swp, onCopied: () => hook("deploy:copied") });
     hook("deploy:linked");
   }
   renameSync(p.next, p.app);
@@ -91,7 +68,7 @@ export function undoDeploySwap(p: BinPaths, s: DeploySwap): void {
 /** Rollback: `app` kept as `.app.swap` (hardlink or copy), `app.prev → app`, `.app.swap → app.prev`. Its own undo. */
 export function rollbackSwap(p: BinPaths, hook: SwapHook = noop, link: LinkFn = linkSync): { linked: boolean } {
   if (!existsSync(p.app) || !existsSync(p.prev)) throw new Error(`rollback needs ${p.app} and ${p.prev}`);
-  const linked = linkOrCopy(p.app, p.swp, null, { hook, link }, "rollback:copied");
+  const linked = linkOrCopy(p.app, p.swp, { link, onCopied: () => hook("rollback:copied") });
   hook("rollback:linked");
   renameSync(p.prev, p.app);
   hook("rollback:renamed");

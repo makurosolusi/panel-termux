@@ -16,7 +16,7 @@ import { join } from "node:path";
 import { type FakeScenarioName, probePaths } from "@/cli/cli.host";
 import { createFakeHost, type FakeHostOptions } from "@/cli/cli.host.fake";
 import { createCliOut } from "@/cli/cli.output";
-import { binaryStep, releaseBlocker } from "@/cli/init.binary";
+import { binaryStep, releaseBlocker, SPACE_HEADROOM_BYTES } from "@/cli/init.binary";
 import { runInit } from "@/cli/init.command";
 import { SELF_VERSION } from "@/cli/init.mode";
 
@@ -171,16 +171,40 @@ describe("binary step: fresh phone", () => {
 });
 
 describe("binary step: upgrade (K21, C21)", () => {
-  test("healthy and runit runs ~/panel/panel → old file becomes panel.prev by hard link (same inode)", async () => {
-    const { h, p, link } = host("upgrade");
+  test("link refused like Termux (EACCES, E9) → panel.prev is a byte-identical copy, stale panel.new replaced", async () => {
+    const { h, p, link } = host("upgrade", {}, (root) => {
+      const dir = createFakeHost("upgrade", { root }).paths.panelDir;
+      writeFileSync(join(dir, "panel.new"), "half a binary from a failed run"); // test-only (POCO lab L10)
+    });
+    const old = readFileSync(p.binary);
     const oldIno = statSync(p.binary).ino;
     const r = await init(h);
     expect(r.code).toBe(0);
     expect(r.text).toContain(`Mengganti ~/panel/panel dengan v${SELF_VERSION} (v0.4.0 disimpan sebagai panel.prev)`);
+    expect(readFileSync(p.prev).equals(old)).toBe(true);
+    expect(statSync(p.prev).ino).not.toBe(oldIno);
+    expect(readFileSync(p.binary, "utf8")).toBe(SELF);
+    expect(existsSync(`${p.prev}.new`) || existsSync(join(h.paths.panelDir, "panel.new"))).toBe(false);
+    expect(readlinkSync(link)).toBe(p.binary); // already ours: left as is
+  });
+
+  test("hard links allowed → old file becomes panel.prev by hard link (same inode)", async () => {
+    const { h, p } = host("upgrade", { linkFails: false });
+    const oldIno = statSync(p.binary).ino;
+    const r = await init(h);
+    expect(r.code).toBe(0);
     expect(statSync(p.prev).ino).toBe(oldIno);
     expect(readFileSync(p.binary, "utf8")).toBe(SELF);
-    expect(existsSync(`${p.prev}.new`)).toBe(false);
-    expect(readlinkSync(link)).toBe(p.binary); // already ours: left as is
+  });
+
+  test("space check counts the panel.prev copy: enough for the new binary alone is not enough → exit 1", async () => {
+    const { h, root } = host("upgrade"); // no panel.db in this scenario
+    h.freeBytes = () => SPACE_HEADROOM_BYTES + statSync(h.selfPath).size; // fits the new binary, not the old one's copy
+    const before = snapshot(root);
+    const r = await init(h);
+    expect(r.code).toBe(1);
+    expect(r.text).toContain("Ruang kosong");
+    expect(snapshot(root)).toEqual(before);
   });
 
   test("panel.prev exists and runit's pid is unknown → panel.prev not overwritten", async () => {
