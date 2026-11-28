@@ -20,6 +20,7 @@ import { createFakeHost, type FakeAnswer, type FakeHost } from "@/cli/cli.host.f
 import { createCliOut } from "@/cli/cli.output";
 import { runInit } from "@/cli/init.command";
 import { defaultTunnelName, tunnelStep } from "@/cli/init.tunnel";
+import { LOGIN_TIMEOUT_MS } from "@/cli/init.tunnel.login";
 import type { ExecResult } from "@/server/exec/termux.exec";
 import { FAKE_TUNNEL_ID } from "@/server/system/system.fake";
 
@@ -180,12 +181,37 @@ describe("fresh phone", () => {
 
   test("login that is not finished in time: exit 1 with the resume command, no tunnel created", async () => {
     const { h } = setup("fresh", { tty: true, answers: [true, ""], files: ENV_FILE });
-    const timedOut = { ...h, run: async () => RUN_TIMEOUT_EXIT } as FakeHost;
+    const opts: { timeoutMs?: number }[] = [];
+    const timedOut = {
+      ...h,
+      run: async (_t: string, _a: readonly string[], o: { timeoutMs?: number }) => {
+        opts.push(o);
+        return RUN_TIMEOUT_EXIT;
+      },
+    } as unknown as FakeHost;
     const r = await init(timedOut);
+    expect(opts[0]?.timeoutMs).toBe(LOGIN_TIMEOUT_MS);
     expect(r.code).toBe(1);
     expect(r.text).toContain("Cloudflare login was not completed within 10 minutes.");
     expect(r.text).toContain("init to continue");
     expect(argvs(h)).not.toContain("cloudflared tunnel create panel-contoh-com");
+  });
+
+  test("login that times out but wrote cert.pem counts as done (the browser won the race)", async () => {
+    const { h, root } = setup("fresh", { tty: true, answers: [true, ""], files: ENV_FILE });
+    const cert = join(h.paths.home, ".cloudflared", "cert.pem");
+    const racy = {
+      ...h,
+      run: async () => {
+        mkdirSync(join(cert, ".."), { recursive: true });
+        writeFileSync(cert, "x");
+        return RUN_TIMEOUT_EXIT;
+      },
+    } as unknown as FakeHost;
+    const r = await init(racy);
+    expect(r.text).not.toContain("was not completed");
+    expect(r.text).not.toContain("tunnel login failed");
+    expect(root).toBeTruthy();
   });
 
   test("no TTY (--yes): exit 3 before login, nothing written", async () => {

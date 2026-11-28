@@ -65,7 +65,13 @@ export async function login(ctx: InitContext, cfDir: string): Promise<void> {
     },
   });
   const cert = join(cfDir, "cert.pem");
-  if (code === RUN_TIMEOUT_EXIT && !existsSync(cert))
+  // cert.pem is the proof of a finished login: the browser can finish just as the timeout fires, so the exit code
+  // alone (timeout or not) must not fail a login that wrote it.
+  if (existsSync(cert)) {
+    ctx.state.changed.push(cert);
+    return;
+  }
+  if (code === RUN_TIMEOUT_EXIT)
     throw new CliExit(
       INIT_EXIT.failed,
       tr(
@@ -74,8 +80,7 @@ export async function login(ctx: InitContext, cfDir: string): Promise<void> {
       ),
       tr(`run ${ctx.resumeCommand()} to continue`, `jalankan ${ctx.resumeCommand()} untuk melanjutkan`),
     );
-  if (code !== 0 || !existsSync(cert)) throw cfFail("tunnel login", code, ctx);
-  ctx.state.changed.push(cert);
+  throw cfFail("tunnel login", code, ctx);
 }
 
 type TunnelRow = { id?: unknown; name?: unknown };
