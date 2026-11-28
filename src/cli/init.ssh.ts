@@ -80,34 +80,52 @@ export type SshState =
       manual: number[];
     };
 
-/** Port sshd listens on by default: `Port` of sshd_config, else the Termux default. */
-const configuredPort = (p: ReturnType<typeof sshPaths>): number =>
-  Number(/^\s*Port\s+(\d+)/im.exec(readOr(p.sshdConfig))?.[1]) || SSHD_PORT;
+/**
+ * Ports of sshd_config: every uncommented `Port` line, else the Termux default. Known limit: `Include` drop-ins
+ * (sshd_config.d/*.conf) are not read for ports.
+ */
+const configuredPorts = (p: ReturnType<typeof sshPaths>): number[] => {
+  const ports = [...readOr(p.sshdConfig).matchAll(/^\s*Port\s+(\d+)/gim)].map((m) => Number(m[1]));
+  return ports.length > 0 ? ports : [SSHD_PORT];
+};
+
+/** Ports given on an sshd command line: `-p N`, `-pN`, `-o Port=N`, `-oPort=N` (they override the config). */
+const cmdlinePorts = (cmdline: readonly string[]): number[] => {
+  const ports: number[] = [];
+  for (let i = 1; i < cmdline.length; i++) {
+    const a = cmdline[i] ?? "";
+    const v = a === "-p" || a === "-o" ? cmdline[++i] : /^-[po]./.test(a) ? a.slice(2) : undefined;
+    const m = /^(?:Port\s*=\s*)?(\d+)$/i.exec(v ?? "");
+    if (m) ports.push(Number(m[1]));
+  }
+  return ports;
+};
 
 /**
- * Our own listening sshd processes outside runit on the configured port (only asked when runit's sshd is not
- * running). Session children ("sshd: user@pts/0") are no listeners; `-p N` on the command line overrides the config.
+ * Our own listening sshd processes outside runit on a configured port (only asked when runit's sshd is not
+ * running). Session children ("sshd: user@pts/0") are no listeners; ports on the command line override the config,
+ * and a listener on ANY of the ports counts.
  */
 const manualSshd = (ctx: InitContext, p: ReturnType<typeof sshPaths>): number[] => {
-  const port = configuredPort(p);
+  const wanted = configuredPorts(p);
   return ctx.host.proc
     .list()
     .filter((q) => q.uid === ctx.host.proc.uid && basename(q.exe) === "sshd" && !q.cmdline[0]?.startsWith("sshd:"))
     .filter((q) => {
-      const i = q.cmdline.indexOf("-p");
-      return (i >= 0 ? Number(q.cmdline[i + 1]) : port) === port;
+      const own = cmdlinePorts(q.cmdline);
+      return (own.length > 0 ? own : wanted).some((n) => wanted.includes(n));
     })
     .map((q) => q.pid);
 };
 
 /**
- * True when sshd starts at boot (runit supervises a running sshd and there is no `down` file), or openssh is not
- * there at all and no sshd runs by hand (nobody uses SSH). False = `init` prints how to enable it.
+ * True when sshd starts at boot (runit supervises a running sshd and there is no `down` file), or no sshd runs at
+ * all, neither supervised nor by hand (nobody uses SSH; same rule as doctor). False = `init` prints how to enable it.
  */
 export async function sshBootReady(ctx: InitContext): Promise<boolean> {
   const p = sshPaths(ctx);
-  if (!existsSync(p.service)) return manualSshd(ctx, p).length === 0;
-  return !existsSync(p.down) && (await svRunning(ctx, p));
+  if (await svRunning(ctx, p)) return !existsSync(p.down);
+  return manualSshd(ctx, p).length === 0;
 }
 
 const svRunning = async (ctx: InitContext, p: ReturnType<typeof sshPaths>): Promise<boolean> =>

@@ -310,7 +310,10 @@ describe("ssh step (K22, C26)", () => {
     expect(await sshBootReady(ctx)).toBe(false); // down file
     rmSync(sshPaths(ctx).down);
     expect(await sshBootReady(ctx)).toBe(true);
-    expect(await sshBootReady(ctxOf(phone("fresh"), null).ctx)).toBe(false); // service exists, not running
+    expect(await sshBootReady(ctxOf(phone("fresh"), null).ctx)).toBe(true); // service exists, nothing runs: unused
+    const manual = phone("fresh");
+    manual.proc.list = () => [{ pid: 9, uid: manual.proc.uid, exe: "/x/usr/bin/sshd", cmdline: ["sshd"] }];
+    expect(await sshBootReady(ctxOf(manual, null).ctx)).toBe(false); // by hand, not under runit
     expect(await sshBootReady(ctxOf(phone("fresh", { bare: true }), null).ctx)).toBe(true); // no openssh: nobody uses ssh
   });
 
@@ -337,6 +340,24 @@ describe("ssh step (K22, C26)", () => {
     expect(sshStep.plan(c2, s2)).toContainEqual(
       expect.objectContaining({ kind: "warning", hint: expect.stringContaining("kill 1 2 3, then sv up sshd") }),
     );
+  });
+
+  test("manual sshd port forms: -pN, -oPort=N, -o Port=N, any config Port, comments ignored", async () => {
+    const h = phone();
+    const sshd = (pid: number, cmdline: string[]) => ({ pid, uid: h.proc.uid, exe: "/x/usr/bin/sshd", cmdline });
+    const { ctx } = ctxOf(h, keyFile(ED));
+    const pids = async () => ((await sshStep.detect(ctx)) as SshState & { manual: number[] }).manual;
+    h.proc.list = () => [
+      sshd(1, ["sshd", "-p8022"]),
+      sshd(2, ["sshd", "-oPort=8022"]),
+      sshd(3, ["sshd", "-o", "Port=8022"]),
+      sshd(4, ["sshd", "-p8023"]),
+      sshd(5, ["sshd", "-oPort=8023"]),
+    ];
+    expect(await pids()).toEqual([1, 2, 3]);
+    writeFileSync(sshPaths(ctx).sshdConfig, "#Port 9999\nPort 8023\nPort 8024\n");
+    h.proc.list = () => [sshd(6, ["sshd", "-p8024"]), sshd(7, ["sshd"]), sshd(8, ["sshd", "-p", "9999"])];
+    expect(await pids()).toEqual([6, 7]); // 7 listens on the config ports; 8 on a commented-out one
   });
 
   test("init without --ssh-key: one note how to enable SSH at boot when SSH is in use but not boot-ready", async () => {
