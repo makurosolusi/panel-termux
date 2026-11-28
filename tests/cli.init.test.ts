@@ -67,6 +67,18 @@ describe("detectMode (K7, K20, K21, C20, E2)", () => {
     expect((await detectMode(h)).mode).toBe("repair");
   });
 
+  test("a stale marker never bypasses downgrade or the upgrade restart; same release still resumes", async () => {
+    for (const [scenario, mode] of [
+      ["downgrade", "downgrade"],
+      ["upgrade", "upgrade"],
+      ["ready", "fresh"], // same version, other build: resume
+    ] as const) {
+      const h = host(scenario);
+      setUnfinished(h, true);
+      expect((await detectMode(h)).mode).toBe(mode);
+    }
+  });
+
   test("fresh never counts the lock, the binary or the panel service", async () => {
     const h = host("fresh-resume");
     mkdirSync(join(h.paths.prefix, "tmp"), { recursive: true });

@@ -92,7 +92,7 @@ export function staleProcess(host: CliHost): boolean {
 }
 
 /**
- * Mode of this phone for this binary: no user data, or a fresh install that did not finish → fresh; no ~/panel/panel →
+ * Mode of this phone for this binary: no user data, or a fresh install of this same release that did not finish → fresh; no ~/panel/panel →
  * repair; same bytes → repair, or upgrade when runit still runs another file; else by version: newer, same (other
  * build) or unknown → upgrade, older → downgrade (init exits 3).
  */
@@ -104,7 +104,11 @@ export async function detectMode(host: CliHost): Promise<ModeDecision> {
   const stale = staleProcess(host);
   const installed = binaryInstalled ? await installedVersion(host) : { version: null, source: null };
   const base = { userData, installed, binaryInstalled, sameBinary, staleProcess: stale };
-  if (userData.length === 0 || isUnfinished(host)) return { ...base, mode: "fresh" }; // unfinished: a resumed fresh install
+  // The unfinished marker resumes a fresh install only for the same release: a stale marker (crash, Ctrl-C) must not
+  // bypass the downgrade refusal or the upgrade restart when an older/newer binary runs later. Ignored, not removed:
+  // detection stays read-only, and a finished init clears it.
+  const resume = isUnfinished(host) && (!binaryInstalled || sameBinary || installed.version === SELF_VERSION);
+  if (userData.length === 0 || resume) return { ...base, mode: "fresh" };
   if (!binaryInstalled) return { ...base, mode: "repair" };
   if (sameBinary) return { ...base, mode: stale ? "upgrade" : "repair" };
   if (installed.version === null) return { ...base, mode: "upgrade" };
