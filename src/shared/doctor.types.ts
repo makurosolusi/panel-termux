@@ -37,6 +37,7 @@ export type DoctorBootstrapKey =
   | "svc_cloudflared"
   | "svc_postgres"
   | "cloudflared_down_file"
+  | "sshd_boot"
   | "cloudflared_run_script"
   | "postgres_initdb"
   | "binary_installed"

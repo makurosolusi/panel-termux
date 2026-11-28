@@ -204,6 +204,23 @@ describe("bootstrap checks", () => {
     expect(await stateOf(host("ready"), "cloudflared_down_file")).toBe("ok");
   });
 
+  test("sshd_boot: ok under runit, warning with a down file or a manual sshd, no check when sshd is not in use", async () => {
+    const ready = host("ready");
+    expect(get(await doctor(ready), "sshd_boot")?.state).toBe("ok");
+    const sshd = join(root(ready), "usr", "var", "service", "sshd");
+    mkdirSync(sshd, { recursive: true });
+    writeFileSync(join(sshd, "down"), "");
+    const down = get(await doctor(ready), "sshd_boot");
+    expect(down).toMatchObject({ state: "warning", action: "init" });
+    expect(down?.label).toContain("down file");
+    expect(down?.hint).toContain("panel init --ssh-key");
+
+    const fresh = host("fresh");
+    expect(get(await doctor(fresh), "sshd_boot")).toBeUndefined(); // openssh unused: its default down file is no warning
+    fresh.proc.list = () => [{ pid: 4242, uid: fresh.proc.uid, exe: "/x/usr/bin/sshd", cmdline: ["sshd"] }];
+    expect(get(await doctor(fresh), "sshd_boot")?.label).toContain("runs by hand");
+  });
+
   test("cloudflared_run_script: the package template (--token-file) is a warning", async () => {
     const h = host("ready");
     const run = join(root(h), "usr", "var", "service", "cloudflared", "run");

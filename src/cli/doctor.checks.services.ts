@@ -89,6 +89,33 @@ export function serviceChecks(p: DoctorProbe): DoctorCheck[] {
         ),
       );
   }
+  // SSH is optional: only checked when sshd is in use (runit runs it, or the user started one by hand), else the
+  // package's default `down` file would warn on every phone that never used SSH. A warning, not an error: the panel
+  // keeps running, but after a reboot the user loses their way in.
+  if (p.sshd.supervised || p.sshd.manual)
+    out.push(
+      l(
+        "sshd_boot",
+        p.sshd.supervised && !p.sshd.down,
+        tr("sshd starts automatically when the phone boots", "sshd menyala otomatis saat HP hidup"),
+        [
+          "warning",
+          p.sshd.down
+            ? tr(
+                "sshd will not start when the phone boots (the sshd service has a down file)",
+                "sshd tidak menyala saat HP hidup (layanan sshd punya file down)",
+              )
+            : tr(
+                "sshd runs by hand, not under runit: it will not start when the phone boots",
+                "sshd berjalan manual, bukan lewat runit: tidak menyala saat HP hidup",
+              ),
+          tr(
+            "run: panel init --ssh-key <key file, https URL or -> (removes the down file, puts sshd under runit)",
+            "jalankan: panel init --ssh-key <file kunci, URL https atau -> (menghapus file down, sshd ikut runit)",
+          ),
+        ],
+      ),
+    );
   if (p.packages.postgresql === "installed")
     out.push(
       l("postgres_initdb", p.pgDataMajor !== null, tr("PostgreSQL data exists", "Data PostgreSQL sudah dibuat"), [

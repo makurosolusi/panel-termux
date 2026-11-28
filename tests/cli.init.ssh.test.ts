@@ -14,7 +14,8 @@ import { join } from "node:path";
 import type { FakeScenarioName } from "@/cli/cli.host";
 import { createFakeHost, type FakeHost, type FakeHostOptions } from "@/cli/cli.host.fake";
 import { CliExit, createCliOut } from "@/cli/cli.output";
-import { createSshStep, type SshState, sshPaths, sshStep } from "@/cli/init.ssh";
+import { runInit } from "@/cli/init.command";
+import { createSshStep, type SshState, sshBootReady, sshPaths, sshStep } from "@/cli/init.ssh";
 import { appendKeys, parseKey, parseKeys } from "@/cli/init.ssh.keys";
 import type { InitArgs, InitContext, InitMode } from "@/cli/init.types";
 
@@ -270,7 +271,7 @@ describe("ssh step (K22, C26)", () => {
     expect(existsSync(sshPaths(ctx).authorizedKeys)).toBe(true);
   });
 
-  test("sshd started by hand (not runit): warning, no sv up, down kept, manual line", async () => {
+  test("sshd started by hand (not runit): warning, no sv up, down removed for the next boot, manual line", async () => {
     const h = phone();
     h.proc.list = () => [{ pid: 777, uid: h.proc.uid, exe: "/x/usr/bin/sshd", cmdline: ["sshd"] }];
     const { ctx } = ctxOf(h, keyFile(ED));
@@ -280,8 +281,78 @@ describe("ssh step (K22, C26)", () => {
     );
     expect(lines.some((l) => l.text.startsWith("Nyalakan SSH"))).toBe(false);
     expect(h.records.some((r) => r.argv.join(" ") === "sv up sshd")).toBe(false);
-    expect(existsSync(sshPaths(ctx).down)).toBe(true);
+    expect(existsSync(sshPaths(ctx).down)).toBe(false); // else `sv up sshd` after the kill says "normally down"
+    expect(ctx.state.changed).toContain(sshPaths(ctx).down);
     expect(ctx.state.manual.join("\n")).toContain("kill 777, then sv up sshd");
+  });
+
+  const runningSshd = (tool: string, args: readonly string[]) =>
+    tool === "sv" && args[0] === "status"
+      ? { code: 0, stdout: "run: sshd: (pid 5) 9s, normally down\n", stderr: "" }
+      : undefined;
+
+  test("sshd already under runit but with the down file: planned, down removed, sshd not restarted, rerun is complete", async () => {
+    const h = phone("ready", { execAnswers: runningSshd });
+    const { ctx } = ctxOf(h, keyFile(ED), "repair");
+    const p = sshPaths(ctx);
+    const lines = await run(ctx);
+    expect(lines.filter((l) => l.kind === "action").map((l) => l.text)).toContain(
+      "Make SSH start when the phone boots (remove the sshd down file)",
+    );
+    expect(existsSync(p.down)).toBe(false);
+    expect(h.records.some((r) => r.argv.join(" ") === "sv up sshd")).toBe(false);
+    expect(sshStep.plan(ctx, await sshStep.detect(ctx)).filter((l) => l.kind === "action")).toEqual([]);
+  });
+
+  test("sshBootReady needs runit running AND no down file", async () => {
+    const h = phone("ready", { execAnswers: runningSshd });
+    const { ctx } = ctxOf(h, null, "repair");
+    expect(await sshBootReady(ctx)).toBe(false); // down file
+    rmSync(sshPaths(ctx).down);
+    expect(await sshBootReady(ctx)).toBe(true);
+    expect(await sshBootReady(ctxOf(phone("fresh"), null).ctx)).toBe(false); // service exists, not running
+    expect(await sshBootReady(ctxOf(phone("fresh", { bare: true }), null).ctx)).toBe(true); // no openssh: nobody uses ssh
+  });
+
+  test("two manual sshd: the one on the configured port is picked, session children and other ports ignored", async () => {
+    const h = phone();
+    const sshd = (pid: number, cmdline: string[]) => ({ pid, uid: h.proc.uid, exe: "/x/usr/bin/sshd", cmdline });
+    h.proc.list = () => [
+      sshd(28248, ["sshd", "-p", "8023"]), // backup sshd on another port: first in the list, the old wrong pick
+      sshd(30000, ["sshd: user@pts/0"]),
+      sshd(28423, ["sshd"]), // default port 8022
+    ];
+    const { ctx } = ctxOf(h, keyFile(ED));
+    const s = (await sshStep.detect(ctx)) as SshState & { manual: number[] };
+    expect(s.manual).toEqual([28423]);
+    await sshStep.apply(ctx, s);
+    expect(ctx.state.manual.join("\n")).toContain("kill 28423, then sv up sshd");
+
+    // Port from sshd_config; two listeners on it are ambiguous: every pid is listed, none guessed
+    const c2 = ctxOf(h, keyFile(ED)).ctx;
+    writeFileSync(sshPaths(c2).sshdConfig, `${TERMUX_SSHD_CONFIG}Port 8023\n`);
+    h.proc.list = () => [sshd(1, ["sshd", "-p", "8023"]), sshd(2, ["sshd"]), sshd(3, ["sshd", "-p", "8023"])];
+    const s2 = (await sshStep.detect(c2)) as SshState & { manual: number[] };
+    expect(s2.manual).toEqual([1, 2, 3]);
+    expect(sshStep.plan(c2, s2)).toContainEqual(
+      expect.objectContaining({ kind: "warning", hint: expect.stringContaining("kill 1 2 3, then sv up sshd") }),
+    );
+  });
+
+  test("init without --ssh-key: one note how to enable SSH at boot when SSH is in use but not boot-ready", async () => {
+    const note = async (h: FakeHost) => {
+      let text = "";
+      const out = createCliOut({ stdout: (t) => (text += t), stderr: (t) => (text += t) });
+      const values = { yes: false, "dry-run": true, "skip-verify": false, lang: "en" } as never;
+      await runInit({ values, positionals: [] }, { out, host: async () => h }, { steps: [sshStep] });
+      return text;
+    };
+    const down = await note(phone("ready", { execAnswers: runningSshd }));
+    expect(down).toContain("SSH does not start automatically when the phone boots");
+    expect(down).toContain("panel init --ssh-key <key file, https URL or ->");
+    const h = phone("ready", { execAnswers: runningSshd });
+    rmSync(join(h.paths.svdir, "sshd", "down"));
+    expect(await note(h)).not.toContain("SSH does not start");
   });
 
   test("sv up sshd is retried until runsv supervises the folder; still failing → exit 1", async () => {
