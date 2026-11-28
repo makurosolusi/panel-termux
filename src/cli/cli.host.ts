@@ -30,6 +30,8 @@ export type RunOptions = {
   env?: Record<string, string | undefined>;
   cwd?: string;
   onLine?: (line: string) => void;
+  /** Kills the child after this many ms; `runVisible` then returns RUN_TIMEOUT_EXIT. */
+  timeoutMs?: number;
   /** `LC_ALL=C` for the child: apt/dpkg output parsed by the CLI must not be translated (lab L8). */
   lcAllC?: boolean;
 };
@@ -189,6 +191,9 @@ async function eachLine(stream: ReadableStream, onLine: (line: string) => void):
   if (rest) emit(rest);
 }
 
+/** Exit code `runVisible` returns for a child killed by `timeoutMs` (same as coreutils `timeout`). */
+export const RUN_TIMEOUT_EXIT = 124;
+
 /**
  * Runs a Termux tool with stdio per RunOptions; spawn failure throws with the command name (Rule 11). With `onLine`
  * both stdout and stderr are piped: cloudflared prints its login URL on stderr.
@@ -203,12 +208,24 @@ export async function runVisible(tool: string, args: readonly string[] = [], opt
   } catch (e) {
     throw new Error(`run ${tool} failed to spawn: ${(e as Error).message}`, { cause: e });
   }
+  let timedOut = false;
+  const timer = opts.timeoutMs
+    ? setTimeout(() => {
+        timedOut = true;
+        proc.kill();
+      }, opts.timeoutMs)
+    : undefined;
   const { onLine } = opts;
-  if (onLine)
-    await Promise.all(
-      [proc.stdout, proc.stderr].map((s) => (s instanceof ReadableStream ? eachLine(s, onLine) : undefined)),
-    );
-  return proc.exited;
+  try {
+    if (onLine)
+      await Promise.all(
+        [proc.stdout, proc.stderr].map((s) => (s instanceof ReadableStream ? eachLine(s, onLine) : undefined)),
+      );
+    const code = await proc.exited;
+    return timedOut ? RUN_TIMEOUT_EXIT : code;
+  } finally {
+    clearTimeout(timer);
+  }
 }
 
 /** Real Termux host. */

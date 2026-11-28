@@ -93,6 +93,8 @@ describe("binary step: fresh phone", () => {
     expect(readlinkSync(link)).toBe(p.binary);
     expect(statSync(p.dataDir).mode & 0o777).toBe(0o700);
     expect(existsSync(join(root, "panel-termux"))).toBe(false); // K24: download outside ~/panel removed
+    expect(r.text).not.toMatch(/^ {2}\S*panel-termux$/m); // the summary does not list a path that is gone
+    expect(existsSync(join(h.paths.prefix, "tmp", "panel-init.unfinished"))).toBe(false); // the run reached its end
     expect(r.text).toContain(
       "Binary matches SHA256SUMS of release v0.5.1 (proves the download is intact, not where it came from)",
     );
@@ -107,6 +109,7 @@ describe("binary step: fresh phone", () => {
     const before = snapshot(root);
     const r = await init(h);
     expect(r.code).toBe(1);
+    expect(existsSync(join(h.paths.prefix, "tmp", "panel-init.unfinished"))).toBe(true); // next run resumes as fresh
     expect(r.text).toContain("does not match SHA256SUMS of release v0.5.1");
     expect(snapshot(root)).toEqual(before);
   });

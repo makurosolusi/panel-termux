@@ -97,6 +97,8 @@ describe("panel init end to end on the fake phone", () => {
     const r = await init(h, { "ssh-key": key });
     expect(r.code).toBe(0);
     expect(r.text).toContain("panel init finished");
+    expect(r.text).toContain("Panel service installed in runit");
+    expect(existsSync(join(h.paths.prefix, "tmp", "panel-init.unfinished"))).toBe(false);
     expect(r.text).not.toContain(SECRET);
     expect(r.text).not.toContain("fake-tunnel-secret");
     const p = probePaths(h.paths);

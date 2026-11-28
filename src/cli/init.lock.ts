@@ -1,6 +1,6 @@
 // `panel init` lock (split from init.command.ts): one init at a time per phone, stale locks (dead or reused pid)
 // are taken over.
-import { closeSync, mkdirSync, openSync, readFileSync, rmSync, writeSync } from "node:fs";
+import { closeSync, existsSync, mkdirSync, openSync, readFileSync, rmSync, writeFileSync, writeSync } from "node:fs";
 import { dirname, join } from "node:path";
 import type { CliHost } from "./cli.host";
 import { tr } from "./cli.locale";
@@ -77,4 +77,21 @@ export function acquireLock(host: CliHost): () => void {
     ),
     tr("run panel init again", "ulangi panel init"),
   );
+}
+
+/** `$PREFIX/tmp/panel-init.unfinished`: a fresh install started and did not reach its last step (outside $HOME, like the lock). */
+const unfinishedFile = (host: CliHost) => join(host.paths.prefix, "tmp", "panel-init.unfinished");
+
+/** True while an interrupted or failed fresh install waits to be resumed: the next run is "fresh" again, not "repair". */
+export const isUnfinished = (host: CliHost): boolean => existsSync(unfinishedFile(host));
+
+/** Marks (`true`) or clears (`false`) the unfinished fresh install. */
+export function setUnfinished(host: CliHost, on: boolean): void {
+  const file = unfinishedFile(host);
+  if (!on) {
+    rmSync(file, { force: true });
+    return;
+  }
+  mkdirSync(dirname(file), { recursive: true });
+  writeFileSync(file, `${host.proc.selfPid}\n`, { mode: 0o600 });
 }

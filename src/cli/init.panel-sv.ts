@@ -96,6 +96,13 @@ export const panelSvStep = defineStep<PanelSvState>({
     if (s.kind === "missing") {
       // `down` until step 10 checked .env and starts it, so runsv never starts a half-configured panel.
       installServiceDir(ctx, "panel", PANEL_RUN_TEMPLATE, true);
+      ctx.out.check(
+        "ok",
+        tr(
+          "Panel service installed in runit (it starts at the last step)",
+          "Layanan panel terpasang di runit (menyala di langkah terakhir)",
+        ),
+      );
       return;
     }
     const run = join(s.dir, "run");
