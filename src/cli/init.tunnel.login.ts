@@ -3,12 +3,15 @@
 // the tunnel token) and errors carry the exit code only.
 import { existsSync } from "node:fs";
 import { join } from "node:path";
+import { RUN_TIMEOUT_EXIT } from "./cli.host";
 import { tr } from "./cli.locale";
 import { CliExit } from "./cli.output";
 import { INIT_EXIT, type InitContext } from "./init.types";
 
 /** cloudflared calls that reach the Cloudflare API from the phone (slow mobile networks). */
 const API_TIMEOUT_MS = 30_000;
+/** How long init waits for the browser login before it gives up (the user can resume with the same command). */
+export const LOGIN_TIMEOUT_MS = 10 * 60_000;
 /** Tunnel names we create/accept (cloudflared allows more; we keep them safe for argv and the run script). */
 const TUNNEL_NAME_RE = /^[a-z0-9][a-z0-9-]{0,62}$/;
 
@@ -45,17 +48,12 @@ export async function login(ctx: InitContext, cfDir: string): Promise<void> {
   );
   let opened = false;
   const code = await ctx.host.run("cloudflared", ["tunnel", "login"], {
+    timeoutMs: LOGIN_TIMEOUT_MS,
     onLine: (line) => {
       const url = /https:\/\/\S+/.exec(line)?.[0];
       if (!url || opened) return;
       opened = true;
-      // one-time login URL, not a secret (D14)
-      ctx.out.line(
-        tr(
-          `If the browser does not open automatically, open: ${url}`,
-          `Bila browser tidak terbuka sendiri, buka: ${url}`,
-        ),
-      );
+      // cloudflared's own output already shows the address (host.run echoes it): only open it here
       ctx.host.exec("termux-open-url", [url]).catch(() => {
         ctx.out.note(
           tr(
@@ -67,8 +65,22 @@ export async function login(ctx: InitContext, cfDir: string): Promise<void> {
     },
   });
   const cert = join(cfDir, "cert.pem");
-  if (code !== 0 || !existsSync(cert)) throw cfFail("tunnel login", code, ctx);
-  ctx.state.changed.push(cert);
+  // cert.pem is the proof of a finished login: the browser can finish just as the timeout fires, so the exit code
+  // alone (timeout or not) must not fail a login that wrote it.
+  if (existsSync(cert)) {
+    ctx.state.changed.push(cert);
+    return;
+  }
+  if (code === RUN_TIMEOUT_EXIT)
+    throw new CliExit(
+      INIT_EXIT.failed,
+      tr(
+        `Cloudflare login was not completed within ${LOGIN_TIMEOUT_MS / 60_000} minutes.`,
+        `Login Cloudflare tidak selesai dalam ${LOGIN_TIMEOUT_MS / 60_000} menit.`,
+      ),
+      tr(`run ${ctx.resumeCommand()} to continue`, `jalankan ${ctx.resumeCommand()} untuk melanjutkan`),
+    );
+  throw cfFail("tunnel login", code, ctx);
 }
 
 type TunnelRow = { id?: unknown; name?: unknown };

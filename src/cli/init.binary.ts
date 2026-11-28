@@ -214,8 +214,8 @@ async function apply(ctx: InitContext, s: BinaryState): Promise<void> {
   }
   if (s.download) {
     const file = s.download;
+    // not recorded in `changed`: that list names what exists now, the summary would show a path that is gone
     step(tr(`delete the download ${file}`, `menghapus file unduhan ${file}`), () => rmSync(file, { force: true }));
-    ctx.state.changed.push(file);
   }
   for (const dir of s.prune) {
     step(tr(`delete ${dir}`, `menghapus ${dir}`), () => rmSync(dir, { recursive: true, force: true }));

@@ -48,6 +48,8 @@ export type DoctorProbe = {
   daemonAlive: boolean;
   services: Record<(typeof SERVICES)[number], SuperviseState | null>;
   cfDownFile: boolean;
+  /** sshd: runit runs it (`supervised`), the package's `down` file is there, or the user runs one by hand. */
+  sshd: { supervised: boolean; down: boolean; manual: boolean };
   cfRunScript: string | null;
   cfConfig: string | null;
   env: EnvFileValues | null;
@@ -146,7 +148,7 @@ export async function collectDoctorProbe(host: CliHost): Promise<DoctorProbe> {
   const port = Number(env?.PORT?.trim() || DEFAULT_PORT);
   const svc = (name: string) => join(paths.svdir, name);
   const publicHost = publicHostOf(env?.APP_BASE_URL);
-  const [packages, held, boot, api, binMajor, services, health, pub] = await Promise.all([
+  const [packages, held, boot, api, binMajor, services, health, pub, sshd] = await Promise.all([
     Promise.all(PROBED_PACKAGES.map(async (k) => [k, await dpkgState(host, k)] as const)),
     tryExec(host, "apt-mark", ["showhold"]),
     androidApp(host, ANDROID_APPS.boot),
@@ -155,6 +157,7 @@ export async function collectDoctorProbe(host: CliHost): Promise<DoctorProbe> {
     Promise.all(SERVICES.map(async (s) => [s, await system.runit.supervise(s)] as const)),
     Number.isInteger(port) ? system.net.httpStatus(port, "/api/health", PANEL_HEALTH_TIMEOUT_MS) : null,
     publicHost ? system.cloudflared.probe(publicHost) : null,
+    system.runit.supervise("sshd"),
   ]);
   const dataDir = resolve(paths.panelDir, env?.PANEL_DATA_DIR?.trim() || DEFAULT_DATA_DIR);
   return {
@@ -185,6 +188,11 @@ export async function collectDoctorProbe(host: CliHost): Promise<DoctorProbe> {
     daemonAlive: daemonAlive(host, p.daemonPid),
     services: Object.fromEntries(services) as DoctorProbe["services"],
     cfDownFile: existsSync(join(svc("cloudflared"), "down")),
+    sshd: {
+      supervised: sshd?.state === "run",
+      down: existsSync(join(svc("sshd"), "down")),
+      manual: host.proc.list().some((q) => q.uid === host.proc.uid && (q.exe.split("/").pop() ?? "") === "sshd"),
+    },
     cfRunScript: readOrNull(join(svc("cloudflared"), "run")),
     cfConfig: readOrNull(join(p.cloudflaredDir, "config.yml")),
     env,

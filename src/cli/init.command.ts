@@ -11,7 +11,7 @@ import { binaryStep } from "./init.binary";
 import { bootStep } from "./init.boot";
 import { envStep } from "./init.env";
 import { chooseInitLanguage } from "./init.language";
-import { acquireLock } from "./init.lock";
+import { acquireLock, setUnfinished } from "./init.lock";
 import { detectMode, SELF_VERSION } from "./init.mode";
 import { packagesStep } from "./init.packages";
 import { panelSvStep } from "./init.panel-sv";
@@ -19,7 +19,7 @@ import { allowed, hasAction, type Planned, POLICY, printPlan, summary, tilde } f
 import { pm2Step } from "./init.pm2";
 import { postgresStep } from "./init.postgres";
 import { runitStep } from "./init.runit";
-import { sshStep } from "./init.ssh";
+import { sshBootReady, sshStep } from "./init.ssh";
 import { startStep } from "./init.start";
 import { tunnelStep } from "./init.tunnel";
 import {
@@ -151,6 +151,13 @@ export async function runInit(parsed: ParsedArgs, io: CliIo, opts: InitOpts = {}
       );
       return;
     }
+    // the unfinished marker (set for fresh installs) stays: the next run resumes instead of repairing
+    out.note(
+      tr(
+        `\nInterrupted. Run ${resumeCommand(host)} to continue where it stopped.`,
+        `\nDihentikan. Jalankan ${resumeCommand(host)} untuk melanjutkan dari yang tertinggal.`,
+      ),
+    );
     release();
     process.exit(INIT_EXIT.interrupted);
   };
@@ -226,6 +233,16 @@ export async function runInit(parsed: ParsedArgs, io: CliIo, opts: InitOpts = {}
       planned.push({ step, policy: POLICY[step.id][mode], lines: step.plan(ctx, await step.detect(ctx)) });
     }
     printPlan(ctx, planned);
+    // Without --ssh-key the ssh step is left out, so tell once how to make SSH survive a reboot (when it is in use).
+    if (args.sshKey === null && (opts.steps ?? INIT_STEPS).includes(sshStep) && !(await sshBootReady(ctx)))
+      out.check(
+        "info",
+        tr("SSH does not start automatically when the phone boots", "SSH tidak menyala otomatis saat HP hidup"),
+        tr(
+          `to enable it: ${ctx.resumeCommand()} --ssh-key <key file, https URL or ->`,
+          `untuk mengaktifkannya: ${ctx.resumeCommand()} --ssh-key <file kunci, URL https atau ->`,
+        ),
+      );
     if (args.dryRun) return INIT_EXIT.ok;
     const todo = planned.filter((p) => allowed(p.policy, tty) && hasAction(p.lines));
     /** Error lines still true after the run (M1: a plan with only errors has no action, so nothing fixed it). */
@@ -263,6 +280,7 @@ export async function runInit(parsed: ParsedArgs, io: CliIo, opts: InitOpts = {}
       return INIT_EXIT.cancelled;
     }
     const postponed: PlanLine[] = [];
+    if (mode === "fresh") setUnfinished(host, true);
     for (const { step } of todo) {
       const state = await step.detect(ctx); // fresh: an earlier step may have done part of it
       if (!hasAction(step.plan(ctx, state))) continue;
@@ -277,6 +295,7 @@ export async function runInit(parsed: ParsedArgs, io: CliIo, opts: InitOpts = {}
         postponed.push({ kind: "error", text: e.message, ...(e.hint ? { hint: e.hint } : {}) });
       }
     }
+    setUnfinished(host, false); // every step ran to its end (a step that throws leaves the marker)
     const errors = await leftErrors();
     summary(out, ctx, [...postponed, ...errors]);
     if (errors.length > 0) return INIT_EXIT.failed;

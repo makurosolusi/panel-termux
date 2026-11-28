@@ -9,6 +9,7 @@ import { runCli } from "@/cli/cli.main";
 import { CliExit, createCliOut } from "@/cli/cli.output";
 import { INIT_STEPS } from "@/cli/init.command";
 import { languageAnswer } from "@/cli/init.language";
+import { setUnfinished } from "@/cli/init.lock";
 import { detectMode } from "@/cli/init.mode";
 import { defineStep, INIT_EXIT, INIT_STEP_IDS, type InitStep, type InitStepId } from "@/cli/init.types";
 import { init, initSandbox, snapshot, stubs } from "./cli.init.harness";
@@ -55,6 +56,27 @@ describe("detectMode (K7, K20, K21, C20, E2)", () => {
     const d = await detectMode(h);
     expect(d.installed).toEqual({ version: "99.1.0", source: "db" });
     expect(d.mode).toBe("downgrade");
+  });
+
+  test("an unfinished fresh install (marker) is fresh again, not repair, until the marker is cleared", async () => {
+    const h = host("fresh-pg"); // user data present: repair without the marker
+    expect((await detectMode(h)).mode).toBe("repair");
+    setUnfinished(h, true);
+    expect((await detectMode(h)).mode).toBe("fresh");
+    setUnfinished(h, false);
+    expect((await detectMode(h)).mode).toBe("repair");
+  });
+
+  test("a stale marker never bypasses downgrade or the upgrade restart; same release still resumes", async () => {
+    for (const [scenario, mode] of [
+      ["downgrade", "downgrade"],
+      ["upgrade", "upgrade"],
+      ["ready", "fresh"], // same version, other build: resume
+    ] as const) {
+      const h = host(scenario);
+      setUnfinished(h, true);
+      expect((await detectMode(h)).mode).toBe(mode);
+    }
   });
 
   test("fresh never counts the lock, the binary or the panel service", async () => {

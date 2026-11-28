@@ -11,6 +11,7 @@ import {
   NotTermuxError,
   pathsFrom,
   probePaths,
+  RUN_TIMEOUT_EXIT,
   runVisible,
 } from "@/cli/cli.host";
 import {
@@ -129,6 +130,12 @@ describe("termux host pieces", () => {
     expect(await runVisible(sh, ["-c", "echo https://login >&2"], { onLine: (l) => lines.push(l) })).toBe(0);
     expect(lines).toEqual(["https://login"]);
     expect(await runVisible(sh, ["-c", "exit 3"], { stdio: "ignore" })).toBe(3);
+  });
+
+  test("run: timeoutMs kills the child and returns RUN_TIMEOUT_EXIT", async () => {
+    const sh = Bun.which("sh") as string;
+    expect(await runVisible(sh, ["-c", "sleep 5"], { stdio: "ignore", timeoutMs: 50 })).toBe(RUN_TIMEOUT_EXIT);
+    expect(await runVisible(sh, ["-c", "exit 0"], { stdio: "ignore", timeoutMs: 5000 })).toBe(0);
   });
 
   test("termux host reads paths from HOME/PREFIX/SVDIR", () => {

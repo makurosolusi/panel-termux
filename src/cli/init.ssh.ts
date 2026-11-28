@@ -64,8 +64,9 @@ export function dropInDecision(p: ReturnType<typeof sshPaths>): DropIn {
 }
 
 /**
- * What detect found. `upgrade` = step left for a later run (K21: upgrade never touches ssh). `manual` = pid of an
- * sshd started by hand (not under runit, e.g. from ~/.bashrc): it holds port 8022, so `sv up` would crash-loop.
+ * What detect found. `upgrade` = step left for a later run (K21: upgrade never touches ssh). `manual` = pids of the
+ * sshd started by hand (not under runit, e.g. from ~/.bashrc) on the configured port: `sv up` would crash-loop. More
+ * than one pid = ambiguous, all are listed. `down` = the package's `down` file: runit would not start sshd at boot.
  */
 export type SshState =
   | { upgrade: true }
@@ -76,12 +77,61 @@ export type SshState =
       dropIn: DropIn;
       down: boolean;
       running: boolean;
-      manual: number | null;
+      manual: number[];
     };
 
-/** Our own sshd process outside runit (only asked when runit's sshd is not running). */
-const manualSshd = (ctx: InitContext): number | null =>
-  ctx.host.proc.list().find((p) => p.uid === ctx.host.proc.uid && basename(p.exe) === "sshd")?.pid ?? null;
+/**
+ * Ports of sshd_config: every uncommented `Port` line, else the Termux default. Known limit: `Include` drop-ins
+ * (sshd_config.d/*.conf) are not read for ports.
+ */
+const configuredPorts = (p: ReturnType<typeof sshPaths>): number[] => {
+  const ports = [...readOr(p.sshdConfig).matchAll(/^\s*Port\s+(\d+)/gim)].map((m) => Number(m[1]));
+  return ports.length > 0 ? ports : [SSHD_PORT];
+};
+
+/** Ports given on an sshd command line: `-p N`, `-pN`, `-o Port=N`, `-oPort=N` (they override the config). */
+const cmdlinePorts = (cmdline: readonly string[]): number[] => {
+  const ports: number[] = [];
+  for (let i = 1; i < cmdline.length; i++) {
+    const a = cmdline[i] ?? "";
+    const v = a === "-p" || a === "-o" ? cmdline[++i] : /^-[po]./.test(a) ? a.slice(2) : undefined;
+    const m = /^(?:Port\s*=\s*)?(\d+)$/i.exec(v ?? "");
+    if (m) ports.push(Number(m[1]));
+  }
+  return ports;
+};
+
+/**
+ * Our own listening sshd processes outside runit on a configured port (only asked when runit's sshd is not
+ * running). Session children ("sshd: user@pts/0") are no listeners; ports on the command line override the config,
+ * and a listener on ANY of the ports counts.
+ */
+const manualSshd = (ctx: InitContext, p: ReturnType<typeof sshPaths>): number[] => {
+  const wanted = configuredPorts(p);
+  return ctx.host.proc
+    .list()
+    .filter((q) => q.uid === ctx.host.proc.uid && basename(q.exe) === "sshd" && !q.cmdline[0]?.startsWith("sshd:"))
+    .filter((q) => {
+      const own = cmdlinePorts(q.cmdline);
+      return (own.length > 0 ? own : wanted).some((n) => wanted.includes(n));
+    })
+    .map((q) => q.pid);
+};
+
+/**
+ * True when sshd starts at boot (runit supervises a running sshd and there is no `down` file), or no sshd runs at
+ * all, neither supervised nor by hand (nobody uses SSH; same rule as doctor). False = `init` prints how to enable it.
+ */
+export async function sshBootReady(ctx: InitContext): Promise<boolean> {
+  const p = sshPaths(ctx);
+  if (await svRunning(ctx, p)) return !existsSync(p.down);
+  return manualSshd(ctx, p).length === 0;
+}
+
+const svRunning = async (ctx: InitContext, p: ReturnType<typeof sshPaths>): Promise<boolean> =>
+  existsSync(p.service) && existsSync(probePaths(ctx.host.paths).sv)
+    ? (await ctx.host.exec("sv", ["status", "sshd"])).stdout.startsWith("run:")
+    : false;
 
 const detect = async (ctx: InitContext): Promise<SshState> => {
   const src = ctx.args.sshKey;
@@ -89,9 +139,7 @@ const detect = async (ctx: InitContext): Promise<SshState> => {
   const keys = await loadKeys(ctx, src);
   const p = sshPaths(ctx);
   const have = existingKeyIds(readOr(p.authorizedKeys));
-  let running = false;
-  if (existsSync(p.service) && existsSync(probePaths(ctx.host.paths).sv))
-    running = (await ctx.host.exec("sv", ["status", "sshd"])).stdout.startsWith("run:");
+  const running = await svRunning(ctx, p);
   return {
     upgrade: false,
     keys,
@@ -99,9 +147,15 @@ const detect = async (ctx: InitContext): Promise<SshState> => {
     dropIn: dropInDecision(p),
     down: existsSync(p.down),
     running,
-    manual: running ? null : manualSshd(ctx),
+    manual: running ? [] : manualSshd(ctx, p),
   };
 };
+
+const BOOT_ACTION = () =>
+  tr(
+    "Make SSH start when the phone boots (remove the sshd down file)",
+    "Buat SSH menyala saat HP hidup (hapus file down milik sshd)",
+  );
 
 const plan = (ctx: InitContext, s: SshState): PlanLine[] => {
   if (s.upgrade)
@@ -137,20 +191,23 @@ const plan = (ctx: InitContext, s: SshState): PlanLine[] => {
       kind: "action",
       text: tr("Turn off SSH password login (keys only)", "Matikan masuk SSH dengan kata sandi (hanya kunci)"),
     });
-  if (s.manual !== null)
+  if (s.manual.length > 0) {
+    const pids = s.manual.join(", ");
     lines.push({
       kind: "warning",
       text: tr(
-        `SSH was started by hand (pid ${s.manual}), not through runit; left as is`,
-        `SSH sudah dinyalakan manual (pid ${s.manual}), bukan lewat runit; dibiarkan`,
+        `SSH was started by hand (pid ${pids}), not through runit; left as is`,
+        `SSH sudah dinyalakan manual (pid ${pids}), bukan lewat runit; dibiarkan`,
       ),
       hint: tr(
-        `to have it start automatically when the phone boots: kill ${s.manual}, then sv up sshd`,
-        `agar menyala sendiri setelah HP restart: kill ${s.manual}, lalu sv up sshd`,
+        `to put it under runit now: kill ${s.manual.join(" ")}, then sv up sshd`,
+        `agar ikut runit sekarang: kill ${s.manual.join(" ")}, lalu sv up sshd`,
       ),
     });
-  else if (!s.running)
+    if (s.down) lines.push({ kind: "action", text: BOOT_ACTION() });
+  } else if (!s.running)
     lines.push({ kind: "action", text: tr(`Start SSH (port ${SSHD_PORT})`, `Nyalakan SSH (port ${SSHD_PORT})`) });
+  else if (s.down) lines.push({ kind: "action", text: BOOT_ACTION() });
   return lines;
 };
 
@@ -200,7 +257,7 @@ const apply = async (ctx: InitContext, s: SshState, timing: InitTiming): Promise
     mkdirSync(p.dropInDir, { recursive: true });
     writeFileSync(p.dropIn, DROP_IN, { mode: 0o644 });
     state.changed.push(p.dropIn);
-    if (s.running || s.manual !== null)
+    if (s.running || s.manual.length > 0)
       state.manual.push(
         tr(
           "SSH: key-only login applies after sshd restarts (sv restart sshd)",
@@ -216,26 +273,26 @@ const apply = async (ctx: InitContext, s: SshState, timing: InitTiming): Promise
       ),
     );
   }
-  if (s.manual !== null)
+  // `down` goes whenever sshd should be managed: with it runit never starts sshd at boot, `sv up` says "normally
+  // down" and a rerun would call SSH complete. A manual sshd is left running (sv up would crash-loop on its port).
+  if (s.manual.length === 0 && !s.running && !existsSync(p.service))
+    throw new CliExit(
+      INIT_EXIT.failed,
+      tr(`The sshd service is missing at ${p.service}.`, `Layanan sshd tidak ada di ${p.service}.`),
+      tr("install it: pkg install openssh", "pasang: pkg install openssh"),
+    );
+  if (s.down && existsSync(p.service)) {
+    rmSync(p.down, { force: true });
+    state.changed.push(p.down);
+  }
+  if (s.manual.length > 0)
     state.manual.push(
       tr(
-        `SSH runs by hand (pid ${s.manual}); to put it under runit: kill ${s.manual}, then sv up sshd`,
-        `SSH berjalan manual (pid ${s.manual}); agar ikut runit: kill ${s.manual}, lalu sv up sshd`,
+        `SSH runs by hand (pid ${s.manual.join(", ")}); to put it under runit: kill ${s.manual.join(" ")}, then sv up sshd`,
+        `SSH berjalan manual (pid ${s.manual.join(", ")}); agar ikut runit: kill ${s.manual.join(" ")}, lalu sv up sshd`,
       ),
     );
-  else if (!s.running) {
-    if (!existsSync(p.service))
-      throw new CliExit(
-        INIT_EXIT.failed,
-        tr(`The sshd service is missing at ${p.service}.`, `Layanan sshd tidak ada di ${p.service}.`),
-        tr("install it: pkg install openssh", "pasang: pkg install openssh"),
-      );
-    if (s.down) {
-      rmSync(p.down, { force: true });
-      state.changed.push(p.down);
-    }
-    await sv(ctx, ["up", "sshd"], timing); // retried: runsv may not supervise a just-installed folder yet
-  }
+  else if (!s.running) await sv(ctx, ["up", "sshd"], timing); // retried: runsv may not supervise a just-installed folder yet
   const host = existsSync(p.hostKey) ? parseKey(readFileSync(p.hostKey, "utf8")) : null;
   out.check(
     host ? "ok" : "warning",
