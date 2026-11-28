@@ -8,7 +8,7 @@
 - `panel doctor` has a new check, "sshd starts automatically when the phone boots". It warns when sshd is in use but has a `down` file or runs outside runit, and says how to fix it.
 - When two sshd processes run by hand, init names the one on the configured port (8022 unless `sshd_config` says otherwise) instead of the first one it found.
 - Without `--ssh-key`, `panel init` now says when SSH will not start at boot and how to turn it on.
-- Ctrl-C during `panel init` prints a one-line summary and the command to continue, and the next run resumes the install ("Resuming an install that did not finish") instead of treating it as a repair. The Cloudflare login now gives up after 10 minutes with the same hint.
+- Ctrl-C during `panel init` prints a one-line summary and the command to continue, and the next run resumes the install ("Resuming an install that did not finish") instead of treating it as a repair. The Cloudflare login now gives up after 10 minutes with the same hint. An interrupted first install resumes where it stopped (it leaves the marker `$PREFIX/tmp/panel-init.unfinished`, which only counts for the same release).
 - `panel init` output: the Cloudflare login address is printed once, the panel service step shows a result line, and the "Changed" list no longer names the downloaded file that was deleted.
 
 ## [0.6.0] - 2026-11-28
